@@ -27,9 +27,9 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # 3.14 is the newest stable in actions/python-versions; 3.15 is still
           # published as a release candidate only.
@@ -82,9 +82,9 @@ jobs:
       DATABASE_URL: postgresql+psycopg2://metroflow_admin:metroflow_password@localhost:5432/metroflow_db
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
