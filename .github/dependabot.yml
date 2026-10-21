@@ -43,6 +43,13 @@ updates:
       web:
         patterns:
           - "*"
+    # eslint-config-next pulls in typescript-eslint, which refuses to parse
+    # TypeScript 7 ("typescript-eslint does not support TS 7.0"). Remove this
+    # once typescript-eslint announces TS 7 support.
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - web
