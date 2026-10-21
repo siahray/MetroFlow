@@ -67,6 +67,30 @@ def status_map(response):
 
 
 # ---------------------------------------------------------------------------
+# Security headers
+# ---------------------------------------------------------------------------
+
+
+def test_security_headers_are_present_on_every_response(client):
+    """
+    Regression guard for the OWASP ZAP findings.
+
+    ZAP flagged "X-Content-Type-Options Header Missing" and "Cross-Origin-
+    Resource-Policy Header Missing or Invalid" on every endpoint. These headers
+    come from middleware, so checking one route covers the rest -- but the
+    middleware must also survive the CORS layer, which is why this goes through
+    the real app rather than a hand-built response.
+    """
+    response = client.get("/")
+    assert response.status_code == 200
+
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["cross-origin-resource-policy"] == "cross-origin"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["x-frame-options"] == "DENY"
+
+
+# ---------------------------------------------------------------------------
 # GeoJSON contract
 # ---------------------------------------------------------------------------
 

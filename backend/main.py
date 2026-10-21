@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -127,6 +127,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Attach baseline security headers to every response.
+
+    ``X-Content-Type-Options: nosniff`` stops browsers from MIME-sniffing JSON
+    into an executable type. ``Cross-Origin-Resource-Policy: cross-origin`` is
+    deliberate rather than ``same-origin``: this API is consumed by the Next.js
+    LGU dashboard and the React Native driver app from origins we do not
+    control, and ``same-origin`` would make no-cors loads of API responses fail.
+    Both are flagged by OWASP ZAP when absent, so the security scan depends on
+    this middleware.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "cross-origin")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
 
 
 # ---------------------------------------------------------------------------

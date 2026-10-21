@@ -46,10 +46,11 @@ jobs:
           exit 1
 
       - name: Run ZAP API scan
-        # Report-only to start. This API has known baseline findings (permissive
-        # CORS, missing security headers), and a gate that is red from day one
-        # just gets ignored. Remove continue-on-error once they are triaged.
-        continue-on-error: true
+        # This is a gate, not a report. ZAP exits non-zero when it finds an alert
+        # at or above the configured failure threshold, which fails the job and
+        # turns the weekly run red. The two Low findings this workflow started
+        # with (missing X-Content-Type-Options and Cross-Origin-Resource-Policy)
+        # are fixed in backend/main.py, so the baseline is clean.
         run: |
           mkdir -p zap-reports
           # ZAP runs as uid 1000 inside the container; the runner workspace is
@@ -63,8 +64,7 @@ jobs:
               -f openapi \
               -r zap-report.html \
               -w zap-report.md \
-              -J zap-report.json \
-              -I
+              -J zap-report.json
 
       - name: Verify a report was produced
         run: |
