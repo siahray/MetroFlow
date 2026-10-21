@@ -95,5 +95,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Apply migrations
+        # The app no longer calls Base.metadata.create_all, so the schema has to
+        # exist before the lifespan (and the seeding it does) runs.
+        run: alembic upgrade head
+
+      - name: Check migrations match the models
+        # Fails if models.py changed without a matching revision, which is the
+        # drift that would otherwise only surface on the hosted database.
+        run: alembic check
+
       - name: Run API contract tests
         run: python -m pytest -m integration

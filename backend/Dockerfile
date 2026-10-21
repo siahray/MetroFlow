@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN useradd --create-home --uid 10001 appuser \
+    && chmod +x entrypoint.sh \
     && chown -R appuser:appuser /app
 USER appuser
 
@@ -31,4 +32,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/ || exit 1
 
+# entrypoint.sh runs `alembic upgrade head` and then execs this command.
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

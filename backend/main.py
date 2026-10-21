@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 import models
 from config import settings
-from database import Base, engine, get_db
+from database import get_db
 from geometry import backfill_geometry
 from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
 from routing import classify_passability, td_a_star_search
@@ -98,7 +98,10 @@ def seed_database(db: Session) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # The schema is owned by Alembic (backend/migrations), not create_all:
+    # create_all can create missing tables but never alter existing ones, which
+    # would drift from the migration history applied to Supabase. The container
+    # entrypoint and CI run `alembic upgrade head` before this starts.
     db = next(get_db())
     try:
         seed_database(db)
