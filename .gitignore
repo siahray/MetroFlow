@@ -18,6 +18,10 @@ __pycache__/
 .coverage
 htmlcov/
 
+# --- Node / root tooling ----------------------------------------------------
+# The root package.json only carries husky. web-lgu/ has its own .gitignore.
+node_modules/
+
 # --- Environment / secrets --------------------------------------------------
 .env
 .env.*

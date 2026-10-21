@@ -1,10 +1,14 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import prettier from "eslint-config-prettier/flat";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Turns off rules that would fight prettier. Must stay after the Next configs
+  // so it wins, and prettier is the only thing that decides formatting.
+  prettier,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

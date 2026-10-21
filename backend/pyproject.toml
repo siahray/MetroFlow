@@ -1,0 +1,25 @@
+# Ruff configuration for the MetroFlow API engine.
+#
+# Run by the pre-commit hook and available locally:
+#   backend/venv/bin/ruff check .
+#   backend/venv/bin/ruff format .
+#
+# Rule families: pycodestyle errors (E), pyflakes (F), import sorting (I),
+# pyupgrade (UP), bugbear (B) and simplify (SIM). Line-length enforcement is
+# delegated to `ruff format`, so E501 is off to avoid double-reporting.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+extend-exclude = ["venv", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501", # line length is enforced by `ruff format`
+    "B008", # FastAPI's Depends()/Query() in defaults is the intended pattern
+]
+
+[tool.ruff.format]
+quote-style = "double"

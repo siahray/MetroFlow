@@ -4,3 +4,5 @@
 pytest>=8.0.0
 # Starlette's TestClient now prefers httpx2 over httpx.
 httpx2>=2.16.0
+# Linter/formatter used by the pre-commit hook.
+ruff>=0.17.0

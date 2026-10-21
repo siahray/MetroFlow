@@ -1,0 +1,11 @@
+{
+  "name": "metroflow",
+  "private": true,
+  "description": "Repository-level git tooling. Application dependencies live in web-lgu/ and backend/.",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

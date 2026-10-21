@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+#
+# Fast pre-commit gate. Only staged files are touched, so this stays comfortably
+# under a second or two on a normal change -- unlike running the full linters.
+#
+#   frontend -> prettier + eslint   (lint-staged, config in web-lgu/)
+#   backend  -> ruff check --fix + ruff format
+#
+# Both steps degrade gracefully when the toolchain is not installed, so a fresh
+# clone is never blocked from making its first commit.
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+# --- Frontend ---------------------------------------------------------------
+if [ -d "$ROOT/web-lgu/node_modules" ]; then
+  ( cd "$ROOT/web-lgu" && bunx lint-staged )
+else
+  echo "pre-commit: web-lgu/node_modules missing, skipping frontend checks"
+  echo "            run: cd web-lgu && bun install"
+fi
+
+# --- Backend ----------------------------------------------------------------
+bash "$ROOT/scripts/pre-commit-ruff.sh"
