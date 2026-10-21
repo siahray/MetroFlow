@@ -1,0 +1,66 @@
+# Dependabot version updates.
+#
+# Weekly, all three ecosystems on the same schedule so a Monday review covers
+# the whole repo at once. Minor and patch bumps are grouped into a single PR per
+# ecosystem; major bumps stay separate because they need real review.
+#
+# Caveat: web-lgu is built with Bun, and Dependabot resolves the npm ecosystem
+# from a package-lock.json / yarn.lock / pnpm-lock.yaml. There is no lockfile in
+# that format here, so if Dependabot reports it cannot find one, switch this
+# entry to `package-ecosystem: bun`.
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Manila
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+      - backend
+
+  - package-ecosystem: npm
+    directory: /web-lgu
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Manila
+    open-pull-requests-limit: 5
+    groups:
+      web-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+      - web
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Manila
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - github-actions

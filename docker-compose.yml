@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostGIS Spatial Database for MetroFlow Graph Storage
   postgres:
@@ -14,6 +12,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metroflow_admin -d metroflow_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
 
   # Redis In-Memory Cache & WebSocket Pub/Sub Broker
@@ -24,6 +27,38 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # FastAPI simulation engine.
+  #
+  # This service exists so CI (the ZAP workflow) can bring up the whole stack
+  # with one command. For day-to-day backend work you can keep running
+  # `uvicorn --reload` on the host instead -- but do not run it at the same
+  # time as `docker compose up`, since both bind port 8000.
+  backend:
+    build:
+      context: ./backend
+    container_name: metroflow_backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://metroflow_admin:metroflow_password@postgres:5432/metroflow_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/openapi.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
 
 volumes:
