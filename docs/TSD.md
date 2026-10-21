@@ -2,17 +2,22 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.0
+Version 1.1
 
 ## Document Control
 
-| Field       | Value                                 |
-| ----------- | ------------------------------------- |
-| Project     | MetroFlow                             |
-| Document    | Technical Specification Document      |
-| Version     | 1.0                                   |
-| Prepared By | «Project Team»                        |
-| Baseline    | `main` @ `9605e38` (last code commit) |
+| Field       | Value                                                            |
+| ----------- | ---------------------------------------------------------------- |
+| Project     | MetroFlow                                                        |
+| Document    | Technical Specification Document                                 |
+| Version     | 1.1                                                              |
+| Prepared By | «Project Team»                                                   |
+| Baseline    | `main` @ `9605e38` (last code commit)                            |
+| Change      | CR-001 adds the driver PWA, event stream, fleet, SOS and sensors |
+
+Version 1.1 describes the **target architecture** for CR-001. Sections marked
+`Planned` are not implemented in the baseline. See [CR-001.md](CR-001.md) for
+the change record and FSD §Implementation Status for the current position.
 
 ## Requirements Traceability
 
@@ -26,44 +31,61 @@ Version 1.0
 | BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                        |
 | BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log          |
 | BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration               |
-| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control (planned)                     |
+| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — JWT/RBAC (planned, CR-001)  |
 | BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI    |
 | BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy       |
 | BR-012 | FSD-FR-049                           | Reporting and export (planned)               |
+| BR-013 | FSD-FR-054 to FSD-FR-064             | Driver PWA, routing extensions, SSE client   |
+| BR-014 | FSD-FR-065 to FSD-FR-081             | Report service, evidence store, moderation   |
+| BR-015 | FSD-FR-073, 074, 087                 | SOS service and distress incidents           |
+| BR-016 | FSD-FR-075 to FSD-FR-089             | Map UI, fleet service, dispatch engine       |
+| BR-017 | FSD-FR-090, FSD-FR-091               | Sensor service and impact rules              |
+| BR-018 | FSD-FR-059, 068 to 071               | PWA cache, offline queue, sync               |
 
 ## 1. Solution Architecture
 
 ```text
-                    rainfall input                      incident reports
-                          │                                    │
-                          ▼                                    ▼
-              ┌───────────────────────┐            ┌───────────────────────┐
-              │  Simulation engine    │            │  Dispatch portal      │
-              │  SCS-CN → depth       │◄───────────│  queue · detail · log │
-              │  TD-A*  → route       │  network   │  (mock data today)    │
-              └───────────┬───────────┘  + routes  └───────────┬───────────┘
-                          │                                    │
-                          ▼                                    ▼
-              ┌─────────────────────────────────────────────────────────┐
-              │  PostgreSQL + PostGIS  (nodes · edges · live state)      │
-              │  versioned by Alembic · row-level security on hosted DB  │
-              └─────────────────────────────────────────────────────────┘
+   driver PWA (mobile-driver)                    LGU portal (web-lgu)
+   nav · alerts · report · SOS                   map · moderation · draw · fleet
+   IndexedDB cache · offline queue               SSE client · dispatch
+            │                                              │
+            └────────────── HTTPS + SSE ──────────────────┘
+                                   │
+                     FastAPI  (JWT · RBAC · rate limits)
+        network · routing · simulation · reports · hazards
+        vehicles · telemetry · SOS · dispatch · sensors
+                     │                              │
+        PostgreSQL + PostGIS                 Redis pub/sub
+        graph · reports · hazards            events · throttle
+        fleet · sensors · audit              counters · cache
+                     │
+              evidence volume (photos)
 ```
 
-The API is stateless: every request loads its data from PostgreSQL, so
-instances can be added horizontally. The portal is a Next.js App Router client
-application; today it holds incident data locally, with a single module as the
-seam for a future intake API.
+The API is stateless apart from the evidence volume and Redis: every request
+loads its data from PostgreSQL, and events fan out through Redis, so instances
+can be added horizontally. The portal is a Next.js App Router application; the
+driver client is a separately deployable Vite PWA so that its service worker and
+IndexedDB cache have no server-runtime dependency.
+
+The event path is deliberately narrow. A privileged mutation commits to
+PostgreSQL, writes its audit record, publishes to a Redis channel, and returns;
+the SSE endpoint relays the channel to connected clients. Publication latency is
+measured from the commit to the emitted event, not from the device receiving it.
 
 **Design principles**
 
-| Principle                           | Consequence                                                        |
-| ----------------------------------- | ------------------------------------------------------------------ |
-| One source of truth for passability | A single function classifies edges for both map colour and routing |
-| Configuration over constants        | Calibration values are environment-driven, not literals            |
-| Schema owned by migrations          | No `create_all` at runtime; drift fails CI                         |
-| Fail closed at the edges            | Security scan and migration gates block rather than warn           |
-| Honest boundaries                   | Mock data and unimplemented features are labelled, not implied     |
+| Principle                           | Consequence                                                          |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| One source of truth for passability | A single function classifies edges for both map colour and routing   |
+| Configuration over constants        | Calibration values are environment-driven, not literals              |
+| Schema owned by migrations          | No `create_all` at runtime; drift fails CI                           |
+| Fail closed at the edges            | Security scan and migration gates block rather than warn             |
+| Honest boundaries                   | Mock data and unimplemented features are labelled, not implied       |
+| One event bus                       | Hazard, fleet and SOS updates follow one publish path                |
+| Offline is a first-class state      | The PWA models pending, synced and stale rather than assuming online |
+| Evidence is untrusted input         | Photos are re-encoded, stripped and size-checked before storage      |
+| Privilege is explicit               | Every mutating LGU route declares the roles allowed to call it       |
 
 ## Application Components
 
@@ -78,23 +100,39 @@ seam for a future intake API.
 | Dispatch Portal       | BR-004 to BR-007 / FSD-FR-018 to 046 | Login, queue, detail, operations log, dispatch actions                     |
 | Security Middleware   | BR-011 / FSD-FR-051                  | Response headers on every request                                          |
 | Delivery Pipeline     | BR-008 / FSD-FR-047                  | Lint, test, scan, migrate, publish image                                   |
+| Auth Service          | BR-009 / FSD-FR-092                  | Login, JWT issue, password hash verification, role dependency              |
+| Report Service        | BR-014 / FSD-FR-065 to 081           | Multipart intake, EXIF extraction, urgency, dedupe, moderation             |
+| Hazard Service        | BR-013 / FSD-FR-059 to 064, 082–086  | Polygon/line validation, obstruction level, publish and withdraw           |
+| Event Stream          | BR-018 / FSD-FR-086                  | Redis pub/sub fan-out over SSE with reconnect snapshots                    |
+| Fleet Service         | BR-016 / FSD-FR-075, 076, 088        | Unit registry, status transitions, telemetry, nearest-unit ranking         |
+| Dispatch Service      | BR-016 / FSD-FR-087 to 089           | Distress incidents, assignment, flood-safe rescue route                    |
+| Sensor Service        | BR-017 / FSD-FR-090, 091             | Reading validation, thresholds, impact radius, advisory roads              |
+| Evidence Store        | BR-014 / FSD-FR-066, 067             | Local volume for the pilot; MIME check, re-encode, EXIF strip              |
+| Driver PWA            | BR-013 to BR-018 / FSD-FR-054 to 074 | Navigation, alerts, reports, offline cache and SOS                         |
+| LGU Map UI            | BR-016 / FSD-FR-075, 076, 082–089    | MapLibre layers, draw tools, fleet and dispatch panels                     |
 
 ### Technology stack
 
-| Layer           | Technology                   | Version                   |
-| --------------- | ---------------------------- | ------------------------- |
-| API language    | Python                       | 3.14                      |
-| API framework   | FastAPI                      | ≥ 0.143.5                 |
-| ORM             | SQLAlchemy                   | ≥ 2.1.5                   |
-| Spatial ORM     | GeoAlchemy2                  | ≥ 0.20.0                  |
-| Migrations      | Alembic                      | ≥ 1.20.0                  |
-| Database        | PostgreSQL + PostGIS         | 15 + 3.3 local; 17 hosted |
-| Driver          | psycopg2-binary              | ≥ 2.9.13                  |
-| Frontend        | Next.js (App Router)         | 16.4.2                    |
-| UI runtime      | React                        | 19.3.1                    |
-| Styling         | Tailwind CSS                 | 4.x                       |
-| Package manager | Bun                          | 1.4.3                     |
-| Tests           | pytest, ESLint, `next build` | see repository            |
+| Layer           | Technology                                   | Version                   |
+| --------------- | -------------------------------------------- | ------------------------- |
+| API language    | Python                                       | 3.14                      |
+| API framework   | FastAPI                                      | ≥ 0.143.5                 |
+| ORM             | SQLAlchemy                                   | ≥ 2.1.5                   |
+| Spatial ORM     | GeoAlchemy2                                  | ≥ 0.20.0                  |
+| Migrations      | Alembic                                      | ≥ 1.20.0                  |
+| Database        | PostgreSQL + PostGIS                         | 15 + 3.3 local; 17 hosted |
+| Driver          | psycopg2-binary                              | ≥ 2.9.13                  |
+| Frontend        | Next.js (App Router)                         | 16.4.2                    |
+| Driver client   | Vite + React PWA                             | Vite 7.x, React 19.3.1    |
+| PWA tooling     | `vite-plugin-pwa`, `idb`                     | Current at implementation |
+| Mapping         | MapLibre GL JS                               | 6.x                       |
+| UI runtime      | React                                        | 19.3.1                    |
+| Styling         | Tailwind CSS                                 | 4.x                       |
+| Package manager | Bun                                          | 1.4.3                     |
+| Realtime        | SSE + Redis pub/sub                          | Redis 7                   |
+| Auth            | python-jose, passlib/bcrypt                  | current at implementation |
+| Evidence        | Pillow, python-multipart                     | current at implementation |
+| Tests           | pytest, Bun test, Playwright, ESLint, builds | see repository            |
 
 ## Database Design - road_nodes
 
@@ -137,14 +175,14 @@ Index: primary key plus GiST on `geom`.
 
 ## Database Design - users
 
-| Column          | Type         | Description                                         |
-| --------------- | ------------ | --------------------------------------------------- |
-| `user_id`       | integer      | Primary key                                         |
-| `name`          | varchar(100) | Display name                                        |
-| `email`         | varchar(100) | Unique; login identifier                            |
-| `password_hash` | varchar(255) | Hash, never plaintext                               |
-| `role`          | varchar(20)  | `SUPER_ADMIN`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER` |
-| `created_at`    | timestamp    | Creation time                                       |
+| Column          | Type         | Description                                                          |
+| --------------- | ------------ | -------------------------------------------------------------------- |
+| `user_id`       | integer      | Primary key                                                          |
+| `name`          | varchar(100) | Display name                                                         |
+| `email`         | varchar(100) | Unique; login identifier                                             |
+| `password_hash` | varchar(255) | Hash, never plaintext                                                |
+| `role`          | varchar(20)  | `SUPER_ADMIN`, `LGU_COMMANDER`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER` |
+| `created_at`    | timestamp    | Creation time                                                        |
 
 ## Database Design - audit_logs
 
@@ -157,60 +195,259 @@ Index: primary key plus GiST on `geom`.
 | `hash_signature` | varchar   | Integrity hash                             |
 | `created_at`     | timestamp | Event time                                 |
 
+## Database Design - incident_reports
+
+| Column            | Type                  | Description                                              |
+| ----------------- | --------------------- | -------------------------------------------------------- |
+| `report_id`       | uuid                  | Primary key                                              |
+| `reporter_hash`   | varchar(64)           | Salted hash of the device or user id; never raw identity |
+| `source`          | varchar(20)           | `PHOTO`, `CCTV`, `SENSOR` or `CALL`                      |
+| `geom`            | geometry(Point, 4326) | Reported location                                        |
+| `barangay`        | varchar(120)          | Reporting area                                           |
+| `narrative`       | text                  | Optional description                                     |
+| `depth_level`     | varchar(20)           | `ANKLE`, `KNEE` or `IMPASSABLE`                          |
+| `photo_path`      | varchar(255)          | Evidence object key                                      |
+| `photo_sha256`    | varchar(64)           | Integrity hash of the stored image                       |
+| `exif`            | json                  | Extracted metadata after the image itself is stripped    |
+| `captured_at`     | timestamptz           | Device capture time                                      |
+| `submitted_at`    | timestamptz           | Server receipt time                                      |
+| `urgency_score`   | double                | Computed priority; see §2.8                              |
+| `status`          | varchar(20)           | `PENDING`, `VERIFIED`, `REJECTED` or `DUPLICATE`         |
+| `duplicate_of`    | uuid                  | FK → `incident_reports.report_id`, nullable              |
+| `moderated_by`    | integer               | FK → `users.user_id`, nullable                           |
+| `moderated_at`    | timestamptz           | Decision time                                            |
+| `decision_reason` | text                  | Required for reject and duplicate                        |
+| `hazard_id`       | uuid                  | FK → `hazard_zones.hazard_id`, nullable                  |
+
+Indexes: GiST on `geom`; btree on `(status, urgency_score desc)`; btree on
+`(submitted_at)` for retention and reporting.
+
+## Database Design - hazard_zones
+
+| Column              | Type                     | Description                                         |
+| ------------------- | ------------------------ | --------------------------------------------------- |
+| `hazard_id`         | uuid                     | Primary key                                         |
+| `kind`              | varchar(20)              | `FLOOD` polygon or `CLOSURE` line                   |
+| `geom`              | geometry(Geometry, 4326) | Polygon or LineString, validated on write           |
+| `obstruction_level` | varchar(20)              | `CAUTION`, `LEVEL_2`, `LEVEL_3` or `IMPASSABLE`     |
+| `source_report_id`  | uuid                     | FK → `incident_reports.report_id`, nullable         |
+| `published_by`      | integer                  | FK → `users.user_id`                                |
+| `published_at`      | timestamptz              | Publication time                                    |
+| `valid_until`       | timestamptz              | Optional expiry                                     |
+| `active`            | boolean                  | Withdrawn hazards remain for audit but are inactive |
+| `notes`             | text                     | Dispatcher note                                     |
+
+Indexes: GiST on `geom`; btree on `(active, published_at desc)`.
+
+## Database Design - vehicles
+
+| Column         | Type                  | Description                                          |
+| -------------- | --------------------- | ---------------------------------------------------- |
+| `vehicle_id`   | uuid                  | Primary key                                          |
+| `call_sign`    | varchar(40)           | Unique human label                                   |
+| `vehicle_type` | varchar(30)           | `AMBULANCE`, `RESCUE_BOAT`, `FIRE_TRUCK` or `PATROL` |
+| `status`       | varchar(20)           | `AVAILABLE`, `EN_ROUTE`, `ON_SCENE` or `OFFLINE`     |
+| `home_node_id` | integer               | FK → `road_nodes.node_id`                            |
+| `capacity`     | integer               | Persons the unit can carry                           |
+| `geom`         | geometry(Point, 4326) | Last known position                                  |
+| `heading`      | double                | Degrees from north                                   |
+| `updated_at`   | timestamptz           | Last telemetry or manual update                      |
+
+Indexes: GiST on `geom`; btree on `(status, vehicle_type)`.
+
+## Database Design - vehicle_telemetry
+
+| Column         | Type                  | Description                |
+| -------------- | --------------------- | -------------------------- |
+| `telemetry_id` | bigint                | Primary key                |
+| `vehicle_id`   | uuid                  | FK → `vehicles.vehicle_id` |
+| `geom`         | geometry(Point, 4326) | Position at capture time   |
+| `speed_kmh`    | double                | Reported speed             |
+| `heading`      | double                | Degrees from north         |
+| `recorded_at`  | timestamptz           | Device capture time        |
+
+Index: btree on `(vehicle_id, recorded_at desc)`; GiST on `geom`. Retention is
+configuration-driven `[TBC]`; the pilot keeps 24 hours.
+
+## Database Design - driver_locations
+
+| Column        | Type                  | Description                                |
+| ------------- | --------------------- | ------------------------------------------ |
+| `location_id` | bigint                | Primary key                                |
+| `device_hash` | varchar(64)           | Salted hash, not a raw device id           |
+| `geom`        | geometry(Point, 4326) | Position rounded to a 50 m grid            |
+| `recorded_at` | timestamptz           | Capture time                               |
+| `expires_at`  | timestamptz           | Purge time; at most 24 hours after capture |
+
+Index: btree on `expires_at`; GiST on `geom`. A scheduled purge is mandatory.
+
+## Database Design - sos_requests
+
+| Column             | Type                  | Description                                   |
+| ------------------ | --------------------- | --------------------------------------------- |
+| `sos_id`           | uuid                  | Primary key                                   |
+| `device_hash`      | varchar(64)           | Salted hash of the requesting device          |
+| `contact_note`     | varchar(240)          | Optional callback or vehicle description      |
+| `geom`             | geometry(Point, 4326) | Distress location                             |
+| `status`           | varchar(20)           | `OPEN`, `ASSIGNED`, `RESOLVED` or `CANCELLED` |
+| `reported_at`      | timestamptz           | Request time                                  |
+| `assigned_task_id` | uuid                  | FK → `dispatch_tasks.task_id`, nullable       |
+| `resolved_at`      | timestamptz           | Resolution time                               |
+
+Index: btree on `(status, reported_at)`; GiST on `geom`.
+
+## Database Design - dispatch_tasks
+
+| Column         | Type                       | Description                                                  |
+| -------------- | -------------------------- | ------------------------------------------------------------ |
+| `task_id`      | uuid                       | Primary key                                                  |
+| `vehicle_id`   | uuid                       | FK → `vehicles.vehicle_id`                                   |
+| `sos_id`       | uuid                       | FK → `sos_requests.sos_id`, nullable                         |
+| `route`        | geometry(LineString, 4326) | Flood-safe route used for the assignment                     |
+| `status`       | varchar(20)                | `ASSIGNED`, `EN_ROUTE`, `ARRIVED`, `COMPLETE` or `CANCELLED` |
+| `eta_minutes`  | double                     | Estimated travel time at assignment                          |
+| `assigned_by`  | integer                    | FK → `users.user_id`                                         |
+| `assigned_at`  | timestamptz                | Assignment time                                              |
+| `started_at`   | timestamptz                | Departure time                                               |
+| `completed_at` | timestamptz                | Completion time                                              |
+
+Index: btree on `(status, assigned_at desc)`; GiST on `route`.
+
+## Database Design - sensors
+
+| Column            | Type                  | Description                                    |
+| ----------------- | --------------------- | ---------------------------------------------- |
+| `sensor_id`       | varchar(60)           | Primary key; stable external identifier        |
+| `sensor_type`     | varchar(20)           | `RIVER_GAUGE` or `RAIN_GAUGE`                  |
+| `name`            | varchar(120)          | Human label                                    |
+| `geom`            | geometry(Point, 4326) | Sensor location                                |
+| `threshold_value` | double                | Breach threshold                               |
+| `threshold_unit`  | varchar(20)           | `m` or `mm_hr`                                 |
+| `impact_radius_m` | double                | Radius within which edges are flagged          |
+| `active`          | boolean               | Disabled sensors reject readings               |
+| `simulated`       | boolean               | True when the value is generated for the pilot |
+
+Index: GiST on `geom`.
+
+## Database Design - sensor_readings
+
+| Column        | Type        | Description                           |
+| ------------- | ----------- | ------------------------------------- |
+| `reading_id`  | bigint      | Primary key                           |
+| `sensor_id`   | varchar(60) | FK → `sensors.sensor_id`              |
+| `value`       | double      | Reading                               |
+| `unit`        | varchar(20) | Unit at capture                       |
+| `recorded_at` | timestamptz | Sensor timestamp                      |
+| `received_at` | timestamptz | Gateway receipt time                  |
+| `breach`      | boolean     | Threshold exceeded at evaluation time |
+
+Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)`.
+
 ## API Design
 
-| Endpoint                   | Method | Reference                  |
-| -------------------------- | ------ | -------------------------- |
-| `/`                        | GET    | BR-010 / FSD-FR-050        |
-| `/api/v1/network/state`    | GET    | BR-001 / FSD-FR-001 to 005 |
-| `/api/v1/simulation/rain`  | POST   | BR-002 / FSD-FR-006 to 010 |
-| `/api/v1/routing/navigate` | GET    | BR-003 / FSD-FR-011 to 017 |
-| `/openapi.json`            | GET    | BR-010 / FSD-FR-052        |
+| Endpoint                          | Method | Reference                  |
+| --------------------------------- | ------ | -------------------------- |
+| `/`                               | GET    | BR-010 / FSD-FR-050        |
+| `/api/v1/network/state`           | GET    | BR-001 / FSD-FR-001 to 005 |
+| `/api/v1/simulation/rain`         | POST   | BR-002 / FSD-FR-006 to 010 |
+| `/api/v1/routing/navigate`        | GET    | BR-003 / FSD-FR-011 to 017 |
+| `/openapi.json`                   | GET    | BR-010 / FSD-FR-052        |
+| `/api/v1/auth/login`              | POST   | BR-009 / FSD-FR-018–023    |
+| `/api/v1/auth/me`                 | GET    | BR-009 / FSD-FR-018–023    |
+| `/api/v1/reports`                 | POST   | BR-014 / FSD-FR-065 to 067 |
+| `/api/v1/reports`                 | GET    | BR-014 / FSD-FR-077        |
+| `/api/v1/reports/{id}`            | GET    | BR-014 / FSD-FR-078, 079   |
+| `/api/v1/reports/{id}/approve`    | POST   | BR-014 / FSD-FR-080        |
+| `/api/v1/reports/{id}/reject`     | POST   | BR-014 / FSD-FR-081        |
+| `/api/v1/hazards/active`          | GET    | BR-013 / FSD-FR-059        |
+| `/api/v1/hazards`                 | POST   | BR-016 / FSD-FR-082 to 085 |
+| `/api/v1/hazards/{id}`            | PATCH  | BR-016 / FSD-FR-084, 085   |
+| `/api/v1/hazards/{id}`            | DELETE | BR-016 / FSD-FR-085        |
+| `/api/v1/hazards/stream`          | GET    | BR-013 / FSD-FR-086 (SSE)  |
+| `/api/v1/vehicles`                | GET    | BR-016 / FSD-FR-075, 076   |
+| `/api/v1/vehicles/{id}/status`    | PATCH  | BR-016 / FSD-FR-076        |
+| `/api/v1/vehicles/{id}/telemetry` | POST   | BR-013 / FSD-FR-072        |
+| `/api/v1/vehicles/stream`         | GET    | BR-016 / FSD-FR-086 (SSE)  |
+| `/api/v1/sos`                     | POST   | BR-015 / FSD-FR-073        |
+| `/api/v1/sos`                     | GET    | BR-015 / FSD-FR-074, 087   |
+| `/api/v1/sos/{id}/assign`         | POST   | BR-016 / FSD-FR-088, 089   |
+| `/api/v1/dispatch/{id}/route`     | GET    | BR-016 / FSD-FR-089        |
+| `/api/v1/sensors/readings`        | POST   | BR-017 / FSD-FR-090        |
+| `/api/v1/sensors`                 | GET    | BR-017 / FSD-FR-091        |
+
+The CR-001 rows are **planned**; they are not present in the baseline. The
+routing endpoint is also extended with coordinate inputs, hazard exclusion and
+turn instructions.
 
 Full request and response contracts, examples and error bodies are in
 [api.md](api.md).
 
 ## Validations
 
-| Validation ID | BRD Ref | FSD Ref    | Rule                                                          |
-| ------------- | ------- | ---------- | ------------------------------------------------------------- |
-| VAL-001       | BR-001  | FSD-FR-002 | `clearance_cm` must be greater than 0 and at most 200         |
-| VAL-002       | BR-002  | FSD-FR-006 | `rainfall_mm_hr` is required and must be between 0 and 250    |
-| VAL-003       | BR-003  | FSD-FR-011 | `start_node` is required and must be an integer               |
-| VAL-004       | BR-003  | FSD-FR-011 | `target_node` is required and must be an integer              |
-| VAL-005       | BR-003  | FSD-FR-015 | Both node ids must exist in the graph                         |
-| VAL-006       | BR-003  | FSD-FR-012 | An edge is excluded when `water_depth_cm >= clearance_cm`     |
-| VAL-007       | BR-001  | FSD-FR-003 | Passability boundaries are inclusive at caution and clearance |
-| VAL-008       | BR-002  | FSD-FR-009 | Overridden edges are excluded from simulation writes          |
-| VAL-009       | BR-009  | FSD-FR-018 | Username and password are required on the login form          |
-| VAL-010       | BR-007  | FSD-FR-037 | An empty internal note is not submitted                       |
-| VAL-011       | BR-005  | FSD-FR-026 | Filter values are constrained to the defined source set       |
-| VAL-012       | BR-008  | FSD-FR-047 | Schema changes are applied only through Alembic revisions     |
+| Validation ID | BRD Ref | FSD Ref    | Rule                                                                                                                     |
+| ------------- | ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------ |
+| VAL-001       | BR-001  | FSD-FR-002 | `clearance_cm` must be greater than 0 and at most 200                                                                    |
+| VAL-002       | BR-002  | FSD-FR-006 | `rainfall_mm_hr` is required and must be between 0 and 250                                                               |
+| VAL-003       | BR-003  | FSD-FR-011 | `start_node` is required and must be an integer                                                                          |
+| VAL-004       | BR-003  | FSD-FR-011 | `target_node` is required and must be an integer                                                                         |
+| VAL-005       | BR-003  | FSD-FR-015 | Both node ids must exist in the graph                                                                                    |
+| VAL-006       | BR-003  | FSD-FR-012 | An edge is excluded when `water_depth_cm >= clearance_cm`                                                                |
+| VAL-007       | BR-001  | FSD-FR-003 | Passability boundaries are inclusive at caution and clearance                                                            |
+| VAL-008       | BR-002  | FSD-FR-009 | Overridden edges are excluded from simulation writes                                                                     |
+| VAL-009       | BR-009  | FSD-FR-018 | Username and password are required on the login form                                                                     |
+| VAL-010       | BR-007  | FSD-FR-037 | An empty internal note is not submitted                                                                                  |
+| VAL-011       | BR-005  | FSD-FR-026 | Filter values are constrained to the defined source set                                                                  |
+| VAL-012       | BR-008  | FSD-FR-047 | Schema changes are applied only through Alembic revisions                                                                |
+| VAL-013       | BR-014  | FSD-FR-065 | `depth_level` is one of `ANKLE`, `KNEE`, `IMPASSABLE`                                                                    |
+| VAL-014       | BR-014  | FSD-FR-066 | Photo is required for a photo report; max 8 MB; JPEG/PNG/WebP; MIME sniffed                                              |
+| VAL-015       | BR-014  | FSD-FR-067 | Latitude is within ±90, longitude within ±180; EXIF location must agree with the claimed point within 200 m when present |
+| VAL-016       | BR-014  | FSD-FR-065 | Report submissions are rate-limited per device `[TBC]`                                                                   |
+| VAL-017       | BR-016  | FSD-FR-082 | A flood polygon has at least three vertices and is closed; a closure line has at least two points                        |
+| VAL-018       | BR-016  | FSD-FR-084 | `obstruction_level` is one of `CAUTION`, `LEVEL_2`, `LEVEL_3`, `IMPASSABLE`                                              |
+| VAL-019       | BR-016  | FSD-FR-076 | Vehicle status moves only through the allowed transition graph                                                           |
+| VAL-020       | BR-013  | FSD-FR-072 | Telemetry accepts at most one batch per five seconds per vehicle                                                         |
+| VAL-021       | BR-015  | FSD-FR-073 | SOS requires a location fix no older than 60 seconds                                                                     |
+| VAL-022       | BR-016  | FSD-FR-089 | A unit can be assigned only when `AVAILABLE`, and the route must avoid inactive or non-blocking hazards                  |
+| VAL-023       | BR-009  | FSD-FR-092 | JWT signature, expiry and role are verified before any privileged write                                                  |
+| VAL-024       | BR-017  | FSD-FR-090 | Sensor is known and active; value is inside its configured range; timestamp is not in the future                         |
 
 ## Security Design
 
-| Security Requirement                                                                   | Reference                            |
-| -------------------------------------------------------------------------------------- | ------------------------------------ |
-| Response headers: nosniff, frame denial, referrer policy, cross-origin resource policy | BR-011 / FSD-FR-051                  |
-| Row-level security on all application tables                                           | BR-011 / FSD-FR-047                  |
-| `anon` and `authenticated` privileges revoked                                          | BR-011 / FSD-FR-051                  |
-| TLS required for the hosted database connection                                        | BR-011 / FSD-FR-051                  |
-| Secrets supplied only as environment variables or repository secrets                   | BR-011 / FSD-FR-051                  |
-| Container runs as an unprivileged user                                                 | BR-011 / FSD-FR-051                  |
-| Automated dependency updates (Dependabot)                                              | BR-008 / FSD-FR-047                  |
-| Static analysis (CodeQL) with capability preflight                                     | BR-008 / FSD-FR-047                  |
-| Dynamic API scan (OWASP ZAP), fail-closed                                              | BR-008 / FSD-FR-047                  |
-| Authentication and role enforcement                                                    | BR-009 / FSD-FR-021 to 023 — planned |
+| Security Requirement                                                                   | Reference                    |
+| -------------------------------------------------------------------------------------- | ---------------------------- |
+| Response headers: nosniff, frame denial, referrer policy, cross-origin resource policy | BR-011 / FSD-FR-051          |
+| Row-level security on all application tables                                           | BR-011 / FSD-FR-047          |
+| `anon` and `authenticated` privileges revoked                                          | BR-011 / FSD-FR-051          |
+| TLS required for the hosted database connection                                        | BR-011 / FSD-FR-051          |
+| Secrets supplied only as environment variables or repository secrets                   | BR-011 / FSD-FR-051          |
+| Container runs as an unprivileged user                                                 | BR-011 / FSD-FR-051          |
+| Automated dependency updates (Dependabot)                                              | BR-008 / FSD-FR-047          |
+| Static analysis (CodeQL) with capability preflight                                     | BR-008 / FSD-FR-047          |
+| Dynamic API scan (OWASP ZAP), fail-closed                                              | BR-008 / FSD-FR-047          |
+| Authentication and role enforcement (JWT, bcrypt, role guards)                         | BR-009 / FSD-FR-092 — CR-001 |
+| Evidence upload validation: MIME sniff, size cap, re-encode and EXIF strip             | BR-014 / FSD-FR-066, 067     |
+| Rate limits on login, reports, telemetry and SOS                                       | BR-009 / FSD-FR-092          |
+| CORS allowlist for the portal and driver PWA                                           | BR-011 / FSD-FR-051          |
+| Location minimisation: 50 m rounding, salted hash, 24-hour retention                   | BR-011 / NFR-021             |
+| Immutable audit writes for privileged actions                                          | BR-008 / FSD-FR-093          |
+| Authenticated SSE subscriptions                                                        | BR-013 / FSD-FR-086          |
+| Sensor gateway authentication and range validation                                     | BR-017 / FSD-FR-090          |
 
 **Open security risks**
 
-| ID      | Risk                                         | Severity | Disposition                                                      |
-| ------- | -------------------------------------------- | -------- | ---------------------------------------------------------------- |
-| SEC-001 | API has no authentication or authorisation   | High     | Accepted for the pilot; BR-009 is the first post-pilot increment |
-| SEC-002 | CORS allows every origin with credentials    | Medium   | Restrict to known portal origins before production               |
-| SEC-003 | No rate limiting                             | Medium   | Add at the proxy or via middleware before public exposure        |
-| SEC-004 | CodeQL cannot analyse the private repository | Medium   | Activates automatically when public or licensed                  |
-| SEC-005 | Audit hash column has no write path          | Low      | Implement with FSD-FR-047                                        |
+| ID      | Risk                                            | Severity | Disposition                                                       |
+| ------- | ----------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| SEC-001 | Baseline API has no authentication              | High     | CR-001 makes JWT/RBAC a release gate; do not expose baseline data |
+| SEC-002 | Baseline CORS allows every origin               | Medium   | Replace with a portal/PWA allowlist in CR-001                     |
+| SEC-003 | Baseline has no rate limiting                   | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS     |
+| SEC-004 | CodeQL cannot analyse the private repository    | Medium   | Activates automatically when public or licensed                   |
+| SEC-005 | Audit hash column has no write path             | Low      | Implement with FSD-FR-093                                         |
+| SEC-006 | Uploaded evidence can exhaust or poison storage | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution        |
+| SEC-007 | SSE stream could leak fleet or SOS positions    | Medium   | Authenticate the stream and filter by role                        |
+| SEC-008 | Driver location can be re-identified            | Medium   | Round, hash the device id, restrict access, purge after 24 hours  |
+| SEC-009 | Demo CCTV may be mistaken for live footage      | Medium   | Label the feed as demo in the API and UI                          |
+| SEC-010 | A sensor reading can be spoofed                 | Medium   | Gateway credential, sensor allowlist, range and timestamp checks  |
+| SEC-011 | PWA token theft on a shared device              | Medium   | Short-lived bearer token, no long-lived local storage             |
 
 ## Error Handling
 
@@ -223,39 +460,69 @@ Full request and response contracts, examples and error bodies are in
 | E005       | Required query parameter missing               | Return 422 listing the missing location                      |
 | E006       | Database unreachable at startup                | Fail startup; container exits; health check never goes green |
 | E007       | Unhandled server error                         | Return 500; log the traceback; do not leak internals         |
+| E008       | Missing, expired or invalid JWT                | Return 401 with `WWW-Authenticate`; change nothing           |
+| E009       | Role not permitted for the action              | Return 403; record the attempt without the payload secrets   |
+| E010       | Photo missing, unsupported or above 8 MB       | Return 415 or 413 with the accepted types and limit          |
+| E011       | Report already verified, rejected or duplicate | Return 409 with the current status                           |
+| E012       | Vehicle unavailable or illegal status change   | Return 409 with the current status and allowed transitions   |
+| E013       | Invalid or self-intersecting geometry          | Return 422 with the geometry reason                          |
+| E014       | Rate limit exceeded                            | Return 429 with `Retry-After`                                |
+| E015       | Event stream or Redis unavailable              | Return 503 for the stream; clients fall back to a snapshot   |
 
 Transaction rules: read endpoints do not commit; simulation commits once after
-all edge updates; migrations run one transaction per revision.
+all edge updates; a privileged mutation commits its row and audit record in one
+transaction, then publishes the event. If publication fails the mutation still
+stands, the failure is logged, and clients recover through the next snapshot or
+reconnect. Migrations run one transaction per revision.
 
 ## Technical Test Cases
 
-| TC ID   | BRD Ref | FSD Ref    | Scenario                                                         |
-| ------- | ------- | ---------- | ---------------------------------------------------------------- |
-| TTC-001 | BR-001  | FSD-FR-001 | Network state returns every seeded node and edge                 |
-| TTC-002 | BR-001  | FSD-FR-003 | Passability thresholds hold at exact boundaries                  |
-| TTC-003 | BR-002  | FSD-FR-007 | SCS-CN returns zero at zero rainfall and increases monotonically |
-| TTC-004 | BR-002  | FSD-FR-008 | Lower elevation produces deeper ponding at equal runoff          |
-| TTC-005 | BR-002  | FSD-FR-009 | Overridden edge is not modified by simulation                    |
-| TTC-006 | BR-003  | FSD-FR-012 | A\* returns the optimal path on the seeded graph                 |
-| TTC-007 | BR-003  | FSD-FR-014 | Blocked graph returns no path                                    |
-| TTC-008 | BR-003  | FSD-FR-016 | Reverse route mirrors the forward route                          |
-| TTC-009 | BR-008  | FSD-FR-047 | `alembic upgrade head` then `alembic check` reports no drift     |
-| TTC-010 | BR-011  | FSD-FR-051 | `anon` role is denied access to application tables               |
-| TTC-011 | BR-010  | FSD-FR-051 | Every response carries the four security headers                 |
-| TTC-012 | BR-001  | FSD-FR-053 | Restarting the API does not duplicate seed rows                  |
+| TC ID   | BRD Ref | FSD Ref    | Scenario                                                                                                      |
+| ------- | ------- | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| TTC-001 | BR-001  | FSD-FR-001 | Network state returns every seeded node and edge                                                              |
+| TTC-002 | BR-001  | FSD-FR-003 | Passability thresholds hold at exact boundaries                                                               |
+| TTC-003 | BR-002  | FSD-FR-007 | SCS-CN returns zero at zero rainfall and increases monotonically                                              |
+| TTC-004 | BR-002  | FSD-FR-008 | Lower elevation produces deeper ponding at equal runoff                                                       |
+| TTC-005 | BR-002  | FSD-FR-009 | Overridden edge is not modified by simulation                                                                 |
+| TTC-006 | BR-003  | FSD-FR-012 | A\* returns the optimal path on the seeded graph                                                              |
+| TTC-007 | BR-003  | FSD-FR-014 | Blocked graph returns no path                                                                                 |
+| TTC-008 | BR-003  | FSD-FR-016 | Reverse route mirrors the forward route                                                                       |
+| TTC-009 | BR-008  | FSD-FR-047 | `alembic upgrade head` then `alembic check` reports no drift                                                  |
+| TTC-010 | BR-011  | FSD-FR-051 | `anon` role is denied access to application tables                                                            |
+| TTC-011 | BR-010  | FSD-FR-051 | Every response carries the four security headers                                                              |
+| TTC-012 | BR-001  | FSD-FR-053 | Restarting the API does not duplicate seed rows                                                               |
+| TTC-013 | BR-009  | FSD-FR-092 | Valid credentials issue a token; invalid credentials return 401                                               |
+| TTC-014 | BR-009  | FSD-FR-092 | A driver token receives 403 on approve, publish and dispatch                                                  |
+| TTC-015 | BR-014  | FSD-FR-066 | A valid photo is stored, EXIF is extracted, and the served file has no EXIF                                   |
+| TTC-016 | BR-014  | FSD-FR-065 | An invalid depth returns 422; a duplicate is flagged, not dropped                                             |
+| TTC-017 | BR-014  | FSD-FR-080 | Approval creates one hazard, one audit row and one event under 100 ms                                         |
+| TTC-018 | BR-014  | FSD-FR-081 | Rejection without a reason returns 422 and changes nothing                                                    |
+| TTC-019 | BR-016  | FSD-FR-082 | A polygon with fewer than three vertices or self-intersection returns 422                                     |
+| TTC-020 | BR-013  | FSD-FR-061 | Routing excludes edges intersecting an active hazard                                                          |
+| TTC-021 | BR-015  | FSD-FR-073 | A stale SOS location is refused; a valid SOS ranks only available units and dispatches on a hazard-safe route |
+| TTC-022 | BR-013  | FSD-FR-072 | Two telemetry batches inside five seconds produce one accepted write                                          |
+| TTC-023 | BR-017  | FSD-FR-091 | A breach marks only in-radius edges advisory until confirmed                                                  |
+| TTC-024 | BR-018  | FSD-FR-068 | A queued report syncs once, survives a retry, and cached routes render offline                                |
 
 ## Technical Acceptance Criteria
 
-| BRD Ref | FSD Ref           | Criteria                                                                  |
-| ------- | ----------------- | ------------------------------------------------------------------------- |
-| BR-001  | FSD-FR-001 to 005 | Every edge carries depth and status; invalid parameters rejected with 422 |
-| BR-002  | FSD-FR-006 to 010 | Simulation persists depth and speed and returns the updated network       |
-| BR-003  | FSD-FR-011 to 017 | Route segments are below clearance, or the API returns 404 with a reason  |
-| BR-004  | FSD-FR-024 to 029 | Queue renders in urgency order with the required fields                   |
-| BR-007  | FSD-FR-039 to 046 | Each action writes a timestamped, attributed log entry                    |
-| BR-008  | FSD-FR-047        | Migrations apply cleanly and deny public database roles                   |
-| BR-010  | FSD-FR-050 to 052 | Health endpoint, security headers and OpenAPI are reachable               |
-| BR-011  | FSD-FR-051        | No secret in the repository; RLS verified against the `anon` role         |
+| BRD Ref | FSD Ref           | Criteria                                                                    |
+| ------- | ----------------- | --------------------------------------------------------------------------- |
+| BR-001  | FSD-FR-001 to 005 | Every edge carries depth and status; invalid parameters rejected with 422   |
+| BR-002  | FSD-FR-006 to 010 | Simulation persists depth and speed and returns the updated network         |
+| BR-003  | FSD-FR-011 to 017 | Route segments are below clearance, or the API returns 404 with a reason    |
+| BR-004  | FSD-FR-024 to 029 | Queue renders in urgency order with the required fields                     |
+| BR-007  | FSD-FR-039 to 046 | Each action writes a timestamped, attributed log entry                      |
+| BR-008  | FSD-FR-047        | Migrations apply cleanly and deny public database roles                     |
+| BR-010  | FSD-FR-050 to 052 | Health endpoint, security headers and OpenAPI are reachable                 |
+| BR-011  | FSD-FR-051        | No secret in the repository; RLS verified against the `anon` role           |
+| BR-009  | FSD-FR-092        | Every privileged route rejects a missing, invalid or under-privileged token |
+| BR-013  | FSD-FR-054 to 064 | Routes avoid active hazards; a new intersecting hazard triggers reroute     |
+| BR-014  | FSD-FR-065 to 081 | Reports persist with evidence and metadata; decisions are recorded          |
+| BR-015  | FSD-FR-073, 074   | SOS requires a fresh location and reaches an acknowledged state             |
+| BR-016  | FSD-FR-075 to 089 | Map, fleet and dispatch use persisted data; assignment is transactional     |
+| BR-017  | FSD-FR-090, 091   | Readings are stored with identity; only in-radius edges become advisory     |
+| BR-018  | FSD-FR-068 to 071 | Cached graph navigates offline; queued reports sync exactly once            |
 
 ## 2. Algorithms
 
@@ -325,20 +592,113 @@ For each hop, stored geometry is fetched and reversed when travel runs against
 the stored direction. Consecutive hops are joined, dropping a duplicated vertex
 at the seam. A straight line is used when geometry is missing.
 
+### 2.6 Hazard-route intersection
+
+The server is authoritative for hazard avoidance. A route is computed against
+the current active hazards: any edge whose geometry intersects an active
+`FLOOD` polygon or `CLOSURE` line is excluded when its obstruction level blocks
+the vehicle. The PWA performs the same test on the remaining route only to
+decide whether to ask for a new route; it never invents a path locally.
+
+```text
+for each remaining segment:
+    if ST_Intersects(segment.geom, hazard.geom)
+       and hazard.blocks(clearance)      → request reroute with hazard_id excluded
+if reroute has no path                      → show explicit refusal and alternatives
+```
+
+A hazard with `CAUTION` remains passable but raises the proximity alert; a
+`LEVEL_3` or `IMPASSABLE` hazard excludes the edge. This keeps the warning and
+the routing rule on one definition.
+
+### 2.7 Nearest-unit ranking
+
+Straight-line distance is not a dispatch decision. The service first selects
+candidate units within a configured radius with a PostGIS KNN query, then
+computes a flood-safe route for each candidate and ranks by estimated travel
+time. Non-`AVAILABLE` units are excluded before routing.
+
+```text
+candidates = KNN(vehicles WHERE status = 'AVAILABLE', incident.geom, k = 5)
+for each candidate:
+    route = flood_safe_route(candidate.geom, incident.geom, candidate.clearance)
+rank by route.eta_minutes asc, then straight-line distance
+```
+
+The preview is advisory: the dispatcher confirms, and the assignment commits the
+task, the unit status and the audit record together.
+
+### 2.8 Report urgency
+
+Urgency is a transparent score, not a black box. It orders the queue; it never
+publishes a hazard.
+
+```text
+severity   = ANKLE 1.0 | KNEE 2.0 | IMPASSABLE 3.0
+source     = PHOTO 1.0 | SENSOR 0.9 | CALL 0.8
+corrobor   = min(1 + 0.25 × nearby_reports, 2.0)
+recency    = exp(−age_minutes / 30)
+urgency    = severity × source × corrobor × recency
+```
+
+Weights are configuration, validated with dispatchers at M7 `[TBC]`. A report
+inside 150 m and 15 minutes of an existing pending report is flagged as a
+possible duplicate, not discarded.
+
+### 2.9 Sensor impact
+
+A reading above its threshold does not publish a hazard. It creates an advisory
+state that a dispatcher must confirm.
+
+```text
+if reading.value >= sensor.threshold_value:
+    edges = ST_DWithin(road_edges.geom, sensor.geom, sensor.impact_radius_m)
+    mark edges advisory for that sensor
+    emit an LGU-only advisory event
+    suppress duplicates inside the debounce window (default 10 min)
+```
+
+Confirmation converts the advisory into a hazard polygon or closure; dismissal
+clears it and records why. `sensors.simulated = true` is surfaced in the UI so a
+simulated gauge is never presented as a real measurement.
+
+### 2.10 Telemetry throttle and privacy
+
+```text
+client batch interval   = 5 s while navigating
+server token bucket     = 1 batch / 5 s / vehicle, burst 2
+driver location stored  = ST_SnapToGrid(point, 0.0005)   (~50 m)
+device identifier       = HMAC-SHA256(server_secret, device_id)
+retention               = 24 h, purged by scheduled job
+```
+
+The latest position is kept for fleet display; history is retained only for the
+configured window. Raw device identifiers and unrounded positions are never
+persisted.
+
 ## 3. Data Relationships and Migrations
 
 ```mermaid
 erDiagram
     USERS ||--o{ AUDIT_LOGS : writes
+    USERS ||--o{ INCIDENT_REPORTS : moderates
+    USERS ||--o{ HAZARD_ZONES : publishes
+    USERS ||--o{ DISPATCH_TASKS : assigns
+    INCIDENT_REPORTS ||--o| HAZARD_ZONES : produces
     ROAD_NODES ||--o{ ROAD_EDGES : starts
     ROAD_NODES ||--o{ ROAD_EDGES : ends
     ROAD_EDGES ||--|| LIVE_EDGE_STATES : has
+    VEHICLES ||--o{ VEHICLE_TELEMETRY : reports
+    VEHICLES ||--o{ DISPATCH_TASKS : serves
+    SOS_REQUESTS ||--o| DISPATCH_TASKS : triggers
+    SENSORS ||--o{ SENSOR_READINGS : emits
 ```
 
-| Revision       | Purpose                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| `fd26e0cb82cc` | Initial schema: five application tables plus spatial columns         |
-| `a1b2c3d4e5f6` | Enable RLS on application tables and revoke `anon` / `authenticated` |
+| Revision                    | Purpose                                                              |
+| --------------------------- | -------------------------------------------------------------------- |
+| `fd26e0cb82cc`              | Initial schema: five application tables plus spatial columns         |
+| `a1b2c3d4e5f6`              | Enable RLS on application tables and revoke `anon` / `authenticated` |
+| Generated on implementation | CR-001: nine tables, indexes, RLS policies and seed accounts         |
 
 Rules:
 
@@ -352,35 +712,51 @@ Rules:
 
 Settings use the `METROFLOW_` prefix and may be supplied in a local `.env`.
 
-| Variable                          | Default           | Effect                              |
-| --------------------------------- | ----------------- | ----------------------------------- |
-| `DATABASE_URL`                    | local PostGIS DSN | Connection string                   |
-| `METROFLOW_CURVE_NUMBER`          | 85                | SCS-CN curve number                 |
-| `METROFLOW_RAINFALL_DURATION_HRS` | 1.0               | Storm duration                      |
-| `METROFLOW_PONDING_AMPLIFICATION` | 3.5               | Runoff-to-street-depth factor       |
-| `METROFLOW_CAUTION_DEPTH_CM`      | 10.0              | Light-flood threshold               |
-| `METROFLOW_DEFAULT_CLEARANCE_CM`  | 30.0              | Clearance when omitted              |
-| `RUN_MIGRATIONS`                  | true              | Apply migrations on container start |
+| Variable                            | Default                | Effect                                         |
+| ----------------------------------- | ---------------------- | ---------------------------------------------- |
+| `DATABASE_URL`                      | local PostGIS DSN      | Connection string                              |
+| `METROFLOW_CURVE_NUMBER`            | 85                     | SCS-CN curve number                            |
+| `METROFLOW_RAINFALL_DURATION_HRS`   | 1.0                    | Storm duration                                 |
+| `METROFLOW_PONDING_AMPLIFICATION`   | 3.5                    | Runoff-to-street-depth factor                  |
+| `METROFLOW_CAUTION_DEPTH_CM`        | 10.0                   | Light-flood threshold                          |
+| `METROFLOW_DEFAULT_CLEARANCE_CM`    | 30.0                   | Clearance when omitted                         |
+| `RUN_MIGRATIONS`                    | true                   | Apply migrations on container start            |
+| `METROFLOW_JWT_SECRET`              | no default             | Token signing; required once auth is enabled   |
+| `METROFLOW_JWT_TTL_MINUTES`         | 480                    | Access-token lifetime                          |
+| `METROFLOW_CORS_ORIGINS`            | localhost origins      | Comma-separated portal and PWA origins         |
+| `METROFLOW_REDIS_URL`               | `redis://redis:6379/0` | Event bus and throttle counters                |
+| `METROFLOW_UPLOAD_DIR`              | `/data/evidence`       | Evidence volume mount                          |
+| `METROFLOW_MAX_UPLOAD_MB`           | 8                      | Photo size cap                                 |
+| `METROFLOW_DRIVER_RETENTION_HOURS`  | 24                     | Driver location purge window                   |
+| `METROFLOW_TELEMETRY_MIN_SECONDS`   | 5                      | Server-side telemetry throttle                 |
+| `METROFLOW_WARNING_RADIUS_M`        | [TBC]                  | Driver proximity alert radius                  |
+| `METROFLOW_SENSOR_DEBOUNCE_MINUTES` | 10                     | Duplicate advisory suppression                 |
+| `METROFLOW_MAP_TILE_URL`            | OSM raster             | Online basemap with attribution                |
+| `METROFLOW_SENSOR_TOKEN`            | no default             | Gateway authentication; required for ingestion |
 
 Repository secrets:
 
-| Secret            | Required by                 | Status                                      |
-| ----------------- | --------------------------- | ------------------------------------------- |
-| `SUPABASE_DB_URL` | Supabase migration workflow | **Not set**; CD no-ops until it is supplied |
+| Secret                   | Required by                 | Status                                         |
+| ------------------------ | --------------------------- | ---------------------------------------------- |
+| `SUPABASE_DB_URL`        | Supabase migration workflow | **Not set**; CD no-ops until it is supplied    |
+| `METROFLOW_JWT_SECRET`   | Deployment                  | Must be set before authentication is enabled   |
+| `METROFLOW_SENSOR_TOKEN` | Deployment / gateway        | Must be set before sensor ingestion is enabled |
 
 ## 5. Deployment and CI/CD
 
 ### 5.1 Local stack
 
-| Service    | Image / build                   | Port | Health check         |
-| ---------- | ------------------------------- | ---- | -------------------- |
-| `postgres` | `postgis/postgis:15-3.3-alpine` | 5432 | `pg_isready`         |
-| `redis`    | `redis:7-alpine`                | 6379 | `redis-cli ping`     |
-| `backend`  | built from `backend/Dockerfile` | 8000 | `curl /openapi.json` |
+| Service    | Image / build                              | Port | Health check         |
+| ---------- | ------------------------------------------ | ---- | -------------------- |
+| `postgres` | `postgis/postgis:15-3.3-alpine`            | 5432 | `pg_isready`         |
+| `redis`    | `redis:7-alpine`                           | 6379 | `redis-cli ping`     |
+| `backend`  | built from `backend/Dockerfile`            | 8000 | `curl /openapi.json` |
+| `mobile`   | `mobile-driver/` Vite dev server (planned) | 5173 | `bun run dev`        |
 
-Redis is provisioned for future caching and pub/sub but is not used by the
-application today. The container runs as uid 10001 and applies migrations on
-start unless `RUN_MIGRATIONS=false`.
+Redis carries the hazard, fleet and SOS event channels and the rate-limit and
+telemetry counters. It is no longer a provisioned-but-unused container once
+CR-001 lands. The backend container runs as uid 10001, mounts the evidence
+volume read-write, and applies migrations on start unless `RUN_MIGRATIONS=false`.
 
 ### 5.2 Hosted database
 
@@ -400,7 +776,8 @@ IPv4 runners, so the session pooler host is required.
 | Workflow                      | Trigger                                     | Gate                                                            |
 | ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
 | Backend CI                    | Push/PR touching `backend/**`; manual       | Unit tests, contract tests, `alembic upgrade`, `alembic check`  |
-| Web CI                        | Push/PR touching `web-lgu/**`; manual       | Bun install, ESLint, `next build`                               |
+| Web CI                        | Push/PR touching `web-lgu/**`; manual       | Bun install, ESLint, `bun test`, `next build`, Playwright E2E   |
+| Mobile CI                     | Push/PR touching `mobile-driver/**`; manual | Bun install, ESLint, `bun test`, PWA production build           |
 | Security — OWASP ZAP API Scan | Weekly cron and manual                      | Fails on findings at or above threshold; no `continue-on-error` |
 | Security — CodeQL             | Push/PR to `main`, weekly, manual           | Skips with a visible warning when code scanning is unavailable  |
 | Supabase — Apply migrations   | After Backend CI succeeds on `main`; manual | Serialised; no-ops without `SUPABASE_DB_URL`                    |
@@ -410,47 +787,58 @@ Delivery flow:
 
 ```text
 change ──► pull request ──► Backend CI ──┐
-                       └──► Web CI     ──┴──► merge to main
+                       ├──► Web CI     ──┤
+                       └──► Mobile CI  ──┴──► merge to main
                                               ├──► Backend CI ──► Supabase migrations
+                                              ├──► Web CI ──► Playwright E2E
                                               └──► tag backend-v* ──► GHCR image
 ```
 
 ## 6. Architecture Decisions
 
-| ID      | Decision                               | Alternatives considered             | Rationale                                                                | Status            |
-| ------- | -------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------ | ----------------- |
-| ADR-001 | Alembic owns the schema                | `Base.metadata.create_all`          | `create_all` cannot alter existing tables, so the database would drift   | Accepted          |
-| ADR-002 | Supabase as hosted Postgres            | Self-managed VM, RDS                | Managed PostGIS, free tier, pooler, point-in-time recovery on paid plans | Accepted          |
-| ADR-003 | Session pooler for CI                  | Direct `db.<ref>` host              | The direct host is IPv6-only; GitHub runners are IPv4                    | Accepted          |
-| ADR-004 | Time-dependent A\*                     | Dijkstra, contraction hierarchies   | Optimal routes with a smaller frontier under depth-dependent cost        | Accepted          |
-| ADR-005 | SCS-CN for runoff                      | Rational method, hydrodynamic model | Standard, explainable, few parameters; adequate for a decision aid       | Accepted          |
-| ADR-006 | Ponding amplification as configuration | Hard-coded coefficient              | Makes the calibration assumption explicit and tunable                    | Accepted          |
-| ADR-007 | RLS deny-by-default on Supabase        | Rely on API auth only               | The Data API is publicly reachable with the anon key                     | Accepted          |
-| ADR-008 | ZAP is a gate, not a report            | `continue-on-error`                 | A report nobody reads does not prevent regressions                       | Accepted          |
-| ADR-009 | CodeQL preflight skip                  | Delete or let it fail               | Keeps the workflow ready to activate without edits                       | Accepted          |
-| ADR-010 | Bun ecosystem in Dependabot            | npm ecosystem                       | Dependabot cannot parse `bun.lock` under npm                             | Accepted          |
-| ADR-011 | Portal ships with mock incident data   | Block the UI until intake exists    | Demonstrates the workflow and fixes the visual contract early            | Accepted, interim |
-| ADR-012 | Security headers in middleware         | Reverse proxy only                  | Headers exist even without a proxy, which is how ZAP sees the app        | Accepted          |
-| ADR-013 | Redis provisioned but unused           | Remove it                           | Keeps parity with the intended production topology                       | Open              |
+| ID      | Decision                                         | Alternatives considered             | Rationale                                                                                                           | Status                          |
+| ------- | ------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| ADR-001 | Alembic owns the schema                          | `Base.metadata.create_all`          | `create_all` cannot alter existing tables, so the database would drift                                              | Accepted                        |
+| ADR-002 | Supabase as hosted Postgres                      | Self-managed VM, RDS                | Managed PostGIS, free tier, pooler, point-in-time recovery on paid plans                                            | Accepted                        |
+| ADR-003 | Session pooler for CI                            | Direct `db.<ref>` host              | The direct host is IPv6-only; GitHub runners are IPv4                                                               | Accepted                        |
+| ADR-004 | Time-dependent A\*                               | Dijkstra, contraction hierarchies   | Optimal routes with a smaller frontier under depth-dependent cost                                                   | Accepted                        |
+| ADR-005 | SCS-CN for runoff                                | Rational method, hydrodynamic model | Standard, explainable, few parameters; adequate for a decision aid                                                  | Accepted                        |
+| ADR-006 | Ponding amplification as configuration           | Hard-coded coefficient              | Makes the calibration assumption explicit and tunable                                                               | Accepted                        |
+| ADR-007 | RLS deny-by-default on Supabase                  | Rely on API auth only               | The Data API is publicly reachable with the anon key                                                                | Accepted                        |
+| ADR-008 | ZAP is a gate, not a report                      | `continue-on-error`                 | A report nobody reads does not prevent regressions                                                                  | Accepted                        |
+| ADR-009 | CodeQL preflight skip                            | Delete or let it fail               | Keeps the workflow ready to activate without edits                                                                  | Accepted                        |
+| ADR-010 | Bun ecosystem in Dependabot                      | npm ecosystem                       | Dependabot cannot parse `bun.lock` under npm                                                                        | Accepted                        |
+| ADR-011 | Portal ships with mock incident data             | Block the UI until intake exists    | Demonstrates the workflow and fixes the visual contract early                                                       | Superseded by CR-001            |
+| ADR-012 | Security headers in middleware                   | Reverse proxy only                  | Headers exist even without a proxy, which is how ZAP sees the app                                                   | Accepted                        |
+| ADR-013 | Redis provisioned but unused                     | Remove it                           | Keeps parity with the intended production topology                                                                  | Accepted; activates with CR-001 |
+| ADR-014 | Driver client is an installable PWA              | Native iOS/Android, Expo            | One codebase, real service worker and IndexedDB, testable without an emulator; store builds are out of scope        | Proposed (CR-001)               |
+| ADR-015 | SSE over Redis pub/sub                           | WebSocket, polling                  | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target | Proposed (CR-001)               |
+| ADR-016 | JWT + bcrypt + RBAC                              | Supabase Auth, shared passcode      | Dependencies already present; local accounts keep the pilot self-contained; roles are enforced server-side          | Proposed (CR-001)               |
+| ADR-017 | Local evidence volume behind a storage interface | Supabase Storage, S3                | No external credential or cost for the pilot; the interface allows a later swap                                     | Proposed (CR-001)               |
+| ADR-018 | Offline mode uses the cached graph               | Cache raster tiles, block offline   | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                | Proposed (CR-001)               |
 
 ## 7. Known Limitations
 
-| ID      | Limitation                                | Impact                                        | Planned resolution                        |
-| ------- | ----------------------------------------- | --------------------------------------------- | ----------------------------------------- |
-| LIM-001 | No authentication or authorisation        | Cannot handle real personal data; API is open | Implement identity and roles (BR-009)     |
-| LIM-002 | Incident data is mocked                   | Triage is demonstrated, not operational       | Build intake and persistence              |
-| LIM-003 | No live sensor or weather ingestion       | Simulation is operator-driven                 | Integrate feeds with agreements           |
-| LIM-004 | Redis is unused                           | Extra container in the stack                  | Cache network state; pub/sub updates      |
-| LIM-005 | CORS allows all origins with credentials  | Cross-origin abuse surface                    | Allowlist portal origins                  |
-| LIM-006 | No rate limiting or WAF                   | DoS and credential-stuffing exposure          | Proxy-level rules before exposure         |
-| LIM-007 | No map rendering in the portal            | GeoJSON served but not drawn                  | MapLibre component                        |
-| LIM-008 | Audit log is schema-only                  | No immutable trail of decisions               | Implement FSD-FR-047 with hash chaining   |
-| LIM-009 | No automated browser end-to-end tests     | UI regressions caught manually                | Add Playwright to Web CI                  |
-| LIM-010 | CodeQL inactive on the private repository | Static analysis gap                           | Publish the repo or license Code Security |
-| LIM-011 | Single-region hosted database             | Latency and availability risk                 | Choose a region near operations           |
-| LIM-012 | No backup/restore runbook or DR test      | Recovery objectives unverified                | Define RPO/RTO and test restore           |
-| LIM-013 | Deleting a model needs a manual `DROP`    | Migration authoring risk                      | Documented in migration rules             |
-| LIM-014 | Seeded graph is four nodes                | Routing demonstration is narrow               | Import the real road network              |
+| ID      | Limitation                                         | Impact                                        | Planned resolution                                                       |
+| ------- | -------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
+| LIM-001 | Baseline has no authentication                     | Cannot handle real personal data; API is open | JWT/RBAC is a CR-001 release gate                                        |
+| LIM-002 | Baseline incident data is mocked                   | Triage is demonstrated, not operational       | Persisted report API in CR-001                                           |
+| LIM-003 | No real sensor or weather ingestion                | Simulation is operator-driven                 | CR-001 adds labelled simulated gauges; real feeds need agreements        |
+| LIM-004 | Baseline Redis is unused                           | Extra container in the stack                  | CR-001 uses it for events and throttling                                 |
+| LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                    | CR-001 allowlist                                                         |
+| LIM-006 | No rate limiting or WAF                            | DoS and credential-stuffing exposure          | CR-001 Redis-backed limits; WAF before public exposure                   |
+| LIM-007 | No map in the baseline portal                      | GeoJSON served but not drawn                  | MapLibre map in CR-001                                                   |
+| LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions               | CR-001 write path with hash chaining                                     |
+| LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                | Playwright added to Web and Mobile CI                                    |
+| LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                           | Publish the repo or license Code Security                                |
+| LIM-011 | Single-region hosted database                      | Latency and availability risk                 | Choose a region near operations                                          |
+| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                | Define RPO/RTO and test restore                                          |
+| LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                      | Documented in migration rules                                            |
+| LIM-014 | Seeded graph is four nodes                         | Routing demonstration is narrow               | Import the real road network                                             |
+| LIM-015 | Driver app is not distributed through an app store | Users install it from the browser             | Accepted for the pilot; native build out of scope                        |
+| LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration       | Agreement and feed integration post-pilot                                |
+| LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic   | Optional tile cache if storage and licensing allow                       |
+| LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS      | The UI directs the user to the emergency line; telephony is out of scope |
 
 ## 8. Repository and Commands
 
@@ -464,25 +852,40 @@ MetroFlow/
 │   ├── geometry.py          PostGIS backfill
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
+│   ├── auth.py              JWT, roles, password hashing (CR-001)
+│   ├── reports.py           report intake and moderation (CR-001)
+│   ├── hazards.py           hazard authoring and publishing (CR-001)
+│   ├── fleet.py             vehicles, telemetry and dispatch (CR-001)
+│   ├── sensors.py           readings and impact rules (CR-001)
+│   ├── events.py            Redis pub/sub and SSE (CR-001)
 │   ├── migrations/          Alembic history
 │   ├── tests/               unit and integration suites
 │   ├── Dockerfile
 │   └── entrypoint.sh
-├── web-lgu/                 Next.js dispatch portal
+├── web-lgu/                 Next.js LGU portal (map, queue, dispatch)
+├── mobile-driver/           Vite React PWA (CR-001)
+│   ├── src/                 navigation, reports, offline, SOS
+│   ├── public/              manifest and icons
+│   └── vite.config.ts       PWA and build configuration
 ├── docs/                    this document set
-├── scripts/                 pre-commit helper
+├── scripts/                 pre-commit helper and doc builder
 ├── .github/workflows/       CI/CD
 └── docker-compose.yml       local stack
 ```
 
-| Task             | Command                                       |
-| ---------------- | --------------------------------------------- |
-| Start the stack  | `docker compose up --build`                   |
-| Run the API      | `cd backend && uvicorn main:app --reload`     |
-| Apply migrations | `cd backend && alembic upgrade head`          |
-| Check drift      | `cd backend && alembic check`                 |
-| Unit tests       | `cd backend && pytest -m "not integration"`   |
-| Contract tests   | `cd backend && pytest -m integration`         |
-| Run the portal   | `cd web-lgu && bun run dev`                   |
-| Lint and build   | `cd web-lgu && bun run lint && bun run build` |
-| Inspect contract | `curl http://localhost:8000/openapi.json`     |
+| Task               | Command                                             |
+| ------------------ | --------------------------------------------------- |
+| Start the stack    | `docker compose up --build`                         |
+| Run the API        | `cd backend && uvicorn main:app --reload`           |
+| Apply migrations   | `cd backend && alembic upgrade head`                |
+| Check drift        | `cd backend && alembic check`                       |
+| Unit tests         | `cd backend && pytest -m "not integration"`         |
+| Contract tests     | `cd backend && pytest -m integration`               |
+| Run the portal     | `cd web-lgu && bun run dev`                         |
+| Run the driver PWA | `cd mobile-driver && bun run dev`                   |
+| Web tests          | `cd web-lgu && bun test`                            |
+| Driver tests       | `cd mobile-driver && bun test`                      |
+| Browser E2E        | `cd web-lgu && bunx playwright test`                |
+| Lint and build     | `cd web-lgu && bun run lint && bun run build`       |
+| Driver build       | `cd mobile-driver && bun run lint && bun run build` |
+| Inspect contract   | `curl http://localhost:8000/openapi.json`           |

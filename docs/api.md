@@ -1,19 +1,24 @@
 # API Reference — MetroFlow Core API
 
-| Field                     | Value                              |
-| ------------------------- | ---------------------------------- |
-| Document ID               | MF-API-001                         |
-| Version                   | 1.0 (Draft)                        |
-| Status                    | Matches `main` @ `9605e38`         |
-| Date                      | 21 October 2026                    |
-| Base URL (local)          | `http://localhost:8000`            |
-| Machine-readable contract | `GET /openapi.json`                |
-| Related documents         | [FSD.md](FSD.md), [TSD.md](TSD.md) |
+| Field                     | Value                                                                    |
+| ------------------------- | ------------------------------------------------------------------------ |
+| Document ID               | MF-API-001                                                               |
+| Version                   | 1.1 (Draft)                                                              |
+| Status                    | Sections 2–8 match `main` @ `9605e38`; section 9 is planned under CR-001 |
+| Date                      | 21 October 2026                                                          |
+| Base URL (local)          | `http://localhost:8000`                                                  |
+| Machine-readable contract | `GET /openapi.json`                                                      |
+| Related documents         | [FSD.md](FSD.md), [TSD.md](TSD.md)                                       |
 
 ## 1. Overview
 
 The API computes flood depth over a road graph and returns clearance-aware
 routes. Responses are JSON; geometry is GeoJSON.
+
+Sections 2–8 document the **implemented** core API. Section 9 lists the
+endpoints added by [CR-001](CR-001.md); they are **not available** in the
+current code baseline and must not be treated as a live contract. The generated
+`/openapi.json` is always authoritative for what is running.
 
 | Method | Path                       | Purpose                                                  |
 | ------ | -------------------------- | -------------------------------------------------------- |
@@ -35,9 +40,14 @@ routes. Responses are JSON; geometry is GeoJSON.
 
 ### 1.2 Authentication
 
-**None.** Every endpoint is currently public. The pilot must not be exposed to
-the internet or given real personal data until authentication is implemented
-(FSD-FR-021, TSD LIM-001). This is a stated limitation, not an oversight.
+**None in the baseline.** Every implemented endpoint is public. The pilot must
+not be exposed to the internet or given real personal data until authentication
+is implemented (FSD-FR-021, TSD LIM-001). This is a stated limitation, not an
+oversight.
+
+Under CR-001, privileged endpoints will require a JWT bearer token, and the
+portal will use an HttpOnly cookie session. The driver PWA will hold a
+short-lived bearer token in memory. Planned scopes are described in §9.
 
 ### 1.3 Response headers
 
@@ -50,7 +60,8 @@ Every response carries:
 | `Referrer-Policy`              | `strict-origin-when-cross-origin` |
 | `X-Frame-Options`              | `DENY`                            |
 
-CORS allows any origin, including credentialed requests (TSD SEC-002).
+CORS currently allows any origin, including credentialed requests (TSD
+SEC-002). CR-001 replaces this with a portal and PWA allowlist.
 
 ### 1.4 Passability status
 
@@ -535,3 +546,92 @@ FastAPI returns `422` with the failing location and reason.
 The generated OpenAPI document is the authoritative machine-readable contract.
 This file explains it; if the two disagree, `/openapi.json` is correct and this
 document has a defect.
+
+---
+
+## 9. Planned endpoints under CR-001
+
+> **Not implemented.** These routes are specified in
+> [TSD.md](TSD.md) and traced in [FSD.md](FSD.md). They do not exist in the
+> current code baseline. Contracts will move into the body of this reference
+> when they are implemented and tested.
+
+### 9.1 Authentication and roles
+
+| Method | Path                 | Access | Purpose                            | Reference               |
+| ------ | -------------------- | ------ | ---------------------------------- | ----------------------- |
+| `POST` | `/api/v1/auth/login` | Public | Verify credentials and issue a JWT | BR-009 / FSD-FR-018–023 |
+| `GET`  | `/api/v1/auth/me`    | Bearer | Return the current user and role   | BR-009 / FSD-FR-018–023 |
+
+Roles: `SUPER_ADMIN`, `LGU_COMMANDER`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER`.
+Verification, publishing and dispatch require an LGU role; configuration
+requires `SUPER_ADMIN`.
+
+### 9.2 Reports and moderation
+
+| Method | Path                           | Access           | Purpose                                    | Reference               |
+| ------ | ------------------------------ | ---------------- | ------------------------------------------ | ----------------------- |
+| `POST` | `/api/v1/reports`              | Device or bearer | Multipart report with photo, depth and GPS | BR-014 / FSD-FR-065–067 |
+| `GET`  | `/api/v1/reports`              | LGU role         | Moderation queue, ordered by urgency       | BR-014 / FSD-FR-077     |
+| `GET`  | `/api/v1/reports/{id}`         | LGU role         | Evidence desk detail                       | BR-014 / FSD-FR-078–079 |
+| `POST` | `/api/v1/reports/{id}/approve` | LGU role         | Create and publish a verified hazard       | BR-014 / FSD-FR-080     |
+| `POST` | `/api/v1/reports/{id}/reject`  | LGU role         | Reject or mark duplicate with a reason     | BR-014 / FSD-FR-081     |
+
+### 9.3 Hazards and events
+
+| Method   | Path                     | Access        | Purpose                                      | Reference               |
+| -------- | ------------------------ | ------------- | -------------------------------------------- | ----------------------- |
+| `GET`    | `/api/v1/hazards/active` | Public/device | Active hazards and closures for the map      | BR-013 / FSD-FR-059     |
+| `POST`   | `/api/v1/hazards`        | LGU role      | Publish a drawn polygon or closure           | BR-016 / FSD-FR-082–085 |
+| `PATCH`  | `/api/v1/hazards/{id}`   | LGU role      | Change obstruction level or validity         | BR-016 / FSD-FR-084–085 |
+| `DELETE` | `/api/v1/hazards/{id}`   | LGU role      | Withdraw a hazard without deleting its audit | BR-016 / FSD-FR-085     |
+| `GET`    | `/api/v1/hazards/stream` | Bearer/device | SSE stream of hazard changes                 | BR-013 / FSD-FR-086     |
+
+### 9.4 Fleet, SOS and dispatch
+
+| Method  | Path                              | Access   | Purpose                           | Reference                |
+| ------- | --------------------------------- | -------- | --------------------------------- | ------------------------ |
+| `GET`   | `/api/v1/vehicles`                | LGU role | Fleet status and active tasks     | BR-016 / FSD-FR-075–076  |
+| `PATCH` | `/api/v1/vehicles/{id}/status`    | LGU role | Manual status transition          | BR-016 / FSD-FR-076      |
+| `POST`  | `/api/v1/vehicles/{id}/telemetry` | Device   | Throttled position batch          | BR-013 / FSD-FR-072      |
+| `GET`   | `/api/v1/vehicles/stream`         | LGU role | SSE stream of fleet changes       | BR-016 / FSD-FR-086      |
+| `POST`  | `/api/v1/sos`                     | Device   | Create a distress request         | BR-015 / FSD-FR-073      |
+| `GET`   | `/api/v1/sos`                     | LGU role | Distress incidents on the map     | BR-015 / FSD-FR-074, 087 |
+| `POST`  | `/api/v1/sos/{id}/assign`         | LGU role | Assign the nearest available unit | BR-016 / FSD-FR-088–089  |
+| `GET`   | `/api/v1/dispatch/{id}/route`     | LGU role | Flood-safe rescue route preview   | BR-016 / FSD-FR-089      |
+
+### 9.5 Sensors
+
+| Method | Path                       | Access        | Purpose                                | Reference           |
+| ------ | -------------------------- | ------------- | -------------------------------------- | ------------------- |
+| `POST` | `/api/v1/sensors/readings` | Gateway token | Ingest a river or rain gauge reading   | BR-017 / FSD-FR-090 |
+| `GET`  | `/api/v1/sensors`          | LGU role      | Sensor list, thresholds and advisories | BR-017 / FSD-FR-091 |
+
+### 9.6 Routing changes
+
+The existing `GET /api/v1/routing/navigate` is extended, not replaced:
+
+| Parameter                  | Type   | Purpose                                                   |
+| -------------------------- | ------ | --------------------------------------------------------- |
+| `origin_lat`, `origin_lon` | number | Device position; snapped to the nearest node              |
+| `target_lat`, `target_lon` | number | Destination point; snapped to the nearest node            |
+| `avoid_hazard_ids`         | string | Comma-separated hazard ids the caller already knows about |
+| `mode`                     | string | `driver` or `rescue`; changes clearance and hazard policy |
+
+Response additions: ordered `instructions[]` with manoeuvre, road name and
+distance; `avoided_hazard_ids[]`; and `rerouted` when the server had to leave
+the requested path. Existing required parameters and responses remain valid.
+
+### 9.7 Planned error additions
+
+| Status | Condition                                              |
+| ------ | ------------------------------------------------------ |
+| `401`  | Missing, expired or invalid token                      |
+| `403`  | Role not permitted for the action                      |
+| `413`  | Evidence photo exceeds the size limit                  |
+| `415`  | Evidence photo type is not accepted                    |
+| `409`  | Report already moderated, or vehicle not assignable    |
+| `429`  | Rate limit exceeded; `Retry-After` returned            |
+| `503`  | Event stream unavailable; client should use a snapshot |
+
+Full error semantics are in TSD §Error Handling (`E008`–`E015`).

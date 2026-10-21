@@ -2,6 +2,10 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
+**Version 1.1** — revised by [CR-001](CR-001.md) to include the driver PWA,
+live hazard publication, fleet dispatch and sensor ingestion. Monetary figures
+remain `[TBC]`.
+
 ## 1. Executive Summary
 
 | Item            | Detail                                                          |
@@ -24,27 +28,31 @@ cheaper, but because the two capabilities that create the value
 LGU owns) are the two that commercial platforms customise least and charge most
 for.
 
-The pilot is scoped to one corridor and deliberately excludes native apps, live
-sensors and production identity. That keeps the commitment inside an academic
-term while producing a demonstrable, auditable capability.
+The pilot is scoped to one corridor and deliberately excludes native app-store
+builds, real CCTV, carrier-grade SOS and multi-LGU tenancy. It now includes the
+driver side of the loop: an installable PWA, live hazard publication, fleet
+dispatch and labelled sensor ingestion. That extension is the CR-001 increment
+and is costed separately so the baseline commitment remains visible.
 
 All monetary figures are `[TBC]` pending quotations. The cost model and formulae
 are complete so figures can be inserted without reworking the document.
 
 ## 2. Business Need and Problem Statement
 
-| Element                | Summary                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Problem                | No shared, current picture of road passability; unstructured reports; no audit trail (BRD, BR-001 to BR-012) |
-| Who is affected        | Dispatchers, rescue units, MDRRMC coordinators, citizens awaiting rescue                                     |
-| Cost of the status quo | Aborted dispatches, duplicated effort, delayed response, no learning between events                          |
-| Opportunity            | Convert verbal coordination into verified, recorded decisions using data the LGU already holds               |
-| Window                 | The capability is useful before the next rainy season; the pilot fits one academic term                      |
+| Element                | Summary                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Problem                | No shared, current picture of road passability; unstructured reports; no audit trail; no warning reaches drivers (BRD, BR-001 to BR-018) |
+| Who is affected        | Dispatchers, rescue units, MDRRMC coordinators, citizens awaiting rescue                                                                 |
+| Cost of the status quo | Aborted dispatches, duplicated effort, delayed response, no learning between events                                                      |
+| Opportunity            | Convert verbal coordination into verified, recorded decisions using data the LGU already holds                                           |
+| Window                 | The capability is useful before the next rainy season; the pilot fits one academic term                                                  |
 
 Current process: a citizen or field unit reports flooding by call, message or
 radio; the dispatcher records it informally; verification depends on familiarity
 with the area or a second call; a unit is assigned without a verified route; the
-outcome is not captured in a form that supports review.
+outcome is not captured in a form that supports review. Nothing verified reaches
+the driver already on the road, so the same hazard is discovered again by each
+vehicle in turn.
 
 The full problem statement, personas and business requirements are in
 [BRD.md](BRD.md).
@@ -59,18 +67,20 @@ The full problem statement, personas and business requirements are in
 | BO-004 | Make every decision auditable                           | 100% of decisions carry actor, timestamp and action     |
 | BO-005 | Keep the system available during a declared event       | Availability `[TBC]`                                    |
 | BO-006 | Give responders a route that respects vehicle clearance | Every route response is passable or an explicit refusal |
+| BO-007 | Keep drivers out of verified flood hazards              | Every active route reroutes or alerts before a hazard   |
+| BO-008 | Shorten field observation to verified hazard            | Median report-to-decision time below baseline `[TBC]`   |
 
 ## 4. Options Analysis
 
 ### 4.1 Options considered
 
-| ID  | Option                   | Description                                                           |
-| --- | ------------------------ | --------------------------------------------------------------------- |
-| O1  | **Do nothing**           | Continue radio, phone and social-media coordination                   |
-| O2  | **Manual GIS procedure** | Dispatchers maintain a shared map and spreadsheet by hand             |
-| O3  | **Commercial platform**  | Licence an existing incident-management or fleet-tracking platform    |
-| O4  | **Build the pilot**      | Build simulation, routing and triage against the LGU's pilot corridor |
-| O5  | **Hybrid**               | Licence a commercial platform and build only the routing engine       |
+| ID  | Option                   | Description                                                                         |
+| --- | ------------------------ | ----------------------------------------------------------------------------------- |
+| O1  | **Do nothing**           | Continue radio, phone and social-media coordination                                 |
+| O2  | **Manual GIS procedure** | Dispatchers maintain a shared map and spreadsheet by hand                           |
+| O3  | **Commercial platform**  | Licence an existing incident-management or fleet-tracking platform                  |
+| O4  | **Build the pilot**      | Build simulation, routing, LGU triage and driver warning against the LGU's corridor |
+| O5  | **Hybrid**               | Licence a commercial platform and build only the routing engine                     |
 
 ### 4.2 Evaluation criteria
 
@@ -129,35 +139,41 @@ and fits the academic term.
 
 The recommendation is conditional on:
 
-1. The scope boundary in the charter being held: no native apps, no live sensor
-   integration, no production identity provider in this release.
+1. CR-001 being approved and its boundary held: installable PWA rather than
+   native store builds, labelled demo CCTV, simulated gauges where real data is
+   unavailable, and no carrier-grade SOS.
 2. Baseline data collection scheduled in M1 so benefits can be measured.
-3. Authentication (BR-009) named as the first post-pilot increment, not quietly
-   dropped.
-4. A decision review at M5, before documentation and defence, using the
-   conservative scenario.
+3. JWT authentication and RBAC (BR-009) delivered as a release gate, not
+   deferred past acceptance.
+4. A decision review at M8, before final defence, using the conservative
+   scenario.
+5. Every simulated sensor or demo video source labelled as such in the product.
 
 ## 7. Cost Estimate
 
 ### 7.1 CAPEX
 
-| No. | Category              | Basis                      | Amount (PHP) |
-| --- | --------------------- | -------------------------- | ------------ |
-| 1   | Development effort    | «N» person-months × «rate» | [TBC]        |
-| 2   | Test devices and data | «Institution»              | [TBC]        |
-| 3   | Contingency           | 10% of the above           | [TBC]        |
-|     | **Total CAPEX**       |                            | **[TBC]**    |
+| No. | Category                               | Basis                      | Amount (PHP) |
+| --- | -------------------------------------- | -------------------------- | ------------ |
+| 1   | Baseline development effort            | «N» person-months × «rate» | [TBC]        |
+| 2   | CR-001 increment: PWA, realtime, fleet | «N» person-months × «rate» | [TBC]        |
+| 3   | Test devices and data                  | «Institution»              | [TBC]        |
+| 4   | Contingency                            | 10% of the above           | [TBC]        |
+|     | **Total CAPEX**                        |                            | **[TBC]**    |
 
 ### 7.2 OPEX
 
-| No. | Category                   | Basis                          | Year 1    | Year 2    | Year 3    |
-| --- | -------------------------- | ------------------------------ | --------- | --------- | --------- |
-| 1   | Hosted database (Supabase) | Plan                           | [TBC]     | [TBC]     | [TBC]     |
-| 2   | Application hosting        | Plan                           | [TBC]     | [TBC]     | [TBC]     |
-| 3   | Domain and TLS             | Registrar                      | [TBC]     | [TBC]     | [TBC]     |
-| 4   | Training and handover      | «N» days × «rate»              | [TBC]     | —         | —         |
-| 5   | Maintenance and support    | 15–20% of development per year | —         | [TBC]     | [TBC]     |
-|     | **Total OPEX**             |                                | **[TBC]** | **[TBC]** | **[TBC]** |
+| No. | Category                     | Basis                          | Year 1    | Year 2    | Year 3    |
+| --- | ---------------------------- | ------------------------------ | --------- | --------- | --------- |
+| 1   | Hosted database (Supabase)   | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 2   | Application hosting          | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 3   | Domain and TLS               | Registrar                      | [TBC]     | [TBC]     | [TBC]     |
+| 4   | Training and handover        | «N» days × «rate»              | [TBC]     | —         | —         |
+| 5   | Maintenance and support      | 15–20% of development per year | —         | [TBC]     | [TBC]     |
+| 6   | PWA hosting and CDN          | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 7   | Evidence photo storage       | Volume or object storage       | [TBC]     | [TBC]     | [TBC]     |
+| 8   | Redis / event infrastructure | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+|     | **Total OPEX**               |                                | **[TBC]** | **[TBC]** | **[TBC]** |
 
 ### 7.3 Cost assumptions
 
@@ -168,18 +184,24 @@ The recommendation is conditional on:
 | CA-003 | All libraries used are open source; no licence fees                                                                                    |
 | CA-004 | Training is delivered to a small group (≤ 10 users) at the operations centre                                                           |
 | CA-005 | Year-2 maintenance assumes dependency and security updates only, no major feature work                                                 |
+| CA-006 | The driver client is a PWA, so there are no app-store fees or native build pipeline costs                                              |
+| CA-007 | Evidence storage grows with report volume; the pilot assumes a capped volume and a documented retention period `[TBC]`                 |
+| CA-008 | Simulated gauges and demo CCTV carry no data-supplier licence in the pilot                                                             |
 
 ## 8. Benefits Assessment
 
-| ID      | Benefit                                | Type       | Measurement                                            | Owner           |
-| ------- | -------------------------------------- | ---------- | ------------------------------------------------------ | --------------- |
-| BEN-001 | Faster triage decisions                | Tangible   | Median minutes report → recorded decision              | Operations lead |
-| BEN-002 | Fewer dispatches into impassable roads | Tangible   | Aborted dispatches per event                           | Operations lead |
-| BEN-003 | Less duplicated effort                 | Tangible   | Duplicate reports screened per event                   | Operations lead |
-| BEN-004 | Accountable decision trail             | Tangible   | Percentage of decisions with actor, time and rationale | MDRRMC          |
-| BEN-005 | Shared situational picture             | Intangible | Dispatcher feedback; one source of truth in use        | Operations lead |
-| BEN-006 | Institutional learning                 | Intangible | Post-event review possible from exported logs          | MDRRMC          |
-| BEN-007 | Reusable technical capability          | Intangible | Routing and simulation usable by a future driver app   | «Project Team»  |
+| ID      | Benefit                                  | Type       | Measurement                                             | Owner           |
+| ------- | ---------------------------------------- | ---------- | ------------------------------------------------------- | --------------- |
+| BEN-001 | Faster triage decisions                  | Tangible   | Median minutes report → recorded decision               | Operations lead |
+| BEN-002 | Fewer dispatches into impassable roads   | Tangible   | Aborted dispatches per event                            | Operations lead |
+| BEN-003 | Less duplicated effort                   | Tangible   | Duplicate reports screened per event                    | Operations lead |
+| BEN-004 | Accountable decision trail               | Tangible   | Percentage of decisions with actor, time and rationale  | MDRRMC          |
+| BEN-005 | Shared situational picture               | Intangible | Dispatcher feedback; one source of truth in use         | Operations lead |
+| BEN-006 | Institutional learning                   | Intangible | Post-event review possible from exported logs           | MDRRMC          |
+| BEN-007 | Reusable technical capability            | Intangible | Routing and simulation reused by the driver PWA         | «Project Team»  |
+| BEN-008 | Drivers avoid verified flooded roads     | Tangible   | Hazard encounters per 100 active routes                 | Operations lead |
+| BEN-009 | Faster field observation to verification | Tangible   | Median report submission → publish minutes              | Operations lead |
+| BEN-010 | Better use of available rescue units     | Tangible   | Units assigned within the target time / available units | Rescue command  |
 
 **Benefit monetisation**
 
@@ -189,6 +211,9 @@ The recommendation is conditional on:
 | BEN-002 | Aborted dispatches avoided × cost per dispatch     | [TBC]               | Fuel, vehicle wear, crew hours |
 | BEN-003 | Hours saved per event                              | «hourly rate» [TBC] | Client HR data                 |
 | BEN-004 | Avoided investigation effort per disputed decision | [TBC]               | Client estimate                |
+| BEN-008 | Hazard encounters avoided × cost per incident      | [TBC]               | Insurance and fleet data       |
+| BEN-009 | Dispatcher minutes saved per verified report       | «hourly rate» [TBC] | Client HR data                 |
+| BEN-010 | Rescue hours saved per event                       | «hourly rate» [TBC] | Client HR data                 |
 
 Avoided losses — injury, property damage, liability — are **excluded** from the
 calculation. They are the strongest reason to build the system and the weakest
@@ -196,15 +221,19 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 
 ## 9. Risk Assessment
 
-| Risk                                     | Impact                                  | Mitigation                                                               |
-| ---------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
-| Model outputs judged unrealistic         | Benefits unrealisable; credibility lost | Declare calibration as configuration; validate against documented events |
-| Authentication not delivered             | Cannot be used with real data           | Scope BR-009 as the first post-pilot increment; state the limitation     |
-| No baseline data                         | Benefits unquantifiable                 | Use audit-trail and risk benefits; collect baseline during the pilot     |
-| Hosted costs exceed the free tier        | Operating cost rises                    | Keep hosting provider-agnostic; the container image is portable          |
-| Dispatchers reject the tool              | Adoption fails regardless of capability | Usability sessions from M3; keep the radio process running in parallel   |
-| A commercial alternative is chosen later | Sunk cost                               | Publish the API contract so the routing engine outlives the portal       |
-| Personal data incident during testing    | Legal and ethical exposure              | Synthetic data only; RLS verified; no personal data in logs              |
+| Risk                                       | Impact                                  | Mitigation                                                                  |
+| ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------- |
+| Model outputs judged unrealistic           | Benefits unrealisable; credibility lost | Declare calibration as configuration; validate against documented events    |
+| Authentication not delivered               | Cannot be used with real data           | CR-001 makes JWT/RBAC a release gate; no privileged action ships without it |
+| No baseline data                           | Benefits unquantifiable                 | Use audit-trail and risk benefits; collect baseline during the pilot        |
+| Hosted costs exceed the free tier          | Operating cost rises                    | Keep hosting provider-agnostic; the container image is portable             |
+| Dispatchers reject the tool                | Adoption fails regardless of capability | Usability sessions from M3; keep the radio process running in parallel      |
+| A commercial alternative is chosen later   | Sunk cost                               | Publish the API contract so the routing engine outlives the portal          |
+| Personal data incident during testing      | Legal and ethical exposure              | Synthetic data only; RLS verified; no personal data in logs                 |
+| Drivers do not adopt the PWA               | Field evidence stays thin               | Usability tests; QR onboarding; synthetic reports as fallback               |
+| Location data re-identifies a driver       | Privacy breach and legal exposure       | 50 m rounding, salted hash, 24-hour retention, role-only access             |
+| PWA background limits on iOS               | Telemetry gaps                          | Foreground-only telemetry; documented limitation; native build excluded     |
+| Sensor or demo CCTV mistaken for live data | Wrong operational decision              | Label simulated and demo sources in the API and UI                          |
 
 Full scoring and owners are in [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
 
@@ -262,10 +291,14 @@ model above is the worksheet; no figure in this section is assumed.
 | M3  | API engine operational              | Week 9 · [TBC]  |
 | M4  | Dispatch portal operational         | Week 12 · [TBC] |
 | M5  | Hardening complete                  | Week 14 · [TBC] |
-| M6  | Documentation and defence           | Week 16 · [TBC] |
+| M6  | Baseline documentation accepted     | Week 16 · [TBC] |
+| M7  | Realtime, reports and fleet API     | Week 18 · [TBC] |
+| M8  | LGU map, moderation and dispatch    | Week 20 · [TBC] |
+| M9  | Driver PWA, sensors and defence     | Week 22 · [TBC] |
 
-Approval is requested at M1; go-live for the pilot demonstration is M6. The
-schedule assumes one academic term and part-time effort.
+Approval is requested at M1; the baseline demonstration is M6 and the final
+CR-001 demonstration is M9. The schedule assumes one academic term, part-time
+effort and a six-week increment `[TBC]`.
 
 ## 13. Governance, Assumptions and Dependencies
 
@@ -273,33 +306,39 @@ schedule assumes one academic term and part-time effort.
 
 | Decision               | Authority               | Recorded in                        |
 | ---------------------- | ----------------------- | ---------------------------------- |
-| Scope changes          | «Project Sponsor»       | Change request log                 |
+| Scope changes          | «Project Sponsor»       | Change request log (CR-001)        |
 | Academic acceptance    | «Project Adviser»       | Document approval blocks           |
 | Architecture decisions | «Project Team Lead»     | TSD §6 Architecture Decisions      |
 | Operational acceptance | «Client Representative» | Charter approval and demo sign-off |
 
 ### 13.2 Assumptions and dependencies
 
-| ID    | Statement                                                       | Effect if false                        |
-| ----- | --------------------------------------------------------------- | -------------------------------------- |
-| A-001 | A PostGIS-capable database is available                         | Core capability cannot be demonstrated |
-| A-003 | Free or institutional tiers suffice                             | Additional recurring cost              |
-| A-004 | Dispatchers have a modern browser and connectivity              | Portal unusable during an event        |
-| D-001 | Hosted database credentials are supplied as a repository secret | Hosted migration not demonstrated      |
-| D-003 | Client confirms the pilot corridor                              | Seed data and demonstration rework     |
+| ID    | Statement                                                       | Effect if false                         |
+| ----- | --------------------------------------------------------------- | --------------------------------------- |
+| A-001 | A PostGIS-capable database is available                         | Core capability cannot be demonstrated  |
+| A-003 | Free or institutional tiers suffice                             | Additional recurring cost               |
+| A-004 | Dispatchers have a modern browser and connectivity              | Portal unusable during an event         |
+| A-007 | Drivers have a smartphone with camera and geolocation           | Driver PWA cannot be piloted            |
+| A-008 | Connectivity can drop during an event                           | Offline mode is essential, not optional |
+| C-006 | The driver client is a PWA, not a store build                   | Distribution limited to browser install |
+| D-001 | Hosted database credentials are supplied as a repository secret | Hosted migration not demonstrated       |
+| D-003 | Client confirms the pilot corridor                              | Seed data and demonstration rework      |
+| D-004 | JWT secret and seed credentials are supplied at deployment      | Authentication cannot start             |
+| D-005 | A persistent evidence volume is available                       | Photos cannot be retained               |
 
 ## 14. Approval Recommendation
 
-Approve **Option 4**, the pilot build, on the conditions in §6.
+Approve **Option 4**, the pilot build, including the CR-001 increment, on the
+conditions in §6.
 
-| Decision           | Detail                               |
-| ------------------ | ------------------------------------ |
-| Decision requested | Approve Option 4 and the pilot scope |
-| Decision maker     | «Project Sponsor»                    |
-| Decision           | [TBC]                                |
-| Date               | [TBC]                                |
-| Conditions         | [TBC]                                |
-| Budget approved    | PHP [TBC]                            |
+| Decision           | Detail                                                       |
+| ------------------ | ------------------------------------------------------------ |
+| Decision requested | Approve Option 4, the pilot scope and CR-001                 |
+| Decision maker     | «Project Sponsor»                                            |
+| Decision           | [TBC]                                                        |
+| Date               | [TBC]                                                        |
+| Conditions         | CR-001 boundary, JWT/RBAC gate, labelled demo data, PWA only |
+| Budget approved    | PHP [TBC]                                                    |
 
 | Role            | Name                    | Signature | Date  |
 | --------------- | ----------------------- | --------- | ----- |

@@ -4,7 +4,11 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Baseline:** `main` @ `9605e38` (last code commit before this document set) · 21 October 2026
+**Document baseline:** v1.1 (CR-001) · **Code baseline:** `main` @ `9605e38` · 21 October 2026
+
+CR-001 extends the scope to the driver PWA, live hazard publication, fleet
+dispatch and sensor ingestion. The implementation is **planned**; the documents
+describe the target behaviour and label the status honestly.
 
 ## Documents
 
@@ -16,6 +20,7 @@ documents, the API reference, and the Word templates the documents follow.
 | Functional Specification       | [FSD.md](FSD.md)                                   | MF-FSD-001 | Defines actors, functional requirements, screens and tests           | Developers, QA, panel   |
 | Technical Specification        | [TSD.md](TSD.md)                                   | MF-TSD-001 | Defines architecture, algorithms, data design, security and CI/CD    | Developers, panel       |
 | Project Management Plan        | [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) | MF-PMP-001 | Defines schedule, quality, risk, communications and change control   | Team, adviser           |
+| Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the driver PWA, hazards, fleet, sensors | Sponsor, team, panel    |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
 
 ## Document templates
@@ -79,6 +84,7 @@ Requirement identifiers are stable across every document.
 | `R-001`, `A-001`, `I-001`, `D-001` | RAID entry                        | PMP                              |
 | `ADR-001`                          | Architecture decision             | TSD                              |
 | `LIM-001`, `SEC-001`               | Known limitation, security risk   | TSD                              |
+| `CR-001`                           | Change request                    | CR-001, PMP change control       |
 
 ## Placeholder conventions
 
@@ -100,6 +106,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | ------- | ----------- | -------------- | ----------------------------------------------------------------------- |
 | 0.1     | 21 Oct 2026 | «Project Team» | Initial draft of the six project documents and the API reference        |
 | 1.0     | 21 Oct 2026 | «Project Team» | Restructured to the supplied Word templates; template identifier scheme |
+| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver PWA, live hazards, fleet dispatch and sensors            |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
@@ -110,6 +117,7 @@ change, per the configuration management rules in the PMP.
 | Material                     | Location                                     |
 | ---------------------------- | -------------------------------------------- |
 | Runnable system              | `backend/`, `web-lgu/`, `docker-compose.yml` |
+| Driver PWA (planned, CR-001) | `mobile-driver/`                             |
 | OpenAPI document (generated) | `http://localhost:8000/openapi.json`         |
 | CI/CD workflows              | `.github/workflows/`                         |
 | Database migrations          | `backend/migrations/`                        |
