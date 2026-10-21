@@ -1,8 +1,20 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
-from datetime import datetime
+from datetime import datetime, timezone
 from database import Base
+
+
+def _utcnow() -> datetime:
+    """
+    Naive UTC timestamp.
+
+    ``datetime.utcnow()`` is deprecated on modern Python. The existing DateTime
+    columns are timezone-naive, so the tzinfo is stripped to keep stored values
+    and comparisons consistent with the previous behaviour.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -11,7 +23,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), default="LGU_DISPATCHER") # SUPER_ADMIN, LGU_DISPATCHER, EMERGENCY_DRIVER
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
 class RoadNode(Base):
     __tablename__ = "road_nodes"
@@ -42,7 +54,7 @@ class LiveEdgeState(Base):
     avg_speed_kmh = Column(Float, default=50.0)
     vehicle_density = Column(Float, default=0.1) # Vehicles per meter
     is_override = Column(Boolean, default=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     edge = relationship("RoadEdge", back_populates="state")
 
@@ -53,4 +65,4 @@ class AuditLog(Base):
     action_type = Column(String(50), nullable=False) # e.g. NODE_OVERRIDE, SIMULATION_TRIGGER
     payload = Column(Text, nullable=False)
     hash_signature = Column(String(64), nullable=False) # Cryptographic SHA-256
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)

@@ -49,14 +49,24 @@ NODE_INDEX_SQL = text(
     """
 )
 
+# Arbitrary but fixed key. Serialises the backfill across concurrent processes:
+# with `uvicorn --workers N`, every worker runs lifespan at once, and parallel
+# CREATE INDEX statements on the same table can deadlock.
+BACKFILL_LOCK_KEY = 842317
+
+BACKFILL_LOCK_SQL = text("SELECT pg_advisory_xact_lock(:key);")
+
 
 def backfill_geometry(db: Session) -> dict:
     """
     Populate missing node/edge geometry and ensure spatial indexes exist.
 
     Nodes must be filled before edges, because edge geometry is derived from
-    its endpoints' point geometry.
+    its endpoints' point geometry. Safe to call from every worker: the advisory
+    lock is transaction-scoped and released on commit.
     """
+    db.execute(BACKFILL_LOCK_SQL, {"key": BACKFILL_LOCK_KEY})
+
     node_result = db.execute(NODE_GEOM_SQL)
     edge_result = db.execute(EDGE_GEOM_SQL)
 
