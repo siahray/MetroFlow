@@ -1,224 +1,267 @@
-# Technical Specification Document — MetroFlow
+# TECHNICAL SPECIFICATION DOCUMENT (TSD)
 
-| Field             | Value                                                                                  |
-| ----------------- | -------------------------------------------------------------------------------------- |
-| Document ID       | MF-TSD-001                                                                             |
-| Version           | 1.0 (Draft)                                                                            |
-| Status            | For academic review                                                                    |
-| Date              | 21 October 2026                                                                        |
-| Prepared by       | «Project Team»                                                                         |
-| Reviewed by       | «Project Adviser»                                                                      |
-| Approved by       | «Project Sponsor»                                                                      |
-| Related documents | [FSD.md](FSD.md), [api.md](api.md), [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) |
+## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-## Revision history
+Version 1.0
 
-| Version | Date        | Author         | Change                          |
-| ------- | ----------- | -------------- | ------------------------------- |
-| 1.0     | 21 Oct 2026 | «Project Team» | Initial technical specification |
+## Document Control
 
-## 1. Purpose and scope
+| Field       | Value                                 |
+| ----------- | ------------------------------------- |
+| Project     | MetroFlow                             |
+| Document    | Technical Specification Document      |
+| Version     | 1.0                                   |
+| Prepared By | «Project Team»                        |
+| Baseline    | `main` @ `9605e38` (last code commit) |
 
-This document specifies how MetroFlow is built: architecture, algorithms, data
-design, security, deployment and delivery pipeline. It is the construction
-counterpart to [FSD.md](FSD.md), which specifies behaviour.
+## Requirements Traceability
 
-**Baseline:** `main` @ `9605e38`. Statements of fact describe that baseline;
-statements marked _Planned_ or _Open_ are not implemented.
+| BRD ID | FSD ID                               | Technical Component                          |
+| ------ | ------------------------------------ | -------------------------------------------- |
+| BR-001 | FSD-FR-001 to FSD-FR-005             | Network State Service, PostGIS geometry      |
+| BR-002 | FSD-FR-006 to FSD-FR-010             | Hydrology Engine (SCS-CN), live state writer |
+| BR-003 | FSD-FR-011 to FSD-FR-017             | Routing Engine (Time-Dependent A\*)          |
+| BR-004 | FSD-FR-024 to FSD-FR-031             | Incident Queue (portal state)                |
+| BR-005 | FSD-FR-026 to FSD-FR-028             | Queue filter and search                      |
+| BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                        |
+| BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log          |
+| BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration               |
+| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control (planned)                     |
+| BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI    |
+| BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy       |
+| BR-012 | FSD-FR-049                           | Reporting and export (planned)               |
 
-## 2. Architecture overview
+## 1. Solution Architecture
 
-### 2.1 System context
-
+```text
+                    rainfall input                      incident reports
+                          │                                    │
+                          ▼                                    ▼
+              ┌───────────────────────┐            ┌───────────────────────┐
+              │  Simulation engine    │            │  Dispatch portal      │
+              │  SCS-CN → depth       │◄───────────│  queue · detail · log │
+              │  TD-A*  → route       │  network   │  (mock data today)    │
+              └───────────┬───────────┘  + routes  └───────────┬───────────┘
+                          │                                    │
+                          ▼                                    ▼
+              ┌─────────────────────────────────────────────────────────┐
+              │  PostgreSQL + PostGIS  (nodes · edges · live state)      │
+              │  versioned by Alembic · row-level security on hosted DB  │
+              └─────────────────────────────────────────────────────────┘
 ```
-┌──────────────┐        HTTPS/JSON        ┌───────────────────────────┐
-│ LGU dispatch │ ───────────────────────► │  MetroFlow API (FastAPI)  │
-│ portal       │ ◄─────────────────────── │  simulation + routing     │
-│ (Next.js)    │                          └────────────┬──────────────┘
-└──────────────┘                                       │ SQLAlchemy
-                                                       ▼
-┌──────────────┐        HTTPS/JSON        ┌───────────────────────────┐
-│ Driver app   │ ───────────────────────► │  PostgreSQL + PostGIS     │
-│ (future)     │                          │  nodes · edges · state    │
-└──────────────┘                          │  users · audit logs       │
-                                          └───────────────────────────┘
-┌──────────────┐                           ┌──────────────────────────┐
-│ Operator     │  manual rainfall input    │  GitHub Actions          │
-│              │ ───────────────────────►  │  test · scan · migrate   │
-└──────────────┘                           └──────────────────────────┘
-```
 
-### 2.2 Containers
+The API is stateless: every request loads its data from PostgreSQL, so
+instances can be added horizontally. The portal is a Next.js App Router client
+application; today it holds incident data locally, with a single module as the
+seam for a future intake API.
 
-| Container        | Technology                                                              | Responsibility                             | State             |
-| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------ | ----------------- |
-| API engine       | FastAPI on Python 3.14, Uvicorn                                         | Network state, simulation, routing, health | Stateless         |
-| Dispatch portal  | Next.js 16 App Router, React 19                                         | Login, queue, detail, actions              | Client state only |
-| Spatial database | PostgreSQL 15 + PostGIS 3.3 (local), PostgreSQL 17 + PostGIS (Supabase) | Road graph, live state, users, audit       | System of record  |
-| Cache / broker   | Redis 7                                                                 | Provisioned for caching and pub/sub        | **Unused today**  |
+**Design principles**
 
-The API is stateless: every request loads its data from PostgreSQL, so instances
-can be added horizontally (NFR-15).
+| Principle                           | Consequence                                                        |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| One source of truth for passability | A single function classifies edges for both map colour and routing |
+| Configuration over constants        | Calibration values are environment-driven, not literals            |
+| Schema owned by migrations          | No `create_all` at runtime; drift fails CI                         |
+| Fail closed at the edges            | Security scan and migration gates block rather than warn           |
+| Honest boundaries                   | Mock data and unimplemented features are labelled, not implied     |
 
-### 2.3 Design principles
+## Application Components
 
-| Principle                           | Consequence                                                                                                      |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| One source of truth for passability | A single function classifies edges for both map colour and routing, so the legend and the router cannot disagree |
-| Configuration over constants        | Calibration values are environment-driven, not literals                                                          |
-| Schema owned by migrations          | No `create_all` at runtime; drift fails CI                                                                       |
-| Fail closed at the edges            | Security scan and migration gates block rather than warn                                                         |
-| Honest boundaries                   | Mock data and unimplemented features are labelled, not implied                                                   |
+| Component             | BRD/FSD Reference                    | Responsibilities                                                           |
+| --------------------- | ------------------------------------ | -------------------------------------------------------------------------- |
+| Network State Service | BR-001 / FSD-FR-001 to 005           | Load graph, classify passability, emit GeoJSON nodes and edges             |
+| Hydrology Engine      | BR-002 / FSD-FR-006 to 010           | SCS-CN runoff, elevation-weighted ponding, speed degradation, state commit |
+| Routing Engine        | BR-003 / FSD-FR-011 to 017           | TD-A\* search, clearance blocking, route geometry assembly, travel time    |
+| Geometry Service      | BR-001 / FSD-FR-004, FSD-FR-053      | Idempotent PostGIS backfill with advisory lock                             |
+| Data Layer            | BR-001 / FSD-FR-001                  | SQLAlchemy models, connection lifecycle, migrations                        |
+| Audit Store           | BR-008 / FSD-FR-047                  | Actor, action, JSON payload, integrity hash (schema only)                  |
+| Dispatch Portal       | BR-004 to BR-007 / FSD-FR-018 to 046 | Login, queue, detail, operations log, dispatch actions                     |
+| Security Middleware   | BR-011 / FSD-FR-051                  | Response headers on every request                                          |
+| Delivery Pipeline     | BR-008 / FSD-FR-047                  | Lint, test, scan, migrate, publish image                                   |
 
-## 3. Technology stack
+### Technology stack
 
-| Layer            | Technology                     | Version                             | Why                                                      |
-| ---------------- | ------------------------------ | ----------------------------------- | -------------------------------------------------------- |
-| Language (API)   | Python                         | 3.14                                | Current stable in CI; typed, mature geospatial ecosystem |
-| API framework    | FastAPI                        | ≥ 0.143.5                           | Pydantic validation, OpenAPI generation, async-ready     |
-| ORM              | SQLAlchemy                     | ≥ 2.1.5                             | Mature, typed, supports GeoAlchemy2                      |
-| Spatial ORM      | GeoAlchemy2                    | ≥ 0.20.0                            | PostGIS geometry columns                                 |
-| Migrations       | Alembic                        | ≥ 1.20.0                            | Versioned schema, downgrade path                         |
-| Database         | PostgreSQL + PostGIS           | 15 + 3.3 local; 17 + PostGIS hosted | Spatial indexes and geometry functions                   |
-| Driver           | psycopg2-binary                | ≥ 2.9.13                            | Synchronous, simple under Uvicorn workers                |
-| Settings         | pydantic-settings              | ≥ 2.16.0                            | Environment-driven configuration                         |
-| Numerics         | NumPy, SciPy                   | ≥ 2.5.4, ≥ 1.18.1                   | Available for future calibration work                    |
-| Frontend         | Next.js                        | 16.4.2                              | App Router, server/client split, typed routes            |
-| UI runtime       | React                          | 19.3.1                              | Component model                                          |
-| Styling          | Tailwind CSS                   | 4.x                                 | Theme tokens, no runtime CSS-in-JS                       |
-| Icons            | lucide-react                   | 1.x                                 | Tree-shaken SVG icons                                    |
-| Maps (installed) | MapLibre GL                    | 6.15                                | GeoJSON rendering in a future map view                   |
-| Package manager  | Bun                            | 1.4.3                               | Faster installs; lockfile understood by Dependabot       |
-| Web tests        | ESLint, Prettier, `next build` | 10.x / 3.9 / 16.4                   | Lint, format, type-check                                 |
-| API tests        | pytest                         | see `requirements-dev.txt`          | Unit and integration suites                              |
+| Layer           | Technology                   | Version                   |
+| --------------- | ---------------------------- | ------------------------- |
+| API language    | Python                       | 3.14                      |
+| API framework   | FastAPI                      | ≥ 0.143.5                 |
+| ORM             | SQLAlchemy                   | ≥ 2.1.5                   |
+| Spatial ORM     | GeoAlchemy2                  | ≥ 0.20.0                  |
+| Migrations      | Alembic                      | ≥ 1.20.0                  |
+| Database        | PostgreSQL + PostGIS         | 15 + 3.3 local; 17 hosted |
+| Driver          | psycopg2-binary              | ≥ 2.9.13                  |
+| Frontend        | Next.js (App Router)         | 16.4.2                    |
+| UI runtime      | React                        | 19.3.1                    |
+| Styling         | Tailwind CSS                 | 4.x                       |
+| Package manager | Bun                          | 1.4.3                     |
+| Tests           | pytest, ESLint, `next build` | see repository            |
 
-Version pins are lower bounds in `requirements.txt` and exact for the web app in
-`package.json`; CI installs from those and from `bun.lock`.
+## Database Design - road_nodes
 
-## 4. Runtime and deployment topology
+| Column        | Type                  | Description                        |
+| ------------- | --------------------- | ---------------------------------- |
+| `node_id`     | integer               | Primary key                        |
+| `name`        | varchar(100)          | Human label                        |
+| `latitude`    | double                | WGS84 latitude                     |
+| `longitude`   | double                | WGS84 longitude                    |
+| `elevation_m` | double                | Default 10.0; drives ponding depth |
+| `geom`        | geometry(Point, 4326) | Backfilled, never overwritten      |
 
-### 4.1 Local stack
+Index: primary key plus GiST on `geom`.
 
-`docker-compose.yml` defines three services:
+## Database Design - road_edges
 
-| Service    | Image / build                   | Port | Health check         |
-| ---------- | ------------------------------- | ---- | -------------------- |
-| `postgres` | `postgis/postgis:15-3.3-alpine` | 5432 | `pg_isready`         |
-| `redis`    | `redis:7-alpine`                | 6379 | `redis-cli ping`     |
-| `backend`  | built from `backend/Dockerfile` | 8000 | `curl /openapi.json` |
+| Column            | Type                       | Description                    |
+| ----------------- | -------------------------- | ------------------------------ |
+| `edge_id`         | integer                    | Primary key                    |
+| `start_node_id`   | integer                    | FK → `road_nodes.node_id`      |
+| `end_node_id`     | integer                    | FK → `road_nodes.node_id`      |
+| `distance_meters` | double                     | Traversal length               |
+| `max_speed_kmh`   | double                     | Default 50                     |
+| `lanes`           | integer                    | Default 2                      |
+| `geom`            | geometry(LineString, 4326) | Backfilled from endpoint nodes |
 
-The backend depends on both services being healthy. The compose stack exists so
-CI can bring up the whole system with one command; day-to-day backend work can
-run `uvicorn --reload` on the host instead.
+Index: primary key plus GiST on `geom`.
 
-> Do not run the host Uvicorn and the compose backend at the same time: both bind
-> port 8000.
+## Database Design - live_edge_states
 
-### 4.2 Container image
+| Column            | Type      | Description                         |
+| ----------------- | --------- | ----------------------------------- |
+| `state_id`        | integer   | Primary key                         |
+| `edge_id`         | integer   | Unique FK → `road_edges.edge_id`    |
+| `water_depth_cm`  | double    | Current depth                       |
+| `avg_speed_kmh`   | double    | Degraded by simulation              |
+| `vehicle_density` | double    | Reserved                            |
+| `is_override`     | boolean   | Manual overrides survive simulation |
+| `updated_at`      | timestamp | Set on insert and update            |
 
-`backend/Dockerfile`:
+## Database Design - users
 
-1. `python:3.14-slim` base.
-2. Dependencies installed before application code, so edits do not invalidate the
-   dependency layer.
-3. Runs as unprivileged `appuser` (uid 10001).
-4. `HEALTHCHECK` against `/`.
-5. `ENTRYPOINT` is `entrypoint.sh`, which applies migrations then `exec`s the
-   server.
+| Column          | Type         | Description                                         |
+| --------------- | ------------ | --------------------------------------------------- |
+| `user_id`       | integer      | Primary key                                         |
+| `name`          | varchar(100) | Display name                                        |
+| `email`         | varchar(100) | Unique; login identifier                            |
+| `password_hash` | varchar(255) | Hash, never plaintext                               |
+| `role`          | varchar(20)  | `SUPER_ADMIN`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER` |
+| `created_at`    | timestamp    | Creation time                                       |
 
-Migration on start is controlled by `RUN_MIGRATIONS` (default `true`). In a
-multi-replica deployment migrations must run once as a separate job; the Supabase
-workflow does exactly that for the hosted database.
+## Database Design - audit_logs
 
-### 4.3 Hosted database
+| Column           | Type      | Description                                |
+| ---------------- | --------- | ------------------------------------------ |
+| `log_id`         | integer   | Primary key                                |
+| `user_id`        | integer   | FK → `users.user_id`                       |
+| `action_type`    | varchar   | Dispatch, escalate, hold, reject, override |
+| `payload`        | text      | JSON snapshot of the action                |
+| `hash_signature` | varchar   | Integrity hash                             |
+| `created_at`     | timestamp | Event time                                 |
 
-| Property              | Value                                                                  |
-| --------------------- | ---------------------------------------------------------------------- |
-| Provider              | Supabase                                                               |
-| Project               | MetroFlow                                                              |
-| Region                | `ap-northeast-2` (Seoul)                                               |
-| Engine                | PostgreSQL 17.11 with PostGIS                                          |
-| Connection used by CI | Session pooler, TLS required                                           |
-| Access model          | API connects as the table owner; `anon` and `authenticated` are denied |
+## API Design
 
-The direct `db.<ref>.supabase.co` host is IPv6-only and unreachable from GitHub's
-IPv4 runners, so the session pooler host is required. The exact pooler prefix
-(`aws-0-…` or `aws-1-…`) must be copied from the dashboard.
+| Endpoint                   | Method | Reference                  |
+| -------------------------- | ------ | -------------------------- |
+| `/`                        | GET    | BR-010 / FSD-FR-050        |
+| `/api/v1/network/state`    | GET    | BR-001 / FSD-FR-001 to 005 |
+| `/api/v1/simulation/rain`  | POST   | BR-002 / FSD-FR-006 to 010 |
+| `/api/v1/routing/navigate` | GET    | BR-003 / FSD-FR-011 to 017 |
+| `/openapi.json`            | GET    | BR-010 / FSD-FR-052        |
 
-### 4.4 Application hosting
+Full request and response contracts, examples and error bodies are in
+[api.md](api.md).
 
-No hosting target is selected. `Backend Image` publishes an OCI image to GHCR on
-a `backend-v*` tag or manual dispatch; a deploy job is added when a host is
-chosen. The web app is compatible with any Node/Bun host.
+## Validations
 
-## 5. Component design
+| Validation ID | BRD Ref | FSD Ref    | Rule                                                          |
+| ------------- | ------- | ---------- | ------------------------------------------------------------- |
+| VAL-001       | BR-001  | FSD-FR-002 | `clearance_cm` must be greater than 0 and at most 200         |
+| VAL-002       | BR-002  | FSD-FR-006 | `rainfall_mm_hr` is required and must be between 0 and 250    |
+| VAL-003       | BR-003  | FSD-FR-011 | `start_node` is required and must be an integer               |
+| VAL-004       | BR-003  | FSD-FR-011 | `target_node` is required and must be an integer              |
+| VAL-005       | BR-003  | FSD-FR-015 | Both node ids must exist in the graph                         |
+| VAL-006       | BR-003  | FSD-FR-012 | An edge is excluded when `water_depth_cm >= clearance_cm`     |
+| VAL-007       | BR-001  | FSD-FR-003 | Passability boundaries are inclusive at caution and clearance |
+| VAL-008       | BR-002  | FSD-FR-009 | Overridden edges are excluded from simulation writes          |
+| VAL-009       | BR-009  | FSD-FR-018 | Username and password are required on the login form          |
+| VAL-010       | BR-007  | FSD-FR-037 | An empty internal note is not submitted                       |
+| VAL-011       | BR-005  | FSD-FR-026 | Filter values are constrained to the defined source set       |
+| VAL-012       | BR-008  | FSD-FR-047 | Schema changes are applied only through Alembic revisions     |
 
-### 5.1 API layer (`backend/main.py`)
+## Security Design
 
-| Unit                   | Responsibility                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| `lifespan`             | Seed the demonstration graph on first boot, backfill geometry, release the connection |
-| `add_security_headers` | Attach baseline security headers to every response                                    |
-| `_load_graph`          | Three fixed queries for nodes, edges and live state (no N+1)                          |
-| `_load_edge_geometry`  | Fetch all edge geometry as parsed GeoJSON in one query                                |
-| `_build_network_state` | Assemble the GeoJSON response for one clearance profile                               |
-| `seed_database`        | Idempotent first-boot seed of the pilot corridor                                      |
-| `_require_node`        | 404 with the available node ids                                                       |
+| Security Requirement                                                                   | Reference                            |
+| -------------------------------------------------------------------------------------- | ------------------------------------ |
+| Response headers: nosniff, frame denial, referrer policy, cross-origin resource policy | BR-011 / FSD-FR-051                  |
+| Row-level security on all application tables                                           | BR-011 / FSD-FR-047                  |
+| `anon` and `authenticated` privileges revoked                                          | BR-011 / FSD-FR-051                  |
+| TLS required for the hosted database connection                                        | BR-011 / FSD-FR-051                  |
+| Secrets supplied only as environment variables or repository secrets                   | BR-011 / FSD-FR-051                  |
+| Container runs as an unprivileged user                                                 | BR-011 / FSD-FR-051                  |
+| Automated dependency updates (Dependabot)                                              | BR-008 / FSD-FR-047                  |
+| Static analysis (CodeQL) with capability preflight                                     | BR-008 / FSD-FR-047                  |
+| Dynamic API scan (OWASP ZAP), fail-closed                                              | BR-008 / FSD-FR-047                  |
+| Authentication and role enforcement                                                    | BR-009 / FSD-FR-021 to 023 — planned |
 
-Dependency injection uses `Depends(get_db)`; the session is closed in `finally`
-so a failed request cannot leak a connection.
+**Open security risks**
 
-### 5.2 Hydrology (`backend/hydrology.py`)
+| ID      | Risk                                         | Severity | Disposition                                                      |
+| ------- | -------------------------------------------- | -------- | ---------------------------------------------------------------- |
+| SEC-001 | API has no authentication or authorisation   | High     | Accepted for the pilot; BR-009 is the first post-pilot increment |
+| SEC-002 | CORS allows every origin with credentials    | Medium   | Restrict to known portal origins before production               |
+| SEC-003 | No rate limiting                             | Medium   | Add at the proxy or via middleware before public exposure        |
+| SEC-004 | CodeQL cannot analyse the private repository | Medium   | Activates automatically when public or licensed                  |
+| SEC-005 | Audit hash column has no write path          | Low      | Implement with FSD-FR-047                                        |
 
-| Function                   | Input                                      | Output              |
-| -------------------------- | ------------------------------------------ | ------------------- |
-| `calculate_scs_cn_runoff`  | rainfall intensity, curve number, duration | runoff depth in mm  |
-| `compute_node_water_depth` | runoff, elevation, amplification           | ponding depth in cm |
+## Error Handling
 
-### 5.3 Routing (`backend/routing.py`)
+| Error Code | Condition                                      | Action                                                       |
+| ---------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| E001       | Unknown `start_node` or `target_node`          | Return 404 naming the available node ids                     |
+| E002       | No route survives the clearance check          | Return 404 with a human-readable message                     |
+| E003       | `clearance_cm` outside `(0, 200]`              | Return 422 with field-level detail                           |
+| E004       | `rainfall_mm_hr` missing or outside `[0, 250]` | Return 422 with field-level detail                           |
+| E005       | Required query parameter missing               | Return 422 listing the missing location                      |
+| E006       | Database unreachable at startup                | Fail startup; container exits; health check never goes green |
+| E007       | Unhandled server error                         | Return 500; log the traceback; do not leak internals         |
 
-| Function               | Responsibility                                                      |
-| ---------------------- | ------------------------------------------------------------------- |
-| `classify_passability` | Single source of truth for `PASSABLE` / `LIGHT_FLOOD` / `SUBMERGED` |
-| `td_a_star_search`     | Time-dependent A\* with flood penalty and clearance blocking        |
+Transaction rules: read endpoints do not commit; simulation commits once after
+all edge updates; migrations run one transaction per revision.
 
-### 5.4 Geometry (`backend/geometry.py`)
+## Technical Test Cases
 
-| Concern               | Approach                                                             |
-| --------------------- | -------------------------------------------------------------------- |
-| Missing node geometry | `ST_MakePoint(longitude, latitude)` in SRID 4326                     |
-| Missing edge geometry | `ST_MakeLine` between endpoint geometries                            |
-| Concurrency           | Transaction-scoped advisory lock (`842317`)                          |
-| Idempotency           | Only `NULL` rows are updated; existing geometry is never overwritten |
-| Indexes               | `GIST` indexes created if absent                                     |
+| TC ID   | BRD Ref | FSD Ref    | Scenario                                                         |
+| ------- | ------- | ---------- | ---------------------------------------------------------------- |
+| TTC-001 | BR-001  | FSD-FR-001 | Network state returns every seeded node and edge                 |
+| TTC-002 | BR-001  | FSD-FR-003 | Passability thresholds hold at exact boundaries                  |
+| TTC-003 | BR-002  | FSD-FR-007 | SCS-CN returns zero at zero rainfall and increases monotonically |
+| TTC-004 | BR-002  | FSD-FR-008 | Lower elevation produces deeper ponding at equal runoff          |
+| TTC-005 | BR-002  | FSD-FR-009 | Overridden edge is not modified by simulation                    |
+| TTC-006 | BR-003  | FSD-FR-012 | A\* returns the optimal path on the seeded graph                 |
+| TTC-007 | BR-003  | FSD-FR-014 | Blocked graph returns no path                                    |
+| TTC-008 | BR-003  | FSD-FR-016 | Reverse route mirrors the forward route                          |
+| TTC-009 | BR-008  | FSD-FR-047 | `alembic upgrade head` then `alembic check` reports no drift     |
+| TTC-010 | BR-011  | FSD-FR-051 | `anon` role is denied access to application tables               |
+| TTC-011 | BR-010  | FSD-FR-051 | Every response carries the four security headers                 |
+| TTC-012 | BR-001  | FSD-FR-053 | Restarting the API does not duplicate seed rows                  |
 
-### 5.5 Dispatch portal (`web-lgu/`)
+## Technical Acceptance Criteria
 
-| Unit                             | Responsibility                                            |
-| -------------------------------- | --------------------------------------------------------- |
-| `app/page.tsx`                   | Renders the portal shell                                  |
-| `app/layout.tsx`                 | Font, metadata, global surface                            |
-| `components/portal.tsx`          | Screen state, sign-in transition, sign-out                |
-| `components/login-screen.tsx`    | Credentials form, reveal toggle, recovery guidance        |
-| `components/dashboard.tsx`       | KPI row, queue state, selection, dismissal, logs, actions |
-| `components/incident-queue.tsx`  | Ordering, filters, search, counts, empty state            |
-| `components/incident-detail.tsx` | Docket, evidence, telemetry, log, note composer, actions  |
-| `components/sidebar.tsx`         | Navigation, alert level, unit block, sign-out             |
-| `components/toast-provider.tsx`  | Transient confirmations with a single timer               |
-| `lib/incidents.ts`               | Mock incident records and initial log entries             |
-| `lib/cn.ts`                      | Class merge helper                                        |
+| BRD Ref | FSD Ref           | Criteria                                                                  |
+| ------- | ----------------- | ------------------------------------------------------------------------- |
+| BR-001  | FSD-FR-001 to 005 | Every edge carries depth and status; invalid parameters rejected with 422 |
+| BR-002  | FSD-FR-006 to 010 | Simulation persists depth and speed and returns the updated network       |
+| BR-003  | FSD-FR-011 to 017 | Route segments are below clearance, or the API returns 404 with a reason  |
+| BR-004  | FSD-FR-024 to 029 | Queue renders in urgency order with the required fields                   |
+| BR-007  | FSD-FR-039 to 046 | Each action writes a timestamped, attributed log entry                    |
+| BR-008  | FSD-FR-047        | Migrations apply cleanly and deny public database roles                   |
+| BR-010  | FSD-FR-050 to 052 | Health endpoint, security headers and OpenAPI are reachable               |
+| BR-011  | FSD-FR-051        | No secret in the repository; RLS verified against the `anon` role         |
 
-State lives in `dashboard.tsx` and flows down as props; there is no global store.
-The only shared context is the toast provider.
+## 2. Algorithms
 
-**Data boundary:** `lib/incidents.ts` is the seam. Replacing it with a fetch
-layer is the planned integration point (FSD FR-31, FR-44).
+### 2.1 SCS Curve Number runoff
 
-## 6. Algorithms and data structures
-
-### 6.1 SCS Curve Number runoff
-
-```
+```text
 P  = rainfall_mm_hr × duration_hrs
 S  = (25400 / CN) − 254
 Ia = 0.2 × S
@@ -231,78 +274,58 @@ Q  = (P − Ia)² / (P − Ia + S)     if P > Ia, else 0
 | `duration_hrs` | 1.0     | Converts intensity to storm depth |
 | `Ia`           | 0.2 S   | Initial abstraction               |
 
-### 6.2 Ponding depth
+### 2.2 Ponding depth
 
-```
+```text
 depression = 1 + (10 − min(elevation_m, 10)) × 0.15
 depth_cm   = max(0, (Q / 10) × depression × amplification)
 ```
 
-| Parameter       | Default                 | Meaning                                                                            |
-| --------------- | ----------------------- | ---------------------------------------------------------------------------------- |
-| `amplification` | 3.5                     | Calibration coefficient standing in for depression storage and drainage-area ratio |
-| `elevation_m`   | upstream node elevation | Lower ground ponds deeper, clamped at a 10 m datum                                 |
+`amplification` defaults to 3.5 and represents depression storage and the
+drainage-area ratio. It is configuration, not a physical constant, and must be
+replaced by a DEM and drainage-network model before results are treated as
+predictive.
 
-The amplification coefficient is deliberately configuration, not a physical
-constant. It must be replaced by a DEM and drainage-network model before results
-are treated as predictive.
+### 2.3 Passability
 
-### 6.3 Passability
-
-```
+```text
 if depth >= clearance      → SUBMERGED
 else if depth >= caution   → LIGHT_FLOOD
 else                       → PASSABLE
 ```
 
-Both comparisons are inclusive. `clearance` defaults to 30 cm; `caution` to
-10 cm. The same function feeds the map legend and the router's blocking rule.
+Both comparisons are inclusive. `clearance` defaults to 30 cm; `caution` to 10 cm.
+The same function feeds the map legend and the router's blocking rule.
 
-### 6.4 Time-dependent A\*
+### 2.4 Time-Dependent A\*
 
-**Cost of traversing an edge**
-
-```
-penalty     = 1 + (depth_cm / 10)^1.8
-speed_m_s   = max((max_speed_kmh / 3.6) / penalty, 0.5)
-cost        = length_m / speed_m_s            (seconds)
-```
-
-**Blocking rule:** an edge is skipped entirely when `depth_cm >= clearance_cm`.
-
-**Heuristic**
-
-```
-h(n) = haversine(n, target) / max_graph_speed_m_s
+```text
+penalty   = 1 + (depth_cm / 10)^1.8
+speed_m_s = max((max_speed_kmh / 3.6) / penalty, 0.5)
+cost      = length_m / speed_m_s            (seconds)
+heuristic = haversine(node, target) / fastest_graph_speed
 ```
 
-Dividing by the fastest speed in the graph guarantees the heuristic never
-overestimates remaining time, so the search is admissible and the result optimal
-under the cost function.
+An edge is skipped entirely when `depth_cm >= clearance_cm`. The heuristic never
+overestimates remaining time, so the result is optimal for this cost function.
 
-**Data structures**
+| Structure        | Use                                                           |
+| ---------------- | ------------------------------------------------------------- |
+| `heapq` min-heap | Frontier; entries carry `g` so stale duplicates are discarded |
+| `g_score` dict   | Best known cost per node                                      |
+| `came_from` dict | Path reconstruction                                           |
+| `settled` set    | Guarantees each node expands once                             |
 
-| Structure                          | Use                                                                     |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| `heapq` min-heap of `(f, g, node)` | Frontier; entries carry their own `g` so stale duplicates are discarded |
-| `g_score` dict                     | Best known cost per node                                                |
-| `came_from` dict                   | Path reconstruction                                                     |
-| `settled` set                      | Guarantees each node expands once                                       |
+Complexity: `O(E log V)` time, `O(V + E)` space. Each edge is added in both
+directions, so a reverse trip never fails for lack of a directed edge.
 
-**Complexity:** `O(E log V)` time, `O(V + E)` space.
-
-**Bidirectional treatment:** each edge is added in both directions, so a reverse
-trip never returns 404.
-
-### 6.5 Geometry assembly
+### 2.5 Geometry assembly
 
 For each hop, stored geometry is fetched and reversed when travel runs against
 the stored direction. Consecutive hops are joined, dropping a duplicated vertex
 at the seam. A straight line is used when geometry is missing.
 
-## 7. Data design
-
-### 7.1 Entity relationships
+## 3. Data Relationships and Migrations
 
 ```mermaid
 erDiagram
@@ -310,386 +333,128 @@ erDiagram
     ROAD_NODES ||--o{ ROAD_EDGES : starts
     ROAD_NODES ||--o{ ROAD_EDGES : ends
     ROAD_EDGES ||--|| LIVE_EDGE_STATES : has
-
-    USERS {
-        int user_id PK
-        string name
-        string email UK
-        string password_hash
-        string role
-        datetime created_at
-    }
-    ROAD_NODES {
-        int node_id PK
-        string name
-        float latitude
-        float longitude
-        float elevation_m
-        geometry geom
-    }
-    ROAD_EDGES {
-        int edge_id PK
-        int start_node_id FK
-        int end_node_id FK
-        float distance_meters
-        float max_speed_kmh
-        int lanes
-        geometry geom
-    }
-    LIVE_EDGE_STATES {
-        int state_id PK
-        int edge_id FK
-        float water_depth_cm
-        float avg_speed_kmh
-        float vehicle_density
-        bool is_override
-        datetime updated_at
-    }
-    AUDIT_LOGS {
-        int log_id PK
-        int user_id FK
-        string action_type
-        text payload
-        string hash_signature
-        datetime created_at
-    }
 ```
 
-### 7.2 `road_nodes`
-
-| Column        | Type                  | Null | Notes                         |
-| ------------- | --------------------- | ---- | ----------------------------- |
-| `node_id`     | integer               | no   | Primary key                   |
-| `name`        | varchar(100)          | yes  | Human label                   |
-| `latitude`    | double                | no   | WGS84 latitude                |
-| `longitude`   | double                | no   | WGS84 longitude               |
-| `elevation_m` | double                | yes  | Default 10.0; drives ponding  |
-| `geom`        | geometry(Point, 4326) | yes  | Backfilled, never overwritten |
-
-Index: primary key, GiST on `geom`.
-
-### 7.3 `road_edges`
-
-| Column            | Type                       | Null | Notes                     |
-| ----------------- | -------------------------- | ---- | ------------------------- |
-| `edge_id`         | integer                    | no   | Primary key               |
-| `start_node_id`   | integer                    | no   | FK → `road_nodes.node_id` |
-| `end_node_id`     | integer                    | no   | FK → `road_nodes.node_id` |
-| `distance_meters` | double                     | no   | Traversal length          |
-| `max_speed_kmh`   | double                     | yes  | Default 50                |
-| `lanes`           | integer                    | yes  | Default 2                 |
-| `geom`            | geometry(LineString, 4326) | yes  | Backfilled from endpoints |
-
-Index: primary key, GiST on `geom`.
-
-### 7.4 `live_edge_states`
-
-| Column            | Type      | Null | Notes                               |
-| ----------------- | --------- | ---- | ----------------------------------- |
-| `state_id`        | integer   | no   | Primary key                         |
-| `edge_id`         | integer   | no   | Unique FK → `road_edges.edge_id`    |
-| `water_depth_cm`  | double    | yes  | Current depth                       |
-| `avg_speed_kmh`   | double    | yes  | Degraded by simulation              |
-| `vehicle_density` | double    | yes  | Reserved                            |
-| `is_override`     | boolean   | yes  | Manual overrides survive simulation |
-| `updated_at`      | timestamp | yes  | Set on insert and update            |
-
-### 7.5 `users` and `audit_logs`
-
-| Table        | Purpose                                        | Status                     |
-| ------------ | ---------------------------------------------- | -------------------------- |
-| `users`      | Account, role, password hash                   | Schema only; no auth flow  |
-| `audit_logs` | Actor, action, JSON payload, SHA-256 signature | Schema only; no write path |
-
-Roles stored as strings: `SUPER_ADMIN`, `LGU_DISPATCHER`,
-`EMERGENCY_DRIVER`.
-
-### 7.6 Migrations
-
-| Revision       | Purpose                                                            |
-| -------------- | ------------------------------------------------------------------ |
-| `fd26e0cb82cc` | Initial schema: five application tables plus spatial columns       |
-| `a1b2c3d4e5f6` | Enable RLS on application tables and revoke `anon`/`authenticated` |
+| Revision       | Purpose                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| `fd26e0cb82cc` | Initial schema: five application tables plus spatial columns         |
+| `a1b2c3d4e5f6` | Enable RLS on application tables and revoke `anon` / `authenticated` |
 
 Rules:
 
 - Every schema change is a revision; `create_all` is never called at runtime.
 - CI runs `alembic upgrade head` then `alembic check`; drift fails the build.
 - Reflected foreign tables (PostGIS `spatial_ref_sys`, `tiger`, `topology`) are
-  filtered out of autogenerate. Consequence: deleting a model does not
-  auto-generate a `DROP`; that must be written by hand.
+  filtered out of autogenerate, so deleting a model needs a hand-written `DROP`.
 - Downgrades are maintained so a revision can be reversed during development.
 
-## 8. API design
+## 4. Configuration
 
-| Method | Path                       | Handler                       | Response model         |
-| ------ | -------------------------- | ----------------------------- | ---------------------- |
-| GET    | `/`                        | `root`                        | Ad-hoc JSON            |
-| GET    | `/api/v1/network/state`    | `get_network_state`           | `NetworkStateResponse` |
-| POST   | `/api/v1/simulation/rain`  | `trigger_rainfall_simulation` | `SimulationResponse`   |
-| GET    | `/api/v1/routing/navigate` | `get_optimal_route`           | `RouteResponse`        |
+Settings use the `METROFLOW_` prefix and may be supplied in a local `.env`.
 
-Design choices:
-
-| Choice                                                  | Rationale                                                                       |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Simulation is `POST` although it takes query parameters | It mutates live state; `POST` prevents a crawler or prefetch from triggering it |
-| Simulation returns the full network                     | Avoids a second round trip for the map                                          |
-| GeoJSON as the wire format                              | Directly consumable by MapLibre and GIS tooling                                 |
-| Errors as HTTP status plus `detail`                     | FastAPI default; 404 carries actionable text (available node ids)               |
-| No versioning beyond `/api/v1`                          | One public version; breaking changes get `/api/v2`                              |
-
-The generated OpenAPI document at `/openapi.json` is the machine-readable
-contract and is what the ZAP scan consumes. Human-readable contracts, examples
-and error cases are in [api.md](api.md).
-
-## 9. Security design
-
-### 9.1 Controls in place
-
-| Layer            | Control                                                                                                                     |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Transport        | TLS terminated by the host/pooler; CI requires `sslmode=require`                                                            |
-| Response headers | `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: cross-origin`, `Referrer-Policy`, `X-Frame-Options: DENY` |
-| Database access  | RLS enabled on all application tables; `anon` and `authenticated` revoked                                                   |
-| Migrations       | `alembic_version` also protected so the Data API cannot rewrite history                                                     |
-| Container        | Non-root user, no build tooling in the runtime layer                                                                        |
-| Secrets          | Environment variables and repository secrets only; `.env` ignored                                                           |
-| Dependencies     | Dependabot with grouped weekly updates; TypeScript major pinned                                                             |
-| Static analysis  | CodeQL workflow with a preflight capability probe                                                                           |
-| Dynamic analysis | OWASP ZAP API scan against the live stack, weekly, fail-closed                                                              |
-| Repository token | Workflows declare `contents: read`                                                                                          |
-
-### 9.2 Row-level security
-
-Supabase exposes the `public` schema through PostgREST. Its default privileges
-would let the public `anon` key read and write application tables — including
-`users.password_hash`. The RLS migration therefore:
-
-1. Enables RLS on every application table with **no policies**, which denies
-   every non-owner request.
-2. Revokes all privileges from `anon` and `authenticated` where those roles
-   exist, as defence in depth.
-3. Leaves the owner role (`postgres`) unaffected, because owners bypass RLS
-   unless `FORCE ROW LEVEL SECURITY` is set — and it deliberately is not.
-
-Verified by connecting as `anon` and observing `permission denied for table
-users`.
-
-### 9.3 Open risks
-
-| ID     | Risk                                         | Severity | Disposition                                                                |
-| ------ | -------------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| SEC-01 | API has no authentication or authorisation   | High     | Accepted for the pilot; BR-09 is the first post-pilot increment            |
-| SEC-02 | CORS allows every origin with credentials    | Medium   | Restrict to known portal origins before production                         |
-| SEC-03 | No rate limiting                             | Medium   | Add at the proxy or via middleware before public exposure                  |
-| SEC-04 | CodeQL cannot analyse the private repository | Medium   | Workflow auto-enables when the repo is public or Code Security is licensed |
-| SEC-05 | No secret scanning beyond GitHub defaults    | Low      | Enable push protection                                                     |
-| SEC-06 | Audit hash is a column without a write path  | Low      | Implement with FR-47                                                       |
-
-`SEC-01` is the reason the pilot may not handle real personal data. That
-constraint is stated in the BRD and must appear in the final report.
-
-## 10. Performance and capacity
-
-| Operation     | Complexity   | Dominant cost                         |
-| ------------- | ------------ | ------------------------------------- |
-| Network state | `O(V + E)`   | Four queries plus geometry JSON parse |
-| Simulation    | `O(V + E)`   | Per-edge arithmetic plus one commit   |
-| Routing       | `O(E log V)` | Heap operations                       |
-
-| Aspect           | Current position                                                                                                               |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Pilot graph      | 4 nodes, 4 edges (demonstration corridor)                                                                                      |
-| Database indexes | Primary keys plus GiST on geometry                                                                                             |
-| Connection model | One session per request, synchronous driver                                                                                    |
-| Caching          | None; Redis is provisioned but unused                                                                                          |
-| Expected limit   | Thousands of edges are fine for `O(E log V)`; the bottleneck becomes per-request geometry serialisation                        |
-| Scaling path     | Add API replicas behind a load balancer; cache network state per clearance; move geometry serialisation to a materialised view |
-
-NFR-01 and NFR-02 are targets, not measured results. A load test is listed in
-the PMP quality plan.
-
-## 11. Reliability and error handling
-
-| Failure                          | Behaviour                                                                |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| Database unreachable at startup  | Lifespan raises; container exits; health check never goes green          |
-| Unknown node id                  | 404 naming the available ids                                             |
-| No safe route                    | 404 with a human-readable message, never an empty 200                    |
-| Invalid parameter                | 422 with field detail from Pydantic                                      |
-| Simulation on an overridden edge | Edge skipped; not counted as affected                                    |
-| Concurrent geometry backfill     | Serialised by a transaction-scoped advisory lock                         |
-| Interrupted migration            | Transaction rolls back; the CD workflow does not cancel an in-flight run |
-| Duplicate seeding on restart     | Seed returns early when nodes exist                                      |
-
-Transaction boundaries:
-
-- Read endpoints do not commit.
-- Simulation commits once, after all edge updates, so a partial update cannot be
-  observed.
-- Migrations run in a single transaction per revision.
-
-## 12. Observability
-
-| Signal             | Current state                                | Gap                                     |
-| ------------------ | -------------------------------------------- | --------------------------------------- |
-| Health endpoint    | `/` returns status and identity              | No dependency checks (database, pooler) |
-| Container health   | Docker `HEALTHCHECK` on `/`                  | Does not prove database connectivity    |
-| Startup log        | Geometry backfill counts                     | No structured logging                   |
-| CI evidence        | Workflow logs, ZAP artifacts, step summaries | No metrics retention                    |
-| Application errors | Uvicorn default output                       | No error tracker, no correlation ids    |
-| Database           | Supabase dashboard                           | No alerting configured                  |
-| Uptime             | None                                         | No external monitor                     |
-
-For the pilot, CI artifacts and container health are the evidence base. Before
-production, add structured logs with request ids, an uptime check on `/openapi.json`,
-and alerts on migration failure.
-
-## 13. Testing strategy
-
-| Layer              | Tool                                           | Scope                                                                                                 | Gate                            |
-| ------------------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Unit               | pytest (`-m "not integration"`)                | Hydrology monotonicity, SCS-CN edge cases, passability thresholds, A\* optimality, no-route behaviour | Backend CI `Unit tests`         |
-| Contract           | pytest (`-m integration`) against real PostGIS | Every endpoint, status codes, response shape, security headers                                        | Backend CI `API contract tests` |
-| Schema             | Alembic                                        | `upgrade head` on a clean database, then `check` for drift                                            | Backend CI                      |
-| Static (web)       | ESLint                                         | Correctness and framework rules                                                                       | Web CI `Lint and build`         |
-| Type               | TypeScript via `next build`                    | Type errors block the build                                                                           | Web CI                          |
-| Build              | Next.js production build                       | Route compiles and prerenders                                                                         | Web CI                          |
-| Security (dynamic) | OWASP ZAP API scan                             | Live stack, OpenAPI-driven                                                                            | Weekly workflow, fail-closed    |
-| Security (static)  | CodeQL                                         | Python and TypeScript                                                                                 | Skipped while unlicensed        |
-| Migration delivery | Alembic to Supabase                            | Hosted schema at head                                                                                 | Gated CD workflow               |
-| Exploratory        | Manual browser session                         | Login → triage → dispatch → sign-out                                                                  | Demonstration                   |
-
-The integration suite runs against a real database on purpose: mocking PostGIS
-would not prove that the geometry queries or the migrations work.
-
-**Not automated:** browser end-to-end tests. The portal was verified with a
-scripted Playwright session during development, but that script is not committed.
-Adding it to Web CI is a recommended improvement.
-
-## 14. CI/CD pipeline
-
-### 14.1 Workflows
-
-| Workflow                          | Trigger                                                    | What it does                                                                                                                        | Gate behaviour                                                                     |
-| --------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Backend CI**                    | Push/PR touching `backend/**` or its workflow; manual      | `Unit tests` job; `API contract tests` job with PostGIS and Redis services, `alembic upgrade head`, `alembic check`, contract tests | Blocks merge: both jobs must pass                                                  |
-| **Web CI**                        | Push/PR touching `web-lgu/**` or its workflow; manual      | Bun install from lockfile, ESLint, `next build` (includes type check)                                                               | Blocks merge                                                                       |
-| **Security — OWASP ZAP API Scan** | Weekly cron (Mon 10:00 PHT) and manual                     | `docker compose up` the real stack, wait for `/openapi.json`, run `zap-api-scan.py`, publish HTML/MD/JSON artifacts                 | **Fails the run** on findings at or above threshold; no `continue-on-error`        |
-| **Security — CodeQL**             | Push/PR to `main`, weekly, manual                          | Preflight probes code-scanning availability; analyses Python and TypeScript with `security-extended` when available                 | Skips with a visible warning on private repos without Code Security                |
-| **Supabase — Apply migrations**   | `workflow_run` after Backend CI succeeds on `main`; manual | Applies Alembic history to the hosted database, then confirms the current revision                                                  | No-ops with a notice when `SUPABASE_DB_URL` is absent; serialised, never cancelled |
-| **Backend Image**                 | Manual, or `backend-v*` tag                                | Builds the container and pushes to GHCR with branch, semver and SHA tags                                                            | Does not deploy; no host selected                                                  |
-
-### 14.2 Delivery flow
-
-```
-change ──► pull request ──► Backend CI ──┐
-                       └──► Web CI     ──┴──► merge to main
-                                              │
-                                              ├──► Backend CI (main) ──► Supabase migrations
-                                              │
-                                              └──► tag backend-v* ──► GHCR image ──► (deploy job: not yet)
-```
-
-### 14.3 Why migrations are a separate workflow
-
-Schema changes must not compete with application startup when several API
-replicas exist. Backend CI validates revisions against an ephemeral PostGIS
-container; the Supabase workflow ships only history that already passed. The
-workflow is serialised and does not cancel in progress, because interrupting DDL
-midway is worse than waiting.
-
-## 15. Environments and configuration
-
-### 15.1 Environments
-
-| Environment | Database                             | Purpose                        | Lifetime             |
-| ----------- | ------------------------------------ | ------------------------------ | -------------------- |
-| Local       | Compose PostGIS on 5432              | Development                    | Developer-controlled |
-| CI          | Service container, recreated per run | Tests and scans                | Job lifetime         |
-| Hosted      | Supabase project, Seoul              | Deployment target for schema   | Persistent           |
-| Production  | None selected                        | Runtime for the API and portal | —                    |
-
-### 15.2 Configuration
-
-Application settings use the `METROFLOW_` prefix and may also be supplied in a
-local `.env`:
-
-| Variable                          | Default           | Effect                                            |
-| --------------------------------- | ----------------- | ------------------------------------------------- |
-| `DATABASE_URL`                    | local PostGIS DSN | Connection string (no prefix; read directly)      |
-| `METROFLOW_CURVE_NUMBER`          | 85                | SCS-CN curve number                               |
-| `METROFLOW_RAINFALL_DURATION_HRS` | 1.0               | Storm duration for intensity to depth             |
-| `METROFLOW_PONDING_AMPLIFICATION` | 3.5               | Runoff-to-street-depth calibration                |
-| `METROFLOW_CAUTION_DEPTH_CM`      | 10.0              | Light-flood threshold                             |
-| `METROFLOW_DEFAULT_CLEARANCE_CM`  | 30.0              | Clearance when the client omits it                |
-| `RUN_MIGRATIONS`                  | true              | Whether the container applies migrations on start |
+| Variable                          | Default           | Effect                              |
+| --------------------------------- | ----------------- | ----------------------------------- |
+| `DATABASE_URL`                    | local PostGIS DSN | Connection string                   |
+| `METROFLOW_CURVE_NUMBER`          | 85                | SCS-CN curve number                 |
+| `METROFLOW_RAINFALL_DURATION_HRS` | 1.0               | Storm duration                      |
+| `METROFLOW_PONDING_AMPLIFICATION` | 3.5               | Runoff-to-street-depth factor       |
+| `METROFLOW_CAUTION_DEPTH_CM`      | 10.0              | Light-flood threshold               |
+| `METROFLOW_DEFAULT_CLEARANCE_CM`  | 30.0              | Clearance when omitted              |
+| `RUN_MIGRATIONS`                  | true              | Apply migrations on container start |
 
 Repository secrets:
 
-| Secret            | Required by                 | Status                             |
-| ----------------- | --------------------------- | ---------------------------------- |
-| `SUPABASE_DB_URL` | Supabase migration workflow | **Not set**; CD no-ops until it is |
+| Secret            | Required by                 | Status                                      |
+| ----------------- | --------------------------- | ------------------------------------------- |
+| `SUPABASE_DB_URL` | Supabase migration workflow | **Not set**; CD no-ops until it is supplied |
 
-`GITHUB_TOKEN` is provided automatically and used for GHCR login.
+## 5. Deployment and CI/CD
 
-## 16. Architecture decisions
+### 5.1 Local stack
 
-| ID     | Decision                                            | Alternatives considered                     | Rationale                                                                                                              | Status                |
-| ------ | --------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| ADR-01 | Alembic owns the schema; no `create_all` at runtime | `Base.metadata.create_all`                  | `create_all` creates missing tables but never alters existing ones, so the database would drift from migration history | Accepted              |
-| ADR-02 | Hosted Postgres is Supabase                         | Self-managed VM, RDS                        | Managed PostGIS, free tier, pooler for IPv4 CI, point-in-time recovery on paid plans                                   | Accepted              |
-| ADR-03 | Session pooler connection for CI                    | Direct `db.<ref>` host                      | Direct host is IPv6-only; GitHub runners are IPv4                                                                      | Accepted              |
-| ADR-04 | Time-dependent A\* rather than Dijkstra             | Dijkstra, contraction hierarchies           | Heuristic gives optimal routes with a smaller frontier; flood penalty makes cost time-dependent anyway                 | Accepted              |
-| ADR-05 | SCS-CN for runoff                                   | Rational method, full hydrodynamic model    | Standard, explainable, few parameters; adequate for a decision aid                                                     | Accepted, replaceable |
-| ADR-06 | Ponding amplification as configuration              | Hard-coded coefficient                      | Makes the calibration assumption explicit and tunable                                                                  | Accepted              |
-| ADR-07 | RLS deny-by-default on Supabase                     | Rely on API auth only                       | The Data API is publicly reachable with the anon key; RLS is the last line of defence                                  | Accepted              |
-| ADR-08 | ZAP is a gate, not a report                         | `continue-on-error`                         | A report nobody reads does not prevent regressions                                                                     | Accepted              |
-| ADR-09 | CodeQL preflight skip                               | Delete the workflow, or let it fail         | Keeps the workflow ready to activate without edits, and keeps `main` green                                             | Accepted              |
-| ADR-10 | Bun ecosystem in Dependabot                         | npm ecosystem                               | Dependabot cannot parse `bun.lock` under npm                                                                           | Accepted              |
-| ADR-11 | Portal ships with mock incident data                | Block the UI until the incidents API exists | Demonstrates the workflow and fixes the visual contract early; the seam is one module                                  | Accepted, interim     |
-| ADR-12 | Security headers in middleware                      | Reverse proxy only                          | Guarantees the headers exist even when the app runs without a proxy, which is how ZAP sees it                          | Accepted              |
-| ADR-13 | Redis provisioned but unused                        | Remove it                                   | The compose stack keeps parity with the intended production topology; removing and re-adding causes churn              | Open                  |
+| Service    | Image / build                   | Port | Health check         |
+| ---------- | ------------------------------- | ---- | -------------------- |
+| `postgres` | `postgis/postgis:15-3.3-alpine` | 5432 | `pg_isready`         |
+| `redis`    | `redis:7-alpine`                | 6379 | `redis-cli ping`     |
+| `backend`  | built from `backend/Dockerfile` | 8000 | `curl /openapi.json` |
 
-## 17. Known limitations and technical debt
+Redis is provisioned for future caching and pub/sub but is not used by the
+application today. The container runs as uid 10001 and applies migrations on
+start unless `RUN_MIGRATIONS=false`.
 
-| ID     | Limitation                                     | Impact                                        | Planned resolution                                          |
-| ------ | ---------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------- |
-| LIM-01 | No authentication or authorisation             | Cannot handle real personal data; API is open | Implement identity and roles (BR-09)                        |
-| LIM-02 | Incident data is mocked in the portal          | Triage is demonstrated, not operational       | Build incident intake and persistence                       |
-| LIM-03 | No live sensor or weather ingestion            | Simulation is operator-driven                 | Integrate feeds with data-sharing agreements                |
-| LIM-04 | Redis is unused                                | Extra container in the stack                  | Add caching for network state and pub/sub for updates       |
-| LIM-05 | CORS allows all origins with credentials       | Cross-origin abuse surface                    | Allowlist portal origins                                    |
-| LIM-06 | No rate limiting or WAF                        | DoS and credential-stuffing exposure          | Proxy-level rules before public exposure                    |
-| LIM-07 | No map rendering in the portal                 | GeoJSON is served but not drawn               | MapLibre component consuming the network endpoint           |
-| LIM-08 | Audit log is schema-only                       | No immutable trail of decisions               | Implement FR-47 with hash chaining                          |
-| LIM-09 | No automated browser end-to-end tests          | Regressions in the UI caught manually         | Add Playwright to Web CI                                    |
-| LIM-10 | CodeQL inactive on the private repo            | Static analysis gap                           | Publish the repo or license Code Security                   |
-| LIM-11 | Single-region hosted database                  | Latency and availability risk                 | Choose a region near operations; add read replica if needed |
-| LIM-12 | No backup/restore runbook or DR test           | Recovery objectives unverified                | Define RPO/RTO and test restore                             |
-| LIM-13 | Deleting a model does not auto-generate `DROP` | Manual migration required                     | Documented in migrations guidance                           |
-| LIM-14 | Seeded graph is four nodes                     | Routing demonstration is narrow               | Import real road network and elevation                      |
+### 5.2 Hosted database
 
-## 18. Traceability to the FSD
+| Property     | Value                                                |
+| ------------ | ---------------------------------------------------- |
+| Provider     | Supabase                                             |
+| Region       | `ap-northeast-2` (Seoul)                             |
+| Engine       | PostgreSQL 17.11 with PostGIS                        |
+| Connection   | Session pooler with `sslmode=require`                |
+| Access model | API connects as owner; `anon`/`authenticated` denied |
 
-| FSD module                   | Requirements | TSD sections             |
-| ---------------------------- | ------------ | ------------------------ |
-| A — Network state            | FR-01–FR-05  | §5.1, §6.3, §7, §8       |
-| B — Rainfall simulation      | FR-06–FR-10  | §5.1, §5.2, §6.1, §6.2   |
-| C — Routing                  | FR-11–FR-17  | §5.3, §6.4, §6.5         |
-| D — Portal access            | FR-18–FR-23  | §5.5 (LIM-01)            |
-| E — Incident queue           | FR-24–FR-31  | §5.5, §7 (mock boundary) |
-| F — Incident detail          | FR-32–FR-38  | §5.5                     |
-| G — Dispatch actions         | FR-39–FR-46  | §5.5, §17 (LIM-08)       |
-| H — Audit and administration | FR-47–FR-49  | §7.5, §17 (LIM-08)       |
-| I — Operations               | FR-50–FR-53  | §4, §5.1, §14            |
+The direct `db.<ref>.supabase.co` host is IPv6-only and unreachable from GitHub's
+IPv4 runners, so the session pooler host is required.
 
-## 19. Appendix — repository and commands
+### 5.3 Workflows
 
-### 19.1 Layout
+| Workflow                      | Trigger                                     | Gate                                                            |
+| ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
+| Backend CI                    | Push/PR touching `backend/**`; manual       | Unit tests, contract tests, `alembic upgrade`, `alembic check`  |
+| Web CI                        | Push/PR touching `web-lgu/**`; manual       | Bun install, ESLint, `next build`                               |
+| Security — OWASP ZAP API Scan | Weekly cron and manual                      | Fails on findings at or above threshold; no `continue-on-error` |
+| Security — CodeQL             | Push/PR to `main`, weekly, manual           | Skips with a visible warning when code scanning is unavailable  |
+| Supabase — Apply migrations   | After Backend CI succeeds on `main`; manual | Serialised; no-ops without `SUPABASE_DB_URL`                    |
+| Backend Image                 | Manual or `backend-v*` tag                  | Builds and pushes to GHCR; does not deploy                      |
 
+Delivery flow:
+
+```text
+change ──► pull request ──► Backend CI ──┐
+                       └──► Web CI     ──┴──► merge to main
+                                              ├──► Backend CI ──► Supabase migrations
+                                              └──► tag backend-v* ──► GHCR image
 ```
+
+## 6. Architecture Decisions
+
+| ID      | Decision                               | Alternatives considered             | Rationale                                                                | Status            |
+| ------- | -------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------ | ----------------- |
+| ADR-001 | Alembic owns the schema                | `Base.metadata.create_all`          | `create_all` cannot alter existing tables, so the database would drift   | Accepted          |
+| ADR-002 | Supabase as hosted Postgres            | Self-managed VM, RDS                | Managed PostGIS, free tier, pooler, point-in-time recovery on paid plans | Accepted          |
+| ADR-003 | Session pooler for CI                  | Direct `db.<ref>` host              | The direct host is IPv6-only; GitHub runners are IPv4                    | Accepted          |
+| ADR-004 | Time-dependent A\*                     | Dijkstra, contraction hierarchies   | Optimal routes with a smaller frontier under depth-dependent cost        | Accepted          |
+| ADR-005 | SCS-CN for runoff                      | Rational method, hydrodynamic model | Standard, explainable, few parameters; adequate for a decision aid       | Accepted          |
+| ADR-006 | Ponding amplification as configuration | Hard-coded coefficient              | Makes the calibration assumption explicit and tunable                    | Accepted          |
+| ADR-007 | RLS deny-by-default on Supabase        | Rely on API auth only               | The Data API is publicly reachable with the anon key                     | Accepted          |
+| ADR-008 | ZAP is a gate, not a report            | `continue-on-error`                 | A report nobody reads does not prevent regressions                       | Accepted          |
+| ADR-009 | CodeQL preflight skip                  | Delete or let it fail               | Keeps the workflow ready to activate without edits                       | Accepted          |
+| ADR-010 | Bun ecosystem in Dependabot            | npm ecosystem                       | Dependabot cannot parse `bun.lock` under npm                             | Accepted          |
+| ADR-011 | Portal ships with mock incident data   | Block the UI until intake exists    | Demonstrates the workflow and fixes the visual contract early            | Accepted, interim |
+| ADR-012 | Security headers in middleware         | Reverse proxy only                  | Headers exist even without a proxy, which is how ZAP sees the app        | Accepted          |
+| ADR-013 | Redis provisioned but unused           | Remove it                           | Keeps parity with the intended production topology                       | Open              |
+
+## 7. Known Limitations
+
+| ID      | Limitation                                | Impact                                        | Planned resolution                        |
+| ------- | ----------------------------------------- | --------------------------------------------- | ----------------------------------------- |
+| LIM-001 | No authentication or authorisation        | Cannot handle real personal data; API is open | Implement identity and roles (BR-009)     |
+| LIM-002 | Incident data is mocked                   | Triage is demonstrated, not operational       | Build intake and persistence              |
+| LIM-003 | No live sensor or weather ingestion       | Simulation is operator-driven                 | Integrate feeds with agreements           |
+| LIM-004 | Redis is unused                           | Extra container in the stack                  | Cache network state; pub/sub updates      |
+| LIM-005 | CORS allows all origins with credentials  | Cross-origin abuse surface                    | Allowlist portal origins                  |
+| LIM-006 | No rate limiting or WAF                   | DoS and credential-stuffing exposure          | Proxy-level rules before exposure         |
+| LIM-007 | No map rendering in the portal            | GeoJSON served but not drawn                  | MapLibre component                        |
+| LIM-008 | Audit log is schema-only                  | No immutable trail of decisions               | Implement FSD-FR-047 with hash chaining   |
+| LIM-009 | No automated browser end-to-end tests     | UI regressions caught manually                | Add Playwright to Web CI                  |
+| LIM-010 | CodeQL inactive on the private repository | Static analysis gap                           | Publish the repo or license Code Security |
+| LIM-011 | Single-region hosted database             | Latency and availability risk                 | Choose a region near operations           |
+| LIM-012 | No backup/restore runbook or DR test      | Recovery objectives unverified                | Define RPO/RTO and test restore           |
+| LIM-013 | Deleting a model needs a manual `DROP`    | Migration authoring risk                      | Documented in migration rules             |
+| LIM-014 | Seeded graph is four nodes                | Routing demonstration is narrow               | Import the real road network              |
+
+## 8. Repository and Commands
+
+```text
 MetroFlow/
 ├── backend/                 FastAPI engine
 │   ├── main.py              app, middleware, endpoints
@@ -704,36 +469,20 @@ MetroFlow/
 │   ├── Dockerfile
 │   └── entrypoint.sh
 ├── web-lgu/                 Next.js dispatch portal
-│   ├── app/                 routes, layout, theme
-│   ├── components/          portal screens and panels
-│   └── lib/                 mock data and helpers
 ├── docs/                    this document set
 ├── scripts/                 pre-commit helper
 ├── .github/workflows/       CI/CD
 └── docker-compose.yml       local stack
 ```
 
-### 19.2 Commands
-
-| Task                 | Command                                     |
-| -------------------- | ------------------------------------------- |
-| Start the full stack | `docker compose up --build`                 |
-| Run the API only     | `cd backend && uvicorn main:app --reload`   |
-| Apply migrations     | `cd backend && alembic upgrade head`        |
-| Check model drift    | `cd backend && alembic check`               |
-| Run unit tests       | `cd backend && pytest -m "not integration"` |
-| Run contract tests   | `cd backend && pytest -m integration`       |
-| Run the portal       | `cd web-lgu && bun run dev`                 |
-| Lint the portal      | `cd web-lgu && bun run lint`                |
-| Build the portal     | `cd web-lgu && bun run build`               |
-| Inspect the contract | `curl http://localhost:8000/openapi.json`   |
-
-### 19.3 References
-
-- FastAPI documentation — <https://fastapi.tiangolo.com>
-- PostGIS reference — <https://postgis.net/documentation/>
-- SCS Curve Number method — USDA NRCS National Engineering Handbook, Part 630
-- A\* search — Hart, Nilsson & Raphael (1968)
-- OWASP API Security Top 10 — <https://owasp.org/API-Security/>
-- Data Privacy Act of 2012 (RA 10173)
-- Philippine Disaster Risk Reduction and Management Act of 2010 (RA 10121)
+| Task             | Command                                       |
+| ---------------- | --------------------------------------------- |
+| Start the stack  | `docker compose up --build`                   |
+| Run the API      | `cd backend && uvicorn main:app --reload`     |
+| Apply migrations | `cd backend && alembic upgrade head`          |
+| Check drift      | `cd backend && alembic check`                 |
+| Unit tests       | `cd backend && pytest -m "not integration"`   |
+| Contract tests   | `cd backend && pytest -m integration`         |
+| Run the portal   | `cd web-lgu && bun run dev`                   |
+| Lint and build   | `cd web-lgu && bun run lint && bun run build` |
+| Inspect contract | `curl http://localhost:8000/openapi.json`     |

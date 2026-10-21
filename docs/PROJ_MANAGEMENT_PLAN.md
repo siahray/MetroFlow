@@ -1,490 +1,333 @@
-# Project Management Plan — MetroFlow
+# PROJECT MANAGEMENT PLAN
 
-| Field             | Value                                                                        |
-| ----------------- | ---------------------------------------------------------------------------- |
-| Document ID       | MF-PMP-001                                                                   |
-| Version           | 1.0 (Draft)                                                                  |
-| Status            | For academic review                                                          |
-| Date              | 21 October 2026                                                              |
-| Prepared by       | «Project Team»                                                               |
-| Reviewed by       | «Project Adviser»                                                            |
-| Approved by       | «Project Sponsor»                                                            |
-| Related documents | [PROJECT_CHARTER.md](PROJECT_CHARTER.md), [FSD.md](FSD.md), [TSD.md](TSD.md) |
+## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-## Revision history
+Version 1.0
 
-| Version | Date        | Author         | Change                  |
-| ------- | ----------- | -------------- | ----------------------- |
-| 1.0     | 21 Oct 2026 | «Project Team» | Initial management plan |
+## Document Information
 
-## 1. Purpose and audience
+| Item            | Details                                         |
+| --------------- | ----------------------------------------------- |
+| Document Title  | Project Management Plan (PMP)                   |
+| Project Name    | MetroFlow                                       |
+| Project Sponsor | «Project Sponsor»                               |
+| Business Owner  | «Client Representative» — LGU Operations (CDMO) |
+| Project Manager | «Project Team Lead»                             |
+| Budget          | PHP [TBC]                                       |
+| Go-Live         | [TBC]                                           |
 
-This plan defines how the project is executed and controlled: lifecycle,
-schedule, quality, resources, communication, risk and change. It is the working
-document for the team and the evidence of process for the adviser and panel.
+## Revision History
 
-It does not restate requirements; those live in [BRD.md](BRD.md) and
-[FSD.md](FSD.md).
+| Version | Date        | Author                      | Description    | Status |
+| ------- | ----------- | --------------------------- | -------------- | ------ |
+| 0.1     | 21 Oct 2026 | «Project Team Lead»         | Initial Draft  | Draft  |
+| 1.0     | 21 Oct 2026 | «QA and Documentation Lead» | Review release | Review |
 
-## 2. Project lifecycle and methodology
+## Approval Sign-Off
 
-### 2.1 Approach
+| Approver                | Role             | Signature | Date  |
+| ----------------------- | ---------------- | --------- | ----- |
+| «Project Sponsor»       | Project Sponsor  |           | [TBC] |
+| «Client Representative» | Business Owner   |           | [TBC] |
+| «Project Adviser»       | Academic Adviser |           | [TBC] |
+| «Project Team Lead»     | Project Manager  |           | [TBC] |
 
-An **incremental delivery with weekly iterations**, wrapped in the fixed
-milestones required by the academic calendar. Each increment produces something
-demonstrable:
+## Table of Contents
 
-| Increment | Demonstrable outcome                                |
-| --------- | --------------------------------------------------- |
-| I1        | Database schema, seed graph, network state endpoint |
-| I2        | Rainfall simulation with persisted state            |
-| I3        | Clearance-aware routing with GeoJSON output         |
-| I4        | Portal shell, login screen and dashboard layout     |
-| I5        | Triage queue, detail panel and operations log       |
-| I6        | Dispatch actions, hardening, hosted migrations      |
-| I7        | Documentation set, defence preparation              |
+1. Executive Summary
+2. Project Overview
+3. Scope Management
+4. Project Schedule
+5. Resource Management
+6. Cost Management
+7. RAID Log
+8. RACI Matrix
+9. Communication Management
+10. Testing Management
+11. Success Metrics
+12. Appendices
 
-### 2.2 Ceremonies
+## Executive Summary
 
-| Ceremony            | Frequency                | Output                                 |
-| ------------------- | ------------------------ | -------------------------------------- |
-| Planning            | Weekly, start            | Iteration goal, task breakdown, owners |
-| Stand-up            | Twice weekly, 15 minutes | Blockers, hand-offs                    |
-| Review with adviser | Bi-weekly                | Feedback, scope decisions              |
-| Retrospective       | Weekly, end              | One process change carried forward     |
-| Demo                | At each milestone        | Working software, not slides           |
+MetroFlow gives the LGU operations centre a verified picture of road passability
+during flooding and a traceable path from incident report to dispatch decision.
+The pilot covers one corridor, a simulation and routing API, and a browser-based
+dispatch portal.
 
-### 2.3 Definition of done
+This plan defines how the work is executed and controlled: schedule, resources,
+cost, risk, quality, communication and change. The project is delivered
+incrementally inside a fixed academic term, with a working demonstration at each
+milestone rather than a single delivery at the end.
 
-A work item is done when:
+Current position: the API, schema and portal are built and tested; authentication
+and incident intake are documented limitations scheduled after the pilot. Every
+unconfirmed date or amount is marked `[TBC]`.
 
-1. The change is merged to `main`.
-2. Unit and contract tests pass for the affected area.
-3. Lint and build pass for the web app when touched.
-4. The relevant requirement in the FSD is updated to its true status.
-5. No new High or Medium ZAP finding is introduced.
+## Project Overview
 
-## 3. Assumptions, constraints and scope baseline
+| Item         | Description                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| Purpose      | Replace unverifiable verbal coordination with a shared network picture and a recorded triage decision |
+| Users        | LGU dispatchers and MDRRMC coordinators; field responders in a future release                         |
+| Deliverables | API engine, dispatch portal, versioned database, CI/CD pipeline, document set, demonstration          |
+| Out of scope | Native apps, live sensor ingestion, production identity provider, real intake, multi-LGU tenancy      |
+| Constraints  | Academic term, part-time effort, no paid Code Security, synthetic data only                           |
 
-| Type       | ID     | Statement                                                           | Owner                       |
-| ---------- | ------ | ------------------------------------------------------------------- | --------------------------- |
-| Assumption | A-01   | PostGIS-capable PostgreSQL is available for development and hosting | «Backend Lead»              |
-| Assumption | A-02   | The pilot corridor is representative enough to demonstrate routing  | «Project Team Lead»         |
-| Assumption | A-03   | Free or institutional tiers suffice for the pilot                   | «Project Team Lead»         |
-| Assumption | A-04   | Dispatchers have a modern desktop browser and connectivity          | «Client Representative»     |
-| Assumption | A-05   | Rainfall intensity is supplied manually or from public data         | «Backend Lead»              |
-| Assumption | A-06   | The client provides corridor and barangay naming                    | «Client Representative»     |
-| Constraint | C-01   | Delivery must fit the academic term                                 | «Project Team Lead»         |
-| Constraint | C-02   | Team effort is part-time                                            | «Project Team Lead»         |
-| Constraint | C-03   | No paid Code Security, so CodeQL cannot run on the private repo     | «QA and Documentation Lead» |
-| Constraint | C-04   | Only synthetic or public data may be used                           | «Client Representative»     |
-| Constraint | C-05   | Credentials are secrets and never committed                         | «Backend Lead»              |
-| Dependency | DEP-01 | Hosted database connection string supplied as a repository secret   | «Client Representative»     |
-| Dependency | DEP-02 | Adviser and panel availability for reviews                          | «Project Adviser»           |
-| Dependency | DEP-03 | Client confirms the pilot corridor                                  | «Client Representative»     |
+### Delivery approach
 
-The scope baseline is [PROJECT_CHARTER.md](PROJECT_CHARTER.md) §4. Assumptions
-are reviewed at each milestone; an invalidated assumption is raised as an issue
-and, if it changes scope, as a change request.
+Weekly iterations, each producing something demonstrable:
 
-## 4. Scope and change control
+| Increment | Demonstrable outcome                           |
+| --------- | ---------------------------------------------- |
+| I1        | Schema, seed graph, network state endpoint     |
+| I2        | Rainfall simulation with persisted state       |
+| I3        | Clearance-aware routing with GeoJSON output    |
+| I4        | Portal shell, login screen, dashboard layout   |
+| I5        | Queue, detail panel and operations log         |
+| I6        | Dispatch actions, hardening, hosted migrations |
+| I7        | Documentation set and defence preparation      |
 
-### 4.1 Change triggers
+**Definition of done:** merged to `main`; tests pass for the affected area; lint
+and build pass when the web app is touched; the FSD status reflects reality; no
+new High or Medium ZAP finding.
 
-A change request is required when a request:
+## Scope Management
 
-- adds or removes a deliverable, actor or integration;
-- moves an item across the in-scope/out-of-scope boundary;
-- changes a `Must` requirement;
-- changes the schedule by more than one week or the budget by any amount;
-- changes an architecture decision recorded in TSD §16.
+### In scope
 
-### 4.2 Change process
+- Flood simulation across the pilot road graph.
+- Clearance-aware route computation.
+- LGU portal: login, queue, incident detail, operations log, dispatch actions.
+- Versioned PostGIS schema with row-level security.
+- Automated build, test, security and migration pipeline.
 
+### Out of scope
+
+- Native driver application.
+- Live sensor, CCTV and weather ingestion.
+- Production identity provider and single sign-on.
+- Real citizen report intake.
+- Multi-LGU tenancy and billing.
+- Public information portal.
+
+### Change control
+
+A change request is required when a request adds or removes a deliverable,
+crosses the scope boundary, changes a `Must` requirement, moves the schedule by
+more than one week, changes the budget, or changes an architecture decision.
+
+```text
+Request → Log (CR-nnn) → Impact assessment → Decision → Update documents → Implement
 ```
-Request → Log (CR-nn) → Impact assessment → Decision → Update documents → Implement
-             │                 │                  │
-             │                 │                  └─ Approve / Defer / Reject
-             │                 └─ Scope, schedule, cost, risk, quality
-             └─ Raised by anyone; recorded by the PM lead
-```
-
-| Step      | Owner                                                    | Artefact                                 |
-| --------- | -------------------------------------------------------- | ---------------------------------------- |
-| Raise     | Any stakeholder                                          | Change request form (appendix A.2)       |
-| Assess    | «Project Team Lead» with affected lead                   | Impact note: scope, schedule, cost, risk |
-| Decide    | «Project Sponsor»; adviser consulted for academic impact | Decision recorded in the CR              |
-| Update    | «QA and Documentation Lead»                              | Affected documents and FSD status        |
-| Implement | Assigned developer                                       | Pull request referencing the CR id       |
 
 No change is implemented before a decision is recorded. Emergency fixes for a
-broken `main` may proceed, with the CR raised the same day.
+broken `main` may proceed, with the request raised the same day. The template is
+in Appendix B.
 
-### 4.3 Scope control metrics
+## Project Schedule
 
-| Metric                                  | Target          |
-| --------------------------------------- | --------------- |
-| Change requests decided within one week | 100%            |
-| Requirements marked `Must` after M2     | No net increase |
-| Out-of-scope work merged without a CR   | 0               |
+| Phase                | Start           | End             | Status      |
+| -------------------- | --------------- | --------------- | ----------- |
+| Requirements         | Week 1 · [TBC]  | Week 2 · [TBC]  | Completed   |
+| Design               | Week 3 · [TBC]  | Week 5 · [TBC]  | Completed   |
+| Development — API    | Week 6 · [TBC]  | Week 9 · [TBC]  | Completed   |
+| Development — Portal | Week 10 · [TBC] | Week 12 · [TBC] | Completed   |
+| Hardening and SIT    | Week 13 · [TBC] | Week 14 · [TBC] | Completed   |
+| Documentation        | Week 15 · [TBC] | Week 16 · [TBC] | In Progress |
+| Demonstration        | Week 16 · [TBC] | Week 16 · [TBC] | Planned     |
 
-## 5. Schedule management
+Milestones:
 
-### 5.1 Milestones
+| ID  | Milestone                           | Exit criterion                                      |
+| --- | ----------------------------------- | --------------------------------------------------- |
+| M1  | Charter and requirements approved   | Charter and BRD signed off                          |
+| M2  | Architecture and data design frozen | TSD accepted; schema drafted                        |
+| M3  | API engine operational              | Network, simulation and routing pass contract tests |
+| M4  | Dispatch portal operational         | Triage flow demonstrated end-to-end                 |
+| M5  | Hardening complete                  | ZAP clean at High/Medium; no open critical defects  |
+| M6  | Documentation and defence           | Document set accepted; demonstration delivered      |
 
-Dates `[TBC]` pending the academic calendar; weeks are relative to project start.
+**Critical path:** requirements → data model → simulation → routing → contract
+tests → hardening → defence. The portal runs in parallel but is not done until
+the queue and detail panels share one state.
 
-| ID  | Milestone                           | Weeks | Exit criteria                                         |
-| --- | ----------------------------------- | ----- | ----------------------------------------------------- |
-| M1  | Charter and requirements approved   | 1–2   | Charter and BRD signed off; baseline data plan agreed |
-| M2  | Architecture and data design frozen | 3–5   | TSD accepted; schema drafted; ADRs recorded           |
-| M3  | API engine operational              | 6–9   | Network, simulation and routing pass contract tests   |
-| M4  | Portal operational                  | 10–12 | Triage flow demonstrated end-to-end                   |
-| M5  | Hardening complete                  | 13–14 | ZAP clean at High/Medium; no open critical defects    |
-| M6  | Documentation and defence           | 15–16 | Document set accepted; demonstration delivered        |
+## Resource Management
 
-### 5.2 Phase plan
+| Role                       | Resource                    | Allocation |
+| -------------------------- | --------------------------- | ---------- |
+| Project Manager            | «Project Team Lead»         | 50%        |
+| Business Analyst           | «Client Representative»     | 20%        |
+| Architect                  | «Project Team Lead»         | 30%        |
+| Backend Developers         | «Backend Lead»              | 100%       |
+| Frontend Developers        | «Frontend Lead»             | 100%       |
+| QA and Documentation       | «QA and Documentation Lead» | 60%        |
+| Adviser                    | «Project Adviser»           | 5%         |
+| Dispatcher representatives | «Lead Dispatcher»           | 5%         |
 
-| Phase          | Work packages                                                       | Key output       |
-| -------------- | ------------------------------------------------------------------- | ---------------- |
-| Initiation     | 1.1 charter, 1.2 stakeholder map, 1.3 baseline plan                 | Approved charter |
-| Requirements   | 2.1 BRD, 2.2 personas, 2.3 acceptance criteria                      | Approved BRD     |
-| Design         | 3.1 architecture, 3.2 data model, 3.3 algorithms, 3.4 security      | TSD draft        |
-| Build — engine | 4.1 schema and migrations, 4.2 hydrology, 4.3 routing, 4.4 API      | Working API      |
-| Build — portal | 5.1 shell, 5.2 queue, 5.3 detail, 5.4 actions                       | Working portal   |
-| Assurance      | 6.1 unit tests, 6.2 contract tests, 6.3 CI gates, 6.4 security scan | Green pipeline   |
-| Delivery       | 7.1 hosted migrations, 7.2 documentation, 7.3 demonstration         | Accepted system  |
+Allocations are part-time estimates against a nominal working week. One person
+may hold more than one role; every role must have a named person before M2.
 
-### 5.3 Critical path
+## Cost Management
 
-```
-requirements → data model → simulation → routing → API contract
-                                                   │
-                        portal shell → queue → detail → actions
-                                                   │
-                                            CI gates → hardening → defence
-```
+| Category                     | Amount (PHP) |
+| ---------------------------- | ------------ |
+| Development effort (in-kind) | [TBC]        |
+| Hosted database              | [TBC]        |
+| Application hosting          | [TBC]        |
+| Domain and TLS               | [TBC]        |
+| Test devices and data        | [TBC]        |
+| Training and handover        | [TBC]        |
+| Contingency (10%)            | [TBC]        |
+| **Total**                    | **[TBC]**    |
 
-The critical path runs through the data model, the routing engine and the
-contract tests. The portal can be built in parallel but cannot be declared done
-before the queue and detail panels share the same state.
-
-### 5.4 Schedule control
-
-| Control             | Cadence           | Action on variance                                 |
-| ------------------- | ----------------- | -------------------------------------------------- |
-| Iteration burn-down | Weekly            | Re-plan next iteration; escalate if variance > 20% |
-| Milestone review    | At each milestone | Re-baseline only with a change request             |
-| Dependency check    | Weekly            | Chase DEP-01 and DEP-03 owners                     |
-
-## 6. Cost management
-
-| Item                  | Basis                            | Status |
-| --------------------- | -------------------------------- | ------ |
-| Development effort    | In-kind, tracked in person-hours | [TBC]  |
-| Hosted database       | Supabase tier                    | [TBC]  |
-| Application hosting   | Provider plan                    | [TBC]  |
-| Domain and TLS        | Registrar                        | [TBC]  |
-| Test devices and data | Institutional                    | [TBC]  |
-| Contingency           | 10% of the above                 | [TBC]  |
-
-Cost control rules:
+Rules:
 
 1. No paid service is subscribed without sponsor approval.
 2. Free tiers are the default; exceeding one requires a documented reason.
-3. Effort is tracked weekly so the in-kind cost in the business case is real, not
-   estimated at the end.
+3. Effort is tracked weekly so the in-kind cost in the business case is real.
 
-## 7. Quality management
+## RAID (Risks, Assumptions, Issues and Dependencies) Log
 
-### 7.1 Quality objectives
+| ID    | Type       | Description                                                       | Owner            | Impact | Status     |
+| ----- | ---------- | ----------------------------------------------------------------- | ---------------- | ------ | ---------- |
+| R-001 | Risk       | Scope creep into native apps and live sensors                     | PM               | High   | Open       |
+| R-002 | Risk       | Hydrological model judged unrealistic                             | Backend Lead     | High   | Open       |
+| R-003 | Risk       | Loss of a team member                                             | PM               | Medium | Open       |
+| R-004 | Risk       | Hosted database never configured                                  | Backend Lead     | Medium | Open       |
+| R-005 | Risk       | Security findings surface late                                    | QA               | Medium | Open       |
+| R-006 | Risk       | Institutional format differs from the document set                | PM               | Low    | Open       |
+| R-007 | Risk       | Authentication not delivered                                      | PM               | High   | Open       |
+| R-008 | Risk       | No baseline data from the client                                  | Business Analyst | Medium | Open       |
+| R-009 | Risk       | Pilot corridor changes late                                       | Business Analyst | Medium | Open       |
+| R-010 | Risk       | Hosted costs exceed the free tier                                 | Backend Lead     | Low    | Open       |
+| R-011 | Risk       | GitHub or Supabase outage during a milestone                      | PM               | Low    | Open       |
+| R-012 | Risk       | Dispatchers reject the tool                                       | Frontend Lead    | Medium | Open       |
+| R-013 | Risk       | A commercial platform is chosen later                             | PM               | Low    | Open       |
+| R-014 | Risk       | Personal data incident during testing                             | QA               | Medium | Open       |
+| A-001 | Assumption | PostGIS-capable PostgreSQL is available                           | Backend Lead     | High   | Open       |
+| A-002 | Assumption | Pilot corridor is representative enough to demonstrate routing    | PM               | Medium | Open       |
+| A-003 | Assumption | Free or institutional tiers suffice for the pilot                 | PM               | Medium | Open       |
+| A-004 | Assumption | Dispatchers have a modern browser and connectivity                | Business Analyst | High   | Open       |
+| A-005 | Assumption | Rainfall intensity is supplied manually or from public data       | Backend Lead     | Medium | Open       |
+| A-006 | Assumption | Client provides corridor and barangay naming                      | Business Analyst | Low    | Open       |
+| I-001 | Issue      | No authentication on the API or portal                            | PM               | High   | Accepted   |
+| I-002 | Issue      | Incident data in the portal is mock data                          | Frontend Lead    | Medium | Accepted   |
+| I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround |
+| D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open       |
+| D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open       |
+| D-003 | Dependency | Client confirms the pilot corridor                                | Business Analyst | High   | Open       |
 
-| Objective                     | Measure                                      | Target   |
-| ----------------------------- | -------------------------------------------- | -------- |
-| Requirements are met          | `Must` requirements implemented and verified | 100%     |
-| Behaviour is protected        | Automatic tests on `main`                    | Green    |
-| Schema is consistent          | `alembic check`                              | No drift |
-| Security baseline holds       | ZAP High/Medium findings                     | 0        |
-| Portal builds                 | Lint and build                               | Green    |
-| Documentation matches reality | FSD status equals implementation             | 100%     |
+Risk scoring and detailed responses are in Appendix A.
 
-### 7.2 Quality gates
-
-| Gate                 | When                   | Owner                       | Evidence          |
-| -------------------- | ---------------------- | --------------------------- | ----------------- |
-| Requirements review  | M1                     | «Project Adviser»           | Signed BRD        |
-| Design review        | M2                     | «Project Adviser»           | TSD accepted      |
-| Code review          | Every pull request     | Peer reviewer               | Approved PR       |
-| Automated tests      | Every push             | CI                          | Workflow run      |
-| Security scan        | Weekly and pre-release | «QA and Documentation Lead» | ZAP report        |
-| Usability check      | M4 and M5              | «Frontend Lead»             | Observation notes |
-| Documentation review | M6                     | «Project Adviser»           | Document set      |
-
-### 7.3 Review checklist
-
-- [ ] Requirement id referenced in the pull request.
-- [ ] Tests added or updated for changed behaviour.
-- [ ] No secret, credential or personal data in the diff.
-- [ ] FSD status updated if behaviour changed.
-- [ ] Migration added if the schema changed, with a working downgrade.
-- [ ] Accessibility considered for UI changes (label, focus, keyboard).
-
-## 8. Resource and team management
-
-### 8.1 Roles
-
-| Role                      | Assigned to                 | Accountability                         |
-| ------------------------- | --------------------------- | -------------------------------------- |
-| Project Sponsor           | «Project Sponsor»           | Authority, funding, acceptance         |
-| Project Adviser           | «Project Adviser»           | Academic quality, scope gate           |
-| Client Representative     | «Client Representative»     | Operational input, data access         |
-| Project Team Lead         | «Project Team Lead»         | Delivery, architecture, change control |
-| Backend Lead              | «Backend Lead»              | Simulation, routing, schema, API       |
-| Frontend Lead             | «Frontend Lead»             | Portal usability and behaviour         |
-| QA and Documentation Lead | «QA and Documentation Lead» | Tests, CI gates, document set          |
-
-Roles may be combined. Every role must have a named person before M2.
-
-### 8.2 RACI
+## RACI Matrix
 
 R = responsible, A = accountable, C = consulted, I = informed.
 
-| Activity          | Sponsor | Adviser | Client | Team Lead | Backend | Frontend | QA/Docs |
-| ----------------- | ------- | ------- | ------ | --------- | ------- | -------- | ------- |
-| Charter           | A       | C       | C      | R         | I       | I        | I       |
-| BRD               | A       | C       | C      | R         | C       | C        | C       |
-| Business case     | A       | C       | C      | R         | I       | I        | C       |
-| FSD               | I       | C       | C      | A         | R       | R        | R       |
-| TSD               | I       | C       | I      | A         | R       | C        | C       |
-| Simulation engine | I       | I       | I      | A         | R       | I        | C       |
-| Routing engine    | I       | I       | I      | A         | R       | I        | C       |
-| Portal            | I       | I       | C      | A         | C       | R        | C       |
-| Test strategy     | I       | I       | I      | A         | C       | C        | R       |
-| CI/CD gates       | I       | I       | I      | A         | C       | C        | R       |
-| Security scan     | I       | I       | I      | A         | C       | I        | R       |
-| Hosted migration  | I       | I       | C      | A         | R       | I        | C       |
-| Documentation set | A       | C       | I      | R         | C       | C        | R       |
-| Demonstration     | A       | C       | C      | R         | R       | R        | C       |
+| Activity              | Sponsor | PM  | BA  | DEV | QA  |
+| --------------------- | ------- | --- | --- | --- | --- |
+| Requirements          | A       | C   | R   | I   | I   |
+| Architecture          | I       | A   | C   | R   | C   |
+| Backend development   | I       | A   | I   | R   | C   |
+| Portal development    | I       | A   | C   | R   | C   |
+| Test strategy         | I       | A   | I   | C   | R   |
+| Security scan         | I       | A   | I   | C   | R   |
+| Hosted migration      | I       | A   | C   | R   | C   |
+| Documentation         | A       | R   | C   | C   | R   |
+| UAT and demonstration | A       | R   | C   | C   | C   |
+| Change approval       | A       | R   | C   | I   | I   |
 
-### 8.3 Capacity
+## Communication Management
 
-| Constraint                            | Effect                                                |
-| ------------------------------------- | ----------------------------------------------------- |
-| Part-time effort alongside coursework | Plan for 60–70% of nominal hours                      |
-| Single person per lead role           | No redundancy; pair on critical paths                 |
-| No dedicated designer                 | Portal uses a fixed visual language established at I4 |
+| Audience              | Frequency     | Method                                |
+| --------------------- | ------------- | ------------------------------------- |
+| Project team          | Twice weekly  | Stand-up                              |
+| Project adviser       | Bi-weekly     | Review meeting                        |
+| Project sponsor       | At milestones | Written status report                 |
+| Dispatcher users      | M4 and M5     | Demo and usability session            |
+| Steering stakeholders | Monthly       | Progress briefing                     |
+| Panel                 | M6            | Document submission and demonstration |
 
-## 9. Communications management
+**Escalation:** blocker at stand-up → owner resolves within one day → «Project
+Team Lead» → «Project Adviser» / «Project Sponsor» for scope. Academic or ethical
+concerns go to the adviser immediately.
 
-### 9.1 Stakeholder communication
+## Testing Management
 
-| Audience     | Information                       | Frequency     | Channel                | Owner         |
-| ------------ | --------------------------------- | ------------- | ---------------------- | ------------- |
-| Team         | Plan, blockers, decisions         | Twice weekly  | Stand-up               | Team Lead     |
-| Adviser      | Progress, risks, decisions needed | Bi-weekly     | Review meeting         | Team Lead     |
-| Sponsor      | Milestone status, change requests | At milestones | Written status report  | Team Lead     |
-| Client users | Demonstration, usability feedback | M4 and M5     | Session                | Frontend Lead |
-| Panel        | Document set, demonstration       | M6            | Submission and defence | Team Lead     |
+| Phase              | Owner    | Exit Criteria                                                     |
+| ------------------ | -------- | ----------------------------------------------------------------- |
+| Unit tests         | DEV      | All pass; hydrology and routing edge cases covered                |
+| Contract tests     | QA + DEV | Every endpoint returns the documented shape and status codes      |
+| Static checks      | QA       | ESLint, TypeScript and production build pass                      |
+| Database migration | DEV      | `alembic upgrade head` on a clean database; `alembic check` clean |
+| Security scan      | QA       | No High or Medium ZAP findings                                    |
+| System integration | QA       | End-to-end triage flow works against the running stack            |
+| UAT                | Business | Dispatcher completes the scripted scenarios; sign-off recorded    |
+| Regression         | QA       | No S1 or S2 defects open before demonstration                     |
 
-### 9.2 Artefacts
+| Test type              | Tool                                       |
+| ---------------------- | ------------------------------------------ |
+| Unit                   | pytest (`-m "not integration"`)            |
+| Contract / integration | pytest (`-m integration`) against PostGIS  |
+| Web lint and types     | ESLint, `next build`                       |
+| Security               | OWASP ZAP API scan, CodeQL (when licensed) |
+| Migration              | Alembic                                    |
+| Exploratory            | Scripted browser session                   |
 
-| Artefact       | Cadence               | Stored in                              |
-| -------------- | --------------------- | -------------------------------------- |
-| Iteration plan | Weekly                | Repository issue tracker               |
-| Status report  | At milestones         | `docs/` or shared drive                |
-| Risk register  | Updated weekly        | PMP §10                                |
-| Decision log   | As decisions are made | TSD §16 (architecture), CR log (scope) |
-| Meeting notes  | Per review            | Shared drive                           |
+## Success Metrics
 
-### 9.3 Escalation
+| KPI                                           | Target                        |
+| --------------------------------------------- | ----------------------------- |
+| `Must` requirements accepted                  | 100% by M5                    |
+| Report-to-triage time                         | Below the M1 baseline `[TBC]` |
+| Decisions with actor, timestamp and action    | 100%                          |
+| Dispatch attempts aborted for road conditions | 0 per event                   |
+| High/Medium security findings                 | 0                             |
+| CI pass rate                                  | ≥ 95%                         |
+| Requirement coverage                          | 100% of `Must` by M5          |
+| System Usability Scale                        | ≥ 75 `[TBC]`                  |
 
-1. Blocker raised at stand-up; owner attempts resolution within one day.
-2. Unresolved: escalated to «Project Team Lead».
-3. Cross-team or scope impact: escalated to «Project Adviser» and, if scope
-   changes, to «Project Sponsor» as a change request.
-4. Academic or ethical concern: «Project Adviser» immediately.
+## Appendices
 
-## 10. Risk management
+### Appendix A — Risk scoring and responses
 
-### 10.1 Method
+Probability and impact are scored High (3), Medium (2), Low (1); score is their
+product. Risks scoring 6 or above are reviewed weekly.
 
-Probability and impact are scored High (3), Medium (2), Low (1); the score is
-their product. Risks scoring 6 or above are reviewed weekly. Each risk has a
-trigger so it is recognised rather than discovered.
+| ID    | Risk                           | P   | I   | Score | Response                                                     | Trigger                             |
+| ----- | ------------------------------ | --- | --- | ----- | ------------------------------------------------------------ | ----------------------------------- |
+| R-001 | Scope creep                    | 3   | 3   | 9     | Hold the charter boundary; every addition needs a CR         | New feature requested mid-iteration |
+| R-002 | Model judged unrealistic       | 3   | 3   | 9     | Declare calibration; validate against documented events      | Adviser or client challenges output |
+| R-003 | Loss of a team member          | 2   | 3   | 6     | Pair on critical paths; record decisions                     | Missed stand-ups for a week         |
+| R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible     | Secret absent at M5                 |
+| R-005 | Late security findings         | 2   | 3   | 6     | Weekly ZAP gate from the first increment                     | New Medium finding                  |
+| R-006 | Format mismatch                | 2   | 2   | 4     | Confirm the rubric at M1                                     | Adviser requests restructuring      |
+| R-007 | Authentication not delivered   | 3   | 3   | 9     | State the limitation; schedule BR-009 post-pilot             | Pilot asked to handle real data     |
+| R-008 | No baseline data               | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot      | Baseline absent at M1 review        |
+| R-009 | Corridor changes late          | 2   | 3   | 6     | Freeze the corridor at M2                                    | New barangay list arrives           |
+| R-010 | Hosted costs exceed free tier  | 2   | 2   | 4     | Keep hosting provider-agnostic                               | Usage warning from provider         |
+| R-011 | Provider outage                | 1   | 3   | 3     | Work locally; defer hosted verification                      | Provider status page                |
+| R-012 | Dispatchers reject the tool    | 2   | 3   | 6     | Usability sessions from M4; keep the radio process running   | Negative feedback in session        |
+| R-013 | Commercial alternative chosen  | 1   | 2   | 2     | Publish the API contract; routing engine outlives the portal | Procurement announcement            |
+| R-014 | Personal data incident         | 1   | 3   | 3     | Synthetic data only; RLS verified; no personal data in logs  | Any real report used in a demo      |
 
-### 10.2 Register
+### Appendix B — Change request template
 
-| ID   | Risk                                                | P   | I   | Score | Response                                                                                       | Trigger                                  | Owner         |
-| ---- | --------------------------------------------------- | --- | --- | ----- | ---------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------- |
-| R-01 | Scope creep into native apps, sensors and auth      | 3   | 3   | 9     | Hold the charter boundary; every addition needs a CR                                           | New feature requested mid-iteration      | Team Lead     |
-| R-02 | Hydrological model judged unrealistic               | 3   | 3   | 9     | Declare calibration constants; validate against documented events; present as decision support | Adviser or client challenges outputs     | Backend Lead  |
-| R-03 | Loss of a team member                               | 2   | 3   | 6     | Pair on critical paths; decisions recorded in the TSD                                          | Missed stand-ups; unavailable for a week | Team Lead     |
-| R-04 | Hosted database never configured                    | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible                                       | Secret still absent at M5                | Backend Lead  |
-| R-05 | Security findings surface late                      | 2   | 3   | 6     | Weekly ZAP gate from the first increment                                                       | New Medium finding                       | QA/Docs       |
-| R-06 | Institutional format differs from this document set | 2   | 2   | 4     | Confirm the rubric at M1                                                                       | Adviser requests restructuring           | Team Lead     |
-| R-07 | Authentication not delivered                        | 3   | 3   | 9     | State the limitation; schedule as first post-pilot increment                                   | Pilot asked to handle real data          | Team Lead     |
-| R-08 | No baseline data from the client                    | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot                                        | Baseline still absent at M1 review       | Client Rep    |
-| R-09 | Pilot corridor changes late                         | 2   | 3   | 6     | Freeze the corridor at M2; changes need a CR                                                   | New barangay list arrives                | Client Rep    |
-| R-10 | Hosted costs exceed free tier                       | 2   | 2   | 4     | Keep hosting provider-agnostic; container is portable                                          | Usage warning from provider              | Backend Lead  |
-| R-11 | GitHub or Supabase outage during a milestone        | 1   | 3   | 3     | Work locally; defer hosted verification                                                        | Provider status page                     | Team Lead     |
-| R-12 | Dispatchers reject the tool                         | 2   | 3   | 6     | Usability sessions from M4; keep radio process running                                         | Negative feedback in session             | Frontend Lead |
-| R-13 | A commercial platform is chosen later               | 1   | 2   | 2     | Publish the API contract; routing engine outlives the portal                                   | Procurement announcement                 | Team Lead     |
-| R-14 | Personal data incident during testing               | 1   | 3   | 3     | Synthetic data only; RLS verified; no PII in logs                                              | Any real report used in a demo           | QA/Docs       |
-
-### 10.3 Risk review
-
-At each weekly planning session:
-
-1. Re-score open risks.
-2. Record any new risk with a trigger.
-3. Confirm the response owner and next action.
-4. Close risks whose trigger can no longer occur.
-
-## 11. Issue management
-
-| Severity | Definition                                     | Response time               |
-| -------- | ---------------------------------------------- | --------------------------- |
-| S1       | `main` broken, data loss, or security exposure | Same day                    |
-| S2       | A `Must` requirement not working               | Within two working days     |
-| S3       | Cosmetic or non-blocking defect                | Next iteration              |
-| S4       | Enhancement request                            | Triaged as a change request |
-
-Issues are logged with reproduction steps, expected and actual behaviour, and the
-requirement id. An S1 issue may bypass the normal change process; the record is
-raised the same day.
-
-## 12. Procurement and tooling
-
-| Item                  | Choice                      | Cost                                    | Decision |
-| --------------------- | --------------------------- | --------------------------------------- | -------- |
-| Source control and CI | GitHub (private repository) | Free tier / institutional               | In use   |
-| Hosted database       | Supabase                    | Free tier, upgrade [TBC]                | In use   |
-| Application hosting   | Not selected                | [TBC]                                   | Deferred |
-| Container registry    | GHCR                        | Included                                | In use   |
-| Security scanning     | OWASP ZAP                   | Open source                             | In use   |
-| Static analysis       | CodeQL                      | Requires Code Security on private repos | Blocked  |
-| Package updates       | Dependabot                  | Included                                | In use   |
-| Documentation         | Markdown in the repository  | Free                                    | In use   |
-
-No purchase is made without sponsor approval (charter §7).
-
-## 13. Stakeholder engagement
-
-| Stakeholder       | Interest                     | Influence | Engagement                                   |
-| ----------------- | ---------------------------- | --------- | -------------------------------------------- |
-| Dispatchers       | Tool must not slow them down | High      | Shadowing, usability sessions, feedback loop |
-| MDRRMC commander  | Verifiable corridor status   | High      | Milestone demos, review of KPI targets       |
-| LGU IT            | Maintainability and access   | Medium    | Handover session, runbook                    |
-| Citizens          | Faster response, privacy     | Low       | Communicated through the LGU                 |
-| Adviser and panel | Rigour                       | High      | Bi-weekly review, document set               |
-
-Engagement risks are covered by R-08 and R-12. The mitigation is early, visible
-contact rather than a demonstration at the end.
-
-## 14. Configuration and documentation management
-
-### 14.1 Version control
-
-| Item            | Rule                                                      |
-| --------------- | --------------------------------------------------------- |
-| Branching       | Short-lived feature branches; `main` is always releasable |
-| Commit messages | Imperative summary; body explains why, not what           |
-| Pull requests   | Require review, green CI, and a requirement reference     |
-| Tags            | `backend-v*` for container releases                       |
-| Secrets         | Never committed; `.env` ignored; repository secrets only  |
-
-### 14.2 Pre-commit enforcement
-
-A Husky hook runs:
-
-- Ruff for Python (`scripts/pre-commit-ruff.sh`).
-- ESLint and Prettier through `lint-staged` for the web app.
-
-The hook is fast enough to run on every commit; anything heavier belongs in CI.
-
-### 14.3 Documentation control
-
-| Rule          | Detail                                                                                  |
-| ------------- | --------------------------------------------------------------------------------------- |
-| Single source | Each document has one owner and lives in `docs/`                                        |
-| Versioning    | Document version increments on approval; revision history updated                       |
-| Traceability  | Requirement ids are stable; changes add rows, they do not renumber                      |
-| Consistency   | A scope or architecture change updates every affected document in the same pull request |
-| Unknowns      | `[TBC]` and `«placeholder»` are explicit, never silently invented                       |
-
-### 14.4 Environment configuration
-
-Configuration is externalised (`METROFLOW_*`, `DATABASE_URL`,
-`SUPABASE_DB_URL`), so the same artefact runs in every environment. The full
-table is in TSD §15.
-
-## 15. Monitoring and control
-
-### 15.1 Project metrics
-
-| Metric                 | Definition                              | Target     | Cadence   |
-| ---------------------- | --------------------------------------- | ---------- | --------- |
-| Iteration completion   | Planned items completed / planned       | ≥ 80%      | Weekly    |
-| CI pass rate           | Green runs / total runs                 | ≥ 95%      | Weekly    |
-| Requirement coverage   | `Must` requirements implemented / total | 100% by M5 | Milestone |
-| Open defects           | S1 + S2 open at review                  | 0          | Weekly    |
-| Security findings      | High + Medium ZAP findings              | 0          | Weekly    |
-| Documentation currency | FSD statuses matching implementation    | 100% at M6 | Milestone |
-
-### 15.2 Status reporting
-
-A milestone report contains: achievements against exit criteria, schedule
-variance, open risks, open issues, decisions needed, and the next milestone's
-confidence level.
-
-### 15.3 Control thresholds
-
-| Variance                       | Action                                       |
-| ------------------------------ | -------------------------------------------- |
-| Schedule slip ≤ 3 days         | Absorb within the iteration                  |
-| Schedule slip > 1 week         | Change request; re-baseline with sponsor     |
-| Any `Must` requirement at risk | Escalate to adviser immediately              |
-| Security finding at High       | Stop feature work; fix before the next merge |
-
-## 16. Closure and handover
-
-### 16.1 Closure checklist
-
-- [ ] All `Must` functional requirements accepted (FSD §14).
-- [ ] CI green on `main`; ZAP clean at High/Medium.
-- [ ] Hosted database at head, or the limitation documented.
-- [ ] Document set approved.
-- [ ] Source repository transferred or access granted per institutional rule.
-- [ ] Handover session delivered to «Client Representative».
-- [ ] Known limitations communicated in writing (TSD §17).
-
-### 16.2 Handover package
-
-| Item          | Contents                                                               |
-| ------------- | ---------------------------------------------------------------------- |
-| Source code   | Repository with history and CI configuration                           |
-| Documentation | Document set plus API reference                                        |
-| Runbook       | Start the stack, apply migrations, rotate secrets, roll back a release |
-| Credentials   | Transferred through the institution's secret process, never by chat    |
-| Training      | One session covering triage, evidence review and dispatch              |
-
-### 16.3 Post-implementation review
-
-Conducted one month after handover, or after the first rain event, whichever is
-sooner:
-
-| Question                                               | Evidence                              |
-| ------------------------------------------------------ | ------------------------------------- |
-| Were the benefits realised?                            | Baseline vs actual (BEN-01 to BEN-03) |
-| Did the system hold up operationally?                  | Incident reports, availability        |
-| What was missing?                                      | User feedback, defect log             |
-| Should the next increment be authentication or intake? | Usage and risk evidence               |
-
-## 17. Appendices
-
-### A.1 Milestone status report template
-
+```text
+CR id:             CR-nnn
+Raised by:         <name>              Date: <date>
+Description:       <what is being asked>
+Reason:            <why>
+Impact — scope:    <requirements affected>
+Impact — schedule: <weeks>
+Impact — cost:     <amount or none>
+Impact — risk:     <new or changed risks>
+Decision:          <approved / deferred / rejected>   By: <name>   Date: <date>
+Documents updated: <list>
 ```
+
+### Appendix C — Milestone status report template
+
+```text
 Milestone:            M<n> — <name>
 Period:               <start> to <end>
 Exit criteria met:    <yes/no, with evidence>
@@ -495,38 +338,39 @@ Decisions required:   <list>
 Confidence in next:   <high/medium/low + reason>
 ```
 
-### A.2 Change request template
+### Appendix D — Configuration and documentation management
 
-```
-CR id:            CR-<nn>
-Raised by:        <name>            Date: <date>
-Description:      <what is being asked>
-Reason:           <why>
-Impact — scope:   <requirements affected>
-Impact — schedule:<weeks>
-Impact — cost:    <amount or none>
-Impact — risk:    <new or changed risks>
-Decision:         <approved / deferred / rejected>   By: <name>   Date: <date>
-Documents updated:<list>
-```
+| Item              | Rule                                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| Branching         | Short-lived feature branches; `main` always releasable            |
+| Commit messages   | Imperative summary; body explains why                             |
+| Pull requests     | Review, green CI and a requirement reference                      |
+| Tags              | `backend-v*` for container releases                               |
+| Secrets           | Never committed; repository secrets only                          |
+| Pre-commit        | Husky: Ruff for Python, ESLint and Prettier for the web app       |
+| Document versions | Increment on approval; revision history updated                   |
+| Traceability      | Requirement ids are stable; changes add rows, never renumber      |
+| Unknowns          | `[TBC]` and `«placeholder»` are explicit, never silently invented |
 
-### A.3 Risk entry template
+### Appendix E — Decision log
 
-```
-ID:          R-<nn>
-Risk:        <cause → event → effect>
-Probability: <H/M/L>   Impact: <H/M/L>   Score: <1-9>
-Response:    <avoid / mitigate / transfer / accept>
-Trigger:     <observable signal>
-Owner:       <role>
-Review date: <date>
-```
+| ID      | Decision                    | Date  | Decided by          | Recorded in |
+| ------- | --------------------------- | ----- | ------------------- | ----------- |
+| ADR-001 | Alembic owns the schema     | [TBC] | «Project Team Lead» | TSD §6      |
+| ADR-002 | Supabase as hosted Postgres | [TBC] | «Project Team Lead» | TSD §6      |
+| ADR-007 | RLS deny-by-default         | [TBC] | «Backend Lead»      | TSD §6      |
+| ADR-011 | Portal ships with mock data | [TBC] | «Project Team Lead» | TSD §6      |
 
-### A.4 Decision log
+### Appendix F — Closure and handover
 
-| ID     | Decision                    | Date  | Decided by          | Recorded in |
-| ------ | --------------------------- | ----- | ------------------- | ----------- |
-| ADR-01 | Alembic owns the schema     | [TBC] | «Project Team Lead» | TSD §16     |
-| ADR-02 | Supabase as hosted Postgres | [TBC] | «Project Team Lead» | TSD §16     |
-| ADR-07 | RLS deny-by-default         | [TBC] | «Backend Lead»      | TSD §16     |
-| ADR-11 | Portal ships with mock data | [TBC] | «Project Team Lead» | TSD §16     |
+- [ ] All `Must` functional requirements accepted (FSD).
+- [ ] CI green on `main`; ZAP clean at High/Medium.
+- [ ] Hosted database at head, or the limitation documented.
+- [ ] Document set approved.
+- [ ] Repository access granted per institutional rule.
+- [ ] Handover session delivered to «Client Representative».
+- [ ] Known limitations communicated in writing (TSD §7).
+
+Post-implementation review, one month after handover or after the first rain
+event: were the benefits realised, did the system hold up, what was missing, and
+should the next increment be authentication or incident intake?

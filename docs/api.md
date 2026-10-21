@@ -37,7 +37,7 @@ routes. Responses are JSON; geometry is GeoJSON.
 
 **None.** Every endpoint is currently public. The pilot must not be exposed to
 the internet or given real personal data until authentication is implemented
-(FSD FR-21, TSD LIM-01). This is a stated limitation, not an oversight.
+(FSD-FR-021, TSD LIM-001). This is a stated limitation, not an oversight.
 
 ### 1.3 Response headers
 
@@ -50,7 +50,7 @@ Every response carries:
 | `Referrer-Policy`              | `strict-origin-when-cross-origin` |
 | `X-Frame-Options`              | `DENY`                            |
 
-CORS allows any origin, including credentialed requests (TSD SEC-02).
+CORS allows any origin, including credentialed requests (TSD SEC-002).
 
 ### 1.4 Passability status
 

@@ -1,121 +1,118 @@
-# Project Charter — MetroFlow
+# PROJECT CHARTER
 
-**Intelligent Urban Mobility and Flood Simulation System**
+## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-| Field          | Value               |
-| -------------- | ------------------- |
-| Document ID    | MF-PC-001           |
-| Version        | 1.0 (Draft)         |
-| Status         | For academic review |
-| Date           | 21 October 2026     |
-| Prepared by    | «Project Team»      |
-| Reviewed by    | «Project Adviser»   |
-| Approved by    | «Project Sponsor»   |
-| Classification | Internal — academic |
+## Document Information
 
-## Revision history
+| Item                    | Details         |
+| ----------------------- | --------------- |
+| Project Name            | MetroFlow       |
+| Project Classification  | Simple          |
+| Document Classification | Internal Use    |
+| Prepared By             | «Project Team»  |
+| Version No.             | 1.0             |
+| Date Prepared           | 21 October 2026 |
 
-| Version | Date        | Author         | Change          |
-| ------- | ----------- | -------------- | --------------- |
-| 1.0     | 21 Oct 2026 | «Project Team» | Initial charter |
+## Revision History
 
-## 1. Executive summary
+| Version | Date Updated | Updated By          | Description     | Section Updated |
+| ------- | ------------ | ------------------- | --------------- | --------------- |
+| 1.0     | 21 Oct 2026  | «Project Team Lead» | Initial Release | All Sections    |
 
-Metro Manila's road network floods faster than responders can assess it. During
-a rain event, the people who decide where to send rescue units work from radio
-reports, phone calls and social media, with no shared view of which roads are
-still passable. The result is delayed dispatch and responders routed into water
-they cannot cross.
+## A. PROJECT OVERVIEW
 
-MetroFlow addresses this with two linked capabilities: a simulation engine that
-computes street-level flood depth across a road graph, and a routing engine that
-returns the fastest path a vehicle of a given clearance can actually drive. An
-LGU dispatch portal presents the resulting network state and a triage queue so
-dispatchers can verify reports and commit resources from one screen.
+| Item               | Description                                                                                                                                                                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose            | Give the LGU operations centre a verified picture of road passability during flooding, and a traceable path from incident report to dispatch decision.                                                                                                                                          |
+| Business Goals     | Faster triage; no dispatch into impassable roads; decisions that can be reviewed after the event; one shared operational picture.                                                                                                                                                               |
+| Project Objectives | OBJ-001 model flood depth on the road graph; OBJ-002 compute clearance-aware routes; OBJ-003 provide a triage workspace; OBJ-004 record every decision; OBJ-005 deliver through an automated pipeline; OBJ-006 document the system to a reviewable standard.                                    |
+| Project Scope      | Flood simulation, clearance-aware routing, the LGU dispatch portal (login, queue, incident detail, operations log, dispatch actions), versioned PostGIS schema with row-level security, and automated build/test/security checks.                                                               |
+| Assumptions        | A PostGIS-capable database is available (A-001); the pilot corridor is representative (A-002); free or institutional service tiers suffice (A-003); dispatchers have a modern browser (A-004); rainfall intensity is supplied manually (A-005); the client provides naming conventions (A-006). |
+| Constraints        | Delivery must fit the academic term (C-001); effort is part-time (C-002); no paid Code Security, so CodeQL cannot run on the private repository (C-003); only synthetic or public data may be used (C-004); credentials are never committed (C-005).                                            |
 
-This charter authorises a **pilot-scope build** covering the Taguig–Pasig
-corridor, the API engine, and the LGU dispatch portal. It does **not** authorise
-native mobile clients, live sensor integration, or multi-LGU deployment. Those
-are recorded as future releases so that acceptance is judged against a fixed,
-achievable boundary.
+**Out of scope:** native driver application, live sensor/CCTV/weather ingestion,
+production identity provider, real citizen report intake, multi-LGU tenancy and a
+public information portal. Moving an item across this boundary requires a change
+request under [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
 
-## 2. Project purpose and business need
+## B. PROJECT SCHEDULE
 
-| Item                    | Statement                                                                                                                                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Business problem        | Dispatchers lack a shared, current picture of road passability during flooding, so triage and dispatch decisions rely on unverified reports.                                                                   |
-| Business need           | A single system that (a) models flood depth on the road network, (b) computes routes that respect vehicle clearance, and (c) gives dispatchers a structured queue with evidence and an auditable action trail. |
-| Driver                  | Seasonal flooding in Metro Manila repeatedly makes primary corridors impassable; response time is the difference between a rescue and a recovery.                                                              |
-| Consequence of inaction | Continued dependence on verbal reports, duplicated dispatch, and responders committing to routes that are already submerged.                                                                                   |
+| Item                     | Value               |
+| ------------------------ | ------------------- |
+| Start Date               | [TBC]               |
+| Cutover Date             | [TBC]               |
+| Period (Weeks)           | 16 weeks [TBC]      |
+| Assigned Project Manager | «Project Team Lead» |
+| Duration Estimate        | 4 months [TBC]      |
 
-The full business analysis is in [BRD.md](BRD.md); the options comparison and
-recommendation are in [BUSINESS_CASE.md](BUSINESS_CASE.md).
+### OPEX
 
-## 3. Project objectives
+| No. | Cost Description               | Amount (PHP) |
+| --- | ------------------------------ | ------------ |
+| 1   | Hosted database (Supabase)     | [TBC]        |
+| 2   | Application hosting            | [TBC]        |
+| 3   | Domain and TLS                 | [TBC]        |
+| 4   | Training and change management | [TBC]        |
+|     | **Total OPEX**                 | **[TBC]**    |
 
-### 3.1 General objective
+### CAPEX
 
-To design, build and evaluate a flood-aware mobility and dispatch system that
-gives an LGU operations unit a verifiable picture of road passability and a
-traceable path from incident report to dispatch decision.
+| No. | Cost Description             | Amount (PHP) |
+| --- | ---------------------------- | ------------ |
+| 1   | Development effort (in-kind) | [TBC]        |
+| 2   | Test devices and data        | [TBC]        |
+| 3   | Contingency (10%)            | [TBC]        |
+|     | **Total CAPEX**              | **[TBC]**    |
 
-### 3.2 Specific objectives
+No funds are requested at charter stage. Every amount is `[TBC]` until
+quotations and the institution's rules are confirmed; approval of this charter
+does not approve expenditure. The cost model is in
+[BUSINESS_CASE.md](BUSINESS_CASE.md).
 
-| ID     | Objective                                          | Measure of achievement                                                                                                               |
-| ------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| OBJ-01 | Model road-network flood state from rainfall input | A rainfall simulation produces per-edge water depth and a passability label for every edge in the pilot graph                        |
-| OBJ-02 | Compute clearance-aware routes                     | A route request returns a path whose every segment is below the requested vehicle clearance, or an explicit "no safe route" response |
-| OBJ-03 | Provide a triage workspace for dispatchers         | A dispatcher can filter, search, inspect evidence and record a decision for a queue item without leaving the screen                  |
-| OBJ-04 | Make every decision traceable                      | Each dispatch, escalation, hold or rejection is appended to an operations log with actor and timestamp                               |
-| OBJ-05 | Operate the system through a reproducible pipeline | Every change is linted, tested and migrated by CI before reaching the hosted database                                                |
-| OBJ-06 | Document the system to a reviewable standard       | The six project documents plus the API reference are accepted by the panel                                                           |
+## C. STAKEHOLDERS
 
-Objectives map to business requirements in [BRD.md](BRD.md) §6 and to functional
-requirements in [FSD.md](FSD.md) §5.
+| Division / Department    | Name                        | Role & Responsibilities                                                     | Contact Details |
+| ------------------------ | --------------------------- | --------------------------------------------------------------------------- | --------------- |
+| MDRRMC / «Client LGU»    | «Project Sponsor»           | Funds, authorises and accepts the pilot; resolves escalated scope decisions | [TBC]           |
+| LGU Operations (CDMO)    | «Client Representative»     | Business owner; provides corridor data, access and operational validation   | [TBC]           |
+| Operations Centre        | «Lead Dispatcher»           | Primary user; participates in usability sessions and acceptance             | [TBC]           |
+| LGU IT                   | «IT Representative»         | Infrastructure, accounts and handover                                       | [TBC]           |
+| «Institution»            | «Project Adviser»           | Academic oversight; quality gate for deliverables                           | [TBC]           |
+| Applications Development | «Project Team Lead»         | Delivery accountability, architecture and change control                    | [TBC]           |
+| Applications Development | «Backend Lead»              | Simulation, routing, API, database                                          | [TBC]           |
+| Applications Development | «Frontend Lead»             | Dispatch portal usability and behaviour                                     | [TBC]           |
+| Applications Development | «QA and Documentation Lead» | Tests, CI gates, security scan and document set                             | [TBC]           |
+| Barangay responders      | «Field Unit Lead»           | Consume routes and dispatch instructions; validate field usability          | [TBC]           |
 
-## 4. High-level scope
+Roles may be combined depending on team size. The RACI detail is in
+[PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
 
-### 4.1 In scope
+## D. ISSUE / RISK
 
-| Area              | Included                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Simulation engine | SCS-CN runoff model, elevation-weighted ponding depth, per-edge live state updates                                                             |
-| Routing engine    | Time-dependent A\* with flood penalty, clearance-based blocking, GeoJSON route geometry                                                        |
-| Network API       | Node/edge GeoJSON state, rainfall simulation, route computation, health endpoint                                                               |
-| Dispatch portal   | Login screen, KPI summary, incident queue with filters and search, incident docket with evidence panels, operations log, four dispatch actions |
-| Data              | PostGIS schema versioned with Alembic; row-level security on the hosted database                                                               |
-| Delivery          | Docker Compose stack, GitHub Actions CI/CD, hosted Postgres migrations, container image publishing                                             |
-| Assurance         | Unit and API contract tests, lint and build gates, OWASP ZAP API scan                                                                          |
+| No.   | Type       | Key Issue/Risk                                | Category  | Mitigation Plan                                                                                |
+| ----- | ---------- | --------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| R-001 | Risk       | Scope creep into native apps and live sensors | Schedule  | Hold the charter boundary; every addition requires a change request                            |
+| R-002 | Risk       | Hydrological model judged unrealistic         | Technical | Declare calibration constants; validate against documented events; present as decision support |
+| R-003 | Risk       | Loss of a team member                         | Resource  | Pair on every critical path; record decisions in the TSD                                       |
+| R-004 | Risk       | Hosted database never configured              | Delivery  | Local stack is the primary demonstration; the CD workflow is gated and visible                 |
+| R-005 | Risk       | Security findings surface late                | Security  | Weekly ZAP gate from the first increment                                                       |
+| I-001 | Issue      | Authentication is not implemented             | Business  | State the limitation; schedule BR-009 as the first post-pilot increment                        |
+| I-002 | Issue      | Incident data in the portal is mock data      | Business  | Document the seam; build intake in the next release                                            |
+| D-001 | Dependency | Client supplies the hosted database secret    | Delivery  | Track at every milestone review                                                                |
 
-### 4.2 Out of scope
+The full RAID log, scoring and owners are in
+[PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
 
-| Excluded                                        | Rationale / disposition                                                                |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Native driver application                       | Named as a future release; the API already serves it, the client does not exist        |
-| Live sensor, CCTV and weather ingestion         | Requires data-sharing agreements with the LGU and third-party feeds                    |
-| Production authentication and identity provider | Requires an organisational identity decision; the user model exists, the flow does not |
-| Real incident intake from citizens              | The portal currently runs on documented mock data                                      |
-| Multi-LGU tenancy and billing                   | Single-pilot deployment only                                                           |
-| Public-facing citizen application               | Not required for dispatch operations                                                   |
-| Offline operation                               | Assumes connectivity at the operations centre                                          |
+## E. KEY DELIVERABLES AND MILESTONES
 
-Any movement across this boundary requires a change request under
-[PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) §4.
-
-## 5. Key deliverables
-
-| ID   | Deliverable                    | Acceptance condition                                                                           |
-| ---- | ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| D-01 | Simulation and routing API     | Contract tests pass; documented endpoints behave as specified in [api.md](api.md)              |
-| D-02 | LGU dispatch portal            | Both screens usable end-to-end for triage with queue, detail and actions                       |
-| D-03 | Database schema and migrations | `alembic upgrade head` succeeds on a clean database; `alembic check` reports no drift          |
-| D-04 | CI/CD pipeline                 | Backend tests, web lint and build, security scan and hosted migrations run from the repository |
-| D-05 | Document set                   | Charter, BRD, business case, FSD, TSD, PMP and API reference accepted                          |
-| D-06 | Demonstration                  | Live walkthrough of simulation → routing → triage → dispatch                                   |
-
-## 6. Milestones
-
-Dates are `[TBC]` pending the academic calendar. Durations are indicative.
+| ID   | Deliverable                    | Acceptance condition                                                      |
+| ---- | ------------------------------ | ------------------------------------------------------------------------- |
+| D-01 | Simulation and routing API     | Contract tests pass; endpoints behave as specified in [api.md](api.md)    |
+| D-02 | LGU dispatch portal            | Both screens usable end-to-end for triage                                 |
+| D-03 | Database schema and migrations | Clean `alembic upgrade head`; `alembic check` reports no drift            |
+| D-04 | CI/CD pipeline                 | Tests, lint, build, security scan and hosted migrations run from the repo |
+| D-05 | Document set                   | Charter, BRD, business case, FSD, TSD, PMP and API reference accepted     |
+| D-06 | Demonstration                  | Live walkthrough of simulation → routing → triage → dispatch              |
 
 | ID  | Milestone                           | Exit criterion                                                  | Target          |
 | --- | ----------------------------------- | --------------------------------------------------------------- | --------------- |
@@ -123,109 +120,26 @@ Dates are `[TBC]` pending the academic calendar. Durations are indicative.
 | M2  | Architecture and data design frozen | TSD accepted; schema drafted                                    | Week 5 · [TBC]  |
 | M3  | API engine operational              | Simulate, network state and route endpoints pass contract tests | Week 9 · [TBC]  |
 | M4  | Dispatch portal operational         | Triage flow demonstrated with queue, detail and actions         | Week 12 · [TBC] |
-| M5  | Hardening complete                  | ZAP scan clean at High/Medium; no open critical defects         | Week 14 · [TBC] |
+| M5  | Hardening complete                  | ZAP clean at High/Medium; no open critical defects              | Week 14 · [TBC] |
 | M6  | Documentation and defence           | Document set accepted; system demonstrated to panel             | Week 16 · [TBC] |
 
-## 7. Budget and funding
+## F. SUCCESS CRITERIA
 
-No funds are requested at charter stage. The table records the cost categories
-that the business case prices; every figure is `[TBC]` until quotations and the
-institution's rules are confirmed.
+| ID     | Criterion                                                               | Verification                       |
+| ------ | ----------------------------------------------------------------------- | ---------------------------------- |
+| SC-001 | All `Must` functional requirements accepted                             | FSD traceability matrix signed off |
+| SC-002 | Backend tests, web lint and build green on `main`                       | CI run history                     |
+| SC-003 | No High or Medium findings from the ZAP API scan                        | ZAP workflow report                |
+| SC-004 | Migrations apply cleanly to a fresh database with no model drift        | CI migration job                   |
+| SC-005 | A dispatcher completes a triage decision in three interactions or fewer | Usability observation              |
+| SC-006 | Document set accepted by the panel                                      | Signed approval block              |
 
-| Category                   | Type                   | Amount    | Source             |
-| -------------------------- | ---------------------- | --------- | ------------------ |
-| Development effort         | In-kind (student team) | [TBC]     | «Project Team»     |
-| Hosted database (Supabase) | Operating              | [TBC]     | Supabase pricing   |
-| Web hosting                | Operating              | [TBC]     | «Hosting provider» |
-| Domain and TLS             | Operating              | [TBC]     | «Registrar»        |
-| Test devices and data      | Capital                | [TBC]     | «Institution»      |
-| Contingency (10%)          | Reserve                | [TBC]     | Derived            |
-| **Total**                  |                        | **[TBC]** |                    |
-
-Approval of this charter does not approve expenditure. Spend requires the
-sponsor's written approval per the institution's procurement rules.
-
-## 8. Stakeholders and roles
-
-| Stakeholder                 | Role in project                                         | Interest                                  |
-| --------------------------- | ------------------------------------------------------- | ----------------------------------------- |
-| «Project Sponsor»           | Funds and authorises; accepts deliverables              | Operational improvement, defensible spend |
-| «Client Representative»     | LGU operations and IT liaison; provides data and access | Fit with existing dispatch practice       |
-| «Project Adviser»           | Academic oversight and quality gate                     | Methodological rigour, scope control      |
-| «Panel»                     | Evaluates the final deliverable                         | Completeness against the rubric           |
-| «Project Team Lead»         | Delivery accountability, architecture                   | Coherent, demonstrable system             |
-| «Backend Lead»              | Simulation, routing, API, database                      | Correct, tested algorithms                |
-| «Frontend Lead»             | Dispatch portal                                         | Usable triage workspace                   |
-| «QA and Documentation Lead» | Test strategy, CI gates, document set                   | Traceability and evidence                 |
-| Dispatchers (end users)     | Use the portal in operations                            | Speed, clarity, low error rate            |
-| Drivers (future users)      | Consume routing output                                  | Routes that are actually passable         |
-
-Roles may be combined depending on team size; the RACI detail is in
-[PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) §8.
-
-## 9. Assumptions, constraints and dependencies
-
-### 9.1 Assumptions
-
-| ID   | Assumption                                                                                            | Impact if false                                               |
-| ---- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| A-01 | A PostGIS-capable PostgreSQL instance is available for development and hosting                        | Geometry features and migrations cannot be demonstrated       |
-| A-02 | The pilot corridor's road graph is representative enough to demonstrate routing behaviour             | Results may not generalise; evaluation limited to methodology |
-| A-03 | Free or institutional tiers of GitHub, Supabase and the hosting provider are sufficient for the pilot | Additional cost and a budget revision                         |
-| A-04 | Dispatchers have a modern desktop browser and reliable connectivity                                   | Portal unusable during an event                               |
-| A-05 | Rainfall intensity can be supplied manually or from public weather data for the pilot                 | Simulation driven by scenarios only                           |
-
-### 9.2 Constraints
-
-| ID   | Constraint                                                                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------------ |
-| C-01 | Delivery must fit the academic term; schedule is fixed at both ends                                          |
-| C-02 | Team effort is part-time and shared with coursework                                                          |
-| C-03 | No paid GitHub Code Security, so CodeQL cannot analyse the private repository until it is public or licensed |
-| C-04 | No production sensor feed or citizen data may be used; only synthetic or public data                         |
-| C-05 | Hosted database credentials are secrets and never committed                                                  |
-
-### 9.3 Dependencies
-
-| ID     | Dependency                                                          | Owner                   |
-| ------ | ------------------------------------------------------------------- | ----------------------- |
-| DEP-01 | Hosted PostgreSQL connection string supplied as a repository secret | «Client Representative» |
-| DEP-02 | Review and sign-off availability of adviser and panel               | «Project Adviser»       |
-| DEP-03 | LGU confirmation of pilot corridor and barangay naming              | «Client Representative» |
-
-## 10. High-level risks
-
-Full register, scoring and responses are in
-[PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) §10.
-
-| ID   | Risk                                                          | Impact                      | Initial response                                                                             |
-| ---- | ------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------- |
-| R-01 | Scope creep into native apps and live sensors                 | Schedule overrun            | Charter boundary plus change control                                                         |
-| R-02 | Hydrological model judged unrealistic                         | Credibility of results      | Declare calibration constants; validate against documented events; present as a decision aid |
-| R-03 | Loss of a team member                                         | Delivery slip               | Pair on every component; documented decisions                                                |
-| R-04 | Hosted database never configured                              | Deployment not demonstrated | Local stack is the primary demo; hosted path proven by CI skip/gate logic                    |
-| R-05 | Security findings late in the term                            | Rework close to defence     | Weekly ZAP gate from the start                                                               |
-| R-06 | Institutional format requirements differ from these documents | Rework                      | Confirm rubric with adviser at M1                                                            |
-
-## 11. Success criteria
-
-| ID    | Criterion                                                               | Verification                                     |
-| ----- | ----------------------------------------------------------------------- | ------------------------------------------------ |
-| SC-01 | All `Must` functional requirements accepted                             | FSD traceability matrix signed off               |
-| SC-02 | Backend contract tests, web lint and build green on `main`              | CI run history                                   |
-| SC-03 | No High or Medium findings from the ZAP API scan                        | ZAP workflow report                              |
-| SC-04 | Migrations apply cleanly to a fresh database with no model drift        | `alembic upgrade head` and `alembic check` in CI |
-| SC-05 | A dispatcher completes a triage decision in three interactions or fewer | Usability observation                            |
-| SC-06 | Document set accepted by the panel                                      | Signed approval block                            |
-
-## 12. Project authority
+## G. PROJECT AUTHORITY AND APPROVAL
 
 The «Project Team Lead» may commit code, open change requests and manage the
 repository. The «Project Sponsor» approves scope changes, budget and acceptance.
-The «Project Adviser» may reject a deliverable that does not meet the stated
+The «Project Adviser» may reject a deliverable that does not meet its stated
 acceptance condition.
-
-## 13. Approval
 
 | Role                  | Name                    | Signature | Date  |
 | --------------------- | ----------------------- | --------- | ----- |
