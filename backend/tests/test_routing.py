@@ -42,7 +42,7 @@ CLEARANCE = 30.0
 
 def build_graph(depths, bidirectional=True):
     graph = {}
-    for (u, v, length, speed), depth in zip(EDGES, depths):
+    for (u, v, length, speed), depth in zip(EDGES, depths, strict=False):
         graph.setdefault(u, []).append((v, length, speed, depth))
         if bidirectional:
             graph.setdefault(v, []).append((u, length, speed, depth))
@@ -79,7 +79,7 @@ def dijkstra(graph, start, target, clearance=CLEARANCE):
 def path_cost(graph, path, clearance=CLEARANCE):
     """Recompute travel time along a returned path, from the graph itself."""
     total = 0.0
-    for u, v in zip(path, path[1:]):
+    for u, v in zip(path, path[1:], strict=False):
         hop = next(
             (entry for entry in graph.get(u, []) if entry[0] == v),
             None,
@@ -200,11 +200,11 @@ def test_same_origin_and_destination():
     [
         (0.0, 30.0, PASSABLE),
         (9.99, 30.0, PASSABLE),
-        (10.0, 30.0, LIGHT_FLOOD),   # inclusive caution boundary
+        (10.0, 30.0, LIGHT_FLOOD),  # inclusive caution boundary
         (29.99, 30.0, LIGHT_FLOOD),
-        (30.0, 30.0, SUBMERGED),     # inclusive impassable boundary
+        (30.0, 30.0, SUBMERGED),  # inclusive impassable boundary
         (80.0, 30.0, SUBMERGED),
-        (35.0, 60.0, LIGHT_FLOOD),   # passable for a taller vehicle
+        (35.0, 60.0, LIGHT_FLOOD),  # passable for a taller vehicle
     ],
 )
 def test_classify_passability_boundaries(depth, clearance, expected):

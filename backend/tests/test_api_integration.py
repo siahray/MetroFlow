@@ -111,10 +111,7 @@ def test_postgis_geometry_is_populated_with_srid_4326():
 
     with engine.connect() as connection:
         rows = connection.execute(
-            text(
-                "SELECT ST_SRID(geom), ST_IsValid(geom), ST_GeometryType(geom) "
-                "FROM road_edges"
-            )
+            text("SELECT ST_SRID(geom), ST_IsValid(geom), ST_GeometryType(geom) FROM road_edges")
         ).all()
 
     assert rows, "no road edges found"
@@ -159,8 +156,7 @@ def test_dry_simulation_clears_all_flooding(client):
         "PASSABLE"
     }
     assert all(
-        feature["properties"]["water_depth_cm"] == 0
-        for feature in body["edges"]["features"]
+        feature["properties"]["water_depth_cm"] == 0 for feature in body["edges"]["features"]
     )
 
 

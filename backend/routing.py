@@ -1,6 +1,5 @@
 import heapq
 import math
-from typing import Dict, List, Optional, Tuple
 
 from config import settings
 
@@ -19,7 +18,7 @@ SUBMERGED = "SUBMERGED"
 def classify_passability(
     water_depth_cm: float,
     clearance_cm: float,
-    caution_depth_cm: Optional[float] = None,
+    caution_depth_cm: float | None = None,
 ) -> str:
     """
     Classify a road edge for a given vehicle clearance.
@@ -42,7 +41,7 @@ def classify_passability(
 
 
 def _max_graph_speed_kmh(
-    graph_edges: Dict[int, List[Tuple[int, float, float, float]]],
+    graph_edges: dict[int, list[tuple[int, float, float, float]]],
 ) -> float:
     """Fastest permitted speed anywhere in the graph (km/h)."""
     speeds = [speed for adjacency in graph_edges.values() for (_, _, speed, _) in adjacency]
@@ -50,12 +49,14 @@ def _max_graph_speed_kmh(
 
 
 def td_a_star_search(
-    graph_nodes: Dict[int, Tuple[float, float]],  # node_id -> (lat, lon)
-    graph_edges: Dict[int, List[Tuple[int, float, float, float]]],  # u -> [(v, length_m, speed_kmh, water_depth_cm)]
+    graph_nodes: dict[int, tuple[float, float]],  # node_id -> (lat, lon)
+    graph_edges: dict[
+        int, list[tuple[int, float, float, float]]
+    ],  # u -> [(v, length_m, speed_kmh, water_depth_cm)]
     start_node: int,
     target_node: int,
     vehicle_clearance_cm: float = 30.0,
-) -> Tuple[List[int], float]:
+) -> tuple[list[int], float]:
     """
     Time-Dependent A* Pathfinding Engine with Min-Heap Priority Queue.
     Incorporate dynamic water depth penalties Omega(d_e) and vehicle clearance
@@ -71,7 +72,7 @@ def td_a_star_search(
     if start_node == target_node:
         return [start_node], 0.0
 
-    def haversine(coord1: Tuple[float, float], coord2: Tuple[float, float]) -> float:
+    def haversine(coord1: tuple[float, float], coord2: tuple[float, float]) -> float:
         R = 6371000.0  # Earth radius in meters
         lat1, lon1 = math.radians(coord1[0]), math.radians(coord1[1])
         lat2, lon2 = math.radians(coord2[0]), math.radians(coord2[1])
@@ -87,14 +88,14 @@ def td_a_star_search(
     def heuristic(node_id: int) -> float:
         return haversine(graph_nodes[node_id], target_coord) / max_speed_m_s
 
-    g_score: Dict[int, float] = {node: float("inf") for node in graph_nodes}
+    g_score: dict[int, float] = {node: float("inf") for node in graph_nodes}
     g_score[start_node] = 0.0
 
-    came_from: Dict[int, int] = {}
+    came_from: dict[int, int] = {}
     settled: set = set()
 
     # Heap entries carry their own g so stale duplicates can be discarded.
-    pq: List[Tuple[float, float, int]] = [(heuristic(start_node), 0.0, start_node)]
+    pq: list[tuple[float, float, int]] = [(heuristic(start_node), 0.0, start_node)]
 
     while pq:
         _, current_g, current = heapq.heappop(pq)
@@ -105,7 +106,7 @@ def td_a_star_search(
         settled.add(current)
 
         if current == target_node:
-            path: List[int] = []
+            path: list[int] = []
             cursor = target_node
             while cursor in came_from:
                 path.append(cursor)

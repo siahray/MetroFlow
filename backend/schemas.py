@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,8 +12,8 @@ class EdgeProperties(BaseModel):
     edge_id: int
     start_node_id: int
     end_node_id: int
-    start_name: Optional[str] = None
-    end_name: Optional[str] = None
+    start_name: str | None = None
+    end_name: str | None = None
     distance_m: float
     max_speed_kmh: float
     avg_speed_kmh: float
@@ -25,7 +25,7 @@ class EdgeProperties(BaseModel):
 class EdgeFeature(BaseModel):
     type: Literal["Feature"] = "Feature"
     id: int
-    geometry: Dict[str, Any] = Field(
+    geometry: dict[str, Any] = Field(
         description="GeoJSON LineString. Coordinates are [longitude, latitude]."
     )
     properties: EdgeProperties
@@ -33,14 +33,14 @@ class EdgeFeature(BaseModel):
 
 class NodeProperties(BaseModel):
     node_id: int
-    name: Optional[str] = None
+    name: str | None = None
     elevation_m: float
 
 
 class NodeFeature(BaseModel):
     type: Literal["Feature"] = "Feature"
     id: int
-    geometry: Dict[str, Any] = Field(
+    geometry: dict[str, Any] = Field(
         description="GeoJSON Point. Coordinates are [longitude, latitude]."
     )
     properties: NodeProperties
@@ -48,12 +48,12 @@ class NodeFeature(BaseModel):
 
 class EdgeFeatureCollection(BaseModel):
     type: Literal["FeatureCollection"] = "FeatureCollection"
-    features: List[EdgeFeature] = Field(default_factory=list)
+    features: list[EdgeFeature] = Field(default_factory=list)
 
 
 class NodeFeatureCollection(BaseModel):
     type: Literal["FeatureCollection"] = "FeatureCollection"
-    features: List[NodeFeature] = Field(default_factory=list)
+    features: list[NodeFeature] = Field(default_factory=list)
 
 
 class NetworkStateResponse(BaseModel):
@@ -88,9 +88,9 @@ class RouteResponse(BaseModel):
     start_node: int
     target_node: int
     vehicle_clearance_cm: float
-    optimal_path_nodes: List[int]
-    geometry: Dict[str, Any] = Field(
+    optimal_path_nodes: list[int]
+    geometry: dict[str, Any] = Field(
         description="GeoJSON LineString for the route. Coordinates are [longitude, latitude]."
     )
-    segments: List[RouteSegment] = Field(default_factory=list)
+    segments: list[RouteSegment] = Field(default_factory=list)
     estimated_travel_time_minutes: float

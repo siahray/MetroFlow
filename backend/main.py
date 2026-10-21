@@ -1,7 +1,7 @@
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +27,6 @@ from schemas import (
     SimulationResponse,
 )
 
-
 # ---------------------------------------------------------------------------
 # Seeding + geometry backfill
 # ---------------------------------------------------------------------------
@@ -39,25 +38,61 @@ def seed_database(db: Session) -> None:
         return
 
     nodes = [
-        models.RoadNode(node_id=1, name="C5 - Market Market", latitude=14.5491, longitude=121.0553, elevation_m=8.5),
-        models.RoadNode(node_id=2, name="C5 - Kalayaan Ave", latitude=14.5583, longitude=121.0581, elevation_m=4.2),  # Low elevation
-        models.RoadNode(node_id=3, name="C5 - Bagong Ilog", latitude=14.5672, longitude=121.0631, elevation_m=3.5),  # Low elevation
-        models.RoadNode(node_id=4, name="Pasig Blvd - Shaw", latitude=14.5731, longitude=121.0685, elevation_m=9.0),
+        models.RoadNode(
+            node_id=1,
+            name="C5 - Market Market",
+            latitude=14.5491,
+            longitude=121.0553,
+            elevation_m=8.5,
+        ),
+        models.RoadNode(
+            node_id=2,
+            name="C5 - Kalayaan Ave",
+            latitude=14.5583,
+            longitude=121.0581,
+            elevation_m=4.2,
+        ),  # Low elevation
+        models.RoadNode(
+            node_id=3,
+            name="C5 - Bagong Ilog",
+            latitude=14.5672,
+            longitude=121.0631,
+            elevation_m=3.5,
+        ),  # Low elevation
+        models.RoadNode(
+            node_id=4,
+            name="Pasig Blvd - Shaw",
+            latitude=14.5731,
+            longitude=121.0685,
+            elevation_m=9.0,
+        ),
     ]
     db.add_all(nodes)
     db.commit()
 
     edges = [
-        models.RoadEdge(edge_id=1, start_node_id=1, end_node_id=2, distance_meters=1100.0, max_speed_kmh=60.0),
-        models.RoadEdge(edge_id=2, start_node_id=2, end_node_id=3, distance_meters=1000.0, max_speed_kmh=50.0),
-        models.RoadEdge(edge_id=3, start_node_id=3, end_node_id=4, distance_meters=850.0, max_speed_kmh=50.0),
-        models.RoadEdge(edge_id=4, start_node_id=1, end_node_id=4, distance_meters=2800.0, max_speed_kmh=40.0),  # Alternative route
+        models.RoadEdge(
+            edge_id=1, start_node_id=1, end_node_id=2, distance_meters=1100.0, max_speed_kmh=60.0
+        ),
+        models.RoadEdge(
+            edge_id=2, start_node_id=2, end_node_id=3, distance_meters=1000.0, max_speed_kmh=50.0
+        ),
+        models.RoadEdge(
+            edge_id=3, start_node_id=3, end_node_id=4, distance_meters=850.0, max_speed_kmh=50.0
+        ),
+        models.RoadEdge(
+            edge_id=4, start_node_id=1, end_node_id=4, distance_meters=2800.0, max_speed_kmh=40.0
+        ),  # Alternative route
     ]
     db.add_all(edges)
     db.commit()
 
     for edge in edges:
-        db.add(models.LiveEdgeState(edge_id=edge.edge_id, water_depth_cm=0.0, avg_speed_kmh=edge.max_speed_kmh))
+        db.add(
+            models.LiveEdgeState(
+                edge_id=edge.edge_id, water_depth_cm=0.0, avg_speed_kmh=edge.max_speed_kmh
+            )
+        )
     db.commit()
 
 
@@ -107,21 +142,21 @@ def _load_graph(db: Session):
     return nodes, edges, states
 
 
-def _load_edge_geometry(db: Session) -> Dict[int, Any]:
+def _load_edge_geometry(db: Session) -> dict[int, Any]:
     """Fetch every edge geometry as parsed GeoJSON, keyed by edge_id."""
     rows = db.query(
         models.RoadEdge.edge_id,
         func.ST_AsGeoJSON(models.RoadEdge.geom),
     ).all()
 
-    geometry: Dict[int, Any] = {}
+    geometry: dict[int, Any] = {}
     for edge_id, raw in rows:
         if raw:
             geometry[edge_id] = json.loads(raw)
     return geometry
 
 
-def _straight_line(start: models.RoadNode, end: models.RoadNode) -> List[List[float]]:
+def _straight_line(start: models.RoadNode, end: models.RoadNode) -> list[list[float]]:
     """Fallback geometry in GeoJSON order: [longitude, latitude]."""
     return [
         [start.longitude, start.latitude],
@@ -130,10 +165,10 @@ def _straight_line(start: models.RoadNode, end: models.RoadNode) -> List[List[fl
 
 
 def _edge_coordinates(
-    geometry: Optional[Dict[str, Any]],
+    geometry: dict[str, Any] | None,
     start: models.RoadNode,
     end: models.RoadNode,
-) -> List[List[float]]:
+) -> list[list[float]]:
     """Prefer PostGIS geometry; fall back to endpoint endpoints if it is missing."""
     if geometry and geometry.get("type") == "LineString":
         coordinates = geometry.get("coordinates") or []
@@ -147,7 +182,7 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
     nodes, edges, states = _load_graph(db)
     geometry = _load_edge_geometry(db)
 
-    edge_features: List[EdgeFeature] = []
+    edge_features: list[EdgeFeature] = []
     for edge in edges:
         start = nodes.get(edge.start_node_id)
         end = nodes.get(edge.end_node_id)
@@ -180,7 +215,7 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
             )
         )
 
-    node_features: List[NodeFeature] = []
+    node_features: list[NodeFeature] = []
     for node in nodes.values():
         node_features.append(
             NodeFeature(
@@ -201,13 +236,13 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
 
     return NetworkStateResponse(
         clearance_cm=clearance_cm,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         edges=EdgeFeatureCollection(features=edge_features),
         nodes=NodeFeatureCollection(features=node_features),
     )
 
 
-def _require_node(nodes: Dict[int, models.RoadNode], node_id: int, label: str) -> None:
+def _require_node(nodes: dict[int, models.RoadNode], node_id: int, label: str) -> None:
     if node_id not in nodes:
         raise HTTPException(
             status_code=404,
@@ -231,7 +266,9 @@ def root():
 
 @app.get("/api/v1/network/state", response_model=NetworkStateResponse)
 def get_network_state(
-    clearance_cm: Annotated[float, Query(gt=0, le=200, description="Vehicle clearance in cm")] = settings.default_clearance_cm,
+    clearance_cm: Annotated[
+        float, Query(gt=0, le=200, description="Vehicle clearance in cm")
+    ] = settings.default_clearance_cm,
     db: Session = Depends(get_db),
 ):
     """
@@ -249,7 +286,9 @@ def get_network_state(
 @app.post("/api/v1/simulation/rain", response_model=SimulationResponse)
 def trigger_rainfall_simulation(
     rainfall_mm_hr: Annotated[float, Query(ge=0, le=250, description="Rainfall intensity (mm/hr)")],
-    clearance_cm: Annotated[float, Query(gt=0, le=200, description="Vehicle clearance in cm")] = settings.default_clearance_cm,
+    clearance_cm: Annotated[
+        float, Query(gt=0, le=200, description="Vehicle clearance in cm")
+    ] = settings.default_clearance_cm,
     db: Session = Depends(get_db),
 ):
     """
@@ -291,7 +330,9 @@ def trigger_rainfall_simulation(
 def get_optimal_route(
     start_node: Annotated[int, Query(description="Origin node id")],
     target_node: Annotated[int, Query(description="Destination node id")],
-    clearance_cm: Annotated[float, Query(gt=0, le=200, description="Vehicle clearance in cm")] = settings.default_clearance_cm,
+    clearance_cm: Annotated[
+        float, Query(gt=0, le=200, description="Vehicle clearance in cm")
+    ] = settings.default_clearance_cm,
     db: Session = Depends(get_db),
 ):
     """
@@ -304,19 +345,22 @@ def get_optimal_route(
     _require_node(nodes, start_node, "start_node")
     _require_node(nodes, target_node, "target_node")
 
-    graph_nodes: Dict[int, Tuple[float, float]] = {
+    graph_nodes: dict[int, tuple[float, float]] = {
         node_id: (node.latitude, node.longitude) for node_id, node in nodes.items()
     }
 
     # Roads are treated as bidirectional: a flooded evacuation corridor is
     # usable in both directions, and a one-way seed made reverse trips 404.
-    graph_edges: Dict[int, List[Tuple[int, float, float, float]]] = {}
-    pair_index: Dict[Tuple[int, int], models.RoadEdge] = {}
+    graph_edges: dict[int, list[tuple[int, float, float, float]]] = {}
+    pair_index: dict[tuple[int, int], models.RoadEdge] = {}
 
     for edge in edges:
         state = states.get(edge.edge_id)
         water_cm = float(state.water_depth_cm) if state else 0.0
-        pair = (min(edge.start_node_id, edge.end_node_id), max(edge.start_node_id, edge.end_node_id))
+        pair = (
+            min(edge.start_node_id, edge.end_node_id),
+            max(edge.start_node_id, edge.end_node_id),
+        )
         pair_index[pair] = edge
 
         for origin, destination in (
@@ -343,8 +387,8 @@ def get_optimal_route(
 
     geometry_map = _load_edge_geometry(db)
 
-    coordinates: List[List[float]] = []
-    segments: List[RouteSegment] = []
+    coordinates: list[list[float]] = []
+    segments: list[RouteSegment] = []
 
     if len(path) == 1:
         # Origin equals destination: emit a degenerate but valid LineString.
@@ -352,7 +396,7 @@ def get_optimal_route(
         point = [origin.longitude, origin.latitude]
         coordinates = [point, point]
     else:
-        for origin_id, destination_id in zip(path, path[1:]):
+        for origin_id, destination_id in zip(path, path[1:], strict=False):
             edge = pair_index.get((min(origin_id, destination_id), max(origin_id, destination_id)))
 
             if edge is None:

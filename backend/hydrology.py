@@ -1,5 +1,3 @@
-from typing import Optional
-
 from config import settings
 
 # ---------------------------------------------------------------------------
@@ -9,8 +7,8 @@ from config import settings
 
 def calculate_scs_cn_runoff(
     rainfall_mm_hr: float,
-    curve_number: Optional[int] = None,
-    duration_hrs: Optional[float] = None,
+    curve_number: int | None = None,
+    duration_hrs: float | None = None,
 ) -> float:
     """
     Calculates direct surface runoff depth (mm) using the SCS-CN model.
@@ -31,7 +29,7 @@ def calculate_scs_cn_runoff(
     # Initial abstraction (Ia) = 0.2 * S
     Ia = 0.2 * S
 
-    if P <= Ia:
+    if Ia >= P:
         return 0.0
 
     # Direct runoff Q (mm)
@@ -43,7 +41,7 @@ def compute_node_water_depth(
     runoff_mm: float,
     slope_percent: float = 1.0,
     elevation_m: float = 5.0,
-    amplification: Optional[float] = None,
+    amplification: float | None = None,
 ) -> float:
     """
     Converts surface runoff (mm) into street ponding water depth (cm),
