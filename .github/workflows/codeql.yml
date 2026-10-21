@@ -5,6 +5,14 @@
 #
 # `security-extended` goes beyond the default suite, which is what catches the
 # lower-confidence variants of SQL injection and unsafe path traversal.
+#
+# LICENSING NOTE
+# CodeQL on a *private* repository requires GitHub Code Security (paid). On
+# GitHub Pro without it, every analysis fails with "Code scanning is not
+# enabled for this repository". The `preflight` job below probes for that and
+# skips analysis with a visible warning instead of painting every push red.
+# The moment the repository goes public or Code Security is purchased, the scan
+# starts running automatically -- no edit to this file required.
 name: Security - CodeQL
 
 on:
@@ -28,8 +36,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  preflight:
+    name: Check code scanning availability
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.probe.outputs.enabled }}
+    steps:
+      - name: Probe code scanning
+        id: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/code-scanning/alerts?per_page=1")
+
+          echo "code-scanning probe: HTTP $status"
+
+          if [ "$status" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "### CodeQL skipped"
+            echo ""
+            echo "Code scanning is not available for this repository (HTTP \`$status\`)."
+            echo ""
+            echo "CodeQL requires **GitHub Code Security** on private repositories and is"
+            echo "free on public ones. Once it is available, this workflow starts scanning"
+            echo "automatically -- no edit required."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::Code scanning unavailable (HTTP $status); skipping CodeQL."
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -49,9 +94,9 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          # None of the selected languages need a compilation step: Python is
-          # interpreted and CodeQL extracts JS/TS directly. That keeps this off
-          # the Next.js build and avoids needing Bun in the runner.
+          # Neither language needs compiling: Python is interpreted and CodeQL
+          # extracts JS/TS directly. That keeps the scan off the Next.js build
+          # and avoids needing Bun in the runner.
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended
 
