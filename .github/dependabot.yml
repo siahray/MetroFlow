@@ -1,13 +1,17 @@
 # Dependabot version updates.
 #
 # Weekly, all three ecosystems on the same schedule so a Monday review covers
-# the whole repo at once. Minor and patch bumps are grouped into a single PR per
-# ecosystem; major bumps stay separate because they need real review.
+# the whole repo at once. Minor, patch and major bumps are grouped into one PR
+# per ecosystem: this project pins lower bounds (>=X) rather than exact
+# versions, so Dependabot classifies a requirement-range bump by the
+# requirement expression, not the resolved version -- filtering the group with
+# `update-types: [minor, patch]` left every pip update outside the group and
+# produced one PR per dependency instead. Groups here therefore take every
+# update type, and a major bump is reviewed in the same PR as its siblings.
 #
-# Caveat: web-lgu is built with Bun, and Dependabot resolves the npm ecosystem
-# from a package-lock.json / yarn.lock / pnpm-lock.yaml. There is no lockfile in
-# that format here, so if Dependabot reports it cannot find one, switch this
-# entry to `package-ecosystem: bun`.
+# web-lgu is built with Bun. The `npm` ecosystem cannot parse `bun.lock` and
+# fails the update job outright ("Set package-ecosystem: bun"), so `bun` is the
+# correct ecosystem here, not npm.
 version: 2
 
 updates:
@@ -20,17 +24,14 @@ updates:
       timezone: Asia/Manila
     open-pull-requests-limit: 5
     groups:
-      backend-minor-patch:
+      backend:
         patterns:
           - "*"
-        update-types:
-          - minor
-          - patch
     labels:
       - dependencies
       - backend
 
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /web-lgu
     schedule:
       interval: weekly
@@ -39,12 +40,9 @@ updates:
       timezone: Asia/Manila
     open-pull-requests-limit: 5
     groups:
-      web-minor-patch:
+      web:
         patterns:
           - "*"
-        update-types:
-          - minor
-          - patch
     labels:
       - dependencies
       - web
