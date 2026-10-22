@@ -10,7 +10,7 @@
 | Project Classification  | Simple          |
 | Document Classification | Internal Use    |
 | Prepared By             | «Project Team»  |
-| Version No.             | 1.1             |
+| Version No.             | 1.2             |
 | Date Prepared           | 21 October 2026 |
 
 ## Revision History
@@ -19,17 +19,18 @@
 | ------- | ------------ | ------------------- | --------------------------------------------------------- | ---------------- |
 | 1.0     | 21 Oct 2026  | «Project Team Lead» | Initial Release                                           | All Sections     |
 | 1.1     | 21 Oct 2026  | «Project Team Lead» | CR-001: driver PWA, live hazards, fleet dispatch, sensors | A, B, C, D, E, F |
+| 1.2     | 22 Oct 2026  | «Project Team Lead» | Provider keys, Supabase Auth, Mapbox tiles, template UI   | A, B, C, D       |
 
 ## A. PROJECT OVERVIEW
 
-| Item               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Purpose            | Give the LGU operations centre a verified picture of road passability during flooding, a traceable path from field report to dispatch decision, and a way to warn and reroute drivers before they enter the water.                                                                                                                                                                                                                                                |
-| Business Goals     | Faster triage; no dispatch into impassable roads; no driver routed into a verified hazard; decisions that can be reviewed after the event; one shared operational picture between the LGU and the road.                                                                                                                                                                                                                                                           |
-| Project Objectives | OBJ-001 model flood depth on the road graph; OBJ-002 compute clearance-aware routes; OBJ-003 provide a triage workspace; OBJ-004 record every decision; OBJ-005 deliver through an automated pipeline; OBJ-006 document the system to a reviewable standard; OBJ-007 publish verified hazards to drivers in real time; OBJ-008 provide offline navigation and reporting; OBJ-009 support live fleet dispatch; OBJ-010 ingest sensor data and flag impacted roads. |
-| Project Scope      | Flood simulation, clearance-aware routing with coordinates and turn instructions, the LGU dispatch portal (live map, moderation queue, evidence desk, drawing tools, fleet and dispatch), the driver PWA (navigation, rerouting, reports, offline, SOS), JWT/RBAC, SSE publishing, river and rain gauge ingestion, versioned PostGIS schema with row-level security, and automated build/test/security checks.                                                    |
-| Assumptions        | A PostGIS-capable database is available (A-001); the corridor is representative (A-002); free or institutional tiers suffice (A-003); dispatchers have a modern browser (A-004); rainfall is supplied manually (A-005); the client provides naming (A-006); drivers have a smartphone with camera and geolocation (A-007); connectivity can drop (A-008); sensor data may be simulated but labelled (A-009); OSM tiles may be used with attribution (A-010).      |
-| Constraints        | Delivery must fit the academic term (C-001); effort is part-time (C-002); no paid Code Security (C-003); only synthetic or public data (C-004); no committed credentials (C-005); the driver client is a PWA, not a store build (C-006); CCTV is a labelled demo registry (C-007); basemap tiles are online-only (C-008); the pilot is single-LGU (C-009).                                                                                                        |
+| Item               | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose            | Give the LGU operations centre a verified picture of road passability during flooding, a traceable path from field report to dispatch decision, and a way to warn and reroute drivers before they enter the water.                                                                                                                                                                                                                                                                                                      |
+| Business Goals     | Faster triage; no dispatch into impassable roads; no driver routed into a verified hazard; decisions that can be reviewed after the event; one shared operational picture between the LGU and the road.                                                                                                                                                                                                                                                                                                                 |
+| Project Objectives | OBJ-001 model flood depth on the road graph; OBJ-002 compute clearance-aware routes; OBJ-003 provide a triage workspace; OBJ-004 record every decision; OBJ-005 deliver through an automated pipeline; OBJ-006 document the system to a reviewable standard; OBJ-007 publish verified hazards to drivers in real time; OBJ-008 provide offline navigation and reporting; OBJ-009 support live fleet dispatch; OBJ-010 ingest sensor data and flag impacted roads.                                                       |
+| Project Scope      | Flood simulation, clearance-aware routing with coordinates and turn instructions, the LGU dispatch portal (live map, moderation queue, evidence desk, drawing tools, fleet and dispatch), the driver PWA (navigation, rerouting, reports, offline, SOS), Supabase Auth/RBAC, SSE publishing, river and rain gauge ingestion, versioned PostGIS schema with row-level security, and automated build/test/security checks.                                                                                                |
+| Assumptions        | A PostGIS-capable database is available (A-001); the corridor is representative (A-002); free or institutional tiers suffice (A-003); dispatchers have a modern browser (A-004); rainfall is supplied manually with optional OpenWeather data (A-005); the client provides naming (A-006); drivers have a smartphone with camera and geolocation (A-007); connectivity can drop (A-008); sensor data may be simulated but labelled (A-009); Mapbox tiles are available on the pilot tier, with OSM as fallback (A-010). |
+| Constraints        | Delivery must fit the academic term (C-001); effort is part-time (C-002); no paid Code Security (C-003); only synthetic or public data (C-004); no committed credentials and origin-restricted public keys (C-005); the driver client is a PWA, not a store build (C-006); CCTV is a labelled demo registry (C-007); basemap tiles are online-only (C-008); the pilot is single-LGU (C-009); UI follows the client-supplied HTML/CSS template (C-010).                                                                  |
 
 **Out of scope:** native iOS or Android store builds, real CCTV integration,
 production SMS or telephony for SOS, offline basemap tiles, multi-LGU tenancy,
@@ -109,30 +110,33 @@ Roles may be combined depending on team size. The RACI detail is in
 | R-006 | Risk       | Drivers do not adopt the PWA                        | Adoption   | Usability tests; QR onboarding; synthetic reports as fallback                                  |
 | R-007 | Risk       | PWA background limits on iOS                        | Technical  | Foreground telemetry; document the limit; keep native builds out of scope                      |
 | R-008 | Risk       | Driver location privacy incident                    | Compliance | Rounding, hashing, 24-hour retention, role-only access, synthetic testing                      |
-| I-001 | Issue      | Authentication is not implemented in baseline       | Business   | CR-001 makes JWT/RBAC a release gate before acceptance                                         |
+| R-009 | Risk       | Provider quota or outage degrades maps or rainfall  | Technical  | OSM fallback, manual rainfall, cached derived data, usage alerts                               |
+| R-010 | Risk       | UI template arrives late or diverges from the FSD   | Schedule   | Treat the FSD behaviour as fixed and the template as visual; review on arrival                 |
+| I-001 | Issue      | Authentication is not implemented in baseline       | Business   | CR-001 makes Supabase Auth/RBAC a release gate before acceptance                               |
 | I-002 | Issue      | Baseline incident data is mock data                 | Business   | CR-001 replaces it with the persisted report API                                               |
 | I-003 | Issue      | CCTV is a demo registry and gauges may be simulated | Business   | Label both in the API and UI; record the limitation in TSD §7                                  |
 | D-001 | Dependency | Client supplies the hosted database secret          | Delivery   | Track at every milestone review                                                                |
-| D-002 | Dependency | JWT signing secret and seed credentials             | Delivery   | Startup fails closed when the secret is absent                                                 |
+| D-002 | Dependency | Supabase project credentials and pilot accounts     | Delivery   | Startup fails closed when Auth configuration is absent                                         |
 | D-003 | Dependency | Evidence upload volume or object storage            | Delivery   | Mount a persistent volume for the pilot; storage interface allows a later swap                 |
+| D-004 | Dependency | Weather, terrain and imagery providers within quota | Delivery   | Manual rainfall, OSM fallback and cached derived data keep the pilot running                   |
 
 The full RAID log, scoring and owners are in
 [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
 
 ## E. KEY DELIVERABLES AND MILESTONES
 
-| ID   | Deliverable                    | Acceptance condition                                                      |
-| ---- | ------------------------------ | ------------------------------------------------------------------------- |
-| D-01 | Simulation and routing API     | Contract tests pass; endpoints behave as specified in [api.md](api.md)    |
-| D-02 | LGU dispatch portal            | Both screens usable end-to-end for triage                                 |
-| D-03 | Database schema and migrations | Clean `alembic upgrade head`; `alembic check` reports no drift            |
-| D-04 | CI/CD pipeline                 | Tests, lint, build, security scan and hosted migrations run from the repo |
-| D-05 | Document set                   | Charter, BRD, business case, FSD, TSD, PMP and API reference accepted     |
-| D-06 | Demonstration                  | Live walkthrough of simulation → routing → triage → dispatch              |
-| D-07 | Driver PWA                     | Installable build; navigation, reports, offline queue, SOS and telemetry  |
-| D-08 | LGU live map and moderation    | MapLibre layers, evidence desk, approve/reject, draw and publish          |
-| D-09 | Fleet and dispatch             | Unit status, nearest-unit ranking, flood-safe rescue route                |
-| D-10 | Auth, RBAC and sensors         | JWT roles, audit writes, gauge ingestion and advisory road impact         |
+| ID   | Deliverable                    | Acceptance condition                                                                                |
+| ---- | ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| D-01 | Simulation and routing API     | Contract tests pass; endpoints behave as specified in [api.md](api.md)                              |
+| D-02 | LGU dispatch portal            | Both screens usable end-to-end for triage                                                           |
+| D-03 | Database schema and migrations | Clean `alembic upgrade head`; `alembic check` reports no drift                                      |
+| D-04 | CI/CD pipeline                 | Tests, lint, build, security scan and hosted migrations run from the repo                           |
+| D-05 | Document set                   | Charter, BRD, business case, FSD, TSD, PMP and API reference accepted                               |
+| D-06 | Demonstration                  | Live walkthrough of simulation → routing → triage → dispatch                                        |
+| D-07 | Driver PWA                     | Installable build from the supplied template; navigation, reports, offline queue, SOS and telemetry |
+| D-08 | LGU live map and moderation    | Template-derived UI; MapLibre layers, evidence desk, approve/reject, draw and publish               |
+| D-09 | Fleet and dispatch             | Unit status, nearest-unit ranking, flood-safe rescue route                                          |
+| D-10 | Auth, RBAC and sensors         | Supabase roles, audit writes, gauge ingestion and advisory road impact                              |
 
 | ID  | Milestone                           | Exit criterion                                                  | Target          |
 | --- | ----------------------------------- | --------------------------------------------------------------- | --------------- |

@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.1
+Version 1.2
 
 ## Document Control
 
@@ -10,37 +10,38 @@ Version 1.1
 | ----------- | ---------------------------------------------------------------- |
 | Project     | MetroFlow                                                        |
 | Document    | Technical Specification Document                                 |
-| Version     | 1.1                                                              |
+| Version     | 1.2                                                              |
 | Prepared By | «Project Team»                                                   |
 | Baseline    | `main` @ `9605e38` (last code commit)                            |
 | Change      | CR-001 adds the driver PWA, event stream, fleet, SOS and sensors |
 
-Version 1.1 describes the **target architecture** for CR-001. Sections marked
-`Planned` are not implemented in the baseline. See [CR-001.md](CR-001.md) for
-the change record and FSD §Implementation Status for the current position.
+Version 1.2 describes the **target architecture** for CR-001, including the
+approved provider keys and Supabase Auth. Sections marked `Planned` are not
+implemented in the baseline. See [CR-001.md](CR-001.md) for the change record and
+FSD §Implementation Status for the current position.
 
 ## Requirements Traceability
 
-| BRD ID | FSD ID                               | Technical Component                          |
-| ------ | ------------------------------------ | -------------------------------------------- |
-| BR-001 | FSD-FR-001 to FSD-FR-005             | Network State Service, PostGIS geometry      |
-| BR-002 | FSD-FR-006 to FSD-FR-010             | Hydrology Engine (SCS-CN), live state writer |
-| BR-003 | FSD-FR-011 to FSD-FR-017             | Routing Engine (Time-Dependent A\*)          |
-| BR-004 | FSD-FR-024 to FSD-FR-031             | Incident Queue (portal state)                |
-| BR-005 | FSD-FR-026 to FSD-FR-028             | Queue filter and search                      |
-| BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                        |
-| BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log          |
-| BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration               |
-| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — JWT/RBAC (planned, CR-001)  |
-| BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI    |
-| BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy       |
-| BR-012 | FSD-FR-049                           | Reporting and export (planned)               |
-| BR-013 | FSD-FR-054 to FSD-FR-064             | Driver PWA, routing extensions, SSE client   |
-| BR-014 | FSD-FR-065 to FSD-FR-081             | Report service, evidence store, moderation   |
-| BR-015 | FSD-FR-073, 074, 087                 | SOS service and distress incidents           |
-| BR-016 | FSD-FR-075 to FSD-FR-089             | Map UI, fleet service, dispatch engine       |
-| BR-017 | FSD-FR-090, FSD-FR-091               | Sensor service and impact rules              |
-| BR-018 | FSD-FR-059, 068 to 071               | PWA cache, offline queue, sync               |
+| BRD ID | FSD ID                               | Technical Component                                   |
+| ------ | ------------------------------------ | ----------------------------------------------------- |
+| BR-001 | FSD-FR-001 to FSD-FR-005             | Network State Service, PostGIS geometry               |
+| BR-002 | FSD-FR-006 to FSD-FR-010             | Hydrology Engine (SCS-CN), live state writer          |
+| BR-003 | FSD-FR-011 to FSD-FR-017             | Routing Engine (Time-Dependent A\*)                   |
+| BR-004 | FSD-FR-024 to FSD-FR-031             | Incident Queue (portal state)                         |
+| BR-005 | FSD-FR-026 to FSD-FR-028             | Queue filter and search                               |
+| BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                                 |
+| BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log                   |
+| BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration                        |
+| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — Supabase Auth/RBAC (planned, CR-001) |
+| BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI             |
+| BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy                |
+| BR-012 | FSD-FR-049                           | Reporting and export (planned)                        |
+| BR-013 | FSD-FR-054 to FSD-FR-064             | Driver PWA, routing extensions, SSE client            |
+| BR-014 | FSD-FR-065 to FSD-FR-081             | Report service, evidence store, moderation            |
+| BR-015 | FSD-FR-073, 074, 087                 | SOS service and distress incidents                    |
+| BR-016 | FSD-FR-075 to FSD-FR-089             | Map UI, fleet service, dispatch engine                |
+| BR-017 | FSD-FR-090, FSD-FR-091               | Sensor service and impact rules                       |
+| BR-018 | FSD-FR-059, 068 to 071               | PWA cache, offline queue, sync                        |
 
 ## 1. Solution Architecture
 
@@ -51,7 +52,7 @@ the change record and FSD §Implementation Status for the current position.
             │                                              │
             └────────────── HTTPS + SSE ──────────────────┘
                                    │
-                     FastAPI  (JWT · RBAC · rate limits)
+                     FastAPI  (Supabase Auth · RBAC · rate limits)
         network · routing · simulation · reports · hazards
         vehicles · telemetry · SOS · dispatch · sensors
                      │                              │
@@ -75,17 +76,18 @@ measured from the commit to the emitted event, not from the device receiving it.
 
 **Design principles**
 
-| Principle                           | Consequence                                                          |
-| ----------------------------------- | -------------------------------------------------------------------- |
-| One source of truth for passability | A single function classifies edges for both map colour and routing   |
-| Configuration over constants        | Calibration values are environment-driven, not literals              |
-| Schema owned by migrations          | No `create_all` at runtime; drift fails CI                           |
-| Fail closed at the edges            | Security scan and migration gates block rather than warn             |
-| Honest boundaries                   | Mock data and unimplemented features are labelled, not implied       |
-| One event bus                       | Hazard, fleet and SOS updates follow one publish path                |
-| Offline is a first-class state      | The PWA models pending, synced and stale rather than assuming online |
-| Evidence is untrusted input         | Photos are re-encoded, stripped and size-checked before storage      |
-| Privilege is explicit               | Every mutating LGU route declares the roles allowed to call it       |
+| Principle                           | Consequence                                                           |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| One source of truth for passability | A single function classifies edges for both map colour and routing    |
+| Configuration over constants        | Calibration values are environment-driven, not literals               |
+| Schema owned by migrations          | No `create_all` at runtime; drift fails CI                            |
+| Fail closed at the edges            | Security scan and migration gates block rather than warn              |
+| Honest boundaries                   | Mock data and unimplemented features are labelled, not implied        |
+| One event bus                       | Hazard, fleet and SOS updates follow one publish path                 |
+| Offline is a first-class state      | The PWA models pending, synced and stale rather than assuming online  |
+| Evidence is untrusted input         | Photos are re-encoded, stripped and size-checked before storage       |
+| Privilege is explicit               | Every mutating LGU route declares the roles allowed to call it        |
+| Design is supplied, not invented    | Portal and PWA UI follow the client HTML/CSS template, not new design |
 
 ## Application Components
 
@@ -100,7 +102,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Dispatch Portal       | BR-004 to BR-007 / FSD-FR-018 to 046 | Login, queue, detail, operations log, dispatch actions                     |
 | Security Middleware   | BR-011 / FSD-FR-051                  | Response headers on every request                                          |
 | Delivery Pipeline     | BR-008 / FSD-FR-047                  | Lint, test, scan, migrate, publish image                                   |
-| Auth Service          | BR-009 / FSD-FR-092                  | Login, JWT issue, password hash verification, role dependency              |
+| Auth Service          | BR-009 / FSD-FR-092                  | Supabase session verification via JWKS, role dependency, audit context     |
 | Report Service        | BR-014 / FSD-FR-065 to 081           | Multipart intake, EXIF extraction, urgency, dedupe, moderation             |
 | Hazard Service        | BR-013 / FSD-FR-059 to 064, 082–086  | Polygon/line validation, obstruction level, publish and withdraw           |
 | Event Stream          | BR-018 / FSD-FR-086                  | Redis pub/sub fan-out over SSE with reconnect snapshots                    |
@@ -113,26 +115,41 @@ measured from the commit to the emitted event, not from the device receiving it.
 
 ### Technology stack
 
-| Layer           | Technology                                   | Version                   |
-| --------------- | -------------------------------------------- | ------------------------- |
-| API language    | Python                                       | 3.14                      |
-| API framework   | FastAPI                                      | ≥ 0.143.5                 |
-| ORM             | SQLAlchemy                                   | ≥ 2.1.5                   |
-| Spatial ORM     | GeoAlchemy2                                  | ≥ 0.20.0                  |
-| Migrations      | Alembic                                      | ≥ 1.20.0                  |
-| Database        | PostgreSQL + PostGIS                         | 15 + 3.3 local; 17 hosted |
-| Driver          | psycopg2-binary                              | ≥ 2.9.13                  |
-| Frontend        | Next.js (App Router)                         | 16.4.2                    |
-| Driver client   | Vite + React PWA                             | Vite 7.x, React 19.3.1    |
-| PWA tooling     | `vite-plugin-pwa`, `idb`                     | Current at implementation |
-| Mapping         | MapLibre GL JS                               | 6.x                       |
-| UI runtime      | React                                        | 19.3.1                    |
-| Styling         | Tailwind CSS                                 | 4.x                       |
-| Package manager | Bun                                          | 1.4.3                     |
-| Realtime        | SSE + Redis pub/sub                          | Redis 7                   |
-| Auth            | python-jose, passlib/bcrypt                  | current at implementation |
-| Evidence        | Pillow, python-multipart                     | current at implementation |
-| Tests           | pytest, Bun test, Playwright, ESLint, builds | see repository            |
+| Layer           | Technology                                    | Version                                    |
+| --------------- | --------------------------------------------- | ------------------------------------------ |
+| API language    | Python                                        | 3.14                                       |
+| API framework   | FastAPI                                       | ≥ 0.143.5                                  |
+| ORM             | SQLAlchemy                                    | ≥ 2.1.5                                    |
+| Spatial ORM     | GeoAlchemy2                                   | ≥ 0.20.0                                   |
+| Migrations      | Alembic                                       | ≥ 1.20.0                                   |
+| Database        | PostgreSQL + PostGIS                          | 15 + 3.3 local; 17 hosted                  |
+| Driver          | psycopg2-binary                               | ≥ 2.9.13                                   |
+| Frontend        | Next.js (App Router)                          | 16.4.2                                     |
+| Driver client   | Vite + React PWA                              | Vite 7.x, React 19.3.1                     |
+| PWA tooling     | `vite-plugin-pwa`, `idb`                      | Current at implementation                  |
+| Mapping         | MapLibre GL JS                                | 6.x                                        |
+| UI runtime      | React                                         | 19.3.1                                     |
+| Styling         | Tailwind CSS                                  | 4.x                                        |
+| UI source       | Client-supplied HTML/CSS template             | Figma-derived; adapted to React components |
+| Package manager | Bun                                           | 1.4.3                                      |
+| Realtime        | SSE + Redis pub/sub                           | Redis 7                                    |
+| Auth            | Supabase Auth (GoTrue) with JWKS verification | Hosted service                             |
+| Evidence        | Pillow, python-multipart                      | current at implementation                  |
+| Tests           | pytest, Bun test, Playwright, ESLint, builds  | see repository                             |
+
+### External data services
+
+| Service        | Mode              | Used for                        | Failure behaviour                                        |
+| -------------- | ----------------- | ------------------------------- | -------------------------------------------------------- |
+| Supabase Auth  | Runtime           | Identity, sessions and JWKS     | Sign-in unavailable; existing sessions last until expiry |
+| Mapbox         | Runtime (browser) | Raster basemap                  | OpenStreetMap raster fallback                            |
+| OpenWeather    | Runtime, optional | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
+| OpenTopography | Offline           | Digital elevation model         | Cached derived terrain; no runtime impact                |
+| Copernicus     | Offline           | Sentinel imagery and land cover | Cached derived layers; no runtime impact                 |
+
+Terrain and imagery are downloaded by a preprocessing step, not by the API. The
+derived datasets carry provider attribution; raw products are not redistributed
+from this repository.
 
 ## Database Design - road_nodes
 
@@ -352,7 +369,6 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/simulation/rain`         | POST   | BR-002 / FSD-FR-006 to 010 |
 | `/api/v1/routing/navigate`        | GET    | BR-003 / FSD-FR-011 to 017 |
 | `/openapi.json`                   | GET    | BR-010 / FSD-FR-052        |
-| `/api/v1/auth/login`              | POST   | BR-009 / FSD-FR-018–023    |
 | `/api/v1/auth/me`                 | GET    | BR-009 / FSD-FR-018–023    |
 | `/api/v1/reports`                 | POST   | BR-014 / FSD-FR-065 to 067 |
 | `/api/v1/reports`                 | GET    | BR-014 / FSD-FR-077        |
@@ -408,7 +424,7 @@ Full request and response contracts, examples and error bodies are in
 | VAL-020       | BR-013  | FSD-FR-072 | Telemetry accepts at most one batch per five seconds per vehicle                                                         |
 | VAL-021       | BR-015  | FSD-FR-073 | SOS requires a location fix no older than 60 seconds                                                                     |
 | VAL-022       | BR-016  | FSD-FR-089 | A unit can be assigned only when `AVAILABLE`, and the route must avoid inactive or non-blocking hazards                  |
-| VAL-023       | BR-009  | FSD-FR-092 | JWT signature, expiry and role are verified before any privileged write                                                  |
+| VAL-023       | BR-009  | FSD-FR-092 | Supabase token signature, expiry and role are verified before any privileged write                                       |
 | VAL-024       | BR-017  | FSD-FR-090 | Sensor is known and active; value is inside its configured range; timestamp is not in the future                         |
 
 ## Security Design
@@ -424,7 +440,9 @@ Full request and response contracts, examples and error bodies are in
 | Automated dependency updates (Dependabot)                                              | BR-008 / FSD-FR-047          |
 | Static analysis (CodeQL) with capability preflight                                     | BR-008 / FSD-FR-047          |
 | Dynamic API scan (OWASP ZAP), fail-closed                                              | BR-008 / FSD-FR-047          |
-| Authentication and role enforcement (JWT, bcrypt, role guards)                         | BR-009 / FSD-FR-092 — CR-001 |
+| Authentication and role enforcement (Supabase session verification, role guards)       | BR-009 / FSD-FR-092 — CR-001 |
+| Key exposure rules: public keys scoped by origin, secrets server-only, rotation        | BR-011 / FSD-FR-051          |
+| Service-role key confined to the backend; never shipped to a client                    | BR-011 / FSD-FR-051          |
 | Evidence upload validation: MIME sniff, size cap, re-encode and EXIF strip             | BR-014 / FSD-FR-066, 067     |
 | Rate limits on login, reports, telemetry and SOS                                       | BR-009 / FSD-FR-092          |
 | CORS allowlist for the portal and driver PWA                                           | BR-011 / FSD-FR-051          |
@@ -435,19 +453,21 @@ Full request and response contracts, examples and error bodies are in
 
 **Open security risks**
 
-| ID      | Risk                                            | Severity | Disposition                                                       |
-| ------- | ----------------------------------------------- | -------- | ----------------------------------------------------------------- |
-| SEC-001 | Baseline API has no authentication              | High     | CR-001 makes JWT/RBAC a release gate; do not expose baseline data |
-| SEC-002 | Baseline CORS allows every origin               | Medium   | Replace with a portal/PWA allowlist in CR-001                     |
-| SEC-003 | Baseline has no rate limiting                   | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS     |
-| SEC-004 | CodeQL cannot analyse the private repository    | Medium   | Activates automatically when public or licensed                   |
-| SEC-005 | Audit hash column has no write path             | Low      | Implement with FSD-FR-093                                         |
-| SEC-006 | Uploaded evidence can exhaust or poison storage | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution        |
-| SEC-007 | SSE stream could leak fleet or SOS positions    | Medium   | Authenticate the stream and filter by role                        |
-| SEC-008 | Driver location can be re-identified            | Medium   | Round, hash the device id, restrict access, purge after 24 hours  |
-| SEC-009 | Demo CCTV may be mistaken for live footage      | Medium   | Label the feed as demo in the API and UI                          |
-| SEC-010 | A sensor reading can be spoofed                 | Medium   | Gateway credential, sensor allowlist, range and timestamp checks  |
-| SEC-011 | PWA token theft on a shared device              | Medium   | Short-lived bearer token, no long-lived local storage             |
+| ID      | Risk                                              | Severity | Disposition                                                                 |
+| ------- | ------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
+| SEC-001 | Baseline API has no authentication                | High     | CR-001 makes Supabase Auth/RBAC a release gate; do not expose baseline data |
+| SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal/PWA allowlist in CR-001                               |
+| SEC-003 | Baseline has no rate limiting                     | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS               |
+| SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Activates automatically when public or licensed                             |
+| SEC-005 | Audit hash column has no write path               | Low      | Implement with FSD-FR-093                                                   |
+| SEC-006 | Uploaded evidence can exhaust or poison storage   | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution                  |
+| SEC-007 | SSE stream could leak fleet or SOS positions      | Medium   | Authenticate the stream and filter by role                                  |
+| SEC-008 | Driver location can be re-identified              | Medium   | Round, hash the device id, restrict access, purge after 24 hours            |
+| SEC-009 | Demo CCTV may be mistaken for live footage        | Medium   | Label the feed as demo in the API and UI                                    |
+| SEC-010 | A sensor reading can be spoofed                   | Medium   | Gateway credential, sensor allowlist, range and timestamp checks            |
+| SEC-011 | PWA session theft on a shared device              | Medium   | Short-lived access token; refresh token cleared on sign-out                 |
+| SEC-012 | Service-role key leak bypasses every RLS policy   | High     | Server-only storage, no client bundling, rotation on suspicion              |
+| SEC-013 | Public keys or provider credentials exhaust quota | Medium   | URL and scope restrictions, usage alerts, OSM and manual fallback           |
 
 ## Error Handling
 
@@ -460,7 +480,7 @@ Full request and response contracts, examples and error bodies are in
 | E005       | Required query parameter missing               | Return 422 listing the missing location                      |
 | E006       | Database unreachable at startup                | Fail startup; container exits; health check never goes green |
 | E007       | Unhandled server error                         | Return 500; log the traceback; do not leak internals         |
-| E008       | Missing, expired or invalid JWT                | Return 401 with `WWW-Authenticate`; change nothing           |
+| E008       | Missing, expired or invalid session token      | Return 401 with `WWW-Authenticate`; change nothing           |
 | E009       | Role not permitted for the action              | Return 403; record the attempt without the payload secrets   |
 | E010       | Photo missing, unsupported or above 8 MB       | Return 415 or 413 with the accepted types and limit          |
 | E011       | Report already verified, rejected or duplicate | Return 409 with the current status                           |
@@ -710,37 +730,74 @@ Rules:
 
 ## 4. Configuration
 
-Settings use the `METROFLOW_` prefix and may be supplied in a local `.env`.
+### 4.1 Backend
 
-| Variable                            | Default                | Effect                                         |
-| ----------------------------------- | ---------------------- | ---------------------------------------------- |
-| `DATABASE_URL`                      | local PostGIS DSN      | Connection string                              |
-| `METROFLOW_CURVE_NUMBER`            | 85                     | SCS-CN curve number                            |
-| `METROFLOW_RAINFALL_DURATION_HRS`   | 1.0                    | Storm duration                                 |
-| `METROFLOW_PONDING_AMPLIFICATION`   | 3.5                    | Runoff-to-street-depth factor                  |
-| `METROFLOW_CAUTION_DEPTH_CM`        | 10.0                   | Light-flood threshold                          |
-| `METROFLOW_DEFAULT_CLEARANCE_CM`    | 30.0                   | Clearance when omitted                         |
-| `RUN_MIGRATIONS`                    | true                   | Apply migrations on container start            |
-| `METROFLOW_JWT_SECRET`              | no default             | Token signing; required once auth is enabled   |
-| `METROFLOW_JWT_TTL_MINUTES`         | 480                    | Access-token lifetime                          |
-| `METROFLOW_CORS_ORIGINS`            | localhost origins      | Comma-separated portal and PWA origins         |
-| `METROFLOW_REDIS_URL`               | `redis://redis:6379/0` | Event bus and throttle counters                |
-| `METROFLOW_UPLOAD_DIR`              | `/data/evidence`       | Evidence volume mount                          |
-| `METROFLOW_MAX_UPLOAD_MB`           | 8                      | Photo size cap                                 |
-| `METROFLOW_DRIVER_RETENTION_HOURS`  | 24                     | Driver location purge window                   |
-| `METROFLOW_TELEMETRY_MIN_SECONDS`   | 5                      | Server-side telemetry throttle                 |
-| `METROFLOW_WARNING_RADIUS_M`        | [TBC]                  | Driver proximity alert radius                  |
-| `METROFLOW_SENSOR_DEBOUNCE_MINUTES` | 10                     | Duplicate advisory suppression                 |
-| `METROFLOW_MAP_TILE_URL`            | OSM raster             | Online basemap with attribution                |
-| `METROFLOW_SENSOR_TOKEN`            | no default             | Gateway authentication; required for ingestion |
+`FASTAPI_ENV` selects runtime behaviour: `development` enables the demo seed and
+the interactive OpenAPI docs; `test` disables both; `production` disables the
+seed, requires HTTPS origins and secure cookies, and serves no interactive docs.
+Calibration and threshold settings keep the `METROFLOW_` prefix and may be
+supplied in a local `.env`.
 
-Repository secrets:
+| Variable                            | Default                | Effect                                                           | Class          |
+| ----------------------------------- | ---------------------- | ---------------------------------------------------------------- | -------------- |
+| `FASTAPI_ENV`                       | `development`          | Runtime mode; gates seed data, docs and cookie security          | Server config  |
+| `DATABASE_URL`                      | local PostGIS DSN      | SQLAlchemy DSN for the runtime application role                  | Secret         |
+| `REDIS_URL`                         | `redis://redis:6379/0` | Event bus and throttle counters                                  | Secret if used |
+| `SUPABASE_URL`                      | no default             | Project URL used to fetch the JWKS; same value as the public URL | Server config  |
+| `SUPABASE_SERVICE_ROLE_KEY`         | no default             | Seed accounts and administrative provisioning; bypasses RLS      | Secret         |
+| `OPENWEATHER_API_KEY`               | no default             | Optional live rainfall; manual rainfall remains the fallback     | Secret         |
+| `OPENTOPOGRAPHY_API_KEY`            | no default             | Offline DEM acquisition only                                     | Secret         |
+| `COPERNICUS_CLIENT_ID`              | no default             | Offline imagery acquisition only                                 | Secret         |
+| `COPERNICUS_CLIENT_SECRET`          | no default             | Offline imagery acquisition only                                 | Secret         |
+| `METROFLOW_SENSOR_TOKEN`            | no default             | Sensor gateway credential; generated at deployment               | Secret         |
+| `METROFLOW_CURVE_NUMBER`            | 85                     | SCS-CN curve number                                              | Server config  |
+| `METROFLOW_RAINFALL_DURATION_HRS`   | 1.0                    | Storm duration                                                   | Server config  |
+| `METROFLOW_PONDING_AMPLIFICATION`   | 3.5                    | Runoff-to-street-depth factor                                    | Server config  |
+| `METROFLOW_CAUTION_DEPTH_CM`        | 10.0                   | Light-flood threshold                                            | Server config  |
+| `METROFLOW_DEFAULT_CLEARANCE_CM`    | 30.0                   | Clearance when omitted                                           | Server config  |
+| `RUN_MIGRATIONS`                    | true                   | Apply migrations on container start                              | Server config  |
+| `METROFLOW_CORS_ORIGINS`            | localhost origins      | Comma-separated portal and PWA origins                           | Server config  |
+| `METROFLOW_UPLOAD_DIR`              | `/data/evidence`       | Evidence volume mount                                            | Server config  |
+| `METROFLOW_MAX_UPLOAD_MB`           | 8                      | Photo size cap                                                   | Server config  |
+| `METROFLOW_DRIVER_RETENTION_HOURS`  | 24                     | Driver location purge window                                     | Server config  |
+| `METROFLOW_TELEMETRY_MIN_SECONDS`   | 5                      | Server-side telemetry throttle                                   | Server config  |
+| `METROFLOW_WARNING_RADIUS_M`        | [TBC]                  | Driver proximity alert radius                                    | Server config  |
+| `METROFLOW_SENSOR_DEBOUNCE_MINUTES` | 10                     | Duplicate advisory suppression                                   | Server config  |
 
-| Secret                   | Required by                 | Status                                         |
-| ------------------------ | --------------------------- | ---------------------------------------------- |
-| `SUPABASE_DB_URL`        | Supabase migration workflow | **Not set**; CD no-ops until it is supplied    |
-| `METROFLOW_JWT_SECRET`   | Deployment                  | Must be set before authentication is enabled   |
-| `METROFLOW_SENSOR_TOKEN` | Deployment / gateway        | Must be set before sensor ingestion is enabled |
+`METROFLOW_REDIS_URL` is accepted as a deprecated alias of `REDIS_URL` so an
+existing deployment does not break; new configuration uses `REDIS_URL`.
+Authentication settings are Supabase project settings, not MetroFlow variables;
+there is no MetroFlow-issued token signing secret.
+
+### 4.2 Portal and driver PWA
+
+Both clients read the same public variables. The driver PWA configures Vite with
+`envPrefix: ['VITE_', 'NEXT_PUBLIC_']` so one set of names serves both apps.
+
+| Variable                          | Required | Effect                                                           | Class  |
+| --------------------------------- | -------- | ---------------------------------------------------------------- | ------ |
+| `NEXT_PUBLIC_SUPABASE_URL`        | Yes      | Supabase project URL                                             | Public |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Yes      | Sign-in and session refresh only; RLS denies direct table access | Public |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Optional | Mapbox raster tiles; OpenStreetMap fallback when unset           | Public |
+
+`NEXT_PUBLIC_*` values are embedded in the browser bundle. They are protected by
+key scope, allowed origins and rotation, never by secrecy. The service-role key
+must never appear in either client.
+
+### 4.3 Secret ownership
+
+| Secret                                   | Location                  | Notes                                                             |
+| ---------------------------------------- | ------------------------- | ----------------------------------------------------------------- |
+| `DATABASE_URL`                           | Backend host environment  | Runtime app role, not the `postgres` superuser; `sslmode=require` |
+| `SUPABASE_DB_URL`                        | GitHub Actions secret     | Migrations only; session pooler host; no-ops until supplied       |
+| `SUPABASE_SERVICE_ROLE_KEY`              | Backend host environment  | Server-only; never in a client bundle                             |
+| `OPENWEATHER_API_KEY`                    | Backend host environment  | Server-only                                                       |
+| `OPENTOPOGRAPHY_API_KEY`                 | Preprocessing environment | Used offline; not present on the runtime host                     |
+| `COPERNICUS_CLIENT_ID` / `_SECRET`       | Preprocessing environment | Used offline; not present on the runtime host                     |
+| `REDIS_URL`                              | Backend host environment  | May embed a password                                              |
+| `METROFLOW_SENSOR_TOKEN`                 | Backend and gateway       | Generated per deployment; rotated on suspicion                    |
+| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Vercel project env        | Public by design; anon key is auth-only                           |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`        | Vercel project env        | Public by design; restrict by URL and scope                       |
 
 ## 5. Deployment and CI/CD
 
@@ -760,16 +817,24 @@ volume read-write, and applies migrations on start unless `RUN_MIGRATIONS=false`
 
 ### 5.2 Hosted database
 
-| Property     | Value                                                |
-| ------------ | ---------------------------------------------------- |
-| Provider     | Supabase                                             |
-| Region       | `ap-northeast-2` (Seoul)                             |
-| Engine       | PostgreSQL 17.11 with PostGIS                        |
-| Connection   | Session pooler with `sslmode=require`                |
-| Access model | API connects as owner; `anon`/`authenticated` denied |
+| Property     | Value                                                              |
+| ------------ | ------------------------------------------------------------------ |
+| Provider     | Supabase                                                           |
+| Region       | `ap-northeast-2` (Seoul)                                           |
+| Engine       | PostgreSQL 17.11 with PostGIS                                      |
+| Connection   | Session pooler with `sslmode=require`                              |
+| Access model | API connects as an application role; `anon`/`authenticated` denied |
 
 The direct `db.<ref>.supabase.co` host is IPv6-only and unreachable from GitHub's
-IPv4 runners, so the session pooler host is required.
+IPv4 runners, so the session pooler host is required for CI migrations. A runtime
+host with IPv6 connectivity may use the direct host, but the session pooler is the
+portable choice. Both forms require `sslmode=require`.
+
+The runtime connects as a dedicated `metroflow_app` role with no superuser,
+`BYPASSRLS` or schema-owner rights. The `postgres` superuser is reserved for
+migrations and never appears in `DATABASE_URL`. The browser never connects to
+Postgres: the anon key is used only against Supabase Auth, and the API remains the
+only data path.
 
 ### 5.3 Workflows
 
@@ -796,49 +861,53 @@ change ──► pull request ──► Backend CI ──┐
 
 ## 6. Architecture Decisions
 
-| ID      | Decision                                         | Alternatives considered             | Rationale                                                                                                           | Status                          |
-| ------- | ------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| ADR-001 | Alembic owns the schema                          | `Base.metadata.create_all`          | `create_all` cannot alter existing tables, so the database would drift                                              | Accepted                        |
-| ADR-002 | Supabase as hosted Postgres                      | Self-managed VM, RDS                | Managed PostGIS, free tier, pooler, point-in-time recovery on paid plans                                            | Accepted                        |
-| ADR-003 | Session pooler for CI                            | Direct `db.<ref>` host              | The direct host is IPv6-only; GitHub runners are IPv4                                                               | Accepted                        |
-| ADR-004 | Time-dependent A\*                               | Dijkstra, contraction hierarchies   | Optimal routes with a smaller frontier under depth-dependent cost                                                   | Accepted                        |
-| ADR-005 | SCS-CN for runoff                                | Rational method, hydrodynamic model | Standard, explainable, few parameters; adequate for a decision aid                                                  | Accepted                        |
-| ADR-006 | Ponding amplification as configuration           | Hard-coded coefficient              | Makes the calibration assumption explicit and tunable                                                               | Accepted                        |
-| ADR-007 | RLS deny-by-default on Supabase                  | Rely on API auth only               | The Data API is publicly reachable with the anon key                                                                | Accepted                        |
-| ADR-008 | ZAP is a gate, not a report                      | `continue-on-error`                 | A report nobody reads does not prevent regressions                                                                  | Accepted                        |
-| ADR-009 | CodeQL preflight skip                            | Delete or let it fail               | Keeps the workflow ready to activate without edits                                                                  | Accepted                        |
-| ADR-010 | Bun ecosystem in Dependabot                      | npm ecosystem                       | Dependabot cannot parse `bun.lock` under npm                                                                        | Accepted                        |
-| ADR-011 | Portal ships with mock incident data             | Block the UI until intake exists    | Demonstrates the workflow and fixes the visual contract early                                                       | Superseded by CR-001            |
-| ADR-012 | Security headers in middleware                   | Reverse proxy only                  | Headers exist even without a proxy, which is how ZAP sees the app                                                   | Accepted                        |
-| ADR-013 | Redis provisioned but unused                     | Remove it                           | Keeps parity with the intended production topology                                                                  | Accepted; activates with CR-001 |
-| ADR-014 | Driver client is an installable PWA              | Native iOS/Android, Expo            | One codebase, real service worker and IndexedDB, testable without an emulator; store builds are out of scope        | Proposed (CR-001)               |
-| ADR-015 | SSE over Redis pub/sub                           | WebSocket, polling                  | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target | Proposed (CR-001)               |
-| ADR-016 | JWT + bcrypt + RBAC                              | Supabase Auth, shared passcode      | Dependencies already present; local accounts keep the pilot self-contained; roles are enforced server-side          | Proposed (CR-001)               |
-| ADR-017 | Local evidence volume behind a storage interface | Supabase Storage, S3                | No external credential or cost for the pilot; the interface allows a later swap                                     | Proposed (CR-001)               |
-| ADR-018 | Offline mode uses the cached graph               | Cache raster tiles, block offline   | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                | Proposed (CR-001)               |
+| ID      | Decision                                                 | Alternatives considered              | Rationale                                                                                                                     | Status                          |
+| ------- | -------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| ADR-001 | Alembic owns the schema                                  | `Base.metadata.create_all`           | `create_all` cannot alter existing tables, so the database would drift                                                        | Accepted                        |
+| ADR-002 | Supabase as hosted Postgres                              | Self-managed VM, RDS                 | Managed PostGIS, free tier, pooler, point-in-time recovery on paid plans                                                      | Accepted                        |
+| ADR-003 | Session pooler for CI                                    | Direct `db.<ref>` host               | The direct host is IPv6-only; GitHub runners are IPv4                                                                         | Accepted                        |
+| ADR-004 | Time-dependent A\*                                       | Dijkstra, contraction hierarchies    | Optimal routes with a smaller frontier under depth-dependent cost                                                             | Accepted                        |
+| ADR-005 | SCS-CN for runoff                                        | Rational method, hydrodynamic model  | Standard, explainable, few parameters; adequate for a decision aid                                                            | Accepted                        |
+| ADR-006 | Ponding amplification as configuration                   | Hard-coded coefficient               | Makes the calibration assumption explicit and tunable                                                                         | Accepted                        |
+| ADR-007 | RLS deny-by-default on Supabase                          | Rely on API auth only                | The Data API is publicly reachable with the anon key                                                                          | Accepted                        |
+| ADR-008 | ZAP is a gate, not a report                              | `continue-on-error`                  | A report nobody reads does not prevent regressions                                                                            | Accepted                        |
+| ADR-009 | CodeQL preflight skip                                    | Delete or let it fail                | Keeps the workflow ready to activate without edits                                                                            | Accepted                        |
+| ADR-010 | Bun ecosystem in Dependabot                              | npm ecosystem                        | Dependabot cannot parse `bun.lock` under npm                                                                                  | Accepted                        |
+| ADR-011 | Portal ships with mock incident data                     | Block the UI until intake exists     | Demonstrates the workflow and fixes the visual contract early                                                                 | Superseded by CR-001            |
+| ADR-012 | Security headers in middleware                           | Reverse proxy only                   | Headers exist even without a proxy, which is how ZAP sees the app                                                             | Accepted                        |
+| ADR-013 | Redis provisioned but unused                             | Remove it                            | Keeps parity with the intended production topology                                                                            | Accepted; activates with CR-001 |
+| ADR-014 | Driver client is an installable PWA                      | Native iOS/Android, Expo             | One codebase, real service worker and IndexedDB, testable without an emulator; store builds are out of scope                  | Proposed (CR-001)               |
+| ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Proposed (CR-001)               |
+| ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Proposed (CR-001)               |
+| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Proposed (CR-001)               |
+| ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Proposed (CR-001)               |
+| ADR-019 | Mapbox raster tiles rendered by MapLibre                 | Mapbox GL JS, OSM raster only        | MapLibre is already integrated; raster tiles accept the public token and OSM remains a no-key fallback                        | Proposed (CR-001)               |
+| ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Proposed (CR-001)               |
 
 ## 7. Known Limitations
 
-| ID      | Limitation                                         | Impact                                        | Planned resolution                                                       |
-| ------- | -------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
-| LIM-001 | Baseline has no authentication                     | Cannot handle real personal data; API is open | JWT/RBAC is a CR-001 release gate                                        |
-| LIM-002 | Baseline incident data is mocked                   | Triage is demonstrated, not operational       | Persisted report API in CR-001                                           |
-| LIM-003 | No real sensor or weather ingestion                | Simulation is operator-driven                 | CR-001 adds labelled simulated gauges; real feeds need agreements        |
-| LIM-004 | Baseline Redis is unused                           | Extra container in the stack                  | CR-001 uses it for events and throttling                                 |
-| LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                    | CR-001 allowlist                                                         |
-| LIM-006 | No rate limiting or WAF                            | DoS and credential-stuffing exposure          | CR-001 Redis-backed limits; WAF before public exposure                   |
-| LIM-007 | No map in the baseline portal                      | GeoJSON served but not drawn                  | MapLibre map in CR-001                                                   |
-| LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions               | CR-001 write path with hash chaining                                     |
-| LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                | Playwright added to Web and Mobile CI                                    |
-| LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                           | Publish the repo or license Code Security                                |
-| LIM-011 | Single-region hosted database                      | Latency and availability risk                 | Choose a region near operations                                          |
-| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                | Define RPO/RTO and test restore                                          |
-| LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                      | Documented in migration rules                                            |
-| LIM-014 | Seeded graph is four nodes                         | Routing demonstration is narrow               | Import the real road network                                             |
-| LIM-015 | Driver app is not distributed through an app store | Users install it from the browser             | Accepted for the pilot; native build out of scope                        |
-| LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration       | Agreement and feed integration post-pilot                                |
-| LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic   | Optional tile cache if storage and licensing allow                       |
-| LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS      | The UI directs the user to the emergency line; telephony is out of scope |
+| ID      | Limitation                                         | Impact                                           | Planned resolution                                                                                           |
+| ------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| LIM-001 | Baseline has no authentication                     | Cannot handle real personal data; API is open    | Supabase Auth/RBAC is a CR-001 release gate                                                                  |
+| LIM-002 | Baseline incident data is mocked                   | Triage is demonstrated, not operational          | Persisted report API in CR-001                                                                               |
+| LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | CR-001 adds optional OpenWeather and labelled simulated gauges; real gauge feeds need agreements             |
+| LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
+| LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | CR-001 allowlist                                                                                             |
+| LIM-006 | No rate limiting or WAF                            | DoS and credential-stuffing exposure             | CR-001 Redis-backed limits; WAF before public exposure                                                       |
+| LIM-007 | No map in the baseline portal                      | GeoJSON served but not drawn                     | MapLibre map in CR-001                                                                                       |
+| LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions                  | CR-001 write path with hash chaining                                                                         |
+| LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright added to Web and Mobile CI                                                                        |
+| LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
+| LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
+| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | Define RPO/RTO and test restore                                                                              |
+| LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                         | Documented in migration rules                                                                                |
+| LIM-014 | Seeded graph is four nodes                         | Routing demonstration is narrow                  | Import the real road network                                                                                 |
+| LIM-015 | Driver app is not distributed through an app store | Users install it from the browser                | Accepted for the pilot; native build out of scope                                                            |
+| LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration          | Agreement and feed integration post-pilot                                                                    |
+| LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic      | Optional tile cache if storage and licensing allow                                                           |
+| LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
+| LIM-019 | Authentication requires Supabase reachability      | An offline PWA cannot refresh an expired session | Cached session within its grace period; explicit re-authentication once online; no privileged offline action |
+| LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | OSM fallback, manual rainfall override, cached derived data and labelled degradation                         |
 
 ## 8. Repository and Commands
 
@@ -846,13 +915,13 @@ change ──► pull request ──► Backend CI ──┐
 MetroFlow/
 ├── backend/                 FastAPI engine
 │   ├── main.py              app, middleware, endpoints
-│   ├── config.py            METROFLOW_* settings
+│   ├── config.py            runtime, provider and METROFLOW_* settings
 │   ├── hydrology.py         SCS-CN and ponding
 │   ├── routing.py           passability and TD-A*
 │   ├── geometry.py          PostGIS backfill
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
-│   ├── auth.py              JWT, roles, password hashing (CR-001)
+│   ├── auth.py              Supabase token verification and roles (CR-001)
 │   ├── reports.py           report intake and moderation (CR-001)
 │   ├── hazards.py           hazard authoring and publishing (CR-001)
 │   ├── fleet.py             vehicles, telemetry and dispatch (CR-001)
@@ -862,9 +931,9 @@ MetroFlow/
 │   ├── tests/               unit and integration suites
 │   ├── Dockerfile
 │   └── entrypoint.sh
-├── web-lgu/                 Next.js LGU portal (map, queue, dispatch)
+├── web-lgu/                 Next.js LGU portal (template-derived UI, map, queue, dispatch)
 ├── mobile-driver/           Vite React PWA (CR-001)
-│   ├── src/                 navigation, reports, offline, SOS
+│   ├── src/                 template-derived UI, navigation, reports, offline, SOS
 │   ├── public/              manifest and icons
 │   └── vite.config.ts       PWA and build configuration
 ├── docs/                    this document set

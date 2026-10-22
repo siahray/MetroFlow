@@ -2,9 +2,9 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-**Version 1.1** — revised by [CR-001](CR-001.md) to include the driver PWA,
-live hazard publication, fleet dispatch and sensor ingestion. Monetary figures
-remain `[TBC]`.
+**Version 1.2** — revised by [CR-001](CR-001.md) to include the driver PWA,
+live hazard publication, fleet dispatch, sensor ingestion, provider keys and
+template-sourced UI. Monetary figures remain `[TBC]`.
 
 ## 1. Executive Summary
 
@@ -143,7 +143,7 @@ The recommendation is conditional on:
    native store builds, labelled demo CCTV, simulated gauges where real data is
    unavailable, and no carrier-grade SOS.
 2. Baseline data collection scheduled in M1 so benefits can be measured.
-3. JWT authentication and RBAC (BR-009) delivered as a release gate, not
+3. Supabase Auth and RBAC (BR-009) delivered as a release gate, not
    deferred past acceptance.
 4. A decision review at M8, before final defence, using the conservative
    scenario.
@@ -163,17 +163,18 @@ The recommendation is conditional on:
 
 ### 7.2 OPEX
 
-| No. | Category                     | Basis                          | Year 1    | Year 2    | Year 3    |
-| --- | ---------------------------- | ------------------------------ | --------- | --------- | --------- |
-| 1   | Hosted database (Supabase)   | Plan                           | [TBC]     | [TBC]     | [TBC]     |
-| 2   | Application hosting          | Plan                           | [TBC]     | [TBC]     | [TBC]     |
-| 3   | Domain and TLS               | Registrar                      | [TBC]     | [TBC]     | [TBC]     |
-| 4   | Training and handover        | «N» days × «rate»              | [TBC]     | —         | —         |
-| 5   | Maintenance and support      | 15–20% of development per year | —         | [TBC]     | [TBC]     |
-| 6   | PWA hosting and CDN          | Plan                           | [TBC]     | [TBC]     | [TBC]     |
-| 7   | Evidence photo storage       | Volume or object storage       | [TBC]     | [TBC]     | [TBC]     |
-| 8   | Redis / event infrastructure | Plan                           | [TBC]     | [TBC]     | [TBC]     |
-|     | **Total OPEX**               |                                | **[TBC]** | **[TBC]** | **[TBC]** |
+| No. | Category                          | Basis                          | Year 1    | Year 2    | Year 3    |
+| --- | --------------------------------- | ------------------------------ | --------- | --------- | --------- |
+| 1   | Hosted database (Supabase)        | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 2   | Application hosting               | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 3   | Domain and TLS                    | Registrar                      | [TBC]     | [TBC]     | [TBC]     |
+| 4   | Training and handover             | «N» days × «rate»              | [TBC]     | —         | —         |
+| 5   | Maintenance and support           | 15–20% of development per year | —         | [TBC]     | [TBC]     |
+| 6   | PWA hosting and CDN               | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 7   | Evidence photo storage            | Volume or object storage       | [TBC]     | [TBC]     | [TBC]     |
+| 8   | Redis / event infrastructure      | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 9   | Map, weather and imagery services | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+|     | **Total OPEX**                    |                                | **[TBC]** | **[TBC]** | **[TBC]** |
 
 ### 7.3 Cost assumptions
 
@@ -187,6 +188,7 @@ The recommendation is conditional on:
 | CA-006 | The driver client is a PWA, so there are no app-store fees or native build pipeline costs                                              |
 | CA-007 | Evidence storage grows with report volume; the pilot assumes a capped volume and a documented retention period `[TBC]`                 |
 | CA-008 | Simulated gauges and demo CCTV carry no data-supplier licence in the pilot                                                             |
+| CA-009 | Mapbox, OpenWeather, OpenTopography and Copernicus usage stays within free or institutional tiers; overage is `[TBC]`                  |
 
 ## 8. Benefits Assessment
 
@@ -221,19 +223,20 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 
 ## 9. Risk Assessment
 
-| Risk                                       | Impact                                  | Mitigation                                                                  |
-| ------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------------- |
-| Model outputs judged unrealistic           | Benefits unrealisable; credibility lost | Declare calibration as configuration; validate against documented events    |
-| Authentication not delivered               | Cannot be used with real data           | CR-001 makes JWT/RBAC a release gate; no privileged action ships without it |
-| No baseline data                           | Benefits unquantifiable                 | Use audit-trail and risk benefits; collect baseline during the pilot        |
-| Hosted costs exceed the free tier          | Operating cost rises                    | Keep hosting provider-agnostic; the container image is portable             |
-| Dispatchers reject the tool                | Adoption fails regardless of capability | Usability sessions from M3; keep the radio process running in parallel      |
-| A commercial alternative is chosen later   | Sunk cost                               | Publish the API contract so the routing engine outlives the portal          |
-| Personal data incident during testing      | Legal and ethical exposure              | Synthetic data only; RLS verified; no personal data in logs                 |
-| Drivers do not adopt the PWA               | Field evidence stays thin               | Usability tests; QR onboarding; synthetic reports as fallback               |
-| Location data re-identifies a driver       | Privacy breach and legal exposure       | 50 m rounding, salted hash, 24-hour retention, role-only access             |
-| PWA background limits on iOS               | Telemetry gaps                          | Foreground-only telemetry; documented limitation; native build excluded     |
-| Sensor or demo CCTV mistaken for live data | Wrong operational decision              | Label simulated and demo sources in the API and UI                          |
+| Risk                                       | Impact                                  | Mitigation                                                                            |
+| ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------- |
+| Model outputs judged unrealistic           | Benefits unrealisable; credibility lost | Declare calibration as configuration; validate against documented events              |
+| Authentication not delivered               | Cannot be used with real data           | CR-001 makes Supabase Auth/RBAC a release gate; no privileged action ships without it |
+| No baseline data                           | Benefits unquantifiable                 | Use audit-trail and risk benefits; collect baseline during the pilot                  |
+| Hosted costs exceed the free tier          | Operating cost rises                    | Keep hosting provider-agnostic; the container image is portable                       |
+| Provider quota or outage                   | Live rainfall or imagery unavailable    | Manual rainfall, OSM tiles and cached derived data; monitor usage                     |
+| Dispatchers reject the tool                | Adoption fails regardless of capability | Usability sessions from M3; keep the radio process running in parallel                |
+| A commercial alternative is chosen later   | Sunk cost                               | Publish the API contract so the routing engine outlives the portal                    |
+| Personal data incident during testing      | Legal and ethical exposure              | Synthetic data only; RLS verified; no personal data in logs                           |
+| Drivers do not adopt the PWA               | Field evidence stays thin               | Usability tests; QR onboarding; synthetic reports as fallback                         |
+| Location data re-identifies a driver       | Privacy breach and legal exposure       | 50 m rounding, salted hash, 24-hour retention, role-only access                       |
+| PWA background limits on iOS               | Telemetry gaps                          | Foreground-only telemetry; documented limitation; native build excluded               |
+| Sensor or demo CCTV mistaken for live data | Wrong operational decision              | Label simulated and demo sources in the API and UI                                    |
 
 Full scoring and owners are in [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
 
@@ -313,32 +316,33 @@ effort and a six-week increment `[TBC]`.
 
 ### 13.2 Assumptions and dependencies
 
-| ID    | Statement                                                       | Effect if false                         |
-| ----- | --------------------------------------------------------------- | --------------------------------------- |
-| A-001 | A PostGIS-capable database is available                         | Core capability cannot be demonstrated  |
-| A-003 | Free or institutional tiers suffice                             | Additional recurring cost               |
-| A-004 | Dispatchers have a modern browser and connectivity              | Portal unusable during an event         |
-| A-007 | Drivers have a smartphone with camera and geolocation           | Driver PWA cannot be piloted            |
-| A-008 | Connectivity can drop during an event                           | Offline mode is essential, not optional |
-| C-006 | The driver client is a PWA, not a store build                   | Distribution limited to browser install |
-| D-001 | Hosted database credentials are supplied as a repository secret | Hosted migration not demonstrated       |
-| D-003 | Client confirms the pilot corridor                              | Seed data and demonstration rework      |
-| D-004 | JWT secret and seed credentials are supplied at deployment      | Authentication cannot start             |
-| D-005 | A persistent evidence volume is available                       | Photos cannot be retained               |
+| ID    | Statement                                                            | Effect if false                         |
+| ----- | -------------------------------------------------------------------- | --------------------------------------- |
+| A-001 | A PostGIS-capable database is available                              | Core capability cannot be demonstrated  |
+| A-003 | Free or institutional tiers suffice                                  | Additional recurring cost               |
+| A-004 | Dispatchers have a modern browser and connectivity                   | Portal unusable during an event         |
+| A-007 | Drivers have a smartphone with camera and geolocation                | Driver PWA cannot be piloted            |
+| A-008 | Connectivity can drop during an event                                | Offline mode is essential, not optional |
+| C-006 | The driver client is a PWA, not a store build                        | Distribution limited to browser install |
+| D-001 | Hosted database credentials are supplied as a repository secret      | Hosted migration not demonstrated       |
+| D-003 | Client confirms the pilot corridor                                   | Seed data and demonstration rework      |
+| D-004 | Supabase credentials and pilot accounts are supplied at deployment   | Authentication cannot start             |
+| D-005 | A persistent evidence volume is available                            | Photos cannot be retained               |
+| D-006 | Map and data providers stay within their free or institutional tiers | Degraded map or manual rainfall         |
 
 ## 14. Approval Recommendation
 
 Approve **Option 4**, the pilot build, including the CR-001 increment, on the
 conditions in §6.
 
-| Decision           | Detail                                                       |
-| ------------------ | ------------------------------------------------------------ |
-| Decision requested | Approve Option 4, the pilot scope and CR-001                 |
-| Decision maker     | «Project Sponsor»                                            |
-| Decision           | [TBC]                                                        |
-| Date               | [TBC]                                                        |
-| Conditions         | CR-001 boundary, JWT/RBAC gate, labelled demo data, PWA only |
-| Budget approved    | PHP [TBC]                                                    |
+| Decision           | Detail                                                                 |
+| ------------------ | ---------------------------------------------------------------------- |
+| Decision requested | Approve Option 4, the pilot scope and CR-001                           |
+| Decision maker     | «Project Sponsor»                                                      |
+| Decision           | [TBC]                                                                  |
+| Date               | [TBC]                                                                  |
+| Conditions         | CR-001 boundary, Supabase Auth/RBAC gate, labelled demo data, PWA only |
+| Budget approved    | PHP [TBC]                                                              |
 
 | Role            | Name                    | Signature | Date  |
 | --------------- | ----------------------- | --------- | ----- |

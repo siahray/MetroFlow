@@ -4,7 +4,7 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v1.1 (CR-001) · **Code baseline:** `main` @ `9605e38` · 21 October 2026
+**Document baseline:** v1.2 (CR-001) · **Code baseline:** `main` @ `9605e38` · 22 October 2026
 
 CR-001 extends the scope to the driver PWA, live hazard publication, fleet
 dispatch and sensor ingestion. The implementation is **planned**; the documents
@@ -107,6 +107,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 0.1     | 21 Oct 2026 | «Project Team» | Initial draft of the six project documents and the API reference        |
 | 1.0     | 21 Oct 2026 | «Project Team» | Restructured to the supplied Word templates; template identifier scheme |
 | 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver PWA, live hazards, fleet dispatch and sensors            |
+| 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI      |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
@@ -114,11 +115,13 @@ change, per the configuration management rules in the PMP.
 
 ## Related material outside this directory
 
-| Material                     | Location                                     |
-| ---------------------------- | -------------------------------------------- |
-| Runnable system              | `backend/`, `web-lgu/`, `docker-compose.yml` |
-| Driver PWA (planned, CR-001) | `mobile-driver/`                             |
-| OpenAPI document (generated) | `http://localhost:8000/openapi.json`         |
-| CI/CD workflows              | `.github/workflows/`                         |
-| Database migrations          | `backend/migrations/`                        |
-| Agent/contributor notes      | `web-lgu/AGENTS.md`                          |
+| Material                     | Location                                       |
+| ---------------------------- | ---------------------------------------------- |
+| Runnable system              | `backend/`, `web-lgu/`, `docker-compose.yml`   |
+| Driver PWA (planned, CR-001) | `mobile-driver/`                               |
+| UI template (to be supplied) | Client HTML/CSS, Figma-derived                 |
+| Environment templates        | `backend/.env.example`, `web-lgu/.env.example` |
+| OpenAPI document (generated) | `http://localhost:8000/openapi.json`           |
+| CI/CD workflows              | `.github/workflows/`                           |
+| Database migrations          | `backend/migrations/`                          |
+| Agent/contributor notes      | `web-lgu/AGENTS.md`                            |

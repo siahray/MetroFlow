@@ -3,9 +3,9 @@
 | Field                     | Value                                                                    |
 | ------------------------- | ------------------------------------------------------------------------ |
 | Document ID               | MF-API-001                                                               |
-| Version                   | 1.1 (Draft)                                                              |
+| Version                   | 1.2 (Draft)                                                              |
 | Status                    | Sections 2–8 match `main` @ `9605e38`; section 9 is planned under CR-001 |
-| Date                      | 21 October 2026                                                          |
+| Date                      | 22 October 2026                                                          |
 | Base URL (local)          | `http://localhost:8000`                                                  |
 | Machine-readable contract | `GET /openapi.json`                                                      |
 | Related documents         | [FSD.md](FSD.md), [TSD.md](TSD.md)                                       |
@@ -45,9 +45,12 @@ not be exposed to the internet or given real personal data until authentication
 is implemented (FSD-FR-021, TSD LIM-001). This is a stated limitation, not an
 oversight.
 
-Under CR-001, privileged endpoints will require a JWT bearer token, and the
-portal will use an HttpOnly cookie session. The driver PWA will hold a
-short-lived bearer token in memory. Planned scopes are described in §9.
+Under CR-001, clients sign in through Supabase Auth and privileged endpoints
+require the resulting bearer token. The portal keeps the session in an HttpOnly
+cookie; the driver PWA holds a short-lived access token in memory. The API
+verifies tokens through the project JWKS and enforces roles server-side. The
+anon key is used only for sign-in and session refresh; it never grants table
+access. Planned scopes are described in §9.
 
 ### 1.3 Response headers
 
@@ -81,6 +84,19 @@ Both comparisons are inclusive. `clearance_cm` defaults to 30 cm and must be
 | `404`  | Unknown node, or no route survives the clearance check | `{"detail": "<message>"}`             |
 | `422`  | Parameter fails validation                             | FastAPI validation object (see §6)    |
 | `500`  | Unhandled server or database error                     | `{"detail": "Internal Server Error"}` |
+
+### 1.6 External services (planned)
+
+| Service        | Consumed by    | Role                                         |
+| -------------- | -------------- | -------------------------------------------- |
+| Supabase Auth  | Portal and PWA | Sign-in, session refresh; API verifies JWKS  |
+| Mapbox         | Portal and PWA | Raster basemap; OSM fallback when unset      |
+| OpenWeather    | Backend        | Optional rainfall; manual entry fallback     |
+| OpenTopography | Preprocessing  | Terrain model; cached, not called at runtime |
+| Copernicus     | Preprocessing  | Imagery and land cover; cached               |
+
+No provider key is accepted from a client request. Provider failures degrade the
+affected feature and never block routing, reporting or SOS.
 
 ---
 
@@ -558,10 +574,12 @@ document has a defect.
 
 ### 9.1 Authentication and roles
 
-| Method | Path                 | Access | Purpose                            | Reference               |
-| ------ | -------------------- | ------ | ---------------------------------- | ----------------------- |
-| `POST` | `/api/v1/auth/login` | Public | Verify credentials and issue a JWT | BR-009 / FSD-FR-018–023 |
-| `GET`  | `/api/v1/auth/me`    | Bearer | Return the current user and role   | BR-009 / FSD-FR-018–023 |
+Sign-in happens against Supabase Auth, not the MetroFlow API. The API exposes
+only the current-user lookup.
+
+| Method | Path              | Access | Purpose                          | Reference               |
+| ------ | ----------------- | ------ | -------------------------------- | ----------------------- |
+| `GET`  | `/api/v1/auth/me` | Bearer | Return the current user and role | BR-009 / FSD-FR-018–023 |
 
 Roles: `SUPER_ADMIN`, `LGU_COMMANDER`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER`.
 Verification, publishing and dispatch require an LGU role; configuration
@@ -626,7 +644,7 @@ the requested path. Existing required parameters and responses remain valid.
 
 | Status | Condition                                              |
 | ------ | ------------------------------------------------------ |
-| `401`  | Missing, expired or invalid token                      |
+| `401`  | Missing, expired or invalid Supabase token             |
 | `403`  | Role not permitted for the action                      |
 | `413`  | Evidence photo exceeds the size limit                  |
 | `415`  | Evidence photo type is not accepted                    |

@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.1
+Version 1.2
 
 ## Document Information
 
@@ -18,11 +18,12 @@ Version 1.1
 
 ## Revision History
 
-| Version | Date        | Author                      | Description                                  | Status   |
-| ------- | ----------- | --------------------------- | -------------------------------------------- | -------- |
-| 0.1     | 21 Oct 2026 | «Project Team Lead»         | Initial Draft                                | Draft    |
-| 1.0     | 21 Oct 2026 | «QA and Documentation Lead» | Review release                               | Review   |
-| 1.1     | 21 Oct 2026 | «Project Team Lead»         | CR-001: driver PWA, realtime, fleet, sensors | Proposed |
+| Version | Date        | Author                      | Description                                       | Status   |
+| ------- | ----------- | --------------------------- | ------------------------------------------------- | -------- |
+| 0.1     | 21 Oct 2026 | «Project Team Lead»         | Initial Draft                                     | Draft    |
+| 1.0     | 21 Oct 2026 | «QA and Documentation Lead» | Review release                                    | Review   |
+| 1.1     | 21 Oct 2026 | «Project Team Lead»         | CR-001: driver PWA, realtime, fleet, sensors      | Proposed |
+| 1.2     | 22 Oct 2026 | «Project Team Lead»         | Provider keys, Supabase Auth, Mapbox, template UI | Proposed |
 
 ## Approval Sign-Off
 
@@ -111,7 +112,7 @@ new High or Medium ZAP finding.
   telemetry and SOS.
 - Hazard verification and live publication over SSE.
 - River and rain gauge ingestion with advisory road impact.
-- JWT authentication, RBAC and audit writes.
+- Supabase Auth, RBAC and audit writes.
 - Versioned PostGIS schema with row-level security.
 - Automated build, test, security and migration pipeline for web and mobile.
 
@@ -207,6 +208,7 @@ may hold more than one role; every role must have a named person before M2.
 | Application hosting                         | [TBC]        |
 | PWA hosting and CDN                         | [TBC]        |
 | Evidence storage                            | [TBC]        |
+| Map, weather and data services              | [TBC]        |
 | Domain and TLS                              | [TBC]        |
 | Test devices and data                       | [TBC]        |
 | Training and handover                       | [TBC]        |
@@ -252,7 +254,8 @@ Rules:
 | A-007 | Assumption | Drivers have a smartphone with camera and geolocation             | Business Analyst | High   | Open          |
 | A-008 | Assumption | Connectivity can drop during an event                             | PM               | High   | Open          |
 | A-009 | Assumption | Sensor data may be simulated but is labelled                      | Backend Lead     | Medium | Open          |
-| A-010 | Assumption | OSM tiles may be used with attribution for the pilot              | Frontend Lead    | Low    | Open          |
+| A-010 | Assumption | Mapbox tiles are available on the pilot tier; OSM is the fallback | Frontend Lead    | Low    | Open          |
+| A-011 | Assumption | Client supplies the HTML/CSS template derived from Figma          | Business Analyst | Medium | Open          |
 | I-001 | Issue      | No authentication on the baseline API or portal                   | PM               | High   | Open (CR-001) |
 | I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Open (CR-001) |
 | I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround    |
@@ -261,9 +264,11 @@ Rules:
 | D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open          |
 | D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open          |
 | D-003 | Dependency | Client confirms the pilot corridor                                | Business Analyst | High   | Open          |
-| D-004 | Dependency | JWT secret and seed credentials supplied at deployment            | Backend Lead     | High   | Open          |
+| D-004 | Dependency | Supabase credentials and pilot accounts supplied at deployment    | Backend Lead     | High   | Open          |
 | D-005 | Dependency | Persistent evidence volume or object storage                      | Backend Lead     | High   | Open          |
-| D-006 | Dependency | Map tile provider remains reachable within its usage policy       | Frontend Lead    | Low    | Open          |
+| D-006 | Dependency | Mapbox and OSM tiles remain reachable within their usage policies | Frontend Lead    | Low    | Open          |
+| D-007 | Dependency | Weather, terrain and imagery providers remain within quota        | Backend Lead     | Low    | Open          |
+| D-008 | Dependency | Client supplies the HTML/CSS template before UI implementation    | Frontend Lead    | High   | Open          |
 
 Risk scoring and detailed responses are in Appendix A.
 
@@ -358,28 +363,28 @@ concerns go to the adviser immediately.
 Probability and impact are scored High (3), Medium (2), Low (1); score is their
 product. Risks scoring 6 or above are reviewed weekly.
 
-| ID    | Risk                           | P   | I   | Score | Response                                                     | Trigger                             |
-| ----- | ------------------------------ | --- | --- | ----- | ------------------------------------------------------------ | ----------------------------------- |
-| R-001 | Scope creep beyond CR-001      | 3   | 3   | 9     | Hold the CR-001 boundary; every addition needs a CR          | New feature requested mid-iteration |
-| R-002 | Model judged unrealistic       | 3   | 3   | 9     | Declare calibration; validate against documented events      | Adviser or client challenges output |
-| R-003 | Loss of a team member          | 2   | 3   | 6     | Pair on critical paths; record decisions                     | Missed stand-ups for a week         |
-| R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible     | Secret absent at M5                 |
-| R-005 | Late security findings         | 2   | 3   | 6     | Weekly ZAP gate from the first increment                     | New Medium finding                  |
-| R-006 | Format mismatch                | 2   | 2   | 4     | Confirm the rubric at M1                                     | Adviser requests restructuring      |
-| R-007 | Authentication not delivered   | 3   | 3   | 9     | CR-001 makes JWT/RBAC a release gate before acceptance       | Pilot asked to handle real data     |
-| R-008 | No baseline data               | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot      | Baseline absent at M1 review        |
-| R-009 | Corridor changes late          | 2   | 3   | 6     | Freeze the corridor at M2                                    | New barangay list arrives           |
-| R-010 | Hosted costs exceed free tier  | 2   | 2   | 4     | Keep hosting provider-agnostic                               | Usage warning from provider         |
-| R-011 | Provider outage                | 1   | 3   | 3     | Work locally; defer hosted verification                      | Provider status page                |
-| R-012 | Dispatchers reject the tool    | 2   | 3   | 6     | Usability sessions from M4; keep the radio process running   | Negative feedback in session        |
-| R-013 | Commercial alternative chosen  | 1   | 2   | 2     | Publish the API contract; routing engine outlives the portal | Procurement announcement            |
-| R-014 | Personal data incident         | 1   | 3   | 3     | Synthetic data only; RLS verified; no personal data in logs  | Any real report used in a demo      |
-| R-015 | Drivers do not adopt the PWA   | 3   | 3   | 9     | Usability tests; QR onboarding; synthetic reports fallback   | Low install or report count at M9   |
-| R-016 | PWA background limits          | 2   | 2   | 4     | Foreground telemetry; document the limit                     | Telemetry gap on iOS devices        |
-| R-017 | Location privacy incident      | 2   | 3   | 6     | Rounding, hashing, retention, role-only access               | Unrounded coordinate in a response  |
-| R-018 | Sensor false positive          | 2   | 2   | 4     | Advisory until confirmed; debounce; per-sensor thresholds    | Advisory without a matching flood   |
-| R-019 | Event stream overload          | 2   | 2   | 4     | Redis pub/sub; bounded queues; reconnect snapshot            | SSE lag above target                |
-| R-020 | Evidence storage abuse         | 2   | 2   | 4     | Size cap, MIME sniff, rate limit, random keys                | Volume usage spikes unexpectedly    |
+| ID    | Risk                           | P   | I   | Score | Response                                                         | Trigger                             |
+| ----- | ------------------------------ | --- | --- | ----- | ---------------------------------------------------------------- | ----------------------------------- |
+| R-001 | Scope creep beyond CR-001      | 3   | 3   | 9     | Hold the CR-001 boundary; every addition needs a CR              | New feature requested mid-iteration |
+| R-002 | Model judged unrealistic       | 3   | 3   | 9     | Declare calibration; validate against documented events          | Adviser or client challenges output |
+| R-003 | Loss of a team member          | 2   | 3   | 6     | Pair on critical paths; record decisions                         | Missed stand-ups for a week         |
+| R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible         | Secret absent at M5                 |
+| R-005 | Late security findings         | 2   | 3   | 6     | Weekly ZAP gate from the first increment                         | New Medium finding                  |
+| R-006 | Format mismatch                | 2   | 2   | 4     | Confirm the rubric at M1                                         | Adviser requests restructuring      |
+| R-007 | Authentication not delivered   | 3   | 3   | 9     | CR-001 makes Supabase Auth/RBAC a release gate before acceptance | Pilot asked to handle real data     |
+| R-008 | No baseline data               | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot          | Baseline absent at M1 review        |
+| R-009 | Corridor changes late          | 2   | 3   | 6     | Freeze the corridor at M2                                        | New barangay list arrives           |
+| R-010 | Hosted costs exceed free tier  | 2   | 2   | 4     | Keep hosting provider-agnostic                                   | Usage warning from provider         |
+| R-011 | Provider outage or quota       | 2   | 3   | 6     | OSM fallback, manual rainfall, cached derived data               | Provider status page or quota alert |
+| R-012 | Dispatchers reject the tool    | 2   | 3   | 6     | Usability sessions from M4; keep the radio process running       | Negative feedback in session        |
+| R-013 | Commercial alternative chosen  | 1   | 2   | 2     | Publish the API contract; routing engine outlives the portal     | Procurement announcement            |
+| R-014 | Personal data incident         | 1   | 3   | 3     | Synthetic data only; RLS verified; no personal data in logs      | Any real report used in a demo      |
+| R-015 | Drivers do not adopt the PWA   | 3   | 3   | 9     | Usability tests; QR onboarding; synthetic reports fallback       | Low install or report count at M9   |
+| R-016 | PWA background limits          | 2   | 2   | 4     | Foreground telemetry; document the limit                         | Telemetry gap on iOS devices        |
+| R-017 | Location privacy incident      | 2   | 3   | 6     | Rounding, hashing, retention, role-only access                   | Unrounded coordinate in a response  |
+| R-018 | Sensor false positive          | 2   | 2   | 4     | Advisory until confirmed; debounce; per-sensor thresholds        | Advisory without a matching flood   |
+| R-019 | Event stream overload          | 2   | 2   | 4     | Redis pub/sub; bounded queues; reconnect snapshot                | SSE lag above target                |
+| R-020 | Evidence storage abuse         | 2   | 2   | 4     | Size cap, MIME sniff, rate limit, random keys                    | Volume usage spikes unexpectedly    |
 
 ### Appendix B — Change request template
 
@@ -417,7 +422,9 @@ Confidence in next:   <high/medium/low + reason>
 | Commit messages   | Imperative summary; body explains why                             |
 | Pull requests     | Review, green CI and a requirement reference                      |
 | Tags              | `backend-v*` for container releases                               |
-| Secrets           | Never committed; repository secrets only                          |
+| Secrets           | Never committed; backend host env or repository secrets           |
+| Public keys       | `NEXT_PUBLIC_*` only; origin- and scope-restricted, never secrets |
+| UI source         | Client HTML/CSS template; no bespoke design without a change      |
 | Pre-commit        | Husky: Ruff for Python, ESLint and Prettier for web and mobile    |
 | Driver PWA        | Separate Bun package in `mobile-driver/`; own lockfile and build  |
 | Document versions | Increment on approval; revision history updated                   |
@@ -426,24 +433,26 @@ Confidence in next:   <high/medium/low + reason>
 
 ### Appendix E — Decision log
 
-| ID      | Decision                    | Date  | Decided by          | Recorded in                   |
-| ------- | --------------------------- | ----- | ------------------- | ----------------------------- |
-| ADR-001 | Alembic owns the schema     | [TBC] | «Project Team Lead» | TSD §6                        |
-| ADR-002 | Supabase as hosted Postgres | [TBC] | «Project Team Lead» | TSD §6                        |
-| ADR-007 | RLS deny-by-default         | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-011 | Portal ships with mock data | [TBC] | «Project Team Lead» | TSD §6 (superseded by CR-001) |
-| ADR-014 | Driver client is a PWA      | [TBC] | «Project Team Lead» | TSD §6                        |
-| ADR-015 | SSE over Redis pub/sub      | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-016 | JWT + bcrypt + RBAC         | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-017 | Local evidence volume       | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-018 | Offline uses cached graph   | [TBC] | «Mobile Lead»       | TSD §6                        |
+| ID      | Decision                               | Date  | Decided by          | Recorded in                   |
+| ------- | -------------------------------------- | ----- | ------------------- | ----------------------------- |
+| ADR-001 | Alembic owns the schema                | [TBC] | «Project Team Lead» | TSD §6                        |
+| ADR-002 | Supabase as hosted Postgres            | [TBC] | «Project Team Lead» | TSD §6                        |
+| ADR-007 | RLS deny-by-default                    | [TBC] | «Backend Lead»      | TSD §6                        |
+| ADR-011 | Portal ships with mock data            | [TBC] | «Project Team Lead» | TSD §6 (superseded by CR-001) |
+| ADR-014 | Driver client is a PWA                 | [TBC] | «Project Team Lead» | TSD §6                        |
+| ADR-015 | SSE over Redis pub/sub                 | [TBC] | «Backend Lead»      | TSD §6                        |
+| ADR-016 | Supabase Auth + app RBAC               | [TBC] | «Backend Lead»      | TSD §6                        |
+| ADR-017 | Local evidence volume                  | [TBC] | «Backend Lead»      | TSD §6                        |
+| ADR-018 | Offline uses cached graph              | [TBC] | «Mobile Lead»       | TSD §6                        |
+| ADR-019 | Mapbox tiles in MapLibre               | [TBC] | «Frontend Lead»     | TSD §6                        |
+| ADR-020 | One live provider; preprocess the rest | [TBC] | «Backend Lead»      | TSD §6                        |
 
 ### Appendix F — Closure and handover
 
 - [ ] All `Must` functional requirements accepted (FSD), including BR-013 to BR-018.
 - [ ] CI green on `main`; ZAP clean at High/Medium.
 - [ ] Hosted database at head, or the limitation documented.
-- [ ] JWT/RBAC verified; role violations return 403 and change nothing.
+- [ ] Supabase Auth/RBAC verified; role violations return 403 and change nothing.
 - [ ] Offline E2E and hazard publish latency tests pass.
 - [ ] Simulated sensors and demo CCTV labelled in the product.
 - [ ] Document set approved, including CR-001.

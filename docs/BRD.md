@@ -8,6 +8,7 @@
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
 | 1.0     | 21 Oct 2026 | «Project Team» | Initial Version                                                    |
 | 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver PWA, live hazards, fleet dispatch, sensor ingestion |
+| 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI |
 
 ## Approvals
 
@@ -157,7 +158,7 @@ Business-level risks. The full register, scoring and responses are in
 | Risk                                              | Impact                                     | Mitigation                                                                                     |
 | ------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | Model outputs judged unrealistic by practitioners | Trust collapses; the tool is not adopted   | Declare calibration constants; validate against documented events; present as decision support |
-| Authentication not delivered before acceptance    | Cannot be used with real data              | CR-001 makes JWT and RBAC a release gate; no privileged action ships without it                |
+| Authentication not delivered before acceptance    | Cannot be used with real data              | CR-001 makes Supabase Auth and RBAC a release gate; no privileged action ships without it      |
 | No baseline data from the client                  | Benefits cannot be quantified              | Use audit-trail and risk benefits; collect the baseline during the pilot                       |
 | Dispatchers find the portal slower than radio     | They bypass the system                     | Usability sessions from M4; keep the existing process running in parallel                      |
 | Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require a change request                                    |
@@ -193,26 +194,26 @@ Business-level risks. The full register, scoring and responses are in
 Priority uses MoSCoW. "Current state" records what the delivered pilot actually
 does, so this document is also an honest statement of scope.
 
-| ID     | Business requirement                                                         | Priority | Current state                                                                     |
-| ------ | ---------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------- |
-| BR-001 | Provide a single, current view of road passability across the pilot corridor | Must     | Met — network state endpoint returns every edge with depth and status             |
-| BR-002 | Allow the operations unit to ask "what happens if it rains this hard?"       | Must     | Met — rainfall simulation endpoint                                                |
-| BR-003 | Recommend a route that a vehicle of known clearance can actually drive       | Must     | Met — routing endpoint                                                            |
-| BR-004 | Present incoming reports as a prioritised queue                              | Must     | Met — queue ordered by urgency score                                              |
-| BR-005 | Allow narrowing the queue by source and by free-text search                  | Should   | Met — source filters and search                                                   |
-| BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                 |
-| BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — decisions append to the operations log                        |
-| BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Partly met — schema exists; write path planned under CR-001                       |
-| BR-009 | Restrict access to authorised personnel by role                              | Must     | Not met — the login screen is presentational; JWT/RBAC planned under CR-001       |
-| BR-010 | Operate on the equipment the LGU already has                                 | Should   | Met — browser-based portal                                                        |
-| BR-011 | Protect the personal data of reporters                                       | Must     | Partly met — database access denied to public API roles; privacy controls planned |
-| BR-012 | Provide management information after an event                                | Could    | Not met — future release                                                          |
-| BR-013 | Give drivers flood-aware navigation that reroutes around verified hazards    | Must     | Not met — planned under CR-001                                                    |
-| BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Not met — planned under CR-001                                                    |
-| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Not met — planned under CR-001                                                    |
-| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Not met — planned under CR-001                                                    |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Not met — planned under CR-001                                                    |
-| BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Not met — planned under CR-001                                                    |
+| ID     | Business requirement                                                         | Priority | Current state                                                                         |
+| ------ | ---------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| BR-001 | Provide a single, current view of road passability across the pilot corridor | Must     | Met — network state endpoint returns every edge with depth and status                 |
+| BR-002 | Allow the operations unit to ask "what happens if it rains this hard?"       | Must     | Met — rainfall simulation endpoint                                                    |
+| BR-003 | Recommend a route that a vehicle of known clearance can actually drive       | Must     | Met — routing endpoint                                                                |
+| BR-004 | Present incoming reports as a prioritised queue                              | Must     | Met — queue ordered by urgency score                                                  |
+| BR-005 | Allow narrowing the queue by source and by free-text search                  | Should   | Met — source filters and search                                                       |
+| BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                     |
+| BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — decisions append to the operations log                            |
+| BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Partly met — schema exists; write path planned under CR-001                           |
+| BR-009 | Restrict access to authorised personnel by role                              | Must     | Not met — the login screen is presentational; Supabase Auth/RBAC planned under CR-001 |
+| BR-010 | Operate on the equipment the LGU already has                                 | Should   | Met — browser-based portal                                                            |
+| BR-011 | Protect the personal data of reporters                                       | Must     | Partly met — database access denied to public API roles; privacy controls planned     |
+| BR-012 | Provide management information after an event                                | Could    | Not met — future release                                                              |
+| BR-013 | Give drivers flood-aware navigation that reroutes around verified hazards    | Must     | Not met — planned under CR-001                                                        |
+| BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Not met — planned under CR-001                                                        |
+| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Not met — planned under CR-001                                                        |
+| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Not met — planned under CR-001                                                        |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Not met — planned under CR-001                                                        |
+| BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Not met — planned under CR-001                                                        |
 
 `Must` requirements define the acceptance boundary. BR-009, BR-013 to BR-016 and
 BR-018 are the largest open items; CR-001 is the vehicle that closes them.
@@ -228,7 +229,7 @@ BR-018 are the largest open items; CR-001 is the vehicle that closes them.
   evidence desk, drawing tools, fleet monitoring and dispatch.
 - Verification and publishing of hazards to connected clients.
 - River and rain gauge ingestion with advisory road impact.
-- JWT authentication, role-based access control and audit writes.
+- Supabase Auth, role-based access control and audit writes.
 - Hosted database with versioned schema and access controls.
 - Automated build, test and security checks, including the mobile client.
 
@@ -272,33 +273,35 @@ place. Those items are recorded in TSD §7 and are not implied by this release.
 
 ### B.2 Assumptions and constraints
 
-| Type       | ID    | Statement                                                                |
-| ---------- | ----- | ------------------------------------------------------------------------ |
-| Assumption | A-001 | A PostGIS-capable PostgreSQL instance is available                       |
-| Assumption | A-002 | The pilot corridor is representative enough to demonstrate routing       |
-| Assumption | A-003 | Free or institutional service tiers suffice for the pilot                |
-| Assumption | A-004 | Dispatchers have a modern desktop browser and reliable connectivity      |
-| Assumption | A-005 | Rainfall intensity is supplied manually or from public data              |
-| Assumption | A-006 | The client provides corridor and barangay naming conventions             |
-| Assumption | A-007 | Drivers have a smartphone with a modern browser, camera and geolocation  |
-| Assumption | A-008 | Cellular data can drop during an event, so offline operation is required |
-| Assumption | A-009 | Sensor readings may be simulated for the pilot but must be labelled      |
-| Assumption | A-010 | OpenStreetMap tiles may be used with attribution for the pilot           |
-| Constraint | C-001 | Delivery must fit the academic term                                      |
-| Constraint | C-002 | Team effort is part-time and shared with coursework                      |
-| Constraint | C-003 | No paid GitHub Code Security, so CodeQL cannot analyse the private repo  |
-| Constraint | C-004 | Only synthetic or public data may be used                                |
-| Constraint | C-005 | Credentials are secrets and never committed                              |
-| Constraint | C-006 | The driver client ships as an installable PWA, not a store build         |
-| Constraint | C-007 | No real CCTV feed is available; a labelled demo registry is used         |
-| Constraint | C-008 | Basemap tiles are online-only; offline mode uses the cached graph        |
-| Constraint | C-009 | The pilot is single-LGU and single-region                                |
-| Dependency | D-001 | Hosted database connection string supplied as a repository secret        |
-| Dependency | D-002 | Adviser and panel availability for reviews                               |
-| Dependency | D-003 | Client confirms the pilot corridor                                       |
-| Dependency | D-004 | JWT signing secret and seed credentials supplied at deployment           |
-| Dependency | D-005 | Persistent upload volume or object storage for evidence photos           |
-| Dependency | D-006 | Map tile provider remains reachable and within its usage policy          |
+| Type       | ID    | Statement                                                                 |
+| ---------- | ----- | ------------------------------------------------------------------------- |
+| Assumption | A-001 | A PostGIS-capable PostgreSQL instance is available                        |
+| Assumption | A-002 | The pilot corridor is representative enough to demonstrate routing        |
+| Assumption | A-003 | Free or institutional service tiers suffice for the pilot                 |
+| Assumption | A-004 | Dispatchers have a modern desktop browser and reliable connectivity       |
+| Assumption | A-005 | Rainfall is supplied manually, with optional OpenWeather data             |
+| Assumption | A-006 | The client provides corridor and barangay naming conventions              |
+| Assumption | A-007 | Drivers have a smartphone with a modern browser, camera and geolocation   |
+| Assumption | A-008 | Cellular data can drop during an event, so offline operation is required  |
+| Assumption | A-009 | Sensor readings may be simulated for the pilot but must be labelled       |
+| Assumption | A-010 | Mapbox tiles are available on the pilot tier; OSM is the no-key fallback  |
+| Constraint | C-001 | Delivery must fit the academic term                                       |
+| Constraint | C-002 | Team effort is part-time and shared with coursework                       |
+| Constraint | C-003 | No paid GitHub Code Security, so CodeQL cannot analyse the private repo   |
+| Constraint | C-004 | Only synthetic or public data may be used                                 |
+| Constraint | C-005 | Credentials are never committed; public keys are restricted by origin     |
+| Constraint | C-006 | The driver client ships as an installable PWA, not a store build          |
+| Constraint | C-007 | No real CCTV feed is available; a labelled demo registry is used          |
+| Constraint | C-008 | Basemap tiles are online-only; offline mode uses the cached graph         |
+| Constraint | C-009 | The pilot is single-LGU and single-region                                 |
+| Constraint | C-010 | UI follows the client-supplied HTML/CSS template; no bespoke UI design    |
+| Dependency | D-001 | Hosted database connection string supplied as a repository secret         |
+| Dependency | D-002 | Adviser and panel availability for reviews                                |
+| Dependency | D-003 | Client confirms the pilot corridor                                        |
+| Dependency | D-004 | Supabase project credentials and pilot accounts supplied at deployment    |
+| Dependency | D-005 | Persistent upload volume or object storage for evidence photos            |
+| Dependency | D-006 | Mapbox and OSM tile services remain reachable within their usage policies |
+| Dependency | D-007 | Weather, terrain and imagery providers remain within their quotas         |
 
 ## Appendix C — Glossary
 
