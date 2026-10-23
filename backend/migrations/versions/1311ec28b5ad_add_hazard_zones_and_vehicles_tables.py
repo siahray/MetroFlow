@@ -8,9 +8,9 @@ Create Date: 2026-10-23
 
 from collections.abc import Sequence
 
+import geoalchemy2
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "1311ec28b5ad"
@@ -27,7 +27,9 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("obstruction_level", sa.String(length=20), nullable=False),
         sa.Column("avg_depth_cm", sa.SmallInteger(), nullable=True),
-        sa.Column("geometry", postgresql.GEOMETRY("POLYGON", 4326), nullable=True),
+        sa.Column(
+            "geometry", geoalchemy2.Geometry(geometry_type="POLYGON", srid=4326), nullable=True
+        ),
         sa.Column("edge_id", sa.Integer(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("published_at", sa.TIMESTAMP(), nullable=True),
@@ -48,13 +50,7 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(op.f("ix_hazard_zones_active"), "hazard_zones", ["active"], unique=False)
-    op.create_index(
-        "idx_hazard_zones_geometry",
-        "hazard_zones",
-        ["geometry"],
-        unique=False,
-        postgresql_using="gist",
-    )
+    # GiST index on geometry is created automatically by GeoAlchemy2
 
     op.create_table(
         "vehicles",
@@ -165,7 +161,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_vehicles_vehicle_id"), table_name="vehicles")
     op.drop_table("vehicles")
 
-    op.drop_index("idx_hazard_zones_geometry", table_name="hazard_zones")
+    # Drop GiST index on geometry (created by GeoAlchemy2)
+    op.execute("DROP INDEX IF EXISTS idx_hazard_zones_geometry")
     op.drop_index(op.f("ix_hazard_zones_active"), table_name="hazard_zones")
     op.drop_index(op.f("ix_hazard_zones_obstruction_level"), table_name="hazard_zones")
     op.drop_index(op.f("ix_hazard_zones_hazard_id"), table_name="hazard_zones")
