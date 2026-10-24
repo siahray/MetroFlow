@@ -11,6 +11,8 @@ import {
   LogOut, Mail
 } from 'lucide-react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import { AuthProvider, useAuth } from './src/auth';
+import { login as apiLogin, register as apiRegister, sendVerification as apiSendVerification, createSOS } from './src/api';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -45,7 +47,7 @@ const SplashScreen = ({ navigation }: any) => (
       </View>
 
       <View style={{ gap: 12, marginBottom: 20 }}>
-        <TouchableOpacity style={{ backgroundColor: '#0f172a', paddingVertical: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }} onPress={() => navigation.replace('MainApp')}>
+        <TouchableOpacity style={{ backgroundColor: '#0f172a', paddingVertical: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }} onPress={() => navigation.replace('Login')}>
           <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Log In</Text>
           <ArrowRight size={16} color="#fff" />
         </TouchableOpacity>
@@ -62,16 +64,27 @@ function ShieldAlert({ size, color }: any) {
   return <Shield size={size} color={color} />;
 }
 
-const HomeScreen = ({ navigation }: any) => (
+const HomeScreen = ({ navigation }: any) => {
+  const { user } = useAuth();
+  const displayName = user?.name || "Driver";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase();
+
+  return (
   <SafeAreaView style={styles.container}>
     <View style={{ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
       <View style={styles.row}>
         <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#1e293b', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>CR</Text>
+          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>{initials || "DR"}</Text>
         </View>
         <View>
-          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>Carlos Reyes</Text>
-          <Text style={{ fontSize: 9, fontWeight: '600', color: '#2563eb' }}>Active Driver • Fleet Member</Text>
+          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>{displayName}</Text>
+          <Text style={{ fontSize: 9, fontWeight: '600', color: '#2563eb' }}>{user?.role || "Active Driver • Fleet Member"}</Text>
         </View>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ecfeff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#cffafe' }}>
@@ -137,9 +150,32 @@ const HomeScreen = ({ navigation }: any) => (
       </View>
     </View>
   </SafeAreaView>
-);
+  );
+};
 
-const ReportScreen = ({ navigation }: any) => (
+const ReportScreen = ({ navigation }: any) => {
+  const { user } = useAuth();
+  const [depth, setDepth] = React.useState<"ankle" | "knee" | "waist">("knee");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  const submitReport = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setMsg("");
+    try {
+      const depthCm = depth === "ankle" ? 15 : depth === "knee" ? 45 : 120;
+      const note = `Community report: ${depth} deep (~${depthCm} cm) by ${user?.name || "mobile user"}`;
+      await createSOS({ latitude: 14.5995, longitude: 121.0223, note });
+      setMsg("Report submitted to dispatch.");
+      setTimeout(() => navigation.navigate("MainApp"), 800);
+    } catch (e) {
+      setMsg("Failed to submit report");
+      setSubmitting(false);
+    }
+  };
+
+  return (
   <SafeAreaView style={styles.container}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
       <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -169,26 +205,26 @@ const ReportScreen = ({ navigation }: any) => (
 
       <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#334155', marginBottom: 8 }}>2. Estimated Depth Level *</Text>
       <View style={{ gap: 8, marginBottom: 16 }}>
-        <TouchableOpacity style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
+        <TouchableOpacity onPress={() => setDepth("ankle")} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: depth === "ankle" ? '#eff6ff' : '#fff', borderRadius: 12, borderWidth: depth === "ankle" ? 2 : 1, borderColor: depth === "ankle" ? '#2563eb' : '#e2e8f0' }}>
           <View>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#1e293b' }}>Ankle Deep</Text>
-            <Text style={{ fontSize: 9, color: '#64748b' }}>Around 15 cm depth</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: depth === "ankle" ? '#1e40af' : '#1e293b' }}>Ankle Deep</Text>
+            <Text style={{ fontSize: 9, color: depth === "ankle" ? '#3b82f6' : '#64748b' }}>Around 15 cm depth</Text>
           </View>
-          <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1' }} />
+          <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: depth === "ankle" ? '#2563eb' : 'transparent', borderWidth: depth === "ankle" ? 0 : 1, borderColor: '#cbd5e1' }} />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#eff6ff', borderRadius: 12, borderWidth: 2, borderColor: '#2563eb' }}>
+        <TouchableOpacity onPress={() => setDepth("knee")} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: depth === "knee" ? '#eff6ff' : '#fff', borderRadius: 12, borderWidth: depth === "knee" ? 2 : 1, borderColor: depth === "knee" ? '#2563eb' : '#e2e8f0' }}>
           <View>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#1e40af' }}>Knee Deep</Text>
-            <Text style={{ fontSize: 9, color: '#3b82f6' }}>Around 45 cm depth</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: depth === "knee" ? '#1e40af' : '#1e293b' }}>Knee Deep</Text>
+            <Text style={{ fontSize: 9, color: depth === "knee" ? '#3b82f6' : '#64748b' }}>Around 45 cm depth</Text>
           </View>
-          <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#2563eb' }} />
+          <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: depth === "knee" ? '#2563eb' : 'transparent', borderWidth: depth === "knee" ? 0 : 1, borderColor: '#cbd5e1' }} />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
+        <TouchableOpacity onPress={() => setDepth("waist")} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: depth === "waist" ? '#eff6ff' : '#fff', borderRadius: 12, borderWidth: depth === "waist" ? 2 : 1, borderColor: depth === "waist" ? '#2563eb' : '#e2e8f0' }}>
           <View>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#1e293b' }}>Waist Deep / Submerged</Text>
-            <Text style={{ fontSize: 9, color: '#64748b' }}>Exceeds 90 cm depth • Severe</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: depth === "waist" ? '#1e40af' : '#1e293b' }}>Waist Deep / Submerged</Text>
+            <Text style={{ fontSize: 9, color: depth === "waist" ? '#3b82f6' : '#64748b' }}>Exceeds 90 cm depth • Severe</Text>
           </View>
-          <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1' }} />
+          <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: depth === "waist" ? '#2563eb' : 'transparent', borderWidth: depth === "waist" ? 0 : 1, borderColor: '#cbd5e1' }} />
         </TouchableOpacity>
       </View>
 
@@ -208,12 +244,15 @@ const ReportScreen = ({ navigation }: any) => (
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={{ backgroundColor: '#0f172a', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }} onPress={() => navigation.navigate('MainApp')}>
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Submit Report</Text>
+      {msg ? <Text style={{ fontSize: 11, color: '#2563eb', textAlign: 'center', marginBottom: 8 }}>{msg}</Text> : null}
+
+      <TouchableOpacity style={{ backgroundColor: '#0f172a', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }} onPress={submitReport} disabled={submitting}>
+        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>{submitting ? "Submitting..." : "Submit Report"}</Text>
       </TouchableOpacity>
     </ScrollView>
   </SafeAreaView>
-);
+  );
+};
 
 const SOSScreen = ({ navigation }: any) => (
   <SafeAreaView style={[styles.container, { backgroundColor: '#0f172a' }]}>
@@ -250,7 +289,22 @@ const SOSScreen = ({ navigation }: any) => (
     </View>
 
     <View style={{ gap: 10, paddingHorizontal: 16, marginBottom: 20 }}>
-      <TouchableOpacity style={{ backgroundColor: '#dc2626', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }} onPress={() => navigation.replace('MainApp')}>
+      <TouchableOpacity
+        style={{ backgroundColor: '#dc2626', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}
+        onPress={async () => {
+          try {
+            await createSOS({
+              latitude: 14.554729,
+              longitude: 121.024445,
+              note: 'Mobile SOS request',
+            });
+            alert('SOS sent successfully');
+          } catch (e) {
+            alert('Failed to send SOS');
+          }
+          navigation.replace('MainApp');
+        }}
+      >
         <AlertTriangle size={18} color="#fff" />
         <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>SOS Request Rescue</Text>
       </TouchableOpacity>
@@ -261,76 +315,90 @@ const SOSScreen = ({ navigation }: any) => (
   </SafeAreaView>
 );
 
-const ProfileScreen = ({ navigation }: any) => (
-  <SafeAreaView style={styles.container}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
-      <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a' }}>Citizen Profile</Text>
-    </View>
-    <ScrollView style={{ flex: 1 }}>
-      <View style={{ backgroundColor: '#f0f9ff', padding: 24, alignItems: 'center', borderBottomWidth: 1, borderColor: '#e0f2fe' }}>
-        <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-          <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>CR</Text>
-        </View>
-        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0f172a' }}>Carlos Reyes</Text>
-        <Text style={{ fontSize: 12, color: '#2563eb', fontWeight: '600', marginTop: 4 }}>Driver / Fleet Member</Text>
-        <View style={{ flexDirection: 'row', width: '100%', marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderColor: '#bfdbfe' }}>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Clearance</Text>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>28 cm</Text>
-          </View>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Alert Sync</Text>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0284c7', marginTop: 4 }}>Active</Text>
-          </View>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Dispatches</Text>
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>14</Text>
-          </View>
-        </View>
-      </View>
-      <View style={{ padding: 16 }}>
-        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>CONTACT INFORMATION</Text>
-        <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', marginBottom: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
-            <Mail size={16} color="#64748b" />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ fontSize: 9, color: '#94a3b8' }}>Civic Dispatch Email</Text>
-              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>carlos.reyes@email.com</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
-            <Car size={16} color="#64748b" />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ fontSize: 9, color: '#94a3b8' }}>Registered Vehicle Plate</Text>
-              <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>ABC 1234</Text>
-            </View>
-          </View>
-        </View>
+const ProfileScreen = ({ navigation }: any) => {
+  const { user } = useAuth();
+  const displayName = user?.name || "";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase();
 
-        <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>APP SETTINGS</Text>
-        <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', marginBottom: 12 }}>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 }} onPress={() => {}}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <MapIcon size={16} color="#64748b" />
-              <View>
-                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>Offline Maps & Telemetry</Text>
-                <Text style={{ fontSize: 9, color: '#94a3b8' }}>Visual placeholder only (no download)</Text>
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
+        <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a' }}>Citizen Profile</Text>
+      </View>
+      <ScrollView style={{ flex: 1 }}>
+        <View style={{ backgroundColor: '#f0f9ff', padding: 24, alignItems: 'center', borderBottomWidth: 1, borderColor: '#e0f2fe' }}>
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+            <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>{initials || "DR"}</Text>
+          </View>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0f172a' }}>{displayName || "Fleet Driver"}</Text>
+          <Text style={{ fontSize: 12, color: '#2563eb', fontWeight: '600', marginTop: 4 }}>{user?.role || "Driver / Fleet Member"}</Text>
+          <View style={{ flexDirection: 'row', width: '100%', marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderColor: '#bfdbfe' }}>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Clearance</Text>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>28 cm</Text>
+            </View>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Alert Sync</Text>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0284c7', marginTop: 4 }}>Active</Text>
+            </View>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' }}>Dispatches</Text>
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>0</Text>
+            </View>
+          </View>
+        </View>
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>CONTACT INFORMATION</Text>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
+              <Mail size={16} color="#64748b" />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={{ fontSize: 9, color: '#94a3b8' }}>Civic Dispatch Email</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>{user?.email || "driver@metroflow.ph"}</Text>
               </View>
             </View>
-            <ChevronRight size={16} color="#cbd5e1" />
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
+              <Car size={16} color="#64748b" />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={{ fontSize: 9, color: '#94a3b8' }}>Registered Vehicle</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>{user?.role || "Emergency Unit"}</Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>APP SETTINGS</Text>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden', marginBottom: 12 }}>
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 }} onPress={() => {}}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <MapIcon size={16} color="#64748b" />
+                <View>
+                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>Offline Maps & Telemetry</Text>
+                  <Text style={{ fontSize: 9, color: '#94a3b8' }}>Visual placeholder only (no download)</Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#cbd5e1" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={{ backgroundColor: '#fef2f2', paddingVertical: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#fee2e2' }} onPress={() => navigation.replace('Splash')}>
+            <LogOut size={16} color="#dc2626" />
+            <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 11 }}>Log Out</Text>
           </TouchableOpacity>
         </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
 
-        <TouchableOpacity style={{ backgroundColor: '#fef2f2', paddingVertical: 12, borderRadius: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#fee2e2' }} onPress={() => navigation.replace('Splash')}>
-          <LogOut size={16} color="#dc2626" />
-          <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 11 }}>Log Out</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
-  </SafeAreaView>
-);
 
-const RouteScreen = ({ navigation }: any) => (
+const RouteScreen = ({ navigation }: any) => {
+  return (
   <SafeAreaView style={styles.container}>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
       <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -389,7 +457,174 @@ const RouteScreen = ({ navigation }: any) => (
       </View>
     </ScrollView>
   </SafeAreaView>
-);
+  );
+};
+
+const LoginScreen = ({ navigation }: any) => {
+  const { signIn } = useAuth();
+  const [mode, setMode] = React.useState<"login" | "register">("login");
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [verificationCode, setVerificationCode] = React.useState("");
+  const [codeSent, setCodeSent] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [sendingCode, setSendingCode] = React.useState(false);
+
+  const handleLogin = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const user = await apiLogin(email, password);
+      signIn(user);
+      navigation.replace("MainApp");
+    } catch (e) {
+      setError("Invalid credentials");
+      setSubmitting(false);
+    }
+  };
+
+  const handleSendCode = async () => {
+    if (sendingCode) return;
+    setSendingCode(true);
+    setError("");
+    try {
+      const res = await apiSendVerification(email);
+      setCodeSent(true);
+      setError(res.code ? `Code sent (dev): ${res.code}` : "Verification code sent");
+    } catch (e: any) {
+      setError(e.message || "Failed to send code");
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      if (!name.trim()) {
+        throw new Error("Name required");
+      }
+      if (!codeSent || !verificationCode.trim()) {
+        throw new Error("Verification code required");
+      }
+      const user = await apiRegister({ name, email, password, role: "EMERGENCY_DRIVER", verification_code: verificationCode });
+      signIn(user);
+      navigation.replace("MainApp");
+    } catch (e: any) {
+      setError(e.message || "Registration failed");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: '#f8fafc' }]}>
+      <View style={{ padding: 24, flex: 1 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <ArrowLeft size={18} color="#1e293b" />
+          <Text style={{ fontSize: 12, color: '#1e293b' }}>Back</Text>
+        </TouchableOpacity>
+
+        <View style={{ alignItems: 'center', marginTop: 40 }}>
+          <View style={{ width: 64, height: 64, backgroundColor: '#2563eb', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+            <Waves size={32} color="#fff" />
+          </View>
+          <Text style={{ fontSize: 20, fontWeight: '900', color: '#0f172a' }}>MetroFlow {mode === "login" ? "Login" : "Sign Up"}</Text>
+          <Text style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+            {mode === "login" ? "Sign in to access dispatch and routing" : "Create a driver account"}
+          </Text>
+        </View>
+
+        <View style={{ marginTop: 32, gap: 12 }}>
+          {mode === "register" ? (
+            <View>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: '#334155', marginBottom: 6 }}>Full Name</Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#0f172a' }}
+                placeholder="Juan Dela Cruz"
+              />
+            </View>
+          ) : null}
+          <View>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#334155', marginBottom: 6 }}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#0f172a' }}
+              placeholder="driver@metroflow.ph"
+            />
+          </View>
+          <View>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#334155', marginBottom: 6 }}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#0f172a' }}
+              placeholder="********"
+            />
+          </View>
+
+          {mode === "register" ? (
+            <>
+              <TouchableOpacity
+                style={{ backgroundColor: '#eff6ff', paddingVertical: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#bfdbfe' }}
+                onPress={handleSendCode}
+                disabled={sendingCode}
+              >
+                <Text style={{ color: '#1e40af', fontWeight: 'bold', fontSize: 12 }}>
+                  {sendingCode ? "Sending..." : codeSent ? "Resend Verification Code" : "Send Verification Code"}
+                </Text>
+              </TouchableOpacity>
+              <View>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#334155', marginBottom: 6 }}>Verification Code</Text>
+                <TextInput
+                  value={verificationCode}
+                  onChangeText={setVerificationCode}
+                  keyboardType="numeric"
+                  maxLength={6}
+                  style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#0f172a' }}
+                  placeholder="123456"
+                />
+              </View>
+            </>
+          ) : null}
+
+          {error ? <Text style={{ fontSize: 11, color: error.includes('dev') ? '#16a34a' : '#dc2626' }}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={{ backgroundColor: '#0f172a', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+            onPress={mode === "login" ? handleLogin : handleRegister}
+            disabled={submitting}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>
+              {submitting ? (mode === "login" ? "Signing in..." : "Signing up...") : mode === "login" ? "Sign In" : "Sign Up"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={() => setMode(mode === "login" ? "register" : "login")}>
+            <Text style={{ fontSize: 12, color: '#475569' }}>
+              {mode === "login" ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 6 }} onPress={() => navigation.replace("MainApp")}>
+            <Text style={{ fontSize: 12, color: '#475569' }}>Continue as Guest</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+};
+
 
 const MainTabs = () => (
   <Tab.Navigator screenOptions={{
@@ -408,13 +643,16 @@ const MainTabs = () => (
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Splash" component={SplashScreen} />
-        <Stack.Screen name="MainApp" component={MainTabs} />
-        <Stack.Screen name="Route" component={RouteScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <AuthProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="MainApp" component={MainTabs} />
+          <Stack.Screen name="Route" component={RouteScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AuthProvider>
   );
 }
 

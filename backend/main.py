@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+import bcrypt
 
 import models
 from config import settings
@@ -23,18 +24,24 @@ from schemas import (
     HazardCreate,
     HazardResponse,
     HazardUpdate,
+    LoginRequest,
     NetworkStateResponse,
     NodeFeature,
     NodeFeatureCollection,
     NodeProperties,
+    RegisterRequest,
     RouteResponse,
     RouteSegment,
+    SendVerifyRequest,
     SimulationResponse,
     SOSCreate,
     SOSResponse,
+    TokenResponse,
+    UserResponse,
     VehicleCreate,
     VehicleResponse,
     VehicleUpdate,
+    VerifyRequest,
 )
 
 # ---------------------------------------------------------------------------
@@ -475,6 +482,85 @@ def get_optimal_route(
 
 
 # ---------------------------------------------------------------------------
+# Auth endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/auth/login", response_model=TokenResponse)
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    import models
+    from auth_utils import create_access_token
+
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    try:
+        if not bcrypt.checkpw(request.password.encode("utf-8"), user.password_hash.encode("utf-8")):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.role not in ["LGU_DISPATCHER", "SUPER_ADMIN"]:
+        raise HTTPException(status_code=403, detail="Only authorized admin accounts can access this system")
+    token = create_access_token({"sub": user.email})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "user_id": user.user_id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+        },
+    }
+
+
+@app.get("/api/v1/auth/me")
+def get_me(email: str, db: Session = Depends(get_db)):
+    import models
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "user_id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+    }
+
+
+@app.post("/api/v1/auth/send-verification")
+def send_verification(request: SendVerifyRequest):
+    try:
+        from verification_store import create_code
+    except Exception:
+        import verification_store
+
+        create_code = verification_store.create_code
+    code = create_code(request.email)
+    return {"message": "Verification code sent", "code": code}
+
+
+@app.post("/api/v1/auth/verify")
+def verify(request: VerifyRequest):
+    try:
+        from verification_store import verify_code
+    except Exception:
+        import verification_store
+
+        verify_code = verification_store.verify_code
+    ok = verify_code(request.email, request.code)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    return {"verified": True}
+
+
+@app.post("/api/v1/auth/register")
+def register(request: RegisterRequest, db: Session = Depends(get_db)):
+    raise HTTPException(status_code=403, detail="Registration is disabled. Only admin can access this system.")
+
+
+# ---------------------------------------------------------------------------
 # SOS / Hazards / Vehicles / Dispatch endpoints
 # ---------------------------------------------------------------------------
 
@@ -596,6 +682,26 @@ def list_vehicles(db: Session = Depends(get_db)):
     import models
 
     return db.query(models.Vehicle).all()
+
+
+@app.get("/api/v1/sos", response_model=list[SOSResponse])
+def list_sos(status: str | None = None, db: Session = Depends(get_db)):
+    import models
+
+    query = db.query(models.SOSRequest)
+    if status:
+        query = query.filter(models.SOSRequest.status == status)
+    return query.order_by(models.SOSRequest.created_at.desc()).all()
+
+
+@app.get("/api/v1/hazards", response_model=list[HazardResponse])
+def list_hazards(active: bool | None = None, db: Session = Depends(get_db)):
+    import models
+
+    query = db.query(models.HazardZone)
+    if active is not None:
+        query = query.filter(models.HazardZone.active == active)
+    return query.order_by(models.HazardZone.created_at.desc()).all()
 
 
 @app.post("/api/v1/vehicles", response_model=VehicleResponse)

@@ -146,7 +146,7 @@ export function DispatchRadar({
               </span>
             </div>
             <div className="font-mono text-xs text-slate-400">
-              Anchor: 14.5995° N, 121.0223° E • Nearest Unit: RU-03 (4.2 km)
+              Anchor: {(incident as any).location?.lat?.toFixed?.(4) ?? incident.location}° N, {(incident as any).location?.lng?.toFixed?.(4) ?? ''}° E
             </div>
           </div>
 
@@ -162,13 +162,13 @@ export function DispatchRadar({
               </div>
             </div>
 
-            {/* Dispatched RU-03 Unit */}
+            {/* Dispatched Unit */}
             <div className="absolute top-[58%] left-[28%] flex flex-col items-center">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg shadow-sky-500/50">
                 <Navigation className="h-4 w-4" />
               </div>
               <div className="mt-1 whitespace-nowrap rounded border border-sky-500 bg-slate-950/90 px-2 py-0.5 font-mono text-[10px] text-sky-300">
-                RU-03 En Route (Speed: 28 km/h • Draft: 35 cm)
+                Unit En Route
               </div>
             </div>
           </div>
@@ -202,26 +202,24 @@ export function DispatchRadar({
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase">Submitted by</div>
                   <div className="text-xs font-bold text-slate-900">
-                    Dale Ramos ({displayedPhone})
+                    {incident.reporter} ({displayedPhone})
                   </div>
                   <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
-                    <CheckCircle className="h-3 w-3" /> Verified Citizen #CIT-8821
+                    <CheckCircle className="h-3 w-3" /> Citizen SOS Verified
                   </div>
                 </div>
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase">Date &amp; Time</div>
-                  <div className="text-xs font-semibold text-slate-800">Oct 24, 2026 11:42 AM</div>
+                  <div className="text-xs font-semibold text-slate-800">{incident.reportedAt}</div>
                   <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                    <Clock className="h-3 w-3" /> 14 minutes ago
+                    <Clock className="h-3 w-3" /> Verified Incident
                   </div>
                 </div>
               </div>
               <div className="flex items-start justify-between rounded-lg border border-slate-200 bg-white p-2.5">
                 <div>
                   <div className="text-xs font-bold text-slate-800">{incident.barangay}</div>
-                  <div className="font-mono text-[11px] text-slate-500">
-                    14.5995° N, 121.0223° E
-                  </div>
+                  <div className="font-mono text-[11px] text-slate-500">{incident.location}</div>
                 </div>
                 <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
                   Sector Delta
@@ -235,12 +233,8 @@ export function DispatchRadar({
                 <MessageSquare className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Citizen Field
                 Description
               </h3>
-              <p className="mb-2 text-xs font-semibold text-slate-800">
-                &ldquo;Flooding in residential area, 45-60 cm water level.&rdquo;
-              </p>
-              <p className="border-l-2 border-slate-300 pl-3 text-xs leading-relaxed text-slate-600 italic">
-                Light passenger vehicles cannot pass. Water is actively rising from south canal
-                overflow. 3 elderly citizens waiting at second floor porch.
+              <p className="text-xs font-semibold text-slate-800">
+                &ldquo;{incident.narrative}&rdquo;
               </p>
             </div>
 
@@ -251,31 +245,23 @@ export function DispatchRadar({
               </h3>
               <div className="flex flex-wrap gap-2">
                 <span className="inline-flex items-center rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
-                  <Camera className="mr-1.5 h-3 w-3" /> Photo (1 Verified)
+                  <Camera className="mr-1.5 h-3 w-3" /> Photo Attached
                 </span>
                 <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                  <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Accurate ±4m)
+                  <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Road Node Match)
                 </span>
-              </div>
-              <div className="flex items-center rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-800">
-                <Droplets className="mr-2 h-3.5 w-3.5 text-sky-600" />
-                <span>IoT Depth Sensor #D-12 reading 48 cm nearby</span>
               </div>
             </div>
 
-            {/* Photo Verification Metadata Grid */}
-            <div className="grid grid-cols-3 gap-2 text-center">
+            {/* Verification Metadata Grid */}
+            <div className="grid grid-cols-2 gap-2 text-center">
               <div className="rounded border border-slate-200 bg-slate-50 p-2">
-                <div className="text-[9px] font-bold text-slate-400 uppercase">Camera</div>
-                <div className="text-xs font-semibold text-slate-700">iPhone 14 Pro</div>
-              </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-2">
-                <div className="text-[9px] font-bold text-slate-400 uppercase">Orientation</div>
-                <div className="text-xs font-semibold text-slate-700">North-West</div>
+                <div className="text-[9px] font-bold text-slate-400 uppercase">Source</div>
+                <div className="text-xs font-semibold text-slate-700 uppercase">{incident.source}</div>
               </div>
               <div className="rounded border border-sky-100 bg-sky-50 p-2">
                 <div className="text-[9px] font-bold text-sky-600 uppercase">AI Confidence</div>
-                <div className="text-xs font-bold text-sky-800">98.2% Authentic</div>
+                <div className="text-xs font-bold text-sky-800">{incident.aiConfidence}</div>
               </div>
             </div>
 
@@ -283,7 +269,7 @@ export function DispatchRadar({
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-900">
-                  Recommended: RU-03 (Swiftwater Boat)
+                  Recommended: Assign nearest vehicle
                 </span>
                 <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
                   AVAILABLE
@@ -372,7 +358,7 @@ export function DispatchRadar({
                   if (onOpenDispatchModal) {
                     onOpenDispatchModal();
                   } else {
-                    onAction(`Dispatched RU-03 to #${incident.id}`);
+                    onAction(`Dispatched unit to #${incident.id}`);
                   }
                 }}
                 className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition-colors"

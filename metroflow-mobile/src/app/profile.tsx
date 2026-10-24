@@ -17,9 +17,9 @@ export default function ProfileScreen() {
       <ScrollView className="flex-1">
         <View className="bg-white p-6 items-center border-b border-slate-100">
           <View className="w-20 h-20 bg-slate-800 rounded-full items-center justify-center mb-3">
-            <Text className="text-white font-bold text-xl">CR</Text>
+            <Text className="text-white font-bold text-xl">DR</Text>
           </View>
-          <Text className="text-base font-bold text-slate-900">Carlos Reyes</Text>
+          <Text className="text-base font-bold text-slate-900">Fleet Driver</Text>
           <Text className="text-xs text-blue-600 font-semibold mt-0.5">Driver / Fleet Member</Text>
           <View className="flex-row gap-6 mt-4 pt-4 border-t border-slate-100">
             <View className="items-center">
@@ -32,7 +32,7 @@ export default function ProfileScreen() {
             </View>
             <View className="items-center">
               <Text className="text-[10px] font-bold text-slate-400 uppercase">Dispatches</Text>
-              <Text className="text-sm font-bold text-slate-800">14</Text>
+              <Text className="text-sm font-bold text-slate-800">0</Text>
             </View>
           </View>
         </View>
@@ -44,14 +44,14 @@ export default function ProfileScreen() {
                 <Mail size={16} color="#64748b" />
                 <Text className="text-sm text-slate-600">Dispatch Email</Text>
               </View>
-              <Text className="text-sm text-slate-900">carlos.reyes@metroflow.ph</Text>
+              <Text className="text-sm text-slate-900">driver@metroflow.ph</Text>
             </View>
             <View className="flex-row items-center justify-between py-2">
               <View className="flex-row items-center gap-2">
                 <Car size={16} color="#64748b" />
                 <Text className="text-sm text-slate-600">Vehicle</Text>
               </View>
-              <Text className="text-sm text-slate-900">Rescue Unit - RF-04</Text>
+              <Text className="text-sm text-slate-900">Emergency Unit</Text>
             </View>
           </View>
           <View className="bg-white rounded-2xl border border-slate-100 overflow-hidden">

@@ -191,3 +191,41 @@ class AssignRequest(BaseModel):
 
 class ConfirmRequest(BaseModel):
     note: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    role: str | None = "EMERGENCY_DRIVER"
+    verification_code: str | None = None
+
+
+class VerifyRequest(BaseModel):
+    email: str
+    code: str
+
+
+class SendVerifyRequest(BaseModel):
+    email: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserResponse"
+
+
+class UserResponse(BaseModel):
+    user_id: int
+    name: str
+    email: str
+    role: str
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}

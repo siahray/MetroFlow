@@ -5,12 +5,14 @@ import {
   ChevronRight,
   CircleCheck,
   CloudRain,
+  Shield,
   Siren,
   Timer,
   TrendingUp,
+  Truck,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DispatchRadar } from "./dispatch-radar";
 import { FloodClosureEditor } from "./flood-closure-editor";
@@ -20,12 +22,14 @@ import { RescueTracking } from "./rescue-tracking";
 import { Sidebar } from "./sidebar";
 import { useToast } from "./toast-provider";
 import {
-  INCIDENTS,
-  INCIDENT_BY_ID,
-  INITIAL_LOGS,
   type LogEntry,
   type QueueFilter,
+  type Incident,
 } from "@/lib/incidents";
+import { listSOS } from "@/lib/sos-live";
+import { sosToIncident } from "@/lib/sos-to-incidents";
+import { listVehicles, type Vehicle } from "@/lib/dispatch";
+import { listHazards, type HazardZone } from "@/lib/hazards";
 
 type View = "triage" | "radar" | "sensors" | "fleet";
 
@@ -36,58 +40,64 @@ const VIEW_TITLES: Record<View, string> = {
   fleet: "Rescue Fleet & Mission Operations",
 };
 
-type KpiCard = {
-  label: string;
-  value: string;
-  detail: string;
-  icon: LucideIcon;
-  iconClassName: string;
-  trend?: { text: string; icon?: LucideIcon; className: string };
-};
-
-const KPI_CARDS: KpiCard[] = [
-  {
-    label: "Verified Today",
-    value: "34",
-    detail: "29 Dispatched to Responders",
-    trend: { text: "+28%", icon: TrendingUp, className: "text-emerald-600" },
-    icon: CircleCheck,
-    iconClassName: "border-emerald-100 bg-emerald-50 text-emerald-600",
-  },
-  {
-    label: "Avg Triage Speed",
-    value: "4.2 min",
-    detail: "Target SLA: < 5.0 mins",
-    icon: Timer,
-    iconClassName: "border-sky-100 bg-sky-50 text-sky-600",
-  },
-  {
-    label: "AI Fraud / Duplicate Filter",
-    value: "99.1%",
-    detail: "11 duplicate spams screened",
-    trend: { text: "Accurate", className: "text-sky-600" },
-    icon: Bot,
-    iconClassName: "border-indigo-100 bg-indigo-50 text-indigo-600",
-  },
-];
-
 function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
+export function Dashboard({ user, onSignOut }: { user?: any; onSignOut: () => void }) {
   const { show } = useToast();
   const [view, setView] = useState<View>("triage");
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState(INCIDENTS[0].id);
+  const [liveIncidents, setLiveIncidents] = useState<Incident[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [hazards, setHazards] = useState<HazardZone[]>([]);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const [logs, setLogs] = useState<Record<string, LogEntry[]>>(INITIAL_LOGS);
+  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [sosList, vehicleList, hazardList] = await Promise.all([
+          listSOS().catch(() => []),
+          listVehicles().catch(() => []),
+          listHazards().catch(() => []),
+        ]);
+        const incidents = sosList.map((s) => sosToIncident(s));
+        setLiveIncidents(incidents);
+        setVehicles(vehicleList);
+        setHazards(hazardList);
+        if (incidents.length > 0 && !incidents.some((i) => i.id === selectedId)) {
+          setSelectedId(incidents[0].id);
+        } else if (incidents.length === 0) {
+          setSelectedId("");
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, [selectedId]);
+
+  const allIncidents = useMemo(() => {
+    return liveIncidents;
+  }, [liveIncidents]);
+
+  const incidentById = useMemo(() => {
+    const map = new Map<string, Incident>();
+    for (const inc of allIncidents) {
+      map.set(inc.id, inc);
+    }
+    return map;
+  }, [allIncidents]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
-    return INCIDENTS.filter((incident) => {
+    return allIncidents.filter((incident) => {
       const matchesFilter = filter === "all" || incident.source === filter;
       const matchesQuery =
         needle === "" ||
@@ -97,11 +107,11 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
 
       return matchesFilter && matchesQuery;
     });
-  }, [filter, query]);
+  }, [allIncidents, filter, query]);
 
-  const selected = INCIDENT_BY_ID.get(selectedId) ?? INCIDENTS[0];
-  const selectedLogs = logs[selected.id] ?? [];
-  const pendingCount = INCIDENTS.length - dismissed.size;
+  const selected = selectedId ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null) : allIncidents[0] ?? null;
+  const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
+  const pendingCount = allIncidents.length - dismissed.size;
 
   const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
     setLogs((current) => ({
@@ -124,18 +134,24 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
 
   const handleAction = useCallback(
     (label: string) => {
-      show(`${label} executed for #${selected.id}`);
-      appendLog(selected.id, `Action: ${label} by Operator M. Santos.`, "action");
+      if (selected?.id) {
+        show(`${label} executed for #${selected.id}`);
+        appendLog(selected.id, `Action: ${label} by Operator M. Santos.`, "action");
+      } else {
+        show(label);
+      }
     },
-    [appendLog, selected.id, show],
+    [appendLog, selected?.id, show],
   );
 
   const handleAddNote = useCallback(
     (text: string) => {
-      appendLog(selected.id, `Note: ${text}`, "note");
+      if (selected?.id) {
+        appendLog(selected.id, `Note: ${text}`, "note");
+      }
       show("Internal note saved to incident log");
     },
-    [appendLog, selected.id, show],
+    [appendLog, selected?.id, show],
   );
 
   const handleNavigate = useCallback(
@@ -158,11 +174,58 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     [show],
   );
 
+  const assignedCount = liveIncidents.filter((i) => i.tags.includes("Vehicle Assigned")).length;
+  const availableVehiclesCount = vehicles.filter(
+    (v) => (v.status || "AVAILABLE").toUpperCase() === "AVAILABLE",
+  ).length;
+  const totalVehiclesCount = vehicles.length;
+  const activeHazardsCount = hazards.filter((h) => h.active !== false).length;
+
+  const kpiCards = [
+    {
+      label: "Dispatched SOS",
+      value: String(assignedCount),
+      detail: assignedCount === 1 ? "1 unit responding" : `${assignedCount} units responding`,
+      trend: { text: "Active", className: "text-emerald-600" },
+      icon: CircleCheck,
+      iconClassName: "border-emerald-100 bg-emerald-50 text-emerald-600",
+    },
+    {
+      label: "Fleet Readiness",
+      value: `${availableVehiclesCount}/${totalVehiclesCount}`,
+      detail: `${availableVehiclesCount} units ready for callout`,
+      trend: { text: "Standby", className: "text-sky-600" },
+      icon: Truck,
+      iconClassName: "border-sky-100 bg-sky-50 text-sky-600",
+    },
+    {
+      label: "Active Hazards",
+      value: String(activeHazardsCount),
+      detail: "Monitored flood closures",
+      trend: { text: "Live", className: "text-indigo-600" },
+      icon: Shield,
+      iconClassName: "border-indigo-100 bg-indigo-50 text-indigo-600",
+    },
+  ];
+
+  const officerName = user?.name || "MDRRMC Dispatcher";
+  const officerRole = user?.role === "SUPER_ADMIN" ? "Super Admin" : "Lead Dispatch Officer";
+  const officerInitials =
+    officerName
+      .split(" ")
+      .filter(Boolean)
+      .map((w: string) => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "DO";
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-100 text-slate-800 select-none">
       <Sidebar
         activeItem={view}
         queueCount={pendingCount}
+        user={user}
+        fleetCount={totalVehiclesCount}
         onSignOut={onSignOut}
         onNavigate={handleNavigate}
       />
@@ -181,21 +244,21 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
 
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-600">
-              <CloudRain className="h-3.5 w-3.5 text-sky-600" />
-              <span>28°C Rain Advisory (38 mm/hr)</span>
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span>Monitoring Grid Active</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-semibold text-rose-700">
               <span className="h-2 w-2 animate-pulse rounded-full bg-rose-600" />
-              <span>Active SOS: 14</span>
+              <span>Active SOS: {liveIncidents.length}</span>
             </div>
             <div className="h-4 w-px bg-slate-200" />
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-                MS
+                {officerInitials}
               </div>
               <div>
-                <div className="leading-tight font-semibold text-slate-800">Maria Santos</div>
-                <div className="text-[10px] text-slate-400">Lead Dispatch Officer</div>
+                <div className="leading-tight font-semibold text-slate-800">{officerName}</div>
+                <div className="text-[10px] text-slate-400">{officerRole}</div>
               </div>
             </div>
           </div>
@@ -208,16 +271,22 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           ) : view === "sensors" ? (
             <FloodClosureEditor onAction={show} />
           ) : view === "radar" ? (
-            <DispatchRadar
-              incident={selected}
-              logs={selectedLogs}
-              queueCount={pendingCount}
-              onBack={() => setView("triage")}
-              onAction={handleAction}
-              onMessage={show}
-              onAddNote={handleAddNote}
-              onOpenDispatchModal={() => setView("triage")}
-            />
+            selected ? (
+              <DispatchRadar
+                incident={selected}
+                logs={selectedLogs}
+                queueCount={pendingCount}
+                onBack={() => setView("triage")}
+                onAction={handleAction}
+                onMessage={show}
+                onAddNote={handleAddNote}
+                onOpenDispatchModal={() => setView("triage")}
+              />
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                No incidents available
+              </div>
+            )
           ) : (
             <>
               {/* KPI Summary Cards */}
@@ -229,18 +298,16 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
                     </p>
                     <div className="mt-1 flex items-baseline gap-2">
                       <span className="text-2xl font-bold text-slate-900">{pendingCount}</span>
-                      <span className="text-xs font-semibold text-rose-600">3 Critical</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-slate-400">Queue velocity: +4 in last hr</p>
+                    <p className="mt-1 text-[11px] text-slate-400">Awaiting dispatch review</p>
                   </div>
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600">
                     <Siren className="h-5 w-5" />
                   </div>
                 </div>
 
-                {KPI_CARDS.map((card) => {
+                {kpiCards.map((card) => {
                   const Icon = card.icon;
-                  const TrendIcon = card.trend?.icon;
 
                   return (
                     <div
@@ -257,7 +324,6 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
                             <span
                               className={`flex items-center text-xs font-medium ${card.trend.className}`}
                             >
-                              {TrendIcon ? <TrendIcon className="mr-0.5 h-3 w-3" /> : null}
                               {card.trend.text}
                             </span>
                           ) : null}
@@ -278,7 +344,7 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <IncidentQueue
                   incidents={visible}
-                  selectedId={selected.id}
+                  selectedId={selected?.id || ""}
                   filter={filter}
                   query={query}
                   dismissed={dismissed}
@@ -288,13 +354,19 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
                   onQueryChange={setQuery}
                 />
 
-                <IncidentDetail
-                  incident={selected}
-                  logs={selectedLogs}
-                  onAction={handleAction}
-                  onAddNote={handleAddNote}
-                  onDispatchConfirmed={handleDispatchConfirmed}
-                />
+                {selected ? (
+                  <IncidentDetail
+                    incident={selected}
+                    logs={selectedLogs}
+                    onAction={handleAction}
+                    onAddNote={handleAddNote}
+                    onDispatchConfirmed={handleDispatchConfirmed}
+                  />
+                ) : (
+                  <div className="col-span-1 flex items-center justify-center rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500 lg:col-span-7">
+                    No incidents in queue
+                  </div>
+                )}
               </div>
             </>
           )}

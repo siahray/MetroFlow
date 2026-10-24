@@ -1,36 +1,41 @@
-"use client";
-
+import Link from "next/link";
 import { CheckSquare, LogOut, Map, Radar, Shield, Truck, Waves } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 
-export type NavItem = "triage" | "radar" | "sensors" | "fleet";
+export type NavItem = "triage" | "radar" | "hazards" | "fleet";
 
-const NAV_ITEMS = [
-  { id: "triage" as NavItem, label: "Triage & Verification", icon: CheckSquare },
-  { id: "radar" as NavItem, label: "Dispatch Radar", icon: Radar },
-  { id: "sensors" as NavItem, label: "Live Map & Hazards", icon: Map },
-  { id: "fleet" as NavItem, label: "Rescue Units & Fleet", icon: Truck },
+export const NAV_ITEMS = [
+  { id: "triage" as NavItem, label: "Triage & Verification", href: "/triage", icon: CheckSquare },
+  { id: "radar" as NavItem, label: "Dispatch Radar", href: "/radar", icon: Radar },
+  { id: "hazards" as NavItem, label: "Live Map & Hazards", href: "/hazards", icon: Map },
+  { id: "fleet" as NavItem, label: "Rescue Units & Fleet", href: "/fleet", icon: Truck },
 ] as const;
 
 type SidebarProps = {
   activeItem?: string;
   queueCount: number;
+  user?: any;
+  fleetCount?: number;
   onSignOut: () => void;
-  onNavigate: (id: string, label: string) => void;
+  onNavigate?: (id: string, label: string) => void;
 };
 
 export function Sidebar({
   activeItem = "triage",
   queueCount,
+  user,
+  fleetCount,
   onSignOut,
   onNavigate,
 }: SidebarProps) {
+  const isAlertActive = queueCount > 0;
+
   return (
     <aside className="flex w-64 flex-shrink-0 select-none flex-col justify-between border-r border-slate-800 bg-slate-900 text-slate-300">
       <div>
         {/* App Logo Header */}
-        <div className="flex items-center gap-3 border-b border-slate-800 p-4">
+        <Link href="/triage" className="flex items-center gap-3 border-b border-slate-800 p-4 hover:bg-slate-800/40 transition-colors">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500 text-white shadow-md shadow-sky-500/20">
             <Waves className="h-5 w-5" />
           </div>
@@ -40,19 +45,47 @@ export function Sidebar({
               LGU Operations
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Alert Status Banner */}
-        <div className="mx-3 my-3 flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
+        <div
+          className={cn(
+            "mx-3 my-3 flex items-center justify-between rounded-lg border p-3",
+            isAlertActive
+              ? "border-amber-500/20 bg-amber-500/10"
+              : "border-slate-800 bg-slate-800/40",
+          )}
+        >
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+              {isAlertActive && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+              )}
+              <span
+                className={cn(
+                  "relative inline-flex h-2 w-2 rounded-full",
+                  isAlertActive ? "bg-amber-500" : "bg-emerald-500",
+                )}
+              />
             </span>
-            <span className="text-xs font-semibold text-amber-300">Status: Level 2 Alert</span>
+            <span
+              className={cn(
+                "text-xs font-semibold",
+                isAlertActive ? "text-amber-300" : "text-slate-300",
+              )}
+            >
+              {isAlertActive ? "Status: Alert Active" : "Status: Normal Monitoring"}
+            </span>
           </div>
-          <span className="rounded bg-amber-400/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-300">
-            14 SOS
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",
+              isAlertActive
+                ? "bg-amber-400/20 text-amber-300"
+                : "bg-slate-700/50 text-slate-400",
+            )}
+          >
+            {queueCount} SOS
           </span>
         </div>
 
@@ -63,10 +96,10 @@ export function Sidebar({
             const active = item.id === activeItem;
 
             return (
-              <button
+              <Link
                 key={item.id}
-                type="button"
-                onClick={() => onNavigate(item.id, item.label)}
+                href={item.href}
+                onClick={() => onNavigate?.(item.id, item.label)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
@@ -81,12 +114,14 @@ export function Sidebar({
                   <span className="ml-auto rounded bg-sky-400/30 px-1.5 py-0.5 font-mono text-[10px] text-white">
                     {queueCount}
                   </span>
-                ) : item.id === "radar" ? (
+                ) : item.id === "radar" && queueCount > 0 ? (
                   <span className="ml-auto h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-                ) : item.id === "fleet" ? (
-                  <span className="ml-auto text-[10px] font-mono text-emerald-400">3 Active</span>
+                ) : item.id === "fleet" && fleetCount != null ? (
+                  <span className="ml-auto text-[10px] font-mono text-emerald-400">
+                    {fleetCount} Units
+                  </span>
                 ) : null}
-              </button>
+              </Link>
             );
           })}
         </nav>
@@ -98,8 +133,12 @@ export function Sidebar({
           <span>MDRRMC PASIG</span>
           <Shield className="h-3.5 w-3.5 text-sky-400" />
         </div>
-        <p className="font-medium text-slate-300">Maria Santos (Lead)</p>
-        <p className="font-mono text-[10px] text-slate-500">Station 4 • Dispatch Officer</p>
+        <p className="font-medium text-slate-300">
+          {user?.name ? `${user.name}` : "MDRRMC Operations"}
+        </p>
+        <p className="font-mono text-[10px] text-slate-500">
+          {user?.role === "SUPER_ADMIN" ? "Super Admin" : "Station 4 • Dispatch Officer"}
+        </p>
         <button
           type="button"
           onClick={onSignOut}

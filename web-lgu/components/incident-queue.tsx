@@ -1,18 +1,15 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import {
-  INCIDENTS,
   QUEUE_FILTERS,
   countBySource,
   maskPhoneNumber,
   type Incident,
   type QueueFilter,
 } from "@/lib/incidents";
-import { listSOS } from "@/lib/sos-live";
 
 type IncidentQueueProps = {
   incidents: Incident[];
@@ -61,26 +58,9 @@ export function IncidentQueue({
   onFilterChange,
   onQueryChange,
 }: IncidentQueueProps) {
-  const [liveSos, setLiveSos] = useState<Array<Record<string, unknown>>>([]);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await listSOS("pending");
-        setLiveSos(data);
-      } catch (e) {
-        // ignore
-      }
-    };
-    load();
-    const interval = setInterval(load, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
   const filters = QUEUE_FILTERS.map((option) => ({
     ...option,
-    count:
-      option.id === "all" ? incidents.length + liveSos.length : countBySource(INCIDENTS, option.id),
+    count: option.id === "all" ? incidents.length : countBySource(incidents, option.id),
   }));
 
   return (

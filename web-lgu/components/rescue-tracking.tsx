@@ -19,9 +19,12 @@ import {
   User,
   Wifi,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
-import { DISTRESS_BEACON, MISSION_MILESTONES, RESCUE_UNITS } from "@/lib/rescue";
+import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
+import { listSOS } from "@/lib/sos-live";
+import type { RescueUnit } from "@/lib/rescue";
 
 type RescueTrackingProps = {
   onBack: () => void;
@@ -29,6 +32,49 @@ type RescueTrackingProps = {
 };
 
 export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
+  const [fleet, setFleet] = useState<RescueUnit[]>([]);
+  const [sosList, setSosList] = useState<SOSRequest[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [vehiclesData, sosData] = await Promise.all([
+          listVehicles().catch(() => []),
+          listSOS().catch(() => []),
+        ]);
+
+        if (vehiclesData && vehiclesData.length > 0) {
+          const mapped = vehiclesData.map((v: any) => {
+            const assignedSos = sosData.find(
+              (s) => s.vehicle_id === v.vehicle_id && (s.status === "assigned" || s.status === "confirmed"),
+            );
+            return {
+              callSign: v.call_sign,
+              type: v.vehicle_type,
+              status: (assignedSos ? "EN_ROUTE" : String(v.status || "AVAILABLE").toUpperCase()) as any,
+              clearance_cm: v.clearance_cm || 0,
+              speed_kmh: v.speed_kmh || 0,
+              location: assignedSos ? `Assigned #FR-${assignedSos.sos_id.toString().padStart(4, "0")}` : "Depot",
+              assignedSosId: assignedSos ? assignedSos.sos_id : undefined,
+            } as RescueUnit & { assignedSosId?: number };
+          });
+          setFleet(mapped);
+        }
+        setSosList(sosData);
+      } catch (e) {
+        // keep fallback
+      }
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const activeMission = sosList.find(
+    (s) => s.vehicle_id != null && (s.status === "assigned" || s.status === "confirmed"),
+  );
+  const activeUnit = fleet.find((u) => (u as any).assignedSosId === activeMission?.sos_id) || fleet[0];
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -47,8 +93,15 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 Rescue Fleet &amp; Mission Operations
               </h2>
               <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold text-sky-700 flex items-center">
-                <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse"></span>
-                RU-03 EN ROUTE
+                <span
+                  className={cn(
+                    "mr-1.5 h-1.5 w-1.5 rounded-full",
+                    activeMission ? "bg-rose-500 animate-pulse" : "bg-emerald-500",
+                  )}
+                />
+                {activeMission
+                  ? `MISSION #FR-${activeMission.sos_id.toString().padStart(4, "0")} ACTIVE`
+                  : "FLEET STANDBY"}
               </span>
             </div>
             <p className="text-xs text-slate-500">
@@ -85,7 +138,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
 
       {/* Fleet Unit Cards Grid */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {RESCUE_UNITS.map((unit) => {
+        {fleet.map((unit) => {
           const isEnRoute = unit.status === "EN_ROUTE";
           return (
             <div
@@ -116,11 +169,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">{unit.type}</p>
                 </div>
-                {unit.callSign === "RU-03" ? (
-                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-600">
-                    ID: #LCT-0321
-                  </span>
-                ) : unit.eta_min ? (
+                {unit.eta_min ? (
                   <span className="rounded bg-sky-50 px-2 py-1 font-mono text-xs font-bold text-sky-700">
                     ETA {unit.eta_min}m
                   </span>
@@ -128,27 +177,6 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                   <span className="font-mono text-xs text-slate-400">{unit.location}</span>
                 )}
               </div>
-
-              {/* Pilot & Payload Indicator for RU-03 */}
-              {unit.callSign === "RU-03" && (
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
-                  <div className="rounded border border-slate-100 bg-slate-50 p-2">
-                    <div className="text-slate-400 uppercase font-semibold">Lead Pilot</div>
-                    <div className="font-bold text-slate-800 flex items-center mt-0.5">
-                      <User className="mr-1 h-3 w-3 text-slate-400" /> Carlo Reyes
-                    </div>
-                    <div className="text-[9px] text-slate-500">Paramedic Cert. IV</div>
-                  </div>
-                  <div className="rounded border border-slate-100 bg-slate-50 p-2">
-                    <div className="text-slate-400 uppercase font-semibold">Live Payload</div>
-                    <div className="font-bold text-slate-800 flex items-center mt-0.5">
-                      <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500"></span> 2 / 6
-                      Capacity
-                    </div>
-                    <div className="text-[9px] text-sky-600 font-medium">4 slots available</div>
-                  </div>
-                </div>
-              )}
 
               {/* Specs strictly in cm for clearance and km/h for speed */}
               <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-100 bg-slate-50 py-1.5 text-center font-mono text-xs">
@@ -177,24 +205,13 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 </div>
               </div>
 
-              {/* Aux Battery Indicator for RU-03 */}
-              {unit.callSign === "RU-03" && (
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px]">
-                  <div className="flex items-center gap-1 text-slate-600 font-mono">
-                    <Activity className="h-3 w-3 text-sky-500" />
-                    <span>Water Speed: 28 km/h</span>
-                  </div>
-                  <div className="flex items-center gap-1 font-mono text-emerald-700">
-                    <Battery className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>Aux Battery: 88% (4.2 hrs)</span>
-                  </div>
-                </div>
-              )}
-
               <div className="text-[11px] text-slate-600">
-                {unit.status === "EN_ROUTE" ? (
+                {unit.status === "EN_ROUTE" && (unit as any).assignedSosId ? (
                   <span>
-                    Task: <strong className="text-slate-900">Distress #FR-0248 (San Pedro)</strong>
+                    Task:{" "}
+                    <strong className="text-slate-900">
+                      Distress #FR-{String((unit as any).assignedSosId).padStart(4, "0")}
+                    </strong>
                   </span>
                 ) : unit.status === "AVAILABLE" ? (
                   <span>
@@ -203,7 +220,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                   </span>
                 ) : (
                   <span>
-                    Task: <strong className="text-slate-900">Vehicle Extraction (#FR-0247)</strong>
+                    Status: <strong className="text-slate-900">{unit.status}</strong>
                   </span>
                 )}
               </div>
@@ -215,73 +232,81 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
       {/* Distress Target & Interactive Route Map Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Distress Target Beacon Card (Left 4 Cols) */}
-        <div className="flex flex-col justify-between space-y-4 rounded-2xl border border-rose-200 bg-white p-5 shadow-sm lg:col-span-4">
+        <div className="flex flex-col justify-between space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-4">
           <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-rose-100 pb-2.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-600 animate-pulse"></span>
-                <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">
-                  Distress Target Beacon
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full",
+                    activeMission ? "bg-rose-600 animate-pulse" : "bg-slate-400",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "text-[10px] font-bold uppercase tracking-wider",
+                    activeMission ? "text-rose-700" : "text-slate-500",
+                  )}
+                >
+                  {activeMission ? "Distress Target Beacon" : "Target Beacon Standby"}
                 </span>
               </div>
-              <span className="font-mono text-xs font-bold text-slate-600">Ticket #FR-0248</span>
+              <span className="font-mono text-xs font-bold text-slate-600">
+                {activeMission
+                  ? `Ticket #FR-${activeMission.sos_id.toString().padStart(4, "0")}`
+                  : "No Target"}
+              </span>
             </div>
 
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">{DISTRESS_BEACON.barangay}</h3>
-              <p className="font-mono text-[11px] text-slate-500 flex items-center mt-0.5">
-                <MapPin className="mr-1 h-3 w-3 text-rose-500" /> 14.5995° N, 121.0223° E • Sector
-                Delta
-              </p>
-            </div>
+            {activeMission ? (
+              <>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Active Incident Mission</h3>
+                  <p className="font-mono text-[11px] text-slate-500 flex items-center mt-0.5">
+                    <MapPin className="mr-1 h-3 w-3 text-rose-500" />
+                    {activeMission.latitude.toFixed(4)}° N, {activeMission.longitude.toFixed(4)}° E •
+                    Sector Delta
+                  </p>
+                </div>
 
-            <div className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs space-y-1">
-              <div className="font-bold text-rose-800 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 text-rose-600" /> 6 Civilians Trapped on
-                Rooftop
+                <div className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs space-y-1">
+                  <div className="font-bold text-rose-800 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
+                    Verified SOS Dispatch
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-relaxed">
+                    {activeMission.note || "Citizen emergency report verified by dispatch."}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="py-6 text-center space-y-2">
+                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                  <Navigation className="h-5 w-5" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">Fleet on Depot Standby</h3>
+                <p className="text-xs text-slate-500 leading-relaxed px-2">
+                  No active emergency missions assigned. Dispatch an incident from the Triage Queue
+                  to initiate live route navigation and distress beacons.
+                </p>
               </div>
-              <p className="text-[11px] text-rose-700 leading-relaxed">
-                Includes 1 infant and 1 senior citizen with limited mobility. Water level approx 180
-                cm and rising.
-              </p>
-            </div>
-
-            {/* Field Recon Photo Mock */}
-            <div className="relative h-32 rounded-xl bg-slate-900 overflow-hidden flex items-center justify-center border border-slate-800">
-              <svg className="h-full w-full object-cover opacity-60" viewBox="0 0 300 120">
-                <rect width="300" height="120" fill="#1e293b" />
-                <path
-                  d="M0,70 Q75,50 150,75 T300,60 L300,120 L0,120 Z"
-                  fill="#0284c7"
-                  opacity="0.6"
-                />
-                <circle
-                  cx="150"
-                  cy="50"
-                  r="16"
-                  fill="#e11d48"
-                  opacity="0.2"
-                  className="animate-ping"
-                />
-                <circle cx="150" cy="50" r="6" fill="#e11d48" />
-              </svg>
-              <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 font-mono text-[9px] text-white backdrop-blur">
-                Field Recon Photo (11:52 AM)
-              </div>
-              <div className="absolute bottom-2 right-2 rounded bg-sky-600 px-2 py-0.5 font-bold text-[9px] text-white shadow">
-                Depth: 180 cm
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => onAction("Signaled secondary backup rescue unit")}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-rose-500 transition-colors"
-            >
-              <AlertTriangle className="h-3.5 w-3.5" /> Signal Immediate Support Unit
-            </button>
+            {activeMission ? (
+              <button
+                type="button"
+                onClick={() => onAction("Signaled secondary backup rescue unit")}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-rose-500 transition-colors"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" /> Signal Immediate Support Unit
+              </button>
+            ) : (
+              <div className="text-center text-xs font-medium text-slate-400 py-2">
+                All units ready for deployment
+              </div>
+            )}
           </div>
         </div>
 
@@ -295,12 +320,16 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 <div className="text-[9px] font-bold text-slate-500 uppercase">
                   Optimal Clearance
                 </div>
-                <div className="text-xs font-bold text-slate-800">Rizal Ave North Arterial</div>
+                <div className="text-xs font-bold text-slate-800">
+                  {activeMission ? "Rizal Ave Safe Bypass" : "Depot Base Clearance"}
+                </div>
               </div>
             </div>
             <div>
               <div className="text-[9px] font-bold text-slate-500 uppercase">Channel Depth</div>
-              <div className="text-xs font-bold text-sky-600">30 cm - 45 cm Safe Draft</div>
+              <div className="text-xs font-bold text-sky-600">
+                {activeMission ? "Safe Draft Verified" : "Clear Corridor (Standby)"}
+              </div>
             </div>
           </div>
 
@@ -340,14 +369,45 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 opacity="0.4"
               />
 
-              {/* Animated Dashed Route Line */}
-              <path
-                d="M 150,280 L 250,280 L 350,220 L 450,120 L 550,100 L 650,120 L 700,180"
-                fill="none"
-                stroke="#0ea5e9"
-                strokeWidth="4"
-                strokeDasharray="8 4"
-              />
+              {activeMission && (
+                <>
+                  {/* Animated Dashed Route Line */}
+                  <path
+                    d="M 150,280 L 250,280 L 350,220 L 450,120 L 550,100 L 650,120 L 700,180"
+                    fill="none"
+                    stroke="#0ea5e9"
+                    strokeWidth="4"
+                    strokeDasharray="8 4"
+                  />
+
+                  {/* Moving Unit Blip */}
+                  <circle cx="450" cy="120" r="12" fill="#0369a1" />
+                  <text
+                    x="450"
+                    y="105"
+                    fontSize="10"
+                    fontWeight="bold"
+                    fill="#0369a1"
+                    textAnchor="middle"
+                  >
+                    {activeUnit?.callSign || "Rescue Unit"} (En Route)
+                  </text>
+
+                  {/* Target Node */}
+                  <circle cx="700" cy="180" r="14" fill="#e11d48" />
+                  <circle cx="700" cy="180" r="6" fill="#fff" />
+                  <text
+                    x="700"
+                    y="210"
+                    fontSize="10"
+                    fontWeight="bold"
+                    fill="#e11d48"
+                    textAnchor="middle"
+                  >
+                    Distress #FR-{activeMission.sos_id.toString().padStart(4, "0")}
+                  </text>
+                </>
+              )}
 
               {/* Depot Delta Start Node */}
               <circle cx="150" cy="280" r="14" fill="#0f172a" />
@@ -360,35 +420,21 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 fill="#334155"
                 textAnchor="middle"
               >
-                Depot Delta
+                Depot Delta HQ
               </text>
 
-              {/* Moving Unit Blip RU-03 */}
-              <circle cx="450" cy="120" r="12" fill="#0369a1" />
-              <text
-                x="450"
-                y="105"
-                fontSize="10"
-                fontWeight="bold"
-                fill="#0369a1"
-                textAnchor="middle"
-              >
-                RU-03 (En Route)
-              </text>
-
-              {/* Target Node */}
-              <circle cx="700" cy="180" r="14" fill="#e11d48" />
-              <circle cx="700" cy="180" r="6" fill="#fff" />
-              <text
-                x="700"
-                y="210"
-                fontSize="10"
-                fontWeight="bold"
-                fill="#e11d48"
-                textAnchor="middle"
-              >
-                Distress #FR-0248
-              </text>
+              {!activeMission && (
+                <text
+                  x="450"
+                  y="180"
+                  fontSize="12"
+                  fontWeight="bold"
+                  fill="#94a3b8"
+                  textAnchor="middle"
+                >
+                  Corridor Grid Standby • Awaiting Active Dispatch
+                </text>
+              )}
             </svg>
           </div>
         </div>
@@ -401,10 +447,14 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
             <Clock className="h-3 w-3" /> Estimated Arrival (ETA)
           </div>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-slate-900">12</span>
-            <span className="text-xs text-slate-500">min</span>
+            <span className="text-2xl font-bold text-slate-900">
+              {activeMission ? "12" : "--"}
+            </span>
+            <span className="text-xs text-slate-500">{activeMission ? "min" : "Standby"}</span>
           </div>
-          <p className="mt-1 font-mono text-[11px] text-slate-400">Target: 12:13 PM PHT</p>
+          <p className="mt-1 font-mono text-[11px] text-slate-400">
+            {activeMission ? "Target: En Route" : "Awaiting Callout"}
+          </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
@@ -412,10 +462,14 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
             <Navigation className="h-3 w-3" /> Remaining Distance
           </div>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-slate-900">4.2</span>
-            <span className="text-xs text-slate-500">km</span>
+            <span className="text-2xl font-bold text-slate-900">
+              {activeMission ? "4.2" : "--"}
+            </span>
+            <span className="text-xs text-slate-500">{activeMission ? "km" : "Base"}</span>
           </div>
-          <p className="mt-1 font-mono text-[11px] text-slate-400">Corridor total: 6.8 km</p>
+          <p className="mt-1 font-mono text-[11px] text-slate-400">
+            {activeMission ? "Corridor verified" : "Stationed at Depot"}
+          </p>
         </div>
 
         <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-4 shadow-2xs">
@@ -423,21 +477,25 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
             <Droplets className="h-3 w-3 text-sky-600" /> Flood Depth En Route
           </div>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-sky-700">30</span>
-            <span className="text-xs text-sky-600">cm</span>
+            <span className="text-2xl font-bold text-sky-700">
+              {activeMission ? "30" : "--"}
+            </span>
+            <span className="text-xs text-sky-600">{activeMission ? "cm" : "Clear"}</span>
           </div>
-          <p className="mt-1 font-mono text-[11px] text-sky-700">Within 35 cm draft limit (Safe)</p>
+          <p className="mt-1 font-mono text-[11px] text-sky-700">
+            {activeMission ? "Within vehicle clearance limit" : "Monitored passability"}
+          </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
           <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 uppercase">
-            <Home className="h-3 w-3 text-emerald-600" /> Assigned Safe Haven
+            <Home className="h-3 w-3 text-emerald-600" /> Operational Base
           </div>
           <div className="mt-1 text-sm font-bold text-slate-800 truncate">
-            St. Jude Evacuation Hub
+            Depot Delta Headquarters
           </div>
           <p className="mt-1 font-mono text-[11px] text-slate-400">
-            Capacity: 450 (180 free slots)
+            {fleet.length} Units Stationed
           </p>
         </div>
       </div>
@@ -447,11 +505,12 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900">
-              Mission Milestone Timeline: RU-03 to #{DISTRESS_BEACON.incidentId}
+              Mission Milestone Timeline: {activeMission ? `#FR-${activeMission.sos_id.toString().padStart(4, "0")}` : "Standby"}
             </h3>
             <p className="text-xs text-slate-500">
-              Corridor verified against live hydro elevation (Max route depth 30 cm &lt; 35 cm
-              draft)
+              {activeMission
+                ? "Corridor verified against live hydro elevation"
+                : "No active dispatch mission. Ready for deployment."}
             </p>
           </div>
           <span className="rounded bg-slate-100 px-3 py-1 font-mono text-xs text-slate-700">
@@ -461,7 +520,26 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
 
         {/* Stepper */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {MISSION_MILESTONES.map((milestone) => (
+          {[
+            {
+              label: "Step 1: Dispatched",
+              time: activeMission ? "Immediate" : "--",
+              detail: activeMission ? "Depot Delta Station" : "Awaiting assignment",
+              state: activeMission ? "done" : "pending",
+            },
+            {
+              label: "Step 2: En Route",
+              time: activeMission ? "Active" : "--",
+              detail: activeMission ? "Flood-safe corridor active" : "Standby at base",
+              state: activeMission ? "current" : "pending",
+            },
+            {
+              label: "Step 3: On Scene",
+              time: activeMission ? "Pending" : "--",
+              detail: activeMission ? "Target perimeter" : "Standby",
+              state: "pending",
+            },
+          ].map((milestone: any) => (
             <div
               key={milestone.label}
               className={cn(
@@ -497,15 +575,17 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         </div>
 
         {/* Mission Bottom Action Buttons */}
-        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={() => onAction("Rerouted RU-03 via high-ground bypass")}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
-          >
-            Reroute via High Ground
-          </button>
-        </div>
+        {activeMission && (
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => activeUnit?.callSign && onAction(`Rerouted ${activeUnit.callSign} via high-ground bypass`)}
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Reroute via High Ground
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -18,17 +18,24 @@ export function Portal() {
 
 function PortalScreens() {
   const [screen, setScreen] = useState<Screen>("login");
+  const [user, setUser] = useState<any>(null);
   const { show } = useToast();
   const transition = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const signIn = useCallback(() => {
-    show("Authenticated as Maria Santos (Lead Dispatcher)");
+  const signIn = useCallback(
+    (userData?: any) => {
+      setUser(userData || null);
+      const name = userData?.name || "";
+      show(name ? `Authenticated as ${name} (Lead Dispatcher)` : "Authenticated");
 
-    // The toast is the only feedback while the dashboard mounts.
-    transition.current = setTimeout(() => setScreen("dashboard"), 600);
-  }, [show]);
+      // The toast is the only feedback while the dashboard mounts.
+      transition.current = setTimeout(() => setScreen("dashboard"), 600);
+    },
+    [show],
+  );
 
   const signOut = useCallback(() => {
+    setUser(null);
     setScreen("login");
     show("Signed out of the dispatch portal");
   }, [show]);
@@ -42,5 +49,5 @@ function PortalScreens() {
     [],
   );
 
-  return screen === "login" ? <LoginScreen onSignIn={signIn} /> : <Dashboard onSignOut={signOut} />;
+  return screen === "login" ? <LoginScreen onSignIn={signIn} /> : <Dashboard user={user} onSignOut={signOut} />;
 }
