@@ -21,6 +21,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
 import { RESCUE_UNITS, type RescueUnit } from "@/lib/rescue";
+import { assignSOS, confirmDispatch } from "@/lib/dispatch";
 
 type IncidentDetailProps = {
   incident: Incident;
@@ -71,7 +72,24 @@ export function IncidentDetail({
     setNoteOpen(false);
   }
 
-  function handleConfirmDispatch() {
+  async function handleConfirmDispatch() {
+    try {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      if (!isNaN(sosId)) {
+        try {
+          await assignSOS(sosId, 1);
+        } catch (e) {
+          // ignore assignment errors if no mapping
+        }
+        try {
+          await confirmDispatch(sosId, `Dispatched ${selectedUnit.callSign}`);
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
     setDispatchModalOpen(false);
     onAction(`Dispatched ${selectedUnit.callSign} (${selectedUnit.type}) to #${incident.id}`);
     if (onDispatchConfirmed) {
