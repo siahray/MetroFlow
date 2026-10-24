@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetroFlow Mobile Driver App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        navy: { 800: '#0f172a', 900: '#020617' },
+                        brand: '#0ea5e9',
+                        tealCustom: '#164e63'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; }
+        .mobile-screen { display: none; }
+        .mobile-screen.active { display: flex; }
+        /* Custom scrollbar hiding for clean app feel */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen py-8 text-slate-800">
+
+    <!-- TOP DEVS/PROTOTYPE CONTROLLER -->
+    <div class="mb-4 bg-slate-800 text-slate-300 p-2 rounded-xl border border-slate-700 flex items-center gap-2 text-xs font-semibold z-50 shadow-xl">
+        <span class="text-slate-400 px-2 uppercase tracking-wider text-[10px]">Mobile View:</span>
+        <button onclick="switchScreen('screen-splash')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">Splash</button>
+        <button onclick="switchScreen('screen-home')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">Home Map</button>
+        <button onclick="switchScreen('screen-destination')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">Route Picker</button>
+        <button onclick="switchScreen('screen-report')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">Report Hazard</button>
+        <button onclick="switchScreen('screen-sos')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">SOS Dispatch</button>
+        <button onclick="switchScreen('screen-profile')" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white">Profile</button>
+    </div>
+
+    <!-- MOBILE PHONE CONTAINER FRAME -->
+    <div class="relative w-[390px] h-[812px] bg-white rounded-[48px] shadow-2xl overflow-hidden border-[10px] border-slate-800 flex flex-col">
+        
+        <!-- TOP STATUS BAR -->
+        <div class="h-11 bg-white flex items-center justify-between px-6 pt-2 shrink-0 z-40 select-none">
+            <span class="text-xs font-bold text-slate-900">9:41</span>
+            <div class="w-24 h-4 bg-slate-900 rounded-full mx-auto -mt-2"></div>
+            <div class="flex items-center gap-1.5 text-slate-900">
+                <i data-lucide="signal" class="w-3.5 h-3.5"></i>
+                <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+                <i data-lucide="battery" class="w-4 h-4"></i>
+            </div>
+        </div>
+
+        <!-- APP BODY (SCREENS CONTAINER) -->
+        <div class="flex-1 relative overflow-hidden bg-slate-50">
+
+            <!-- SCREEN 1: SPLASH & LOGIN -->
+            <div id="screen-splash" class="mobile-screen active absolute inset-0 flex-col justify-between p-6 bg-gradient-to-b from-blue-50/50 via-white to-slate-50 overflow-y-auto">
+                <div class="flex items-center justify-between pt-2">
+                    <span class="px-3 py-1 bg-blue-100/80 text-blue-700 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <div class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></div> Live Flood Network
+                    </span>
+                    <span class="text-[10px] font-bold text-slate-500 uppercase">Civic Transit Safe</span>
+                </div>
+
+                <div class="my-auto text-center space-y-4 py-8">
+                    <div class="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto text-white shadow-xl shadow-blue-500/20">
+                        <i data-lucide="waves" class="w-10 h-10"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-black text-slate-900 tracking-tight">MetroFlow</h1>
+                        <p class="text-xs text-slate-500 font-medium mt-1">Safer Roads. Stronger Communities.</p>
+                    </div>
+
+                    <div class="bg-white/80 backdrop-blur p-4 rounded-2xl border border-slate-100 shadow-sm space-y-2 max-w-[280px] mx-auto text-left">
+                        <div class="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                            <i data-lucide="shield-alert" class="w-4 h-4 text-blue-600"></i> Real-Time Hydrologic Rerouting
+                        </div>
+                        <p class="text-[10px] text-slate-500 leading-relaxed">
+                            Calculates safe corridors based on your vehicle's ground clearance profile (28 cm).
+                        </p>
+                    </div>
+                </div>
+
+                <div class="space-y-3 pb-4">
+                    <button onclick="switchScreen('screen-home')" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10">
+                        Log In <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="switchScreen('screen-home')" class="w-full py-3.5 bg-blue-50 text-blue-900 font-bold text-sm rounded-xl hover:bg-blue-100/80">
+                        Continue as Guest
+                    </button>
+                </div>
+            </div>
+
+            <!-- SCREEN 2: HOME & MAP -->
+            <div id="screen-home" class="mobile-screen absolute inset-0 flex-col overflow-hidden">
+                <!-- Header -->
+                <div class="p-4 bg-white border-b border-slate-100 flex items-center justify-between z-10 shrink-0">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm">
+                            CR
+                        </div>
+                        <div>
+                            <h2 class="text-xs font-bold text-slate-900">Carlos Reyes</h2>
+                            <p class="text-[10px] font-semibold text-blue-600">Active Driver • Fleet Member</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 bg-cyan-50 border border-cyan-100 rounded-md text-[10px] font-bold text-cyan-800 flex items-center gap-1">
+                            <i data-lucide="droplet" class="w-3 h-3 text-cyan-600"></i> Sensor Online
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Hazard Alert Banner -->
+                <div class="bg-red-500 text-white px-4 py-2.5 flex items-center justify-between text-xs font-semibold z-10">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0"></i>
+                        <span>HAZARD SURGE • Flooded roads detected</span>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </div>
+
+                <!-- Map Canvas Container -->
+                <div class="flex-1 relative bg-slate-200">
+                    <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Map View" class="w-full h-full object-cover">
+                    
+                    <!-- Search Overlay Bar -->
+                    <div class="absolute top-4 inset-x-4">
+                        <button onclick="switchScreen('screen-destination')" class="w-full bg-white/95 backdrop-blur shadow-lg border border-slate-200 rounded-2xl p-3.5 flex items-center gap-3 text-left">
+                            <i data-lucide="search" class="w-5 h-5 text-slate-400"></i>
+                            <div>
+                                <p class="text-xs font-bold text-slate-800">ELEVATED PATH PLANNER</p>
+                                <p class="text-[11px] text-slate-500">Where to? Search flood-safe destination...</p>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Flooded Area Indicator on Map -->
+                    <div class="absolute top-1/2 left-1/3 -translate-y-1/2 bg-red-600/80 text-white backdrop-blur border border-red-300 rounded-lg p-2 text-[10px] font-bold shadow-lg">
+                        Water Level: 42 cm
+                    </div>
+                </div>
+
+                <!-- Drainage Quick Status Card -->
+                <div class="p-4 bg-white border-t border-slate-100 z-10 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-800 uppercase tracking-wider">Urban Drainage Status</span>
+                        <span class="text-[10px] font-semibold text-slate-400">Updated 2m ago</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase">Open Pumping</p>
+                            <p class="text-sm font-bold text-blue-900">14/16</p>
+                        </div>
+                        <div class="bg-red-50 p-2.5 rounded-xl border border-red-100">
+                            <p class="text-[9px] font-bold text-red-500 uppercase">Blocked Pave</p>
+                            <p class="text-sm font-bold text-red-900">3 Segs</p>
+                        </div>
+                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <p class="text-[9px] font-bold text-slate-400 uppercase">Tide Level</p>
+                            <p class="text-sm font-bold text-slate-800">+1.1m</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCREEN 3: SET DESTINATION & ROUTE SELECTOR -->
+            <div id="screen-destination" class="mobile-screen absolute inset-0 flex-col bg-white overflow-y-auto no-scrollbar">
+                <!-- Top Nav Bar -->
+                <div class="p-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <button onclick="switchScreen('screen-home')" class="p-2 hover:bg-slate-50 rounded-full">
+                        <i data-lucide="arrow-left" class="w-5 h-5 text-slate-700"></i>
+                    </button>
+                    <span class="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Route Selection</span>
+                    <div class="w-9"></div>
+                </div>
+
+                <!-- Origin & Destination Inputs -->
+                <div class="p-4 bg-slate-50 border-b border-slate-100 space-y-3">
+                    <div class="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                        <i data-lucide="navigation" class="w-4 h-4 text-blue-600"></i>
+                        <input type="text" value="Current Location (Rizal Ave, Sector 4)" class="w-full text-xs font-semibold text-slate-800 bg-transparent outline-none">
+                    </div>
+                    <div class="flex items-center gap-3 bg-white p-3 rounded-xl border border-blue-500 shadow-xs">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-red-500"></i>
+                        <input type="text" value="Financial District Tower" class="w-full text-xs font-bold text-slate-900 bg-transparent outline-none">
+                    </div>
+                </div>
+
+                <!-- Suggested Safe Route Card -->
+                <div class="p-4 space-y-4">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Hydrologic Route Suggestions</h3>
+
+                    <div class="p-4 bg-blue-50/60 border-2 border-blue-600 rounded-2xl space-y-3 relative">
+                        <span class="absolute top-3 right-3 px-2 py-0.5 bg-blue-600 text-white rounded text-[9px] font-bold uppercase">Recommended</span>
+                        <div>
+                            <h4 class="text-sm font-bold text-blue-950">Alternative (Bypass Safe)</h4>
+                            <p class="text-xs font-semibold text-blue-800 mt-0.5">27 min • 10.8 km • Clear of runoff</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-[11px] font-semibold text-teal-700 bg-white/80 px-2.5 py-1.5 rounded-lg border border-teal-100">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-teal-600"></i> Safer route avoids flooded area
+                        </div>
+                    </div>
+
+                    <!-- Direct Route (Warning Card) -->
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 opacity-80">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="text-sm font-bold text-slate-800">Current Route (Direct)</h4>
+                                <p class="text-xs font-semibold text-slate-500">32 min • 12.4 km • +5 min delay</p>
+                            </div>
+                            <span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[9px] font-bold uppercase">Hazard</span>
+                        </div>
+                        <p class="text-[10px] font-semibold text-red-600 flex items-center gap-1">
+                            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> Caution: Water level 22 cm at Underpass
+                        </p>
+                    </div>
+
+                    <button onclick="switchScreen('screen-home')" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg mt-4">
+                        <i data-lucide="navigation" class="w-4 h-4"></i> Start Safe Navigation
+                    </button>
+                </div>
+            </div>
+
+            <!-- SCREEN 4: HAZARD REPORTING -->
+            <div id="screen-report" class="mobile-screen absolute inset-0 flex-col bg-white overflow-y-auto no-scrollbar">
+                <div class="p-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                    <button onclick="switchScreen('screen-home')" class="p-2 hover:bg-slate-50 rounded-full">
+                        <i data-lucide="arrow-left" class="w-5 h-5 text-slate-700"></i>
+                    </button>
+                    <span class="text-xs font-bold text-slate-800 uppercase tracking-wider">Community Flood Watch</span>
+                    <div class="w-9"></div>
+                </div>
+
+                <div class="p-4 space-y-5">
+                    <!-- Step 1: Photo Upload -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-700 block mb-2">1. Snap Waterline Photo (Optional)</label>
+                        <div class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center space-y-2 bg-slate-50/50">
+                            <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                                <i data-lucide="camera" class="w-5 h-5"></i>
+                            </div>
+                            <p class="text-xs font-semibold text-slate-700">Snap waterline against curb or vehicle</p>
+                            <p class="text-[10px] text-slate-400">JPG, PNG up to 10MB</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Depth Selection -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-700 block mb-2">2. Estimated Depth Level *</label>
+                        <div class="space-y-2">
+                            <label class="flex items-center justify-between p-3 border border-slate-200 rounded-xl bg-white cursor-pointer">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800">Ankle Deep</p>
+                                    <p class="text-[10px] text-slate-500">Around 15 cm depth</p>
+                                </div>
+                                <input type="radio" name="depth" class="w-4 h-4 accent-blue-600">
+                            </label>
+                            <label class="flex items-center justify-between p-3 border-2 border-blue-600 rounded-xl bg-blue-50/40 cursor-pointer">
+                                <div>
+                                    <p class="text-xs font-bold text-blue-950">Knee Deep</p>
+                                    <p class="text-[10px] text-blue-700">Around 45 cm depth</p>
+                                </div>
+                                <input type="radio" name="depth" checked class="w-4 h-4 accent-blue-600">
+                            </label>
+                            <label class="flex items-center justify-between p-3 border border-slate-200 rounded-xl bg-white cursor-pointer">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800">Waist Deep / Submerged</p>
+                                    <p class="text-[10px] text-slate-500">Exceeds 90 cm depth • Severe</p>
+                                </div>
+                                <input type="radio" name="depth" class="w-4 h-4 accent-blue-600">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Passability -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-700 block mb-2">3. Passability Status *</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="p-2.5 border border-slate-200 rounded-xl text-center text-slate-700 hover:border-slate-400">
+                                <i data-lucide="car" class="w-5 h-5 mx-auto mb-1"></i>
+                                <span class="text-[10px] font-bold block">Passable</span>
+                            </button>
+                            <button class="p-2.5 border-2 border-blue-600 bg-blue-50 text-blue-900 rounded-xl text-center">
+                                <i data-lucide="truck" class="w-5 h-5 mx-auto mb-1 text-blue-600"></i>
+                                <span class="text-[10px] font-bold block">High Clearance Only</span>
+                            </button>
+                            <button class="p-2.5 border border-slate-200 rounded-xl text-center text-slate-700 hover:border-slate-400">
+                                <i data-lucide="x-circle" class="w-5 h-5 mx-auto mb-1 text-red-500"></i>
+                                <span class="text-[10px] font-bold block">Impassable</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button onclick="switchScreen('screen-home')" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl shadow-lg mt-2">
+                        Submit Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- SCREEN 5: SOS EMERGENCY -->
+            <div id="screen-sos" class="mobile-screen absolute inset-0 flex-col bg-slate-900 text-white p-6 justify-between overflow-y-auto">
+                <div class="flex justify-between items-center">
+                    <span class="px-2.5 py-1 bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                        Priority SOS Line
+                    </span>
+                    <button onclick="switchScreen('screen-home')" class="text-slate-400 hover:text-white">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <div class="text-center my-auto space-y-6">
+                    <div class="relative w-28 h-28 mx-auto flex items-center justify-center">
+                        <div class="absolute inset-0 bg-red-500/20 rounded-full animate-ping"></div>
+                        <div class="w-24 h-24 bg-red-600 rounded-full border-4 border-red-400 flex items-center justify-center shadow-2xl shadow-red-600/50">
+                            <i data-lucide="life-buoy" class="w-12 h-12 text-white"></i>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h2 class="text-xl font-bold">Need Immediate Rescue?</h2>
+                        <p class="text-xs text-slate-400 mt-2 leading-relaxed max-w-[260px] mx-auto">
+                            If stranded or vehicle trapped in rising floodwaters, request LGU deployment.
+                        </p>
+                    </div>
+
+                    <div class="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl text-left space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-400 font-semibold">Identified Location:</span>
+                            <span class="text-teal-400 font-bold">±3m accuracy</span>
+                        </div>
+                        <p class="text-xs font-bold text-white">Rizal Ave near LRT Station</p>
+                        <p class="text-[10px] text-slate-400">Metro District Sector 4 • Northbound</p>
+                    </div>
+                </div>
+
+                <div class="space-y-3 pt-4">
+                    <button onclick="switchScreen('screen-home')" class="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-extrabold text-sm rounded-xl shadow-xl shadow-red-600/30 flex items-center justify-center gap-2">
+                        <i data-lucide="alert-octagon" class="w-5 h-5"></i> Request SOS Rescue
+                    </button>
+                    <button onclick="switchScreen('screen-home')" class="w-full py-3 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl border border-slate-700">
+                        Cancel Request
+                    </button>
+                </div>
+            </div>
+
+            <!-- SCREEN 6: PROFILE & SETTINGS -->
+            <div id="screen-profile" class="mobile-screen absolute inset-0 flex-col bg-slate-50 overflow-y-auto no-scrollbar pb-16">
+                <!-- Profile Header -->
+                <div class="bg-white p-6 text-center border-b border-slate-100 relative">
+                    <div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center text-white font-bold text-xl mx-auto mb-3 shadow-md">
+                        CR
+                    </div>
+                    <h2 class="text-base font-bold text-slate-900">Carlos Reyes</h2>
+                    <p class="text-xs text-blue-600 font-semibold mt-0.5">Driver / Fleet Member</p>
+
+                    <div class="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-100 text-center">
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Clearance</p>
+                            <p class="text-sm font-bold text-slate-800">28 cm</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Alert Sync</p>
+                            <p class="text-sm font-bold text-teal-600">Active</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">Dispatches</p>
+                            <p class="text-sm font-bold text-slate-800">14</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact & App Info -->
+                <div class="p-4 space-y-4">
+                    <div class="bg-white rounded-2xl p-4 border border-slate-100 space-y-3">
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Account & Vehicle Details</h3>
+                        <div class="flex items-center justify-between text-xs py-1 border-b border-slate-50">
+                            <span class="text-slate-500">Dispatch Email</span>
+                            <span class="font-bold text-slate-800">carlos.reyes@email.com</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs py-1">
+                            <span class="text-slate-500">Vehicle Plate</span>
+                            <span class="font-bold text-slate-800">ABC 1234 (SUV 28cm)</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-4 border border-slate-100 space-y-3">
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">App Preferences</h3>
+                        <div class="flex items-center justify-between text-xs py-1">
+                            <span class="font-bold text-slate-800">Flash Flood Push Alerts</span>
+                            <input type="checkbox" checked class="w-4 h-4 accent-blue-600">
+                        </div>
+                    </div>
+
+                    <button onclick="switchScreen('screen-splash')" class="w-full py-3 bg-red-50 text-red-600 font-bold text-xs rounded-xl border border-red-100">
+                        Log Out
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- BOTTOM MOBILE NAVIGATION TABS -->
+        <div class="h-16 bg-white border-t border-slate-100 flex items-center justify-around px-2 shrink-0 z-40 select-none">
+            <button onclick="switchScreen('screen-home')" class="flex flex-col items-center gap-0.5 text-blue-600">
+                <i data-lucide="map" class="w-5 h-5"></i>
+                <span class="text-[10px] font-bold">Map</span>
+            </button>
+            <button onclick="switchScreen('screen-report')" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-800">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                <span class="text-[10px] font-bold">Report</span>
+            </button>
+            <button onclick="switchScreen('screen-sos')" class="flex flex-col items-center gap-0.5 text-red-500 hover:text-red-600">
+                <i data-lucide="life-buoy" class="w-5 h-5"></i>
+                <span class="text-[10px] font-bold">SOS</span>
+            </button>
+            <button onclick="switchScreen('screen-profile')" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-slate-800">
+                <i data-lucide="user" class="w-5 h-5"></i>
+                <span class="text-[10px] font-bold">Profile</span>
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Screen switching controller
+        function switchScreen(screenId) {
+            document.querySelectorAll('.mobile-screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+    </script>
+</body>
+</html>

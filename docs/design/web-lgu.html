@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetroFlow LGU Operations & Dispatch Portal - Prototype</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#172033',
+                            900: '#0f172a',
+                            950: '#020617',
+                        },
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .web-screen { display: none; }
+        .web-screen.active { display: flex; }
+        /* Smooth scrolling & clean scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .radar-sweep {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, rgba(14, 165, 233, 0.25) 0deg, rgba(14, 165, 233, 0) 60deg, transparent 60deg);
+            animation: radarRotate 4s linear infinite;
+        }
+        @keyframes radarRotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-slate-950 text-slate-800 antialiased overflow-hidden select-none">
+
+    <!-- TOP PROTOTYPE CONTROLLER BAR -->
+    <header class="h-12 bg-slate-900 border-b border-slate-800 text-slate-200 px-4 flex items-center justify-between z-50 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-md bg-sky-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                    <i data-lucide="waves" class="w-3.5 h-3.5"></i>
+                </div>
+                <span class="font-bold text-sm tracking-tight text-white">MetroFlow LGU</span>
+            </div>
+            <span class="text-slate-600">|</span>
+            <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Prototype Viewport:</span>
+            <div class="flex items-center gap-1.5 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
+                <button onclick="switchScreen('screen-login')" id="nav-btn-login" class="px-2.5 py-1 rounded text-xs font-medium transition text-slate-400 hover:text-white">
+                    1. Login
+                </button>
+                <button onclick="switchScreen('screen-triage')" id="nav-btn-triage" class="px-2.5 py-1 rounded text-xs font-semibold bg-sky-600 text-white shadow-sm transition">
+                    2. Triage & Verification
+                </button>
+                <button onclick="switchScreen('screen-radar')" id="nav-btn-radar" class="px-2.5 py-1 rounded text-xs font-medium transition text-slate-400 hover:text-white">
+                    3. Dispatch Radar
+                </button>
+                <button onclick="switchScreen('screen-map')" id="nav-btn-map" class="px-2.5 py-1 rounded text-xs font-medium transition text-slate-400 hover:text-white">
+                    4. Map & Hazards
+                </button>
+                <button onclick="switchScreen('screen-fleet')" id="nav-btn-fleet" class="px-2.5 py-1 rounded text-xs font-medium transition text-slate-400 hover:text-white">
+                    5. Rescue Fleet Tracking
+                </button>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button onclick="openDispatchModal()" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 shadow-sm transition">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i> Launch 3-Step Dispatch
+            </button>
+            <div class="flex items-center gap-1.5 text-xs text-slate-400 font-mono border-l border-slate-800 pl-3">
+                <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Audit v1.0 Compliant (cm, km/h, slate-900)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN APP WRAPPER -->
+    <div class="flex-1 relative overflow-hidden bg-slate-100 flex flex-col">
+
+        <!-- ========================================================================================= -->
+        <!-- SCREEN 1: LOGIN SCREEN -->
+        <!-- ========================================================================================= -->
+        <div id="screen-login" class="web-screen absolute inset-0 flex-col justify-between bg-slate-100 p-6 overflow-y-auto">
+            <!-- Top bar -->
+            <div class="flex flex-col sm:flex-row items-center justify-between border-b border-slate-200/80 pb-3 text-xs font-medium text-slate-500">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    <span class="font-semibold text-slate-800 uppercase tracking-wider">MDRRMC Operational Grid</span>
+                    <span class="text-slate-300">•</span>
+                    <span class="font-mono text-slate-500">NODE PH-NCR-04</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 shadow-sm">
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+                        <span>SSL 256-Bit Encrypted</span>
+                    </span>
+                    <span class="font-mono text-slate-400">v4.8.2-rc (Pilot)</span>
+                </div>
+            </div>
+
+            <!-- Login Box -->
+            <div class="flex-1 flex items-center justify-center py-10">
+                <div class="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-8 space-y-6">
+                    <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-sky-500 via-sky-600 to-indigo-600 rounded-t-2xl"></div>
+
+                    <div class="text-center space-y-2">
+                        <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 shadow-sm mb-1">
+                            <i data-lucide="waves" class="w-6 h-6 text-sky-600"></i>
+                        </div>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900">MetroFlow Portal</h1>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">LGU Dispatch & Triage System</p>
+                        <p class="text-xs text-slate-400">Authorized personnel credentials required</p>
+                    </div>
+
+                    <form onsubmit="event.preventDefault(); switchScreen('screen-triage');" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Email / Username</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                    <i data-lucide="user" class="w-4 h-4"></i>
+                                </span>
+                                <input type="text" value="m.santos@metroflow.gov.ph" required class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50/50 text-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-xs font-semibold text-slate-600 uppercase">Password</label>
+                                <span class="text-xs text-sky-600 font-medium cursor-pointer hover:underline">Forgot password?</span>
+                            </div>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                                    <i data-lucide="lock" class="w-4 h-4"></i>
+                                </span>
+                                <input type="password" value="••••••••••••" required class="w-full pl-9 pr-10 py-2.5 rounded-lg border border-slate-200 bg-slate-50/50 text-sm focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none">
+                                <button type="button" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between text-xs">
+                            <label class="flex items-center gap-2 text-slate-600 cursor-pointer">
+                                <input type="checkbox" checked class="w-4 h-4 rounded border-slate-300 text-sky-600">
+                                <span>Remember session for 12 hours</span>
+                            </label>
+                        </div>
+
+                        <!-- Approved primary color slate-900 (not navy-950) -->
+                        <button type="submit" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 shadow-md shadow-slate-900/10 transition">
+                            <span>Sign in to Dispatch Operations</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </form>
+
+                    <div class="pt-4 border-t border-slate-100 text-center space-y-2">
+                        <span class="text-[10px] uppercase tracking-widest font-bold text-slate-400">Official CDRRMO Clearance</span>
+                        <div class="flex items-center justify-center gap-1.5 p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-600 text-xs">
+                            <i data-lucide="shield-alert" class="w-4 h-4 text-sky-600"></i>
+                            <span class="font-medium">Authorized LGU & MDRRMC Personnel Only</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center text-xs text-slate-500 py-2 space-y-1">
+                <p>Pasig-Marikina River Basin Disaster Risk Reduction Network</p>
+                <p class="text-slate-400">For operational access escalation contact CDMO Helpdesk at <span class="font-mono text-slate-600">+63 (2) 8888-FLOW</span></p>
+            </div>
+        </div>
+
+        <!-- ========================================================================================= -->
+        <!-- MAIN OPERATIONAL SHELL (Triage, Radar, Map, Fleet) -->
+        <!-- ========================================================================================= -->
+        <div id="shell-container" class="flex-1 flex overflow-hidden">
+            
+            <!-- LEFT NAVIGATION SIDEBAR -->
+            <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between flex-shrink-0 text-slate-300 select-none z-30">
+                <div>
+                    <!-- App Logo Header -->
+                    <div class="p-4 border-b border-slate-800 flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-lg bg-sky-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
+                            <i data-lucide="waves" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold text-white text-base leading-none">MetroFlow</div>
+                            <div class="text-[10px] text-sky-400 uppercase tracking-wider font-semibold mt-1">LGU Operations</div>
+                        </div>
+                    </div>
+
+                    <!-- Sector Alert Banner -->
+                    <div class="m-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="relative flex h-2 w-2">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                            </span>
+                            <span class="text-xs font-semibold text-amber-300">Status: Level 2 Alert</span>
+                        </div>
+                        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-bold">14 SOS</span>
+                    </div>
+
+                    <!-- Active Nav Items -->
+                    <nav class="px-2 space-y-1 text-xs font-medium">
+                        <button onclick="switchScreen('screen-triage')" id="side-nav-triage" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition bg-sky-600 text-white font-semibold shadow-sm">
+                            <i data-lucide="check-square" class="w-4 h-4"></i>
+                            <span>Triage & Verification</span>
+                            <span class="ml-auto bg-sky-400/30 text-white text-[10px] font-mono px-1.5 py-0.5 rounded">8</span>
+                        </button>
+
+                        <button onclick="switchScreen('screen-radar')" id="side-nav-radar" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+                            <i data-lucide="radar" class="w-4 h-4"></i>
+                            <span>Dispatch Radar</span>
+                            <span class="ml-auto flex h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+                        </button>
+
+                        <button onclick="switchScreen('screen-map')" id="side-nav-map" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+                            <i data-lucide="map" class="w-4 h-4"></i>
+                            <span>Live Map & Hazards</span>
+                        </button>
+
+                        <button onclick="switchScreen('screen-fleet')" id="side-nav-fleet" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition text-slate-400 hover:text-white hover:bg-slate-800/60">
+                            <i data-lucide="truck" class="w-4 h-4"></i>
+                            <span>Rescue Units & Fleet</span>
+                            <span class="ml-auto text-[10px] text-emerald-400 font-mono">3 Active</span>
+                        </button>
+
+                        <!-- OUT OF SCOPE SECTION (Per UI/UX Design Audit & Scope Resolution) -->
+                        <div class="pt-4 pb-1">
+                            <p class="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Out of Scope (Pilot)</p>
+                            
+                            <button disabled title="Out of scope for pilot" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-slate-600 cursor-not-allowed opacity-60">
+                                <i data-lucide="megaphone" class="w-4 h-4"></i>
+                                <span>Civic Broadcasts</span>
+                                <span class="ml-auto text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-500">Disabled</span>
+                            </button>
+
+                            <button disabled title="Out of scope for pilot" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-slate-600 cursor-not-allowed opacity-60">
+                                <i data-lucide="building" class="w-4 h-4"></i>
+                                <span>Evacuation Centers</span>
+                                <span class="ml-auto text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-500">Disabled</span>
+                            </button>
+
+                            <button disabled title="Out of scope for pilot" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-slate-600 cursor-not-allowed opacity-60">
+                                <i data-lucide="plane" class="w-4 h-4"></i>
+                                <span>Air-Asset Escalation</span>
+                                <span class="ml-auto text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-500">Disabled</span>
+                            </button>
+                        </div>
+                    </nav>
+                </div>
+
+                <!-- Officer / Sign out info -->
+                <div class="m-3 p-3 rounded-lg bg-slate-850 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                    <div class="flex items-center justify-between font-semibold text-slate-300">
+                        <span>MDRRMC PASIG</span>
+                        <i data-lucide="shield" class="w-3.5 h-3.5 text-sky-400"></i>
+                    </div>
+                    <p class="text-slate-400 font-medium">Maria Santos (Lead)</p>
+                    <p class="text-[10px] font-mono text-slate-500">Station 4 • Dispatch Officer</p>
+                    <button onclick="switchScreen('screen-login')" class="w-full pt-2 mt-2 border-t border-slate-800 flex items-center gap-1.5 text-rose-400 hover:text-rose-300 text-[11px] text-left">
+                        <i data-lucide="log-out" class="w-3 h-3"></i>
+                        <span>Sign out portal</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- RIGHT OPERATIONAL CONTENT AREA -->
+            <div class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-100">
+                
+                <!-- TOP HEADER BAR -->
+                <header class="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between flex-shrink-0 z-20">
+                    <div class="flex items-center gap-3 text-xs">
+                        <span class="text-slate-400">Operations HQ</span>
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-300"></i>
+                        <span id="breadcrumb-title" class="font-semibold text-slate-800">Incident Triage & Verification</span>
+                        <span class="px-2 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-700 font-mono text-[10px] font-bold">SECTOR DELTA ACTIVE</span>
+                    </div>
+
+                    <div class="flex items-center gap-4 text-xs">
+                        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            <i data-lucide="cloud-rain" class="w-3.5 h-3.5 text-sky-600"></i>
+                            <span>28°C Rain Advisory (38 mm/hr)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-semibold">
+                            <span class="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+                            <span>Active Distress SOS: 14</span>
+                        </div>
+                        <div class="h-4 w-px bg-slate-200"></div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">MS</div>
+                            <div>
+                                <div class="font-semibold text-slate-800 leading-tight">Maria Santos</div>
+                                <div class="text-[10px] text-slate-400">Lead Dispatch Officer</div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- ========================================================================================= -->
+                <!-- SCREEN 2: INCIDENT TRIAGE & VERIFICATION -->
+                <!-- ========================================================================================= -->
+                <main id="screen-triage" class="web-screen active flex-1 p-6 overflow-y-auto space-y-6 flex-col">
+                    
+                    <!-- KPI Metric Summary Row -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending Triage</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <span id="kpi-pending-count" class="text-2xl font-bold text-slate-900">8</span>
+                                    <span class="text-xs font-semibold text-rose-600">3 Critical Flood</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">Queue velocity: +4 in last hr</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100">
+                                <i data-lucide="siren" class="w-5 h-5"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Verified Today</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <span class="text-2xl font-bold text-slate-900">34</span>
+                                    <span class="text-xs font-medium text-emerald-600 flex items-center"><i data-lucide="trending-up" class="w-3 h-3 mr-0.5"></i> +28%</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">29 Dispatched to Responders</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                                <i data-lucide="check-circle" class="w-5 h-5"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Avg Triage Speed</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <span class="text-2xl font-bold text-slate-900">4.2 min</span>
+                                    <span class="text-xs font-medium text-sky-600">Within SLA</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">Target SLA: &lt; 5.0 mins</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-100">
+                                <i data-lucide="timer" class="w-5 h-5"></i>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">AI Fraud / Duplicate Filter</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <span class="text-2xl font-bold text-slate-900">99.1%</span>
+                                    <span class="text-xs font-medium text-indigo-600">Active</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">11 duplicate spams screened</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                                <i data-lucide="bot" class="w-5 h-5"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Grid: Incident Queue (5 cols) + Detail & Actions (7 cols) -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        
+                        <!-- INCIDENT QUEUE LIST -->
+                        <div class="lg:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[700px] overflow-hidden">
+                            <div class="p-4 border-b border-slate-200 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <h2 class="font-bold text-slate-900 text-sm">Incoming Incident Queue</h2>
+                                        <span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-xs font-bold">8</span>
+                                    </div>
+                                    <span class="text-xs text-slate-400">Sort by: <strong class="text-slate-700 font-semibold">Urgency Score</strong></span>
+                                </div>
+
+                                <!-- Filter tabs -->
+                                <div class="flex gap-1.5 overflow-x-auto text-xs pb-1">
+                                    <button onclick="filterQueue('all')" id="qfilter-all" class="px-3 py-1 rounded-lg bg-slate-900 text-white font-medium shrink-0">All (8)</button>
+                                    <button onclick="filterQueue('photo')" id="qfilter-photo" class="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium shrink-0">Photo (5)</button>
+                                    <button onclick="filterQueue('sensor')" id="qfilter-sensor" class="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium shrink-0">Sensor Mismatch (2)</button>
+                                    <button onclick="filterQueue('escalated')" id="qfilter-escalated" class="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium shrink-0">Escalated (1)</button>
+                                </div>
+
+                                <!-- Search bar -->
+                                <div class="relative">
+                                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                                    <input type="text" placeholder="Search Report ID, Citizen name, Barangay..." class="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20">
+                                </div>
+                            </div>
+
+                            <!-- List of Incidents -->
+                            <div class="flex-1 overflow-y-auto divide-y divide-slate-100" id="incident-list">
+                                
+                                <!-- Incident Item 1 (Selected) -->
+                                <div onclick="selectIncident('FR-0248')" id="card-FR-0248" class="p-4 cursor-pointer hover:bg-slate-50/80 transition border-l-4 border-sky-600 bg-sky-50/70">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono text-xs font-bold text-slate-800">#FR-0248</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">Urgency 9.4</span>
+                                        </div>
+                                        <span class="text-[11px] text-slate-400">11 min ago</span>
+                                    </div>
+                                    <h3 class="text-xs font-bold text-slate-900 mt-1">Brgy. San Pedro - Riverside Zone</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">Dale Ramos (Masked: +63 91** *** ****)</p>
+                                    <div class="flex flex-wrap items-center gap-2 mt-2 text-[10px]">
+                                        <span class="px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-medium">Photo GPS Match</span>
+                                        <span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-medium">6 Trapped (Ground Floor Submerged)</span>
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between">
+                                        <button onclick="dismissIncident('FR-0248', event)" class="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded border border-slate-200">Dismiss</button>
+                                        <span class="text-[11px] font-medium text-sky-700 bg-sky-100 px-2.5 py-0.5 rounded">Reviewing Detail</span>
+                                    </div>
+                                </div>
+
+                                <!-- Incident Item 2 -->
+                                <div onclick="selectIncident('FR-0241')" id="card-FR-0241" class="p-4 cursor-pointer hover:bg-slate-50/80 transition border-l-4 border-transparent">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono text-xs font-bold text-slate-800">#FR-0241</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">Urgency 8.6</span>
+                                        </div>
+                                        <span class="text-[11px] text-slate-400">40 min ago</span>
+                                    </div>
+                                    <h3 class="text-xs font-bold text-slate-900 mt-1">San Pedro Creek Spillway</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">San Pedro BDRRMC Patrol</p>
+                                    <div class="flex flex-wrap items-center gap-2 mt-2 text-[10px]">
+                                        <span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">Escalated by BFP</span>
+                                    </div>
+                                    <div class="mt-3 flex items-center justify-between">
+                                        <button onclick="dismissIncident('FR-0241', event)" class="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded border border-slate-200">Dismiss</button>
+                                        <span class="text-[11px] text-slate-600">Open</span>
+                                    </div>
+                                </div>
+
+                                <!-- Incident Item 3 -->
+                                <div onclick="selectIncident('FR-0247')" id="card-FR-0247" class="p-4 cursor-pointer hover:bg-slate-50/80 transition border-l-4 border-transparent">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono text-xs font-bold text-slate-800">#FR-0247</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Urgency 7.8</span>
+                                        </div>
+                                        <span class="text-[11px] text-slate-400">18 min ago</span>
+                                    </div>
+                                    <h3 class="text-xs font-bold text-slate-900 mt-1">Rizal Avenue, Malaya Overpass</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">Automated CCTV Analytics #09</p>
+                                    <div class="flex flex-wrap items-center gap-2 mt-2 text-[10px]">
+                                        <span class="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">Road Impassable</span>
+                                        <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium">Stalled Delivery Truck</span>
+                                    </div>
+                                </div>
+
+                                <!-- Incident Item 4 -->
+                                <div onclick="selectIncident('FR-0246')" id="card-FR-0246" class="p-4 cursor-pointer hover:bg-slate-50/80 transition border-l-4 border-transparent">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-mono text-xs font-bold text-slate-800">#FR-0246</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-700 border border-sky-200">Urgency 6.9</span>
+                                        </div>
+                                        <span class="text-[11px] text-slate-400">24 min ago</span>
+                                    </div>
+                                    <h3 class="text-xs font-bold text-slate-900 mt-1">A. Mabini St. Alleyway</h3>
+                                    <p class="text-[11px] text-slate-500 mt-0.5">River Gauge #04 Telemetry</p>
+                                    <div class="flex flex-wrap items-center gap-2 mt-2 text-[10px]">
+                                        <span class="px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 font-medium">Water Rising (+10 cm/hr)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- INCIDENT DETAIL & DISPATCH VERIFICATION -->
+                        <div class="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between space-y-6">
+                            
+                            <div class="space-y-6">
+                                <!-- Docket Header -->
+                                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                                    <div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <span class="px-2.5 py-0.5 rounded bg-rose-800 text-white font-semibold text-xs uppercase tracking-wide">Incident Docket</span>
+                                            <span class="font-mono font-bold text-base text-slate-900" id="detail-docket-id">#FR-0248</span>
+                                            <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-xs border border-rose-200" id="detail-level">Critical Flood Level 3</span>
+                                        </div>
+                                        <div class="flex items-center gap-2 text-xs text-slate-600 mt-2">
+                                            <span>Reported by: <strong class="text-slate-900" id="detail-reporter">Dale Ramos (Masked: +63 91** *** ****)</strong></span>
+                                            <span class="text-slate-300">•</span>
+                                            <span>Filed: <span class="text-slate-500">Apr 27, 2026 • 11:41 AM (11 min ago)</span></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- AI Verification badge -->
+                                    <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 text-right shrink-0">
+                                        <div class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">AI Confidence Score</div>
+                                        <div class="text-sm font-extrabold text-emerald-800" id="detail-confidence">99.2% Authentic</div>
+                                    </div>
+                                </div>
+
+                                <!-- Witness Narrative -->
+                                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                                    <div class="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                        <i data-lucide="message-square" class="w-3.5 h-3.5 text-slate-400"></i>
+                                        <span>Citizen Witness Narrative</span>
+                                    </div>
+                                    <p class="text-xs text-slate-700 leading-relaxed italic" id="detail-narrative">
+                                        "Water rose very quickly after the creek spillway overflowed. It is now calf-to-knee deep (approx 75 cm) inside our ground floor. There are 6 of us trapped on the upper stair landing including two small children and my elderly aunt. Current is strong."
+                                    </p>
+                                </div>
+
+                                <!-- Evidence and Location Grid -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    
+                                    <!-- Photo Evidence card -->
+                                    <div class="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-2xs">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="font-bold text-slate-800 flex items-center gap-1">
+                                                <i data-lucide="camera" class="w-3.5 h-3.5 text-sky-600"></i> Citizen Photo Evidence
+                                            </span>
+                                            <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Metadata Intact</span>
+                                        </div>
+                                        
+                                        <!-- Simulated Flood Evidence Image -->
+                                        <div class="h-40 rounded-lg overflow-hidden relative bg-slate-900 flex items-center justify-center">
+                                            <svg class="w-full h-full object-cover opacity-80" viewBox="0 0 400 200" preserveAspectRatio="none">
+                                                <rect width="400" height="200" fill="#1e293b"/>
+                                                <!-- Water gradient waves -->
+                                                <path d="M0,120 Q100,100 200,130 T400,110 L400,200 L0,200 Z" fill="#0284c7" opacity="0.6"/>
+                                                <path d="M0,140 Q150,130 250,150 T400,135 L400,200 L0,200 Z" fill="#0369a1" opacity="0.8"/>
+                                                <!-- Submerged car icon representation -->
+                                                <rect x="140" y="110" width="80" height="30" rx="6" fill="#475569"/>
+                                                <circle cx="160" cy="140" r="10" fill="#0f172a"/>
+                                                <circle cx="200" cy="140" r="10" fill="#0f172a"/>
+                                            </svg>
+                                            <div class="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur text-white text-[10px] font-mono px-2 py-1 rounded">
+                                                AI Submersion Est: <strong class="text-sky-400">75 cm - 90 cm</strong>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-50 p-2 rounded border border-slate-100 text-[10px] font-mono text-slate-500 space-y-0.5">
+                                            <div>Device: <span class="text-slate-800">iPhone 14 Pro</span></div>
+                                            <div>Timestamp: <span class="text-slate-800">11:40:22 AM PHT</span></div>
+                                            <div>GPS Coords: <span class="text-slate-800">14.5995° N, 121.0223° E</span></div>
+                                            <div class="text-emerald-600 font-semibold flex items-center gap-1">
+                                                <i data-lucide="check" class="w-3 h-3"></i> Cell tower triangulation validated
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Location & Sensor Telemetry card -->
+                                    <div class="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-2xs">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="font-bold text-slate-800 flex items-center gap-1">
+                                                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-rose-600"></i> Location & Sensor Telemetry
+                                            </span>
+                                            <span class="text-[10px] text-slate-500" id="detail-barangay">Brgy. San Pedro</span>
+                                        </div>
+
+                                        <!-- Radar Sensor Box -->
+                                        <div class="h-40 rounded-lg overflow-hidden relative bg-slate-100 border border-slate-200 flex items-center justify-center p-2">
+                                            <div class="absolute inset-0 bg-sky-50 opacity-50"></div>
+                                            <div class="absolute inset-0 border border-dashed border-sky-200 rounded"></div>
+                                            <div class="text-center relative z-10">
+                                                <div class="w-16 h-16 rounded-full border-2 border-rose-500 bg-rose-500/20 flex items-center justify-center mx-auto animate-pulse">
+                                                    <div class="w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-lg">
+                                                        <i data-lucide="alert-triangle" class="w-2.5 h-2.5"></i>
+                                                    </div>
+                                                </div>
+                                                <span class="text-[9px] font-bold text-rose-800 bg-white/90 px-1.5 py-0.5 rounded shadow mt-1 inline-block">Incident Radius: 300 m</span>
+                                            </div>
+                                            <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-rose-800 text-white font-bold text-[9px]">Flood Zone 1</div>
+                                        </div>
+
+                                        <div class="bg-slate-50 p-2 rounded border border-slate-100 text-[10px] space-y-1">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-600">Nearest Rescue:</span>
+                                                <span class="font-bold text-sky-700">RU-03 (Rescue Boat) • 12 min away</span>
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-600">Spillway Sensor #D-12:</span>
+                                                <span class="font-bold text-rose-600">480 cm (Critical Overtopping)</span>
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-slate-600">Rain Gauge Sta. Rosa:</span>
+                                                <span class="font-bold text-sky-700">38 mm/hr (Torrential)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Operations Log -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                                            <i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-400"></i> Operations Log & Responders Allocation Notes
+                                        </span>
+                                        <button onclick="toggleInternalNote()" class="text-sky-600 hover:text-sky-700 font-medium text-[11px]">+ Add Internal Note</button>
+                                    </div>
+
+                                    <div class="bg-slate-50 rounded-lg p-2.5 border border-slate-200 max-h-24 overflow-y-auto space-y-1 text-[11px]" id="operations-log-list">
+                                        <div class="text-slate-500"><span class="font-mono text-slate-400">11:42 AM</span> AI Auto-triage: Submersion flagged &gt; 60 cm. Assigned Urgency 9.4.</div>
+                                        <div class="text-slate-500"><span class="font-mono text-slate-400">11:44 AM</span> Operator M. Santos confirmed photo GPS matches Riverside Zone cadastre.</div>
+                                    </div>
+
+                                    <div id="internal-note-box" class="hidden flex items-center gap-2 mt-2">
+                                        <input type="text" id="internal-note-input" placeholder="Internal note for dispatch log..." class="flex-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20">
+                                        <button onclick="addInternalNote()" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold text-[11px]">Add note</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dispatch Action Buttons (Step Audit Compliant) -->
+                            <div class="pt-4 border-t border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <button onclick="executeAction('Reject / False Alarm')" class="px-3 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition">
+                                    Reject / False Alarm
+                                </button>
+                                <button onclick="executeAction('Escalate to BFP / Coast Guard')" class="px-3 py-2 rounded-lg border border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold transition">
+                                    Escalate to BFP / Coast Guard
+                                </button>
+                                <button onclick="executeAction('Hold for Sensor Update')" class="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-semibold transition">
+                                    Hold for Sensor Update
+                                </button>
+                                <!-- Approved success color emerald-600 / emerald-500 -->
+                                <button onclick="openDispatchModal()" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-1.5">
+                                    <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                                    <span>Approve & Dispatch</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <!-- ========================================================================================= -->
+                <!-- SCREEN 3: DISPATCH RADAR -->
+                <!-- ========================================================================================= -->
+                <main id="screen-radar" class="web-screen flex-1 p-6 overflow-y-auto space-y-6 flex-col">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Active Emergency Dispatch Radar</h2>
+                            <p class="text-xs text-slate-500">Real-time distress incidents, telemetry stream, and nearest available rescue unit tracking</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="togglePhoneMasking()" id="radar-phone-mask-btn" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs">
+                                <i data-lucide="shield" class="w-3.5 h-3.5 text-sky-600"></i>
+                                <span id="radar-phone-mask-text">PII Masked (+63 9** *** ****)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- Radar Visual Screen -->
+                        <div class="lg:col-span-8 bg-slate-900 rounded-2xl border border-slate-800 p-6 relative overflow-hidden flex flex-col justify-between h-[640px] shadow-xl text-white">
+                            <!-- Radar concentric circles -->
+                            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                                <div class="w-[500px] h-[500px] rounded-full border border-sky-400"></div>
+                                <div class="w-[360px] h-[360px] rounded-full border border-sky-400 absolute"></div>
+                                <div class="w-[220px] h-[220px] rounded-full border border-sky-400 absolute"></div>
+                                <div class="w-[80px] h-[80px] rounded-full border border-sky-400 absolute"></div>
+                                <div class="radar-sweep"></div>
+                            </div>
+
+                            <!-- Top overlays -->
+                            <div class="relative z-10 flex items-center justify-between">
+                                <div class="flex items-center gap-2 bg-slate-950/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    <span class="text-xs font-mono font-bold text-sky-400">SECTOR DELTA SWEEP: PASSING</span>
+                                </div>
+                                <div class="text-xs font-mono text-slate-400">Grid: 14.5995 N / 121.0223 E</div>
+                            </div>
+
+                            <!-- Distress Pins inside radar -->
+                            <div class="relative z-10 flex-1 flex items-center justify-center">
+                                <!-- Pin 1 (Critical) -->
+                                <div class="absolute top-[35%] left-[45%] flex flex-col items-center group cursor-pointer" onclick="selectIncident('FR-0248')">
+                                    <div class="w-8 h-8 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg shadow-rose-600/50 animate-bounce">
+                                        <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                                    </div>
+                                    <div class="bg-slate-950/90 text-white text-[10px] px-2 py-0.5 rounded border border-rose-500 mt-1 whitespace-nowrap">
+                                        FR-0248 (6 Trapped • 75 cm)
+                                    </div>
+                                </div>
+
+                                <!-- Pin 2 (RU-03 En Route) -->
+                                <div class="absolute top-[55%] left-[30%] flex flex-col items-center">
+                                    <div class="w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center shadow-lg shadow-sky-500/50">
+                                        <i data-lucide="navigation" class="w-4 h-4"></i>
+                                    </div>
+                                    <div class="bg-slate-950/90 text-sky-300 text-[10px] px-2 py-0.5 rounded border border-sky-500 mt-1 whitespace-nowrap">
+                                        RU-03 En Route (Speed: 24 km/h)
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bottom radar telemetry bar -->
+                            <div class="relative z-10 bg-slate-950/80 backdrop-blur p-4 rounded-xl border border-slate-800 grid grid-cols-3 gap-4 text-xs font-mono">
+                                <div>
+                                    <span class="text-slate-400 block text-[10px]">RADAR FREQUENCY</span>
+                                    <span class="text-white font-bold">156.800 MHz (Ch. 16 Marine)</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[10px]">ACTIVE BEACONS</span>
+                                    <span class="text-rose-400 font-bold">14 High-Priority SOS</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[10px]">RESPONSE RADIUS</span>
+                                    <span class="text-emerald-400 font-bold">5.8 km Perimeter</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Distress Docket Detail in Radar -->
+                        <div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between shadow-sm h-[640px]">
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                                    <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-xs font-bold">DISTRESS DOCKET</span>
+                                    <span class="font-mono text-xs font-bold text-slate-800">#FR-0248</span>
+                                </div>
+
+                                <div class="space-y-1">
+                                    <h3 class="font-bold text-slate-900 text-sm">Riverside Zone, Brgy. San Pedro</h3>
+                                    <p class="text-xs text-slate-500">Citizen Reporter: <strong class="text-slate-800" id="radar-reporter-display">Dale Ramos (+63 91** *** ****)</strong></p>
+                                </div>
+
+                                <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5 text-xs text-rose-900">
+                                    <div class="font-bold flex items-center gap-1.5">
+                                        <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> Trapped Civilians (Urgent SOS)
+                                    </div>
+                                    <p class="text-[11px] text-rose-800 leading-relaxed">
+                                        Spillway overflowed, 6 people trapped on stair landing. Water depth approx 75 cm inside residential premises.
+                                    </p>
+                                </div>
+
+                                <div class="space-y-2 pt-2">
+                                    <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Recommended Dispatch Asset</span>
+                                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="font-bold text-slate-900">RU-03 (Rescue Boat)</span>
+                                            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">AVAILABLE</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-600 space-y-1">
+                                            <div class="flex justify-between"><span>Speed Capability:</span> <strong class="font-mono">28 km/h</strong></div>
+                                            <div class="flex justify-between"><span>Safe Draft Limit:</span> <strong class="font-mono">150 cm</strong></div>
+                                            <div class="flex justify-between"><span>Corridor Travel Time:</span> <strong class="font-mono text-sky-700 font-bold">12 mins</strong></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 pt-4 border-t border-slate-100">
+                                <button onclick="openDispatchModal()" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+                                    <i data-lucide="send" class="w-4 h-4"></i> Dispatch RU-03 to Location
+                                </button>
+                                <button onclick="switchScreen('screen-triage')" class="w-full py-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs">
+                                    Back to Full Triage Queue
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <!-- ========================================================================================= -->
+                <!-- SCREEN 4: LIVE MAP & FLOOD HAZARD EDITOR -->
+                <!-- ========================================================================================= -->
+                <main id="screen-map" class="web-screen flex-1 p-6 overflow-y-auto space-y-6 flex-col">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Live Road Network & Hazard Authoring</h2>
+                            <p class="text-xs text-slate-500">Draw flood polygons and road closures to publish flood-safe dynamic rerouting for drivers</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-3 py-1 rounded bg-slate-100 text-slate-700 text-xs font-mono border border-slate-200">SRID: 4326 PostGIS</span>
+                            <button onclick="publishHazardAction()" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5">
+                                <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i> Publish Hazard Live
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- Map Canvas Container -->
+                        <div class="lg:col-span-8 bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden relative h-[640px] shadow-xl flex flex-col justify-between">
+                            <!-- Map Toolbar -->
+                            <div class="absolute top-4 left-4 z-20 flex items-center gap-1.5 bg-slate-950/90 backdrop-blur p-1.5 rounded-xl border border-slate-800 shadow-md">
+                                <button class="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-medium flex items-center gap-1.5 shadow-sm">
+                                    <i data-lucide="mouse-pointer-2" class="w-3.5 h-3.5"></i> Select
+                                </button>
+                                <button class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5">
+                                    <i data-lucide="hexagon" class="w-3.5 h-3.5 text-sky-400"></i> Flood Polygon
+                                </button>
+                                <button class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5">
+                                    <i data-lucide="git-commit" class="w-3.5 h-3.5 text-rose-400"></i> Closure Line
+                                </button>
+                                <button class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5">
+                                    <i data-lucide="map-pin" class="w-3.5 h-3.5 text-amber-400"></i> Hazard Pin
+                                </button>
+                            </div>
+
+                            <!-- Map Layers Box -->
+                            <div class="absolute top-4 right-4 z-20 bg-slate-950/90 backdrop-blur p-3 rounded-xl border border-slate-800 text-white text-xs space-y-2">
+                                <div class="font-bold text-[11px] text-slate-400 uppercase tracking-wider">Active Map Layers</div>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-sky-600">
+                                    <span>Live Road Graph</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-sky-600">
+                                    <span>Flood Polygons (Depth cm)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked class="w-3.5 h-3.5 rounded text-sky-600">
+                                    <span>Rescue Fleet Locations</span>
+                                </label>
+                            </div>
+
+                            <!-- Interactive Map Canvas Rendering (Simulated Metro Manila Network) -->
+                            <div class="w-full h-full relative flex items-center justify-center">
+                                <svg class="w-full h-full object-cover" viewBox="0 0 800 600">
+                                    <!-- Dark Map Basemap Grid -->
+                                    <rect width="800" height="600" fill="#0f172a"/>
+                                    <!-- Waterbody: Marikina River / Manggahan Floodway -->
+                                    <path d="M400,0 C420,150 380,300 440,450 C460,520 480,600 480,600" fill="none" stroke="#0284c7" stroke-width="24" stroke-opacity="0.4"/>
+                                    <path d="M400,0 C420,150 380,300 440,450 C460,520 480,600 480,600" fill="none" stroke="#38bdf8" stroke-width="12" stroke-opacity="0.8"/>
+                                    
+                                    <!-- Secondary road network -->
+                                    <line x1="50" y1="200" x2="750" y2="200" stroke="#334155" stroke-width="4"/>
+                                    <line x1="100" y1="400" x2="700" y2="400" stroke="#334155" stroke-width="4"/>
+                                    <line x1="200" y1="50" x2="200" y2="550" stroke="#334155" stroke-width="4"/>
+                                    <line x1="600" y1="50" x2="600" y2="550" stroke="#334155" stroke-width="4"/>
+
+                                    <!-- Active Submerged Road Segment (Impassable: > clearance) -->
+                                    <line x1="320" y1="200" x2="520" y2="200" stroke="#e11d48" stroke-width="8" stroke-linecap="round"/>
+                                    
+                                    <!-- Drawn Flood Polygon (San Pedro Riverside) -->
+                                    <polygon points="360,140 480,130 520,240 380,260" fill="#0284c7" fill-opacity="0.45" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4"/>
+                                    
+                                    <!-- Safe Corridor Reroute (Green) -->
+                                    <polyline points="200,200 200,100 600,100 600,200" fill="none" stroke="#10b981" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+                                    
+                                    <!-- Nodes / Markers -->
+                                    <circle cx="200" cy="200" r="6" fill="#10b981"/>
+                                    <circle cx="600" cy="200" r="6" fill="#10b981"/>
+                                    <circle cx="420" cy="200" r="8" fill="#e11d48" stroke="#fff" stroke-width="2"/>
+                                </svg>
+
+                                <div class="absolute bottom-4 left-4 bg-slate-950/90 backdrop-blur px-3 py-2 rounded-xl border border-slate-800 text-xs font-mono text-slate-300">
+                                    <span>Selected Hazard: </span><strong class="text-sky-400">San Pedro Flood Polygon #HZ-08</strong>
+                                    <span class="text-slate-500"> | Depth: </span><strong class="text-amber-400">140 cm</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Hazard Properties Editor Panel -->
+                        <div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between shadow-sm h-[640px]">
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                                    <span class="text-xs font-bold text-slate-800 uppercase tracking-wider">Hazard Parameters</span>
+                                    <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-mono text-xs font-bold">DRAFT READY</span>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Hazard Zone Name</label>
+                                    <input type="text" value="San Pedro Riverside Inundation" class="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium focus:outline-none focus:border-sky-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Obstruction Level (FSD-FR-084)</label>
+                                    <select class="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium focus:outline-none focus:border-sky-500">
+                                        <option selected>Submerged / Impassable (depth &gt;= clearance)</option>
+                                        <option>Light Flood / Caution (depth &gt;= 10 cm)</option>
+                                        <option>Clear / Passable</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-xs font-semibold text-slate-700 uppercase">Estimated Water Depth (cm)</label>
+                                        <span class="text-xs font-mono font-bold text-sky-600">140 cm</span>
+                                    </div>
+                                    <input type="range" min="10" max="250" value="140" class="w-full accent-sky-600">
+                                    <div class="flex justify-between text-[10px] text-slate-400 font-mono mt-0.5">
+                                        <span>10 cm (Caution)</span>
+                                        <span>140 cm (Deep)</span>
+                                        <span>250 cm (Max)</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Target Road Segments</label>
+                                    <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+                                        <div class="font-medium text-slate-800">Edge ID: #RD-EDGE-4081</div>
+                                        <div class="text-[11px] text-slate-500">Rizal Avenue corner San Pedro Blvd</div>
+                                        <div class="text-[11px] text-rose-600 font-semibold">• 480 m corridor affected</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 pt-4 border-t border-slate-100">
+                                <button onclick="publishHazardAction()" class="w-full py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-md transition flex items-center justify-center gap-1.5">
+                                    <i data-lucide="check" class="w-4 h-4"></i> Publish & Broadcast to Drivers
+                                </button>
+                                <button onclick="executeAction('Withdraw Hazard')" class="w-full py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-medium text-xs">
+                                    Withdraw / Deactivate Zone
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <!-- ========================================================================================= -->
+                <!-- SCREEN 5: RESCUE UNITS & FLEET TRACKING -->
+                <!-- ========================================================================================= -->
+                <main id="screen-fleet" class="web-screen flex-1 p-6 overflow-y-auto space-y-6 flex-col">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900 tracking-tight">Rescue Fleet & Mission Operations</h2>
+                            <p class="text-xs text-slate-500">Telemetry tracking, flood-safe corridors, clearance compliance, and real-time mission lifecycle</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span> 3 Units Active
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Fleet Cards Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Unit RU-03 (Selected active mission) -->
+                        <div class="bg-white rounded-xl border-2 border-sky-600 p-4 shadow-sm space-y-3 relative">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-mono font-bold text-sm text-slate-900">RU-03</span>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800">EN ROUTE</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-0.5">Zodiac Inflatable Rescue Boat</p>
+                                </div>
+                                <span class="px-2 py-1 rounded bg-sky-50 text-sky-700 text-xs font-bold font-mono">ETA 12m</span>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 text-center text-xs font-mono py-1 bg-slate-50 rounded-lg border border-slate-100">
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">CLEARANCE</span>
+                                    <span class="font-bold text-slate-800">35 cm</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">SPEED</span>
+                                    <span class="font-bold text-slate-800">24 km/h</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">CORRIDOR</span>
+                                    <span class="font-bold text-emerald-600">SAFE</span>
+                                </div>
+                            </div>
+
+                            <div class="text-[11px] text-slate-600">
+                                <span>Task: </span><strong class="text-slate-800">Distress #FR-0248 (San Pedro)</strong>
+                            </div>
+                        </div>
+
+                        <!-- Unit RU-01 -->
+                        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-mono font-bold text-sm text-slate-900">RU-01</span>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">AVAILABLE</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-0.5">High-Clearance 4x4 Truck</p>
+                                </div>
+                                <span class="text-xs font-mono text-slate-400">Depot Delta</span>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 text-center text-xs font-mono py-1 bg-slate-50 rounded-lg border border-slate-100">
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">CLEARANCE</span>
+                                    <span class="font-bold text-slate-800">45 cm</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">SPEED</span>
+                                    <span class="font-bold text-slate-800">60 km/h</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">STANDBY</span>
+                                    <span class="font-bold text-sky-600">READY</span>
+                                </div>
+                            </div>
+
+                            <div class="text-[11px] text-slate-600">
+                                <span>Status: </span><strong class="text-emerald-700">Ready for Immediate Dispatch</strong>
+                            </div>
+                        </div>
+
+                        <!-- Unit RU-04 -->
+                        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-mono font-bold text-sm text-slate-900">RU-04</span>
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">ON SCENE</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-0.5">Rapid Flood Extraction Unit</p>
+                                </div>
+                                <span class="text-xs font-mono text-indigo-700 font-bold">Malaya Overpass</span>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-2 text-center text-xs font-mono py-1 bg-slate-50 rounded-lg border border-slate-100">
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">CLEARANCE</span>
+                                    <span class="font-bold text-slate-800">50 cm</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">SPEED</span>
+                                    <span class="font-bold text-slate-800">0 km/h</span>
+                                </div>
+                                <div>
+                                    <span class="text-slate-400 block text-[9px]">OPERATION</span>
+                                    <span class="font-bold text-indigo-600">ACTIVE</span>
+                                </div>
+                            </div>
+
+                            <div class="text-[11px] text-slate-600">
+                                <span>Task: </span><strong class="text-slate-800">Vehicle Extraction (#FR-0247)</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mission Milestones & Map Detail -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-sm">Active Mission Tracking: RU-03 to Docket #FR-0248</h3>
+                                <p class="text-xs text-slate-500">Route guidance verified against live hydro elevation and road passability</p>
+                            </div>
+                            <span class="px-3 py-1 rounded bg-slate-100 text-slate-700 text-xs font-mono">Distance remaining: 4.2 km</span>
+                        </div>
+
+                        <!-- Stepper -->
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                <div class="flex items-center gap-2 text-xs font-bold text-emerald-800">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i> Step 1: Dispatched
+                                </div>
+                                <p class="text-[11px] text-emerald-700 mt-1 font-mono">11:58 AM • Depot Delta</p>
+                            </div>
+
+                            <div class="p-3 bg-sky-50 border border-sky-300 rounded-xl shadow-xs">
+                                <div class="flex items-center gap-2 text-xs font-bold text-sky-800">
+                                    <i data-lucide="navigation" class="w-4 h-4 text-sky-600 animate-spin"></i> Step 2: En Route (Active)
+                                </div>
+                                <p class="text-[11px] text-sky-700 mt-1 font-mono">Speed 24 km/h • Safe Draft</p>
+                            </div>
+
+                            <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-400">
+                                <div class="flex items-center gap-2 text-xs font-bold text-slate-600">
+                                    <i data-lucide="flag" class="w-4 h-4 text-slate-400"></i> Step 3: On Scene
+                                </div>
+                                <p class="text-[11px] text-slate-500 mt-1 font-mono">Est: 12:13 PM • San Pedro</p>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================================= -->
+    <!-- 3-STEP AUDIT-COMPLIANT DISPATCH WORKFLOW MODAL -->
+    <!-- ========================================================================================= -->
+    <div id="dispatch-modal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-6">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <h3 class="font-bold text-slate-900 text-base">Flood-Safe Dispatch Workflow</h3>
+                </div>
+                <button onclick="closeDispatchModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Stepper indicators -->
+            <div class="flex items-center justify-between text-xs font-semibold px-2">
+                <div id="modal-step-indicator-1" class="text-sky-600 flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center text-[10px]">1</span>
+                    <span>Publish Hazard</span>
+                </div>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                <div id="modal-step-indicator-2" class="text-slate-400 flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px]">2</span>
+                    <span>Assign Unit</span>
+                </div>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                <div id="modal-step-indicator-3" class="text-slate-400 flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px]">3</span>
+                    <span>Confirm Route</span>
+                </div>
+            </div>
+
+            <!-- Modal Step 1 -->
+            <div id="modal-step-1" class="space-y-4">
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+                    <span class="font-bold flex items-center gap-1">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> Step 1: Formalize & Publish Hazard
+                    </span>
+                    <p class="text-[11px] text-amber-800">
+                        Before dispatching responders, publish the verified flood hazard into the active road graph to ensure all civilian and rescue navigations automatically reroute around the impassable edges.
+                    </p>
+                </div>
+                <div class="text-xs space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div><strong>Incident Docket:</strong> #FR-0248</div>
+                    <div><strong>Location:</strong> Brgy. San Pedro Riverside Zone</div>
+                    <div><strong>Observed Water Depth:</strong> <span class="font-mono font-bold text-sky-700">75 cm (Impassable for light vehicles)</span></div>
+                </div>
+                <button onclick="goToModalStep(2)" class="w-full py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow transition">
+                    Publish Hazard to Road Network & Continue &rarr;
+                </button>
+            </div>
+
+            <!-- Modal Step 2 -->
+            <div id="modal-step-2" class="space-y-4 hidden">
+                <div class="text-xs font-semibold text-slate-700 uppercase">Select Available Rescue Unit:</div>
+                <div class="space-y-2">
+                    <label class="p-3 rounded-xl border-2 border-sky-600 bg-sky-50/50 flex items-center justify-between cursor-pointer">
+                        <div class="flex items-center gap-3">
+                            <input type="radio" name="rescue-unit-select" checked class="text-sky-600">
+                            <div>
+                                <div class="font-bold text-xs text-slate-900">RU-03 (Inflatable Rescue Boat)</div>
+                                <div class="text-[11px] text-slate-500">Ground clearance / draft: 35 cm • Speed: 24 km/h</div>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-emerald-700 font-mono">12 min ETA</span>
+                    </label>
+
+                    <label class="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-between cursor-pointer">
+                        <div class="flex items-center gap-3">
+                            <input type="radio" name="rescue-unit-select" class="text-sky-600">
+                            <div>
+                                <div class="font-bold text-xs text-slate-900">RU-01 (High-Clearance 4x4 Truck)</div>
+                                <div class="text-[11px] text-slate-500">Ground clearance: 45 cm • Speed: 60 km/h</div>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-slate-600 font-mono">18 min ETA</span>
+                    </label>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="goToModalStep(1)" class="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium">Back</button>
+                    <button onclick="goToModalStep(3)" class="flex-1 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold">Preview Safe Route &rarr;</button>
+                </div>
+            </div>
+
+            <!-- Modal Step 3 -->
+            <div id="modal-step-3" class="space-y-4 hidden">
+                <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-1">
+                    <span class="font-bold flex items-center gap-1">
+                        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i> Safe Corridor Verified
+                    </span>
+                    <p class="text-[11px] text-emerald-800">
+                        A clearance-aware route (4.2 km) has been verified. No segment on this path exceeds the 35 cm vehicle draft limit.
+                    </p>
+                </div>
+                <div class="text-xs space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono">
+                    <div class="flex justify-between"><span>Unit Assigned:</span> <strong>RU-03 (Boat)</strong></div>
+                    <div class="flex justify-between"><span>Incident:</span> <strong>#FR-0248</strong></div>
+                    <div class="flex justify-between"><span>Calculated ETA:</span> <strong class="text-emerald-700">12:13 PM PHT</strong></div>
+                </div>
+                <button onclick="confirmFinalDispatch()" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+                    <i data-lucide="send" class="w-4 h-4"></i> Confirm & Commit Dispatch
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl border border-slate-800 flex items-center gap-2 translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i data-lucide="info" class="w-4 h-4 text-sky-400"></i>
+        <span id="toast-message">Notification</span>
+    </div>
+
+    <!-- JAVASCRIPT CONTROLLER -->
+    <script>
+        // Init Lucide Icons
+        lucide.createIcons();
+
+        // Screen Switcher
+        function switchScreen(screenId) {
+            document.querySelectorAll('.web-screen').forEach(el => el.classList.remove('active'));
+            const target = document.getElementById(screenId);
+            if (target) target.classList.add('active');
+
+            // Update top bar buttons
+            const navIds = ['login', 'triage', 'radar', 'map', 'fleet'];
+            navIds.forEach(id => {
+                const btn = document.getElementById('nav-btn-' + id);
+                if (btn) {
+                    if (screenId === 'screen-' + id) {
+                        btn.className = "px-2.5 py-1 rounded text-xs font-semibold bg-sky-600 text-white shadow-sm transition";
+                    } else {
+                        btn.className = "px-2.5 py-1 rounded text-xs font-medium transition text-slate-400 hover:text-white";
+                    }
+                }
+            });
+
+            // Update sidebar buttons
+            const sideIds = ['triage', 'radar', 'map', 'fleet'];
+            sideIds.forEach(id => {
+                const sideBtn = document.getElementById('side-nav-' + id);
+                if (sideBtn) {
+                    if (screenId === 'screen-' + id) {
+                        sideBtn.className = "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition bg-sky-600 text-white font-semibold shadow-sm";
+                    } else {
+                        sideBtn.className = "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition text-slate-400 hover:text-white hover:bg-slate-800/60";
+                    }
+                }
+            });
+
+            // Breadcrumb title update
+            const titles = {
+                'screen-triage': 'Incident Triage & Verification',
+                'screen-radar': 'Emergency Dispatch Radar',
+                'screen-map': 'Live Road Network & Hazard Authoring',
+                'screen-fleet': 'Rescue Fleet & Mission Operations',
+                'screen-login': 'Authentication Portal'
+            };
+            const breadcrumb = document.getElementById('breadcrumb-title');
+            if (breadcrumb && titles[screenId]) {
+                breadcrumb.textContent = titles[screenId];
+            }
+        }
+
+        // Incident selection
+        const INCIDENTS = {
+            'FR-0248': {
+                id: 'FR-0248',
+                level: 'Critical Flood Level 3',
+                reporter: 'Dale Ramos (Masked: +63 91** *** ****)',
+                narrative: '"Water rose very quickly after the creek spillway overflowed. It is now calf-to-knee deep (approx 75 cm) inside our ground floor. There are 6 of us trapped on the upper stair landing including two small children and my elderly aunt. Current is strong."',
+                confidence: '99.2% Authentic',
+                barangay: 'Brgy. San Pedro'
+            },
+            'FR-0241': {
+                id: 'FR-0241',
+                level: 'Critical Flood Level 3',
+                reporter: 'San Pedro BDRRMC Patrol (+63 92** *** ****)',
+                narrative: '"Spillway gate is at maximum release and the creek has jumped its bank near the elementary school. Rescue boat cannot hold position against the current. Requesting BFP support and additional zodiac units."',
+                confidence: '97.4% Verified',
+                barangay: 'Brgy. San Pedro'
+            },
+            'FR-0247': {
+                id: 'FR-0247',
+                level: 'Moderate Hazard Level 2',
+                reporter: 'CCTV Analytics Feed #09',
+                narrative: '"Automated video analytics detected stalled delivery truck submerged up to hood level (approx 85 cm). Roadway impassable to light vehicles. Traffic queueing rapidly towards EDSA southbound."',
+                confidence: '94.5% Confirmed',
+                barangay: 'Malaya Overpass'
+            },
+            'FR-0246': {
+                id: 'FR-0246',
+                level: 'Alert Level 1',
+                reporter: 'River Sensor Station #04 Telemetry',
+                narrative: '"Rapid water rise detected in narrow alleyway drainage channel (+10 cm/hr). Low risk to human life currently, but water approaching commercial building thresholds."',
+                confidence: '98.0% Validated',
+                barangay: 'A. Mabini St.'
+            }
+        };
+
+        function selectIncident(id) {
+            const data = INCIDENTS[id];
+            if (!data) return;
+
+            document.getElementById('detail-docket-id').textContent = '#' + data.id;
+            document.getElementById('detail-level').textContent = data.level;
+            document.getElementById('detail-reporter').textContent = data.reporter;
+            document.getElementById('detail-confidence').textContent = data.confidence;
+            document.getElementById('detail-narrative').textContent = data.narrative;
+            document.getElementById('detail-barangay').textContent = data.barangay;
+
+            // Highlight in list
+            document.querySelectorAll('#incident-list > div').forEach(el => {
+                el.classList.remove('border-sky-600', 'bg-sky-50/70');
+                el.classList.add('border-transparent');
+            });
+            const card = document.getElementById('card-' + id);
+            if (card) {
+                card.classList.add('border-sky-600', 'bg-sky-50/70');
+                card.classList.remove('border-transparent');
+            }
+        }
+
+        function filterQueue(type) {
+            ['all', 'photo', 'sensor', 'escalated'].forEach(t => {
+                const btn = document.getElementById('qfilter-' + t);
+                if (btn) {
+                    if (t === type) {
+                        btn.className = "px-3 py-1 rounded-lg bg-slate-900 text-white font-medium shrink-0";
+                    } else {
+                        btn.className = "px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium shrink-0";
+                    }
+                }
+            });
+            showToast('Filter queue: ' + type.toUpperCase());
+        }
+
+        function dismissIncident(id, e) {
+            e.stopPropagation();
+            const card = document.getElementById('card-' + id);
+            if (card) {
+                card.style.opacity = '0.3';
+                showToast('Docket #' + id + ' dismissed from active queue');
+            }
+        }
+
+        function toggleInternalNote() {
+            const box = document.getElementById('internal-note-box');
+            box.classList.toggle('hidden');
+        }
+
+        function addInternalNote() {
+            const input = document.getElementById('internal-note-input');
+            const val = input.value.trim();
+            if (!val) return;
+
+            const list = document.getElementById('operations-log-list');
+            const div = document.createElement('div');
+            div.className = "text-sky-900 font-semibold";
+            div.innerHTML = `<span class="font-mono text-slate-400">Just now</span> Note: ${val}`;
+            list.appendChild(div);
+            input.value = '';
+            showToast('Internal note appended to docket');
+        }
+
+        function executeAction(label) {
+            showToast('Action logged: ' + label);
+            const list = document.getElementById('operations-log-list');
+            const div = document.createElement('div');
+            div.className = "text-slate-800 font-bold";
+            div.innerHTML = `<span class="font-mono text-slate-400">Just now</span> Action: ${label} by Operator M. Santos`;
+            list.appendChild(div);
+        }
+
+        // Modal Controls
+        function openDispatchModal() {
+            document.getElementById('dispatch-modal').classList.remove('hidden');
+            goToModalStep(1);
+        }
+
+        function closeDispatchModal() {
+            document.getElementById('dispatch-modal').classList.add('hidden');
+        }
+
+        function goToModalStep(step) {
+            [1, 2, 3].forEach(s => {
+                const el = document.getElementById('modal-step-' + s);
+                const indicator = document.getElementById('modal-step-indicator-' + s);
+                if (s === step) {
+                    el.classList.remove('hidden');
+                    indicator.className = "text-sky-600 flex items-center gap-1.5 font-bold";
+                } else if (s < step) {
+                    el.classList.add('hidden');
+                    indicator.className = "text-emerald-600 flex items-center gap-1.5 font-semibold";
+                } else {
+                    el.classList.add('hidden');
+                    indicator.className = "text-slate-400 flex items-center gap-1.5";
+                }
+            });
+        }
+
+        function confirmFinalDispatch() {
+            closeDispatchModal();
+            showToast('Rescue Unit RU-03 successfully dispatched to #FR-0248!');
+            switchScreen('screen-fleet');
+        }
+
+        function publishHazardAction() {
+            showToast('Hazard published! Live road graph updated & broadcast via SSE.');
+        }
+
+        let phoneMasked = true;
+        function togglePhoneMasking() {
+            phoneMasked = !phoneMasked;
+            const text = document.getElementById('radar-phone-mask-text');
+            const display = document.getElementById('radar-reporter-display');
+            if (phoneMasked) {
+                text.textContent = "PII Masked (+63 9** *** ****)";
+                display.textContent = "Dale Ramos (+63 91** *** ****)";
+                showToast("Citizen PII phone numbers masked");
+            } else {
+                text.textContent = "PII Revealed (Authorized Access)";
+                display.textContent = "Dale Ramos (+63 917 555 0192)";
+                showToast("Authorized officer: PII revealed for emergency contact");
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
