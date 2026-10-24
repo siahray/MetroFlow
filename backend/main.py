@@ -15,9 +15,14 @@ from geometry import backfill_geometry
 from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
 from routing import classify_passability, td_a_star_search
 from schemas import (
+    AssignRequest,
+    ConfirmRequest,
     EdgeFeature,
     EdgeFeatureCollection,
     EdgeProperties,
+    HazardCreate,
+    HazardResponse,
+    HazardUpdate,
     NetworkStateResponse,
     NodeFeature,
     NodeFeatureCollection,
@@ -25,6 +30,11 @@ from schemas import (
     RouteResponse,
     RouteSegment,
     SimulationResponse,
+    SOSCreate,
+    SOSResponse,
+    VehicleCreate,
+    VehicleResponse,
+    VehicleUpdate,
 )
 
 # ---------------------------------------------------------------------------
@@ -462,3 +472,161 @@ def get_optimal_route(
         segments=segments,
         estimated_travel_time_minutes=round(travel_time_s / 60.0, 2),
     )
+
+
+# ---------------------------------------------------------------------------
+# SOS / Hazards / Vehicles / Dispatch endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/sos", response_model=SOSResponse)
+def create_sos(sos: SOSCreate, db: Session = Depends(get_db)):
+    import models
+
+    # Create a simple auto-incrementing id by getting max
+    max_id = db.query(func.max(models.SOSRequest.sos_id)).scalar() or 0
+    new_sos = models.SOSRequest(
+        sos_id=int(max_id) + 1,
+        latitude=sos.latitude,
+        longitude=sos.longitude,
+        note=sos.note,
+        status="pending",
+    )
+    db.add(new_sos)
+    db.commit()
+    db.refresh(new_sos)
+    return new_sos
+
+
+@app.post("/api/v1/hazards", response_model=HazardResponse)
+def create_hazard(hazard: HazardCreate, db: Session = Depends(get_db)):
+    import models
+
+    max_id = db.query(func.max(models.HazardZone.hazard_id)).scalar() or 0
+    new_hazard = models.HazardZone(
+        hazard_id=int(max_id) + 1,
+        name=hazard.name,
+        obstruction_level=hazard.obstruction_level,
+        avg_depth_cm=hazard.avg_depth_cm,
+        edge_id=hazard.edge_id,
+        notes=hazard.notes,
+        active=True,
+    )
+    db.add(new_hazard)
+    db.commit()
+    db.refresh(new_hazard)
+    return new_hazard
+
+
+@app.patch("/api/v1/hazards/{hazard_id}", response_model=HazardResponse)
+def update_hazard(hazard_id: int, hazard: HazardUpdate, db: Session = Depends(get_db)):
+    import models
+
+    db_hazard = db.query(models.HazardZone).filter(models.HazardZone.hazard_id == hazard_id).first()
+    if not db_hazard:
+        raise HTTPException(status_code=404, detail="Hazard not found")
+    if hazard.name is not None:
+        db_hazard.name = hazard.name
+    if hazard.obstruction_level is not None:
+        db_hazard.obstruction_level = hazard.obstruction_level
+    if hazard.avg_depth_cm is not None:
+        db_hazard.avg_depth_cm = hazard.avg_depth_cm
+    if hazard.active is not None:
+        db_hazard.active = hazard.active
+    if hazard.notes is not None:
+        db_hazard.notes = hazard.notes
+    db.commit()
+    db.refresh(db_hazard)
+    return db_hazard
+
+
+@app.post("/api/v1/hazards/{hazard_id}/publish", response_model=HazardResponse)
+def publish_hazard(hazard_id: int, db: Session = Depends(get_db)):
+    import models
+
+    db_hazard = db.query(models.HazardZone).filter(models.HazardZone.hazard_id == hazard_id).first()
+    if not db_hazard:
+        raise HTTPException(status_code=404, detail="Hazard not found")
+    db_hazard.published_at = datetime.now(UTC).replace(tzinfo=None)
+    db_hazard.active = True
+    db.commit()
+    db.refresh(db_hazard)
+    return db_hazard
+
+
+@app.post("/api/v1/sos/{sos_id}/assign", response_model=SOSResponse)
+def assign_sos(sos_id: int, assign_req: AssignRequest, db: Session = Depends(get_db)):
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    db_vehicle = (
+        db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == assign_req.vehicle_id).first()
+    )
+    if not db_vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    db_sos.vehicle_id = assign_req.vehicle_id
+    db_sos.status = "assigned"
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.post("/api/v1/dispatch/{sos_id}/confirm", response_model=SOSResponse)
+def confirm_dispatch(sos_id: int, confirm_req: ConfirmRequest, db: Session = Depends(get_db)):
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if confirm_req.note:
+        if db_sos.note:
+            db_sos.note = f"{db_sos.note}; {confirm_req.note}"
+        else:
+            db_sos.note = confirm_req.note
+    db_sos.status = "confirmed"
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.get("/api/v1/vehicles", response_model=list[VehicleResponse])
+def list_vehicles(db: Session = Depends(get_db)):
+    import models
+
+    return db.query(models.Vehicle).all()
+
+
+@app.post("/api/v1/vehicles", response_model=VehicleResponse)
+def create_vehicle(vehicle: VehicleCreate, db: Session = Depends(get_db)):
+    import models
+
+    max_id = db.query(func.max(models.Vehicle.vehicle_id)).scalar() or 0
+    new_vehicle = models.Vehicle(
+        vehicle_id=int(max_id) + 1,
+        call_sign=vehicle.call_sign,
+        vehicle_type=vehicle.vehicle_type,
+        clearance_cm=vehicle.clearance_cm,
+        status=vehicle.status,
+        current_location_lat=vehicle.current_location_lat,
+        current_location_lon=vehicle.current_location_lon,
+    )
+    db.add(new_vehicle)
+    db.commit()
+    db.refresh(new_vehicle)
+    return new_vehicle
+
+
+@app.patch("/api/v1/vehicles/{vehicle_id}", response_model=VehicleResponse)
+def update_vehicle(vehicle_id: int, vehicle: VehicleUpdate, db: Session = Depends(get_db)):
+    import models
+
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
+    if not db_vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    for field, value in vehicle.model_dump(exclude_unset=True).items():
+        setattr(db_vehicle, field, value)
+    db.commit()
+    db.refresh(db_vehicle)
+    return db_vehicle

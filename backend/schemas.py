@@ -94,3 +94,100 @@ class RouteResponse(BaseModel):
     )
     segments: list[RouteSegment] = Field(default_factory=list)
     estimated_travel_time_minutes: float
+
+
+# ---------------------------------------------------------------------------
+# SOS / Hazards / Vehicles / Dispatch schemas
+# ---------------------------------------------------------------------------
+
+
+class SOSCreate(BaseModel):
+    latitude: float
+    longitude: float
+    note: str | None = None
+
+
+class SOSResponse(BaseModel):
+    sos_id: int
+    latitude: float
+    longitude: float
+    note: str | None = None
+    vehicle_id: int | None = None
+    status: str
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class HazardCreate(BaseModel):
+    name: str
+    obstruction_level: str = "partial"
+    avg_depth_cm: int | None = None
+    edge_id: int | None = None
+    notes: str | None = None
+    geometry: dict[str, Any] | None = None
+
+
+class HazardUpdate(BaseModel):
+    name: str | None = None
+    obstruction_level: str | None = None
+    avg_depth_cm: int | None = None
+    active: bool | None = None
+    notes: str | None = None
+
+
+class HazardResponse(BaseModel):
+    hazard_id: int
+    name: str
+    obstruction_level: str
+    avg_depth_cm: int | None = None
+    edge_id: int | None = None
+    notes: str | None = None
+    published_at: datetime | None = None
+    active: bool | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class VehicleCreate(BaseModel):
+    call_sign: str
+    vehicle_type: str
+    clearance_cm: int | None = None
+    status: str = "available"
+    current_location_lat: float | None = None
+    current_location_lon: float | None = None
+
+
+class VehicleUpdate(BaseModel):
+    call_sign: str | None = None
+    vehicle_type: str | None = None
+    clearance_cm: int | None = None
+    status: str | None = None
+    current_location_lat: float | None = None
+    current_location_lon: float | None = None
+    speed_kmh: float | None = None
+
+
+class VehicleResponse(BaseModel):
+    vehicle_id: int
+    call_sign: str
+    vehicle_type: str
+    clearance_cm: int | None = None
+    status: str
+    current_location_lat: float | None = None
+    current_location_lon: float | None = None
+    speed_kmh: float | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class AssignRequest(BaseModel):
+    vehicle_id: int
+
+
+class ConfirmRequest(BaseModel):
+    note: str | None = None
