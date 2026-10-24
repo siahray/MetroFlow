@@ -4,7 +4,6 @@ import { Search } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import {
-  INCIDENTS,
   QUEUE_FILTERS,
   countBySource,
   maskPhoneNumber,
@@ -61,7 +60,7 @@ export function IncidentQueue({
 }: IncidentQueueProps) {
   const filters = QUEUE_FILTERS.map((option) => ({
     ...option,
-    count: option.id === "all" ? INCIDENTS.length : countBySource(INCIDENTS, option.id),
+    count: option.id === "all" ? incidents.length : countBySource(incidents, option.id),
   }));
 
   return (

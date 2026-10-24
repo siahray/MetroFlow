@@ -1,5 +1,5 @@
-import { Portal } from "@/components/portal";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <Portal />;
+  redirect("/triage");
 }

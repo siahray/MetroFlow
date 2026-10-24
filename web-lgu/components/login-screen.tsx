@@ -5,15 +5,43 @@ import { useState, type FormEvent } from "react";
 
 import { useToast } from "./toast-provider";
 
-export function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
-  const [username, setUsername] = useState("m.santos@metroflow.gov.ph");
-  const [password, setPassword] = useState("••••••••••••");
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+export function LoginScreen({ onSignIn }: { onSignIn: (user?: any) => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const { show } = useToast();
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSignIn();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: username, password }),
+      });
+      if (!res.ok) {
+        throw new Error("Invalid credentials");
+      }
+      const data = await res.json();
+      setIsSubmitting(false);
+      const user = data.user || data;
+      if (user.role !== "LGU_DISPATCHER" && user.role !== "SUPER_ADMIN") {
+        setError("Only authorized admin accounts can access this system");
+        return;
+      }
+      onSignIn(user);
+    } catch (e) {
+      setIsSubmitting(false);
+      setError("Invalid credentials");
+      show("Authentication failed");
+    }
   }
 
   return (
@@ -131,11 +159,17 @@ export function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
             </div>
 
             {/* Approved primary color: slate-900 (not navy-950) */}
+            {error ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {error}
+              </div>
+            ) : null}
             <button
               type="submit"
-              className="group flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-slate-900/10 transition-all duration-200 hover:bg-slate-800 hover:shadow-lg"
+              disabled={isSubmitting}
+              className="group flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-slate-900/10 transition-all duration-200 hover:bg-slate-800 hover:shadow-lg disabled:opacity-50"
             >
-              <span>Sign in to Dispatch Operations</span>
+              <span>{isSubmitting ? "Authenticating..." : "Sign in to Dispatch Operations"}</span>
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </button>
           </form>

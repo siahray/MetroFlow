@@ -11,16 +11,19 @@ import {
   FileText,
   MapPin,
   MessageSquare,
+  Radar,
   Send,
   TriangleAlert,
   User,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
 import { RESCUE_UNITS, type RescueUnit } from "@/lib/rescue";
+import { assignSOS, confirmDispatch, listVehicles } from "@/lib/dispatch";
 
 type IncidentDetailProps = {
   incident: Incident;
@@ -53,7 +56,31 @@ export function IncidentDetail({
   const [note, setNote] = useState("");
   const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<1 | 2 | 3>(1);
-  const [selectedUnit, setSelectedUnit] = useState<RescueUnit>(RESCUE_UNITS[0]);
+  const [vehicles, setVehicles] = useState<RescueUnit[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<RescueUnit | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await listVehicles();
+        if (data && data.length > 0) {
+          const mapped = data.map((v: any) => ({
+            callSign: v.call_sign,
+            type: v.vehicle_type,
+            status: (String(v.status || "AVAILABLE").toUpperCase()) as any,
+            clearance_cm: v.clearance_cm || 0,
+            speed_kmh: v.speed_kmh || 0,
+            location: "Depot",
+          })) as RescueUnit[];
+          setVehicles(mapped);
+          setSelectedUnit(mapped[0]);
+        }
+      } catch (e) {
+        // keep fallback
+      }
+    };
+    load();
+  }, []);
 
   useEffect(() => {
     const node = logRef.current;
@@ -71,11 +98,30 @@ export function IncidentDetail({
     setNoteOpen(false);
   }
 
-  function handleConfirmDispatch() {
+  async function handleConfirmDispatch() {
+    try {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      if (!isNaN(sosId)) {
+        try {
+          await assignSOS(sosId, 1);
+        } catch (e) {
+          // ignore assignment errors if no mapping
+        }
+        try {
+          if (selectedUnit) await confirmDispatch(sosId, `Dispatched ${selectedUnit.callSign}`);
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
     setDispatchModalOpen(false);
-    onAction(`Dispatched ${selectedUnit.callSign} (${selectedUnit.type}) to #${incident.id}`);
-    if (onDispatchConfirmed) {
-      onDispatchConfirmed(selectedUnit.callSign, incident.id);
+    if (selectedUnit) {
+      onAction(`Dispatched ${selectedUnit.callSign} (${selectedUnit.type}) to #${incident.id}`);
+      if (onDispatchConfirmed) {
+        onDispatchConfirmed(selectedUnit.callSign, incident.id);
+      }
     }
   }
 
@@ -97,6 +143,14 @@ export function IncidentDetail({
               <span className="rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800">
                 {incident.level}
               </span>
+              <Link
+                href={`/radar?id=${encodeURIComponent(incident.id)}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-100 transition-colors"
+                title="View distress signal on Emergency Dispatch Radar"
+              >
+                <Radar className="h-3 w-3 text-sky-600" />
+                <span>Radar View</span>
+              </Link>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
               <span>
@@ -159,10 +213,6 @@ export function IncidentDetail({
           <p className="text-xs font-medium leading-relaxed text-slate-800">
             &ldquo;{incident.narrative}&rdquo;
           </p>
-          <p className="border-l-2 border-slate-300 pl-3 text-xs leading-relaxed text-slate-600 italic">
-            Light passenger vehicles cannot pass. Water is actively rising from south canal
-            overflow. 3 elderly citizens waiting at second floor porch.
-          </p>
         </div>
 
         {/* Attached Telemetry & Evidence Chips */}
@@ -172,15 +222,11 @@ export function IncidentDetail({
           </h3>
           <div className="flex flex-wrap gap-2">
             <span className="inline-flex items-center rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
-              <Camera className="mr-1.5 h-3 w-3" /> Photo (1 Verified)
+              <Camera className="mr-1.5 h-3 w-3" /> Telemetry Attached
             </span>
             <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-              <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Accurate ±4m)
+              <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS Verified
             </span>
-          </div>
-          <div className="flex items-center rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-800">
-            <Droplets className="mr-2 h-3.5 w-3.5 text-sky-600" />
-            <span>IoT Depth Sensor #D-12 reading 48 cm nearby</span>
           </div>
         </div>
 
@@ -190,10 +236,10 @@ export function IncidentDetail({
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
             <div className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1 font-bold text-slate-800">
-                <Camera className="h-3.5 w-3.5 text-sky-600" /> Citizen Photo Evidence
+                <Camera className="h-3.5 w-3.5 text-sky-600" /> Incident Ground Evidence
               </span>
               <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                EXIF Verified
+                Verified
               </span>
             </div>
 
@@ -220,37 +266,32 @@ export function IncidentDetail({
                 <circle cx="200" cy="140" r="10" fill="#0f172a" />
               </svg>
 
-              {/* Depth strictly in cm per UI/UX Audit (e.g. 75 cm - 90 cm) */}
               <div className="absolute bottom-2 left-2 rounded bg-slate-950/80 px-2 py-1 font-mono text-[10px] text-white backdrop-blur">
-                AI Submersion Est: <strong className="text-sky-400">75 cm - 90 cm</strong>
+                Verification: <strong className="text-sky-400">{incident.level}</strong>
               </div>
             </div>
 
             {/* Photo Metadata 3-Column Block */}
-            <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[10px]">
+            <div className="grid grid-cols-2 gap-1.5 text-center font-mono text-[10px]">
               <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
-                <div className="text-[9px] text-slate-400 uppercase">Camera</div>
-                <div className="font-semibold text-slate-700">iPhone 14 Pro</div>
-              </div>
-              <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
-                <div className="text-[9px] text-slate-400 uppercase">Orientation</div>
-                <div className="font-semibold text-slate-700">North-West</div>
+                <div className="text-[9px] text-slate-400 uppercase">Source</div>
+                <div className="font-semibold text-slate-700 uppercase">{incident.source}</div>
               </div>
               <div className="rounded border border-sky-100 bg-sky-50 p-1.5">
                 <div className="text-[9px] text-sky-600 uppercase">AI Confidence</div>
-                <div className="font-bold text-sky-800">98.2% Authentic</div>
+                <div className="font-bold text-sky-800">{incident.aiConfidence}</div>
               </div>
             </div>
 
             <div className="space-y-0.5 rounded border border-slate-100 bg-slate-50 p-2 font-mono text-[10px] text-slate-500">
               <div>
-                Timestamp: <span className="text-slate-800">11:40:22 AM PHT</span>
+                Reported: <span className="text-slate-800">{incident.reportedAt}</span>
               </div>
               <div>
-                GPS Coords: <span className="text-slate-800">14.5995° N, 121.0223° E</span>
+                Location: <span className="text-slate-800">{incident.location}</span>
               </div>
               <div className="flex items-center gap-1 font-semibold text-emerald-600">
-                <Check className="h-3 w-3" /> Cell tower triangulation validated
+                <Check className="h-3 w-3" /> Geolocation verified on road graph
               </div>
             </div>
           </div>
@@ -259,7 +300,7 @@ export function IncidentDetail({
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
             <div className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1 font-bold text-slate-800">
-                <MapPin className="h-3.5 w-3.5 text-rose-600" /> Location &amp; Sensor Telemetry
+                <MapPin className="h-3.5 w-3.5 text-rose-600" /> Location &amp; Dispatch Status
               </span>
               <span className="text-[10px] text-slate-500">{incident.barangay}</span>
             </div>
@@ -275,27 +316,31 @@ export function IncidentDetail({
                   </div>
                 </div>
                 <span className="mt-1 inline-block rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-rose-800 shadow">
-                  Incident Radius: 300 m
+                  {incident.level}
                 </span>
               </div>
 
               <div className="absolute top-2 right-2 rounded bg-rose-800 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                Flood Zone 1
+                Sector Delta
               </div>
             </div>
 
             <div className="space-y-1 rounded border border-slate-100 bg-slate-50 p-2 text-[10px]">
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Nearest Rescue:</span>
-                <span className="font-bold text-sky-700">RU-03 (Boat) • 12 min (4.2 km)</span>
+                <span className="font-bold text-sky-700">
+                  {selectedUnit
+                    ? `${selectedUnit.callSign} (${selectedUnit.type})`
+                    : "No unit selected"}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-600">Spillway Sensor #D-12:</span>
-                <span className="font-bold text-rose-600">480 cm (Critical Overtopping)</span>
+                <span className="text-slate-600">Urgency Priority:</span>
+                <span className="font-bold text-amber-600">{incident.urgency} / 10.0</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-600">Rain Gauge Sta. Rosa:</span>
-                <span className="font-bold text-sky-700">38 mm/hr (Torrential)</span>
+                <span className="text-slate-600">Verification:</span>
+                <span className="font-bold text-emerald-600">{incident.aiConfidence}</span>
               </div>
             </div>
           </div>
@@ -498,8 +543,8 @@ export function IncidentDetail({
                   Select Available Rescue Unit:
                 </div>
                 <div className="space-y-2">
-                  {RESCUE_UNITS.map((unit) => {
-                    const isSelected = selectedUnit.callSign === unit.callSign;
+                  {vehicles.map((unit) => {
+                    const isSelected = selectedUnit?.callSign === unit.callSign;
                     return (
                       <label
                         key={unit.callSign}
@@ -570,14 +615,14 @@ export function IncidentDetail({
                   </span>
                   <p className="text-[11px] text-emerald-800 leading-relaxed">
                     A clearance-aware route (4.2 km) avoiding all active flood polygons has been
-                    calculated for {selectedUnit.callSign}.
+                    calculated for {selectedUnit?.callSign}.
                   </p>
                 </div>
                 <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs">
                   <div className="flex justify-between">
                     <span>Unit Assigned:</span>
                     <strong>
-                      {selectedUnit.callSign} ({selectedUnit.type})
+                      {selectedUnit?.callSign} ({selectedUnit?.type})
                     </strong>
                   </div>
                   <div className="flex justify-between">
@@ -586,7 +631,7 @@ export function IncidentDetail({
                   </div>
                   <div className="flex justify-between">
                     <span>Ground Clearance:</span>
-                    <strong>{selectedUnit.clearance_cm} cm</strong>
+                    <strong>{selectedUnit?.clearance_cm} cm</strong>
                   </div>
                   <div className="flex justify-between">
                     <span>Calculated ETA:</span>

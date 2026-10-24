@@ -74,3 +74,44 @@ class AuditLog(Base):
     payload = Column(Text, nullable=False)
     hash_signature = Column(String(64), nullable=False)  # Cryptographic SHA-256
     created_at = Column(DateTime, default=_utcnow)
+
+
+class HazardZone(Base):
+    __tablename__ = "hazard_zones"
+    hazard_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    obstruction_level = Column(String(20), nullable=False)
+    avg_depth_cm = Column(Integer, nullable=True)
+    geometry = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=True)
+    edge_id = Column(Integer, ForeignKey("road_edges.edge_id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+    vehicle_id = Column(Integer, primary_key=True, index=True)
+    call_sign = Column(String(50), unique=True, nullable=False)
+    vehicle_type = Column(String(30), nullable=False)
+    clearance_cm = Column(Integer, nullable=True)
+    status = Column(String(20), nullable=False)
+    current_location_lat = Column(Float, nullable=True)
+    current_location_lon = Column(Float, nullable=True)
+    speed_kmh = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class SOSRequest(Base):
+    __tablename__ = "sos_requests"
+    sos_id = Column(Integer, primary_key=True, index=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    note = Column(Text, nullable=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.vehicle_id"), nullable=True)
+    status = Column(String(20), default="pending")
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

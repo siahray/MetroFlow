@@ -16,9 +16,10 @@ import {
   UploadCloud,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
+import { createHazard, listHazards, publishHazard, type HazardZone } from "@/lib/hazards";
 
 type FloodClosureEditorProps = {
   onAction: (message: string) => void;
@@ -42,19 +43,50 @@ const COLOR_SWATCHES = [
 export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   const [activeMode, setActiveMode] = useState<"polygon" | "closure">("polygon");
   const [activeTool, setActiveTool] = useState("select");
-  const [polygonName, setPolygonName] = useState("San Pedro Riverside Inundation");
-  const [depthCm, setDepthCm] = useState(140);
+  const [polygonName, setPolygonName] = useState("");
+  const [depthCm, setDepthCm] = useState(0);
   const [obstructionLevel, setObstructionLevel] = useState("SUBMERGED");
   const [selectedSwatch, setSelectedSwatch] = useState("sky-500");
   const [barrierDeployed, setBarrierDeployed] = useState(true);
+  const [hazards, setHazards] = useState<HazardZone[]>([]);
+  const [saving, setSaving] = useState(false);
   const [layers, setLayers] = useState({
     graph: true,
     polygons: true,
     fleet: true,
   });
 
-  function handlePublish() {
-    onAction(`Published Hazard: ${polygonName} (${depthCm} cm) to active road graph.`);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await listHazards();
+        setHazards(data);
+      } catch (e) {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function handlePublish() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const created = await createHazard({
+        name: polygonName,
+        obstruction_level: obstructionLevel,
+        avg_depth_cm: depthCm,
+      });
+      const published = await publishHazard(created.hazard_id);
+      setHazards((current) => [published, ...current]);
+      onAction(`Published Hazard #${published.hazard_id}: ${polygonName} (${depthCm} cm)`);
+    } catch (e) {
+      onAction(`Failed to publish hazard ${polygonName}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleWithdraw() {
@@ -403,6 +435,49 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
               <div className="text-sm font-bold text-sky-700">
                 {depthCm} cm ({(depthCm / 100).toFixed(1)}m)
               </div>
+            </div>
+
+            {/* Live Hazards from Database */}
+            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-[10px] font-bold text-slate-600 uppercase">
+                  Published Hazards (DB)
+                </span>
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">
+                  {hazards.filter((h) => h.published_at).length}
+                </span>
+              </div>
+              {hazards.length === 0 ? (
+                <p className="py-1 text-[11px] text-slate-400">No hazards recorded yet.</p>
+              ) : (
+                <ul className="max-h-40 space-y-1.5 overflow-y-auto">
+                  {hazards.slice(0, 8).map((hazard) => (
+                    <li
+                      key={hazard.hazard_id}
+                      className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-2 py-1.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[11px] font-semibold text-slate-800">
+                          #{hazard.hazard_id} {hazard.name}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {hazard.obstruction_level} • {hazard.avg_depth_cm ?? 0} cm
+                        </div>
+                      </div>
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                          hazard.published_at
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-amber-100 text-amber-700",
+                        )}
+                      >
+                        {hazard.published_at ? "Live" : "Draft"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Overlay Color Swatches */}
