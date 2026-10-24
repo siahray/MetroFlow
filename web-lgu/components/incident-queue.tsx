@@ -7,6 +7,7 @@ import {
   INCIDENTS,
   QUEUE_FILTERS,
   countBySource,
+  maskPhoneNumber,
   type Incident,
   type QueueFilter,
 } from "@/lib/incidents";
@@ -117,6 +118,9 @@ export function IncidentQueue({
         {incidents.map((incident) => {
           const selected = incident.id === selectedId;
           const isDismissed = dismissed.has(incident.id);
+          const reporterDisplay = incident.reporter.includes("+63")
+            ? maskPhoneNumber(incident.reporter)
+            : incident.reporter;
 
           return (
             <div
@@ -148,7 +152,7 @@ export function IncidentQueue({
               </div>
 
               <h3 className="mt-1 text-xs font-bold text-slate-900">{incident.location}</h3>
-              <p className="mt-0.5 text-[11px] text-slate-500">{incident.reporter}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">{reporterDisplay}</p>
 
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                 {incident.tags.map((tag) => (

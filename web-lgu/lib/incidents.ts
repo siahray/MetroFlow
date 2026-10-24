@@ -38,6 +38,34 @@ export const QUEUE_FILTERS = [
 
 export type QueueFilter = (typeof QUEUE_FILTERS)[number]["id"];
 
+/**
+ * Masks a phone number for PII protection (e.g. +63 917 555 0192 -> +63 91** *** ****)
+ * Per UI/UX Design Audit & Scope Resolution.
+ */
+export function maskPhoneNumber(phone: string): string {
+  if (!phone) return "";
+
+  // Remove non-digits
+  const digits = phone.replace(/\D/g, "");
+
+  // Handle Philippine mobile numbers: starts with 63 and 12 digits
+  if (digits.startsWith("63") && digits.length === 12) {
+    return `+63 ${digits.substring(2, 4)}** *** ****`;
+  }
+
+  // Handle 11-digit numbers starting with 0
+  if (digits.startsWith("0") && digits.length === 11) {
+    return `+63 ${digits.substring(1, 3)}** *** ****`;
+  }
+
+  // Fallback: show first 3 characters, mask the rest
+  if (digits.length >= 3) {
+    return `${digits.substring(0, 3)}** *** ****`;
+  }
+
+  return "+63 9** *** ****";
+}
+
 /** Ordered by urgency score, which is how the queue is presented. */
 export const INCIDENTS: Incident[] = [
   {
@@ -48,7 +76,7 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 11:41 AM (11 min ago)",
     aiConfidence: "99.2% Authentic",
     narrative:
-      '"Water rose very quickly after the creek spillway overflowed. It is now calf-to-knee deep inside our ground floor. There are 6 of us trapped on the upper stair landing including two small children and my elderly aunt. Current is strong."',
+      '"Water rose very quickly after the creek spillway overflowed. It is now calf-to-knee deep (approx 75 cm) inside our ground floor. There are 6 of us trapped on the upper stair landing including two small children and my elderly aunt. Current is strong."',
     location: "Brgy. San Pedro - Riverside Zone",
     barangay: "Brgy. San Pedro",
     source: "photo",
@@ -76,7 +104,7 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 11:34 AM (18 min ago)",
     aiConfidence: "94.5% Confirmed",
     narrative:
-      '"Automated video analytics detected stalled delivery truck submerged up to hood level. Roadway impassable to light vehicles. Traffic queueing rapidly towards EDSA southbound."',
+      '"Automated video analytics detected stalled delivery truck submerged up to hood level (approx 85 cm). Roadway impassable to light vehicles. Traffic queueing rapidly towards EDSA southbound."',
     location: "Rizal Avenue, Malaya Overpass",
     barangay: "Malaya",
     source: "sensor",
@@ -90,11 +118,11 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 11:28 AM (24 min ago)",
     aiConfidence: "98.0% Validated",
     narrative:
-      '"Rapid water rise detected in narrow alleyway drainage channel (+10cm/hr). Low risk to human life currently, but water approaching commercial building thresholds."',
+      '"Rapid water rise detected in narrow alleyway drainage channel (+10 cm/hr). Low risk to human life currently, but water approaching commercial building thresholds."',
     location: "A. Mabini St. Alleyway",
     barangay: "A. Mabini",
     source: "sensor",
-    tags: ["Rising Rapidly (+10cm/hr)"],
+    tags: ["Rising Rapidly (+10 cm/hr)"],
   },
   {
     id: "FR-0245",
@@ -104,11 +132,11 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 11:19 AM (33 min ago)",
     aiConfidence: "96.7% Authentic",
     narrative:
-      '"Floodwater is halfway up our gate and still rising. My mother uses a wheelchair and cannot manage the steps to the second floor on her own. We are four adults and one senior."',
+      '"Floodwater is halfway up our gate (approx 60 cm) and still rising. My mother uses a wheelchair and cannot manage the steps to the second floor on her own. We are four adults and one senior."',
     location: "Sampaguita St. corner Mabini",
     barangay: "Brgy. San Pedro",
     source: "photo",
-    tags: ["Photo GPS Match", "1 Elderly"],
+    tags: ["Photo GPS Match", "1 Senior"],
   },
   {
     id: "FR-0244",
@@ -118,7 +146,7 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 11:10 AM (42 min ago)",
     aiConfidence: "92.3% Authentic",
     narrative:
-      '"Delivery van stalled in the underpass and is blocking the innermost lane. Water is below the door line but rising. Drivers are pushing it towards the shoulder."',
+      '"Delivery van stalled in the underpass and is blocking the innermost lane. Water is 35 cm below the door line but rising. Drivers are pushing it towards the shoulder."',
     location: "Doña Aurora Ave.",
     barangay: "Malaya",
     source: "photo",
@@ -132,7 +160,7 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 11:01 AM (51 min ago)",
     aiConfidence: "90.8% Authentic",
     narrative:
-      '"Knee-deep water along the service road, passable for trucks only. Tricycles are turning back and causing a bottleneck near the barangay hall."',
+      '"Knee-deep water (approx 50 cm) along the service road, passable for high-clearance trucks only. Tricycles are turning back and causing a bottleneck near the barangay hall."',
     location: "Kalayaan Ave. Service Road",
     barangay: "Brgy. Cembo",
     source: "photo",
@@ -146,7 +174,7 @@ export const INCIDENTS: Incident[] = [
     reportedAt: "Apr 27, 2026 • 10:54 AM (58 min ago)",
     aiConfidence: "88.9% Authentic",
     narrative:
-      '"Water is creeping over the southbound underpass kerb. Still passable for SUVs, but the drainage grate on the left side looks blocked with debris."',
+      '"Water is creeping over the southbound underpass kerb (approx 25 cm). Still passable for SUVs, but the drainage grate on the left side looks blocked with debris."',
     location: "C5 Southbound Underpass",
     barangay: "Brgy. Bagong Ilog",
     source: "photo",
@@ -161,7 +189,7 @@ export const INITIAL_LOGS: Record<string, LogEntry[]> = {
   "FR-0248": [
     {
       time: "11:42 AM",
-      text: "AI Auto-triage: Submersion flagged > 0.6m. Assigned Urgency 9.4.",
+      text: "AI Auto-triage: Submersion flagged > 60 cm. Assigned Urgency 9.4.",
       kind: "muted",
     },
     {

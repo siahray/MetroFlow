@@ -12,8 +12,11 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { DispatchRadar } from "./dispatch-radar";
+import { FloodClosureEditor } from "./flood-closure-editor";
 import { IncidentDetail } from "./incident-detail";
 import { IncidentQueue } from "./incident-queue";
+import { RescueTracking } from "./rescue-tracking";
 import { Sidebar } from "./sidebar";
 import { useToast } from "./toast-provider";
 import {
@@ -23,6 +26,15 @@ import {
   type LogEntry,
   type QueueFilter,
 } from "@/lib/incidents";
+
+type View = "triage" | "radar" | "sensors" | "fleet";
+
+const VIEW_TITLES: Record<View, string> = {
+  triage: "Incident Triage & Verification",
+  radar: "Emergency Dispatch Radar",
+  sensors: "Live Map & Hazard Authoring",
+  fleet: "Rescue Fleet & Mission Operations",
+};
 
 type KpiCard = {
   label: string;
@@ -65,6 +77,7 @@ function nowLabel() {
 
 export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
   const { show } = useToast();
+  const [view, setView] = useState<View>("triage");
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(INCIDENTS[0].id);
@@ -120,24 +133,47 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
   const handleAddNote = useCallback(
     (text: string) => {
       appendLog(selected.id, `Note: ${text}`, "note");
+      show("Internal note saved to incident log");
     },
-    [appendLog, selected.id],
+    [appendLog, selected.id, show],
+  );
+
+  const handleNavigate = useCallback(
+    (id: string, label: string) => {
+      if (id === "triage" || id === "fleet" || id === "sensors" || id === "radar") {
+        setView(id as View);
+        return;
+      }
+
+      show(`${label} is out of scope for pilot.`);
+    },
+    [show],
+  );
+
+  const handleDispatchConfirmed = useCallback(
+    (unitCallSign: string, incidentId: string) => {
+      show(`Rescue Unit ${unitCallSign} successfully dispatched to #${incidentId}!`);
+      setView("fleet");
+    },
+    [show],
   );
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-100 text-slate-800">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-100 text-slate-800 select-none">
       <Sidebar
+        activeItem={view}
         queueCount={pendingCount}
         onSignOut={onSignOut}
-        onNavigate={(label) => show(`${label} is not part of this prototype yet.`)}
+        onNavigate={handleNavigate}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
+        {/* Top Operations Header */}
+        <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 z-20">
           <div className="flex items-center gap-3 text-xs">
             <span className="text-slate-400">Operations HQ</span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-            <span className="font-semibold text-slate-800">Incident Triage & Verification</span>
+            <span className="font-semibold text-slate-800">{VIEW_TITLES[view]}</span>
             <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 font-mono text-[10px] font-bold text-sky-700">
               SECTOR DELTA ACTIVE
             </span>
@@ -146,7 +182,7 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-600">
               <CloudRain className="h-3.5 w-3.5 text-sky-600" />
-              <span>28°C Rain Advisory</span>
+              <span>28°C Rain Advisory (38 mm/hr)</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-semibold text-rose-700">
               <span className="h-2 w-2 animate-pulse rounded-full bg-rose-600" />
@@ -154,7 +190,7 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
             </div>
             <div className="h-4 w-px bg-slate-200" />
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-navy-800 text-xs font-bold text-white">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
                 MS
               </div>
               <div>
@@ -165,80 +201,103 @@ export function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           </div>
         </header>
 
+        {/* Main Workspace */}
         <main className="flex-1 space-y-6 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div>
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                  Pending Verification
-                </p>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-slate-900">{pendingCount}</span>
-                  <span className="text-xs font-semibold text-rose-600">14 High Urgency</span>
-                </div>
-                <p className="mt-1 text-[11px] text-slate-400">Queue velocity: +3 in last hr</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600">
-                <Siren className="h-5 w-5" />
-              </div>
-            </div>
-
-            {KPI_CARDS.map((card) => {
-              const Icon = card.icon;
-              const TrendIcon = card.trend?.icon;
-
-              return (
-                <div
-                  key={card.label}
-                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <div>
-                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                      {card.label}
-                    </p>
-                    <div className="mt-1 flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-slate-900">{card.value}</span>
-                      {card.trend ? (
-                        <span
-                          className={`flex items-center text-xs font-medium ${card.trend.className}`}
-                        >
-                          {TrendIcon ? <TrendIcon className="mr-0.5 h-3 w-3" /> : null}
-                          {card.trend.text}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-[11px] text-slate-400">{card.detail}</p>
-                  </div>
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg border ${card.iconClassName}`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <IncidentQueue
-              incidents={visible}
-              selectedId={selected.id}
-              filter={filter}
-              query={query}
-              dismissed={dismissed}
-              onSelect={handleSelect}
-              onDismiss={handleDismiss}
-              onFilterChange={setFilter}
-              onQueryChange={setQuery}
-            />
-
-            <IncidentDetail
+          {view === "fleet" ? (
+            <RescueTracking onBack={() => setView("triage")} onAction={show} />
+          ) : view === "sensors" ? (
+            <FloodClosureEditor onAction={show} />
+          ) : view === "radar" ? (
+            <DispatchRadar
               incident={selected}
               logs={selectedLogs}
+              queueCount={pendingCount}
+              onBack={() => setView("triage")}
               onAction={handleAction}
+              onMessage={show}
               onAddNote={handleAddNote}
+              onOpenDispatchModal={() => setView("triage")}
             />
-          </div>
+          ) : (
+            <>
+              {/* KPI Summary Cards */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                      Pending Triage
+                    </p>
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-slate-900">{pendingCount}</span>
+                      <span className="text-xs font-semibold text-rose-600">3 Critical</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-400">Queue velocity: +4 in last hr</p>
+                  </div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600">
+                    <Siren className="h-5 w-5" />
+                  </div>
+                </div>
+
+                {KPI_CARDS.map((card) => {
+                  const Icon = card.icon;
+                  const TrendIcon = card.trend?.icon;
+
+                  return (
+                    <div
+                      key={card.label}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div>
+                        <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                          {card.label}
+                        </p>
+                        <div className="mt-1 flex items-baseline gap-2">
+                          <span className="text-2xl font-bold text-slate-900">{card.value}</span>
+                          {card.trend ? (
+                            <span
+                              className={`flex items-center text-xs font-medium ${card.trend.className}`}
+                            >
+                              {TrendIcon ? <TrendIcon className="mr-0.5 h-3 w-3" /> : null}
+                              {card.trend.text}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-400">{card.detail}</p>
+                      </div>
+                      <div
+                        className={`flex h-10 w-10 items-center justify-center rounded-lg border ${card.iconClassName}`}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Main Triage & Verification Split Pane */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                <IncidentQueue
+                  incidents={visible}
+                  selectedId={selected.id}
+                  filter={filter}
+                  query={query}
+                  dismissed={dismissed}
+                  onSelect={handleSelect}
+                  onDismiss={handleDismiss}
+                  onFilterChange={setFilter}
+                  onQueryChange={setQuery}
+                />
+
+                <IncidentDetail
+                  incident={selected}
+                  logs={selectedLogs}
+                  onAction={handleAction}
+                  onAddNote={handleAddNote}
+                  onDispatchConfirmed={handleDispatchConfirmed}
+                />
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>

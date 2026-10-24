@@ -1,46 +1,62 @@
 "use client";
 
-import { Camera, Check, FileText, MapPin, MessageSquare, TriangleAlert } from "lucide-react";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  Droplets,
+  FileText,
+  MapPin,
+  MessageSquare,
+  Send,
+  TriangleAlert,
+  User,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { cn } from "@/lib/cn";
-import type { Incident, LogEntry } from "@/lib/incidents";
+import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
+import { RESCUE_UNITS, type RescueUnit } from "@/lib/rescue";
 
 type IncidentDetailProps = {
   incident: Incident;
   logs: LogEntry[];
   onAction: (label: string) => void;
   onAddNote: (text: string) => void;
+  onDispatchConfirmed?: (unitCallSign: string, incidentId: string) => void;
 };
 
-const ACTIONS = [
+const BASE_ACTIONS = [
   {
     label: "Reject / False Alarm",
     className: "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
   },
   {
-    label: "Escalate to BFP / Coast Guard",
-    className: "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200",
-  },
-  {
     label: "Hold for Sensor Update",
     className: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
   },
-  {
-    label: "Approve & Dispatch RU-03",
-    className:
-      "border-transparent bg-emerald-600 text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700",
-  },
 ];
 
-export function IncidentDetail({ incident, logs, onAction, onAddNote }: IncidentDetailProps) {
+export function IncidentDetail({
+  incident,
+  logs,
+  onAction,
+  onAddNote,
+  onDispatchConfirmed,
+}: IncidentDetailProps) {
   const logRef = useRef<HTMLDivElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
+  const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
+  const [modalStep, setModalStep] = useState<1 | 2 | 3>(1);
+  const [selectedUnit, setSelectedUnit] = useState<RescueUnit>(RESCUE_UNITS[0]);
 
   useEffect(() => {
     const node = logRef.current;
-
     if (node) {
       node.scrollTop = node.scrollHeight;
     }
@@ -48,25 +64,33 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
 
   function handleAddNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     const text = note.trim();
-
-    if (!text) {
-      return;
-    }
-
+    if (!text) return;
     onAddNote(text);
     setNote("");
     setNoteOpen(false);
   }
 
+  function handleConfirmDispatch() {
+    setDispatchModalOpen(false);
+    onAction(`Dispatched ${selectedUnit.callSign} (${selectedUnit.type}) to #${incident.id}`);
+    if (onDispatchConfirmed) {
+      onDispatchConfirmed(selectedUnit.callSign, incident.id);
+    }
+  }
+
+  const rawReporter = incident.reporter.includes("(")
+    ? `${incident.reporter.split("(")[0].trim()} (${maskPhoneNumber(incident.reporter)})`
+    : incident.reporter;
+
   return (
     <div className="flex flex-col justify-between space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-7">
       <div className="space-y-6">
+        {/* Docket Header */}
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-rose-800 px-2.5 py-0.5 text-xs font-semibold text-white uppercase">
+              <span className="rounded bg-rose-800 px-2.5 py-0.5 text-xs font-semibold text-white uppercase tracking-wider">
                 Incident Docket
               </span>
               <span className="font-mono text-base font-bold text-slate-900">#{incident.id}</span>
@@ -76,7 +100,7 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
               <span>
-                Reported by: <strong className="text-slate-900">{incident.reporter}</strong>
+                Reported by: <strong className="text-slate-900">{rawReporter}</strong>
               </span>
               <span className="text-slate-300">•</span>
               <span>
@@ -93,22 +117,83 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-3.5">
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
+        {/* Submission Parameters Card */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <h3 className="mb-3 flex items-center text-xs font-bold tracking-wider text-slate-500 uppercase">
+            <User className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Submission Parameters &amp;
+            Verification
+          </h3>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase">Reporter Identification</div>
+              <div className="text-xs font-bold text-slate-800">{rawReporter}</div>
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                <CheckCircle className="h-3 w-3" /> Verified Citizen ID #CIT-8821
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase">Date &amp; Elapsed Time</div>
+              <div className="text-xs font-semibold text-slate-800">{incident.reportedAt}</div>
+              <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                <Clock className="h-3 w-3" /> 14 minutes ago (High Priority)
+              </div>
+            </div>
+          </div>
+          <div className="flex items-start justify-between rounded-lg border border-slate-200 bg-white p-2.5">
+            <div>
+              <div className="text-xs font-bold text-slate-800">{incident.barangay}</div>
+              <div className="font-mono text-[11px] text-slate-500">14.5995° N, 121.0223° E</div>
+            </div>
+            <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+              Sector Delta
+            </span>
+          </div>
+        </div>
+
+        {/* Citizen Witness & Field Narrative */}
+        <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
             <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
             <span>Citizen Witness Narrative</span>
           </div>
-          <p className="text-xs leading-relaxed text-slate-700 italic">{incident.narrative}</p>
+          <p className="text-xs font-medium leading-relaxed text-slate-800">
+            &ldquo;{incident.narrative}&rdquo;
+          </p>
+          <p className="border-l-2 border-slate-300 pl-3 text-xs leading-relaxed text-slate-600 italic">
+            Light passenger vehicles cannot pass. Water is actively rising from south canal
+            overflow. 3 elderly citizens waiting at second floor porch.
+          </p>
         </div>
 
+        {/* Attached Telemetry & Evidence Chips */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold tracking-wider text-slate-500 uppercase">
+            Attached Telemetry &amp; Ground Evidence
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
+              <Camera className="mr-1.5 h-3 w-3" /> Photo (1 Verified)
+            </span>
+            <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+              <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Accurate ±4m)
+            </span>
+          </div>
+          <div className="flex items-center rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-800">
+            <Droplets className="mr-2 h-3.5 w-3.5 text-sky-600" />
+            <span>IoT Depth Sensor #D-12 reading 48 cm nearby</span>
+          </div>
+        </div>
+
+        {/* Evidence and Location Telemetry */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Photo Evidence Card */}
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
             <div className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1 font-bold text-slate-800">
                 <Camera className="h-3.5 w-3.5 text-sky-600" /> Citizen Photo Evidence
               </span>
               <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                Metadata Intact
+                EXIF Verified
               </span>
             </div>
 
@@ -135,15 +220,29 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
                 <circle cx="200" cy="140" r="10" fill="#0f172a" />
               </svg>
 
+              {/* Depth strictly in cm per UI/UX Audit (e.g. 75 cm - 90 cm) */}
               <div className="absolute bottom-2 left-2 rounded bg-slate-950/80 px-2 py-1 font-mono text-[10px] text-white backdrop-blur">
-                AI Submersion Est: <strong className="text-sky-400">0.65m - 0.85m</strong>
+                AI Submersion Est: <strong className="text-sky-400">75 cm - 90 cm</strong>
+              </div>
+            </div>
+
+            {/* Photo Metadata 3-Column Block */}
+            <div className="grid grid-cols-3 gap-1.5 text-center font-mono text-[10px]">
+              <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                <div className="text-[9px] text-slate-400 uppercase">Camera</div>
+                <div className="font-semibold text-slate-700">iPhone 14 Pro</div>
+              </div>
+              <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                <div className="text-[9px] text-slate-400 uppercase">Orientation</div>
+                <div className="font-semibold text-slate-700">North-West</div>
+              </div>
+              <div className="rounded border border-sky-100 bg-sky-50 p-1.5">
+                <div className="text-[9px] text-sky-600 uppercase">AI Confidence</div>
+                <div className="font-bold text-sky-800">98.2% Authentic</div>
               </div>
             </div>
 
             <div className="space-y-0.5 rounded border border-slate-100 bg-slate-50 p-2 font-mono text-[10px] text-slate-500">
-              <div>
-                Device: <span className="text-slate-800">iPhone 14 Pro</span>
-              </div>
               <div>
                 Timestamp: <span className="text-slate-800">11:40:22 AM PHT</span>
               </div>
@@ -156,10 +255,11 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
             </div>
           </div>
 
+          {/* Location & Sensor Telemetry Card */}
           <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
             <div className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1 font-bold text-slate-800">
-                <MapPin className="h-3.5 w-3.5 text-rose-600" /> Location & Sensor Telemetry
+                <MapPin className="h-3.5 w-3.5 text-rose-600" /> Location &amp; Sensor Telemetry
               </span>
               <span className="text-[10px] text-slate-500">{incident.barangay}</span>
             </div>
@@ -175,7 +275,7 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
                   </div>
                 </div>
                 <span className="mt-1 inline-block rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-rose-800 shadow">
-                  Incident Radius: 300m
+                  Incident Radius: 300 m
                 </span>
               </div>
 
@@ -187,25 +287,25 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
             <div className="space-y-1 rounded border border-slate-100 bg-slate-50 p-2 text-[10px]">
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Nearest Rescue:</span>
-                <span className="font-bold text-sky-700">RU-03 (Zodiac) • 12 min away</span>
+                <span className="font-bold text-sky-700">RU-03 (Boat) • 12 min (4.2 km)</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Spillway Sensor #D-12:</span>
-                <span className="font-bold text-rose-600">4.8m (Critical Overtopping)</span>
+                <span className="font-bold text-rose-600">480 cm (Critical Overtopping)</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Rain Gauge Sta. Rosa:</span>
-                <span className="font-bold text-sky-700">38mm/hr (Torrential)</span>
+                <span className="font-bold text-sky-700">38 mm/hr (Torrential)</span>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Operations Log */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1 text-[11px] font-bold tracking-wider text-slate-700 uppercase">
-              <FileText className="h-3.5 w-3.5 text-slate-400" /> Operations Log & Responders
-              Allocation Notes
+              <FileText className="h-3.5 w-3.5 text-slate-400" /> Operations Log & Notes
             </span>
             <button
               type="button"
@@ -231,7 +331,7 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
                 className={cn(
                   entry.kind === "muted" && "text-slate-500",
                   entry.kind === "action" && "font-semibold text-slate-700",
-                  entry.kind === "note" && "text-sky-900",
+                  entry.kind === "note" && "text-sky-900 font-medium",
                 )}
               >
                 <span className="font-mono text-slate-400">{entry.time}</span> {entry.text}
@@ -259,8 +359,9 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
         </div>
       </div>
 
+      {/* Action Buttons */}
       <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-4 md:grid-cols-4">
-        {ACTIONS.map((action) => (
+        {BASE_ACTIONS.map((action) => (
           <button
             key={action.label}
             type="button"
@@ -273,7 +374,246 @@ export function IncidentDetail({ incident, logs, onAction, onAddNote }: Incident
             {action.label}
           </button>
         ))}
+
+        {/* Multi-step modal trigger per UI/UX Audit & FSD requirements */}
+        <button
+          type="button"
+          onClick={() => {
+            setModalStep(1);
+            setDispatchModalOpen(true);
+          }}
+          className="flex items-center justify-center gap-1.5 rounded-lg border border-transparent bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-colors"
+        >
+          <CheckCircle className="h-3.5 w-3.5" />
+          <span>Approve & Dispatch</span>
+        </button>
       </div>
+
+      {/* 3-STEP DISPATCH MODAL */}
+      {dispatchModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                <h3 className="text-base font-bold text-slate-900">Flood-Safe Dispatch Workflow</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDispatchModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Stepper Navigation */}
+            <div className="flex items-center justify-between px-2 text-xs font-semibold">
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  modalStep >= 1 ? "text-sky-600 font-bold" : "text-slate-400",
+                )}
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-[10px] text-white">
+                  1
+                </span>
+                <span>Publish Hazard</span>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-300" />
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  modalStep >= 2 ? "text-sky-600 font-bold" : "text-slate-400",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                    modalStep >= 2 ? "bg-sky-600 text-white" : "bg-slate-200 text-slate-600",
+                  )}
+                >
+                  2
+                </span>
+                <span>Assign Unit</span>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-300" />
+              <div
+                className={cn(
+                  "flex items-center gap-1.5",
+                  modalStep >= 3 ? "text-sky-600 font-bold" : "text-slate-400",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                    modalStep >= 3 ? "bg-sky-600 text-white" : "bg-slate-200 text-slate-600",
+                  )}
+                >
+                  3
+                </span>
+                <span>Confirm Route</span>
+              </div>
+            </div>
+
+            {/* Step 1 Content */}
+            {modalStep === 1 ? (
+              <div className="space-y-4">
+                <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <span className="flex items-center gap-1 font-bold">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" /> Step 1: Formalize & Publish
+                    Hazard
+                  </span>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Publish the verified flood hazard into the active road graph. All citizen and
+                    dispatch navigations will automatically calculate clearance-aware detours.
+                  </p>
+                </div>
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div>
+                    <strong>Incident Docket:</strong> #{incident.id}
+                  </div>
+                  <div>
+                    <strong>Location:</strong> {incident.location} ({incident.barangay})
+                  </div>
+                  <div>
+                    <strong>Reported Submersion:</strong>{" "}
+                    <span className="font-mono font-bold text-sky-700">75 cm (Impassable)</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalStep(2)}
+                  className="w-full rounded-lg bg-sky-600 py-2.5 text-xs font-semibold text-white shadow hover:bg-sky-500 transition-colors"
+                >
+                  Publish Hazard to Road Network & Continue &rarr;
+                </button>
+              </div>
+            ) : null}
+
+            {/* Step 2 Content */}
+            {modalStep === 2 ? (
+              <div className="space-y-4">
+                <div className="text-xs font-semibold text-slate-700 uppercase">
+                  Select Available Rescue Unit:
+                </div>
+                <div className="space-y-2">
+                  {RESCUE_UNITS.map((unit) => {
+                    const isSelected = selectedUnit.callSign === unit.callSign;
+                    return (
+                      <label
+                        key={unit.callSign}
+                        onClick={() => setSelectedUnit(unit)}
+                        className={cn(
+                          "flex cursor-pointer items-center justify-between rounded-xl p-3 border transition-colors",
+                          isSelected
+                            ? "border-sky-600 bg-sky-50/60"
+                            : "border-slate-200 bg-white hover:bg-slate-50",
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="unit-select"
+                            checked={isSelected}
+                            onChange={() => setSelectedUnit(unit)}
+                            className="text-sky-600"
+                          />
+                          <div>
+                            <div className="text-xs font-bold text-slate-900">
+                              {unit.callSign} ({unit.type})
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono">
+                              Clearance: {unit.clearance_cm} cm • Speed: {unit.speed_kmh} km/h
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "rounded px-2 py-0.5 text-[10px] font-bold font-mono",
+                            unit.status === "AVAILABLE"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-sky-100 text-sky-800",
+                          )}
+                        >
+                          {unit.status}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalStep(1)}
+                    className="flex-1 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalStep(3)}
+                    className="flex-1 rounded-lg bg-sky-600 py-2 text-xs font-semibold text-white hover:bg-sky-500"
+                  >
+                    Preview Safe Route &rarr;
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Step 3 Content */}
+            {modalStep === 3 ? (
+              <div className="space-y-4">
+                <div className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                  <span className="flex items-center gap-1 font-bold">
+                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Safe Corridor Verified
+                  </span>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    A clearance-aware route (4.2 km) avoiding all active flood polygons has been
+                    calculated for {selectedUnit.callSign}.
+                  </p>
+                </div>
+                <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs">
+                  <div className="flex justify-between">
+                    <span>Unit Assigned:</span>
+                    <strong>
+                      {selectedUnit.callSign} ({selectedUnit.type})
+                    </strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Target Incident:</span>
+                    <strong>#{incident.id}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Ground Clearance:</span>
+                    <strong>{selectedUnit.clearance_cm} cm</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Calculated ETA:</span>
+                    <strong className="text-emerald-700">12:13 PM PHT (~ 12 mins)</strong>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalStep(2)}
+                    className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDispatch}
+                    className="flex-2 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition-colors"
+                  >
+                    <Send className="h-4 w-4" /> Confirm & Commit Dispatch
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
