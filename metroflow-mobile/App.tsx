@@ -360,7 +360,7 @@ const ProfileScreen = ({ navigation }: any) => {
               <Mail size={16} color="#64748b" />
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={{ fontSize: 9, color: '#94a3b8' }}>Civic Dispatch Email</Text>
-                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>{user?.email || "driver@metroflow.ph"}</Text>
+                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0f172a' }}>{user?.email || ""}</Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
@@ -493,7 +493,7 @@ const LoginScreen = ({ navigation }: any) => {
     try {
       const res = await apiSendVerification(email);
       setCodeSent(true);
-      setError(res.code ? `Code sent (dev): ${res.code}` : "Verification code sent");
+      setError(res.code ? `Code sent (dev): ${res.code}` : "Verification code sent to email");
     } catch (e: any) {
       setError(e.message || "Failed to send code");
     } finally {
@@ -559,7 +559,7 @@ const LoginScreen = ({ navigation }: any) => {
               autoCapitalize="none"
               keyboardType="email-address"
               style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#0f172a' }}
-              placeholder="driver@metroflow.ph"
+              placeholder="Enter email"
             />
           </View>
           <View>
@@ -617,7 +617,7 @@ const LoginScreen = ({ navigation }: any) => {
           </TouchableOpacity>
 
           <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 6 }} onPress={() => navigation.replace("MainApp")}>
-            <Text style={{ fontSize: 12, color: '#475569' }}>Continue as Guest</Text>
+            <Text style={{ fontSize: 12, color: '#475569' }}>Continue</Text>
           </TouchableOpacity>
         </View>
       </View>
