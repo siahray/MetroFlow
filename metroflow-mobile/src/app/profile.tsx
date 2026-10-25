@@ -44,7 +44,7 @@ export default function ProfileScreen() {
                 <Mail size={16} color="#64748b" />
                 <Text className="text-sm text-slate-600">Dispatch Email</Text>
               </View>
-              <Text className="text-sm text-slate-900">driver@metroflow.ph</Text>
+              <Text className="text-sm text-slate-900">{user?.email || ""}</Text>
             </View>
             <View className="flex-row items-center justify-between py-2">
               <View className="flex-row items-center gap-2">

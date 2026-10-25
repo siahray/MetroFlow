@@ -538,6 +538,10 @@ def send_verification(request: SendVerifyRequest):
 
         create_code = verification_store.create_code
     code = create_code(request.email)
+    # In production, send via email. For now, still return code for dev; in prod remove.
+    import os
+    if os.getenv("ENV") == "production":
+        return {"message": "Verification code sent to email"}
     return {"message": "Verification code sent", "code": code}
 
 

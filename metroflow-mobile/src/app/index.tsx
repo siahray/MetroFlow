@@ -35,7 +35,7 @@ export default function SplashScreen() {
             <Text className="text-xs font-semibold text-slate-600 mb-1.5">Email Address</Text>
             <TextInput
               className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm"
-              placeholder="driver@metroflow.ph"
+              placeholder="Enter email"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
