@@ -1,0 +1,62 @@
+name: Deploy Backend
+
+on:
+  workflow_run:
+    workflows: ["Backend Image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+
+concurrency:
+  group: deploy-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: Deploy to hosting provider
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success')
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    steps:
+      - name: Compute image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/backend:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy notice
+        run: |
+          echo "Deploying ${{ steps.image.outputs.name }} to ${{ github.event.inputs.environment || 'production' }}"
+          echo "::notice title=Backend deployment::Configure your hosting provider (Railway/Render/Fly.io/Cloud Run) to pull from GHCR or add provider-specific deploy steps here. Set secrets: RAILWAY_TOKEN, RENDER_API_KEY, FLY_API_TOKEN, or GOOGLE_APPLICATION_CREDENTIALS."
+
+      # Example: Railway
+      # - name: Deploy to Railway
+      #   if: ${{ secrets.RAILWAY_TOKEN != '' }}
+      #   run: |
+      #     npm i -g @railway/cli
+      #     railway up --service backend --image ${{ steps.image.outputs.name }}
+      #   env:
+      #     RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      # Example: Render
+      # - name: Deploy to Render
+      #   if: ${{ secrets.RENDER_API_KEY != '' }}
+      #   run: |
+      #     curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+      #       -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+      #       -H "Accept: application/json" \
+      #       -H "Content-Type: application/json" \
+      #       -d '{"imageUrl":"${{ steps.image.outputs.name }}"}'
