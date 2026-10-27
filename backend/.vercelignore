@@ -1,0 +1,31 @@
+# Upload exclusions for the Vercel Python function.
+#
+# The function bundle is everything in this directory, so keep the local virtual
+# environment, credentials and test-only files out of it. `.env` never ships:
+# the deployment reads the same values from Vercel environment variables.
+
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.env
+.env.*
+
+tests/
+requirements-dev.txt
+pytest.ini
+Dockerfile
+.dockerignore
+
+# pyproject.toml only carries the ruff configuration, but Vercel treats its
+# presence as the dependency manifest and installs from it, so the runtime
+# requirements in requirements.txt would be skipped. Leaving it out makes
+# requirements.txt the single source of truth, as it is for CI and the image.
+pyproject.toml
+
+.vscode/
+.DS_Store

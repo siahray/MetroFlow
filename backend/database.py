@@ -14,7 +14,19 @@ DATABASE_URL = os.getenv(
     "postgresql+psycopg2://metroflow_admin:metroflow_password@localhost:5432/metroflow_db",
 )
 
-engine = create_engine(DATABASE_URL, echo=False)
+# ``pool_pre_ping`` matters when the database sits behind a connection pooler, as
+# the hosted Supabase deployment does: an idle pooled connection can be closed
+# under us, and without the check the first query after the drop fails. The pool
+# is also kept small because a serverless platform runs many short-lived
+# instances, and each one would otherwise hold its default five connections open.
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    pool_size=2,
+    max_overflow=3,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
