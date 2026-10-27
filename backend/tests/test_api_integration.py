@@ -33,12 +33,22 @@ LAT_RANGE = (14.4, 14.8)
 @pytest.fixture(scope="session")
 def client():
     """
-    One app lifespan for the whole session.
+    One app lifespan for the whole session, signed in as the bootstrap dispatcher.
 
     Startup runs seeding and geometry backfill, so re-entering it per test would
-    repeat that DDL dozens of times for no benefit.
+    repeat that DDL dozens of times for no benefit. Every /api/v1 route except
+    the auth entry points now requires a token (TSD LIM-022), so the contract
+    client signs in once and reuses the header.
     """
+    from config import settings
+
     with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/v1/auth/login",
+            json={"email": settings.admin_email, "password": settings.admin_password},
+        )
+        assert response.status_code == 200, f"dispatcher sign-in failed: {response.text}"
+        test_client.headers["Authorization"] = f"Bearer {response.json()['access_token']}"
         yield test_client
 
 
@@ -88,6 +98,41 @@ def test_security_headers_are_present_on_every_response(client):
     assert response.headers["cross-origin-resource-policy"] == "cross-origin"
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
     assert response.headers["x-frame-options"] == "DENY"
+
+
+# ---------------------------------------------------------------------------
+# Route-level authentication (TSD LIM-022)
+# ---------------------------------------------------------------------------
+
+
+def test_reads_and_writes_are_rejected_without_a_token(client):
+    """The bearer header is what separates an anonymous caller from a write."""
+    token = client.headers.pop("Authorization")
+    try:
+        read = client.get("/api/v1/network/state", params={"clearance_cm": 30})
+        write = client.post(
+            "/api/v1/simulation/rain",
+            params={"rainfall_mm_hr": 10, "clearance_cm": 30},
+        )
+    finally:
+        client.headers["Authorization"] = token
+
+    assert read.status_code == 401
+    assert write.status_code == 401
+
+
+def test_a_garbage_token_is_rejected(client):
+    token = client.headers.pop("Authorization")
+    try:
+        response = client.get(
+            "/api/v1/network/state",
+            params={"clearance_cm": 30},
+            headers={"Authorization": "Bearer not-a-token"},
+        )
+    finally:
+        client.headers["Authorization"] = token
+
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------

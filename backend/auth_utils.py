@@ -46,3 +46,25 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+
+def require_roles(*roles: str):
+    """
+    Build a dependency that admits only the given roles.
+
+    Authentication and authorisation stay separate: ``get_current_user`` answers
+    "who is calling" with a 401, while this answers "may they do this" with a
+    403. Keeping the check in a dependency rather than in each handler means a
+    route cannot forget it and still pass review.
+    """
+    allowed = frozenset(roles)
+
+    def dependency(current_user: models.User = Depends(get_current_user)) -> models.User:
+        if current_user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account is not permitted to perform this action",
+            )
+        return current_user
+
+    return dependency
