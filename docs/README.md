@@ -133,6 +133,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 1.0     | 21 Oct 2026 | «Project Team» | Restructured to the supplied Word templates; template identifier scheme |
 | 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch and sensors            |
 | 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI      |
+| 1.3     | 27 Oct 2026 | «Project Team» | CR-001 approved; ADR-021 tokens; implementation status aligned with the code |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
@@ -143,8 +144,8 @@ change, per the configuration management rules in the PMP.
 | Material                     | Location                                       |
 | ---------------------------- | ---------------------------------------------- |
 | Runnable system              | `backend/`, `metroflow-admin/`, `docker-compose.yml`   |
-| Driver app (planned, CR-001) | `metroflow-mobile/`                               |
-| UI template (to be supplied) | Client HTML/CSS, Figma-derived                 |
+| Driver app (Expo, CR-001)    | `metroflow-mobile/`                               |
+| UI template (client-supplied) | `docs/design/`                                  |
 | Environment templates        | `backend/.env.example`, `metroflow-admin/.env.example`, `metroflow-mobile/.env.example` |
 | OpenAPI document (generated) | `http://localhost:8000/openapi.json`           |
 | CI/CD workflows              | `.github/workflows/`                           |

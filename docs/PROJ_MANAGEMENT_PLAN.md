@@ -331,12 +331,17 @@ concerns go to the adviser immediately.
 | Unit                   | pytest (`-m "not integration"`)            |
 | Contract / integration | pytest (`-m integration`) against PostGIS  |
 | Web lint and types     | ESLint, `next build`                       |
-| Web unit               | Bun test                                   |
-| Driver unit            | Bun test                                   |
-| Browser E2E            | Playwright (online and offline contexts)   |
+| Web unit               | Bun test (planned)                         |
+| Driver unit            | Bun test (planned)                         |
+| Browser E2E            | Playwright (planned; online and offline contexts) |
 | Security               | OWASP ZAP API scan, CodeQL (when licensed) |
 | Migration              | Alembic                                    |
 | Exploratory            | Scripted browser session                   |
+
+This table is the agreed test strategy. Present in the repository today: pytest
+suites, ESLint and `next build`, `tsc --noEmit` for the driver app, Alembic,
+the ZAP API scan workflow and CodeQL. `Bun test` and Playwright are planned and
+tracked by TSD LIM-009.
 
 ## Success Metrics
 
