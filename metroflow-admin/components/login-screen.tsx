@@ -8,7 +8,11 @@ import type { SessionUser } from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-export function LoginScreen({ onSignIn }: { onSignIn: (user?: SessionUser) => void }) {
+export function LoginScreen({
+  onSignIn,
+}: {
+  onSignIn: (user?: SessionUser, token?: string) => void;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -30,14 +34,14 @@ export function LoginScreen({ onSignIn }: { onSignIn: (user?: SessionUser) => vo
       if (!res.ok) {
         throw new Error("Invalid credentials");
       }
-      const data: SessionUser & { user?: SessionUser } = await res.json();
+      const data = (await res.json()) as { access_token?: string; user?: SessionUser };
       setIsSubmitting(false);
-      const user: SessionUser = data.user ?? data;
+      const user: SessionUser = data.user ?? (data as SessionUser);
       if (user.role !== "LGU_DISPATCHER" && user.role !== "SUPER_ADMIN") {
         setError("Only authorized admin accounts can access this system");
         return;
       }
-      onSignIn(user);
+      onSignIn(user, data.access_token);
     } catch {
       setIsSubmitting(false);
       setError("Invalid credentials");

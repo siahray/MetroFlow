@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 
 import type { AuthUser } from "./api";
+import { setAuthToken } from "./api";
 
 type AuthState = {
   user: AuthUser | null;
@@ -18,7 +19,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const signIn = useCallback((next: AuthUser) => setUser(next), []);
-  const signOut = useCallback(() => setUser(null), []);
+  const signOut = useCallback(() => {
+    setAuthToken(null);
+    setUser(null);
+  }, []);
 
   const value = useMemo(() => ({ user, signIn, signOut }), [user, signIn, signOut]);
 

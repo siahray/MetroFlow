@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LifeBuoy, MapPin, AlertOctagon } from 'lucide-react-native';
-import { createSOS } from '../../api';
+import { ApiError, createSOS } from '../../api';
 
 /** Placeholder coords — in production, replace with expo-location GPS fix */
 const PLACEHOLDER_COORDS = { latitude: 14.554729, longitude: 121.024445 };
@@ -31,8 +31,14 @@ export default function SOSScreen() {
       Alert.alert('SOS Sent', 'Your distress signal has been sent to MDRRMC Emergency Dispatch.', [
         { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
       ]);
-    } catch {
-      Alert.alert('Failed', 'Could not send SOS. Check your connection and try again.');
+    } catch (error) {
+      const needsSignIn = error instanceof ApiError && error.status === 401;
+      Alert.alert(
+        needsSignIn ? 'Sign in required' : 'Failed',
+        needsSignIn
+          ? 'Sign in or create an account to send an SOS.'
+          : 'Could not send SOS. Check your connection and try again.',
+      );
       setSending(false);
     }
   }
