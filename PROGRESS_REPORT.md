@@ -11,7 +11,10 @@
 
 MetroFlow is a dual-interface flood-aware urban mobility system consisting of a FastAPI backend, an LGU web dashboard (`metroflow-admin/`) and an Expo driver app. The system covers flood simulation, clearance-aware routing, SOS/emergency dispatch and flood-hazard publishing. All application data flows through the backend API into Supabase Postgres. Accounts are real: the API issues its own session tokens and checks bcrypt credentials against the `users` table.
 
-This is a working pilot, not a production service. Most endpoints still accept unauthenticated calls (TSD LIM-022), so the stack must stay off the public internet until route-level enforcement lands.
+This is a working pilot, not a production service. Every route except the four
+auth entry points now requires a session token, and writes require a portal role
+(TSD SEC-001 closed); rate limiting and a WAF are still missing (LIM-006), so the
+stack stays off the public internet until those gateway controls exist.
 
 ---
 
@@ -47,9 +50,10 @@ This is a working pilot, not a production service. Most endpoints still accept u
 - **Passwords** bcrypt-hashed on the `users` row
 - **Login** accepts `LGU_DISPATCHER`, `SUPER_ADMIN` and `EMERGENCY_DRIVER`
 - **Registration** creates driver accounts only
-- **`GET /api/v1/auth/me`** is the only route that currently validates the token
+- **`GET /api/v1/auth/me`** returns the caller from the token
+- **Route enforcement** — every route except the four auth entry points requires a bearer token (`401`); routes that change shared state or read incident data require a portal role (`403` for drivers)
 - **Email verification** uses an in-process store (dev mode returns the code); it does not survive a restart
-- **Open gap:** the remaining routes do not require a token yet (TSD LIM-022)
+- **Open gap:** none for authentication; rate limiting and a WAF are still missing (TSD LIM-006)
 
 ### Endpoints
 | Endpoint | Method | Description |
@@ -78,7 +82,7 @@ This is a working pilot, not a production service. Most endpoints still accept u
 ## 3. LGU Web Dashboard (`metroflow-admin/`, Next.js)
 
 - **Separate pages:** `/login` and the operational screens (`/triage`, `/dashboard`, `/radar`, `/fleet`, `/hazards`)
-- **Real sign-in** against the API; only the signed-in profile is kept for the session (no token is sent yet — TSD LIM-022)
+- **Real sign-in** against the API; the token is kept in `sessionStorage` and sent on every request, and a `401` returns the operator to `/login`
 - **Live data** — SOS requests, vehicles and hazards load from the API
 - **Mixed data** — the SOS live panel is API-backed; the remaining queue entries are still seed/demo records
 - **Dispatch** assigns the selected fleet unit by its backend `vehicle_id` instead of a hardcoded id
@@ -92,7 +96,8 @@ This is a working pilot, not a production service. Most endpoints still accept u
 ## 4. Driver Mobile App (Expo / React Native)
 
 - **Expo Router tab layout** — Map, Report, SOS and Profile tabs
-- **Email/password auth** with a registration path for driver accounts
+- **Email/password auth** with a registration path for driver accounts; registration signs in automatically and the token is held for the app session
+- **Guest mode** still browses the app, but sending an SOS or a report asks the driver to sign in
 - **Profile:** displays clearance in cm
 - **SOS/Report:** submits to the backend
 - **Offline Maps:** visual placeholder only (no SQLite/download)

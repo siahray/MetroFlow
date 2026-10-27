@@ -345,7 +345,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
 | Audit and administration | FSD-FR-047 to 049 | Planned     | Entity exists; no write path                        |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
-| Authentication and RBAC  | FSD-FR-092, 093   | Partial     | Login, registration, roles and `/auth/me` exist; tokens are not yet enforced (LIM-022) |
+| Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me` and route-level enforcement; audit writes planned |
 | Driver navigation        | FSD-FR-054 to 064 | Partial     | Expo app with map and a routing screen; turn-by-turn list and reroute absent |
 | Field reporting          | FSD-FR-065 to 067 | Planned     | Camera, depth and EXIF capture not implemented      |
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
@@ -422,10 +422,9 @@ Actor: dispatcher. Postcondition: dashboard visible.
 2. Actor submits the form.
 3. System shows a confirmation and reveals the dashboard after a short delay.
 
-Current limitation: the portal keeps the returned profile for the session but
-does not store or send the token, and does not guard every route client-side.
-CR-001 adds server-side role checks; route-level token enforcement is tracked as
-TSD LIM-022.
+Current limitation: the shell redirects signed-out visitors to `/login`, and the
+portal sends its token on every request; a `401` clears the session. Role checks
+on individual screens and audit records are still CR-001 work.
 Requirements: FSD-FR-018 to 023, FSD-FR-092.
 
 ### UC-005 — Triage an incident

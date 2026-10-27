@@ -36,6 +36,7 @@ what is running.
 | Units            | Distance metres, speed km/h, water depth centimetres, rainfall mm/hr |
 | Timestamps       | ISO 8601, UTC (`2026-10-21T12:00:00Z`)                               |
 | Content type     | `application/json`                                                   |
+| Authentication   | `Authorization: Bearer <token>` on every route except the auth entry points |
 | Parameters       | Query parameters on `GET` routes; JSON bodies on `POST`/`PATCH` routes |
 | Versioning       | Path prefix `/api/v1`; breaking changes move to `/api/v2`            |
 
@@ -51,12 +52,38 @@ are provisioned by the operator, never self-registered. `EMERGENCY_DRIVER` is
 the field role and is created by `POST /api/v1/auth/register`; the endpoint
 refuses to mint an administrative role.
 
-`GET /api/v1/auth/me` is the only route that validates a token today. The
-CR-001 routes in §9 issue and accept credentials but do **not** yet enforce them
-(TSD LIM-022), so the deployment must stay off the public internet until that
-gate lands. The token is returned to both clients but neither sends it on later
-requests yet: the portal persists only the signed-in profile for the browser
-session, and the driver app keeps the profile in memory.
+Every route requires that token except the four auth entry points — `login`,
+`register`, `send-verification` and `verify` — and the health check at `/`. A
+missing, malformed or expired token returns `401`.
+
+Authorisation is separate from authentication. Portal roles (`LGU_DISPATCHER`,
+`SUPER_ADMIN`) may change shared state and read incident data; a driver account
+(`EMERGENCY_DRIVER`) may read the network, hazards, routes and fleet, and create
+SOS requests. A denied action returns `403`.
+
+| Route                                                                      | Driver | Portal |
+| -------------------------------------------------------------------------- | ------ | ------ |
+| `GET /network/state`, `GET /routing/navigate`, `GET /hazards`, `GET /vehicles` | yes    | yes    |
+| `POST /sos`, `GET /auth/me`                                                | yes    | yes    |
+| `GET /sos`                                                                 | no     | yes    |
+| `POST /sos/{id}/assign`, `POST /dispatch/{id}/confirm`                     | no     | yes    |
+| `POST /simulation/rain`                                                    | no     | yes    |
+| `POST`/`PATCH` `/hazards*` and `/vehicles*`                                | no     | yes    |
+
+Both clients attach `Authorization: Bearer <token>`. The portal keeps the token
+in `sessionStorage` for the browser session and returns to the login screen when
+the API answers `401`; the driver app keeps it in memory for the app session and
+tells the user to sign in if a request is rejected.
+
+The examples below send `-H "Authorization: Bearer $TOKEN"`. Get `TOKEN` from
+the login response:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"dispatcher@metroflow.local","password":"metroflow-dev"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+```
 
 Two operational notes. `METROFLOW_ADMIN_EMAIL` and `METROFLOW_ADMIN_PASSWORD`
 seed the first dispatcher when the user table is empty, because registration
@@ -96,6 +123,8 @@ Both comparisons are inclusive. `clearance_cm` defaults to 30 cm and must be
 
 | Status | When                                                   | Body                                  |
 | ------ | ------------------------------------------------------ | ------------------------------------- |
+| `401`  | Missing, malformed or expired token                    | `{"detail": "<message>"}`             |
+| `403`  | The caller's role may not perform this action          | `{"detail": "<message>"}`             |
 | `404`  | Unknown node, or no route survives the clearance check | `{"detail": "<message>"}`             |
 | `422`  | Parameter fails validation                             | FastAPI validation object (see §6)    |
 | `500`  | Unhandled server or database error                     | `{"detail": "Internal Server Error"}` |
@@ -166,7 +195,8 @@ Returns the full renderable road network for one clearance profile.
 ### 2.3 Example
 
 ```bash
-curl -s "http://localhost:8000/api/v1/network/state?clearance_cm=30"
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/network/state?clearance_cm=30"
 ```
 
 ```json
@@ -272,7 +302,8 @@ All fields of §2.2, plus:
 ### 3.4 Example
 
 ```bash
-curl -s -X POST "http://localhost:8000/api/v1/simulation/rain?rainfall_mm_hr=80&clearance_cm=30"
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/simulation/rain?rainfall_mm_hr=80&clearance_cm=30"
 ```
 
 ```json
@@ -415,7 +446,8 @@ the returned path is optimal for this cost function (TSD §6.4).
 ### 4.4 Example — dry network
 
 ```bash
-curl -s "http://localhost:8000/api/v1/routing/navigate?start_node=1&target_node=4&clearance_cm=30"
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/routing/navigate?start_node=1&target_node=4&clearance_cm=30"
 ```
 
 ```json
@@ -582,8 +614,8 @@ document has a defect.
 ## 9. CR-001 endpoints
 
 These routes exist and are called by the portal and the driver app. Request and
-response models live in `backend/schemas.py`. None of them validates a bearer
-token yet (TSD LIM-022), so the §1.2 deployment constraint still applies.
+response models live in `backend/schemas.py`. All of them, and the rest of the
+API, require a bearer token except the four auth entry points in §9.1.
 
 ### 9.1 Authentication
 
@@ -598,8 +630,8 @@ token yet (TSD LIM-022), so the §1.2 deployment constraint still applies.
 Registration accepts `DRIVER`, `COMMUTER` or `EMERGENCY_DRIVER` and stores
 `EMERGENCY_DRIVER`. It returns `403` for `LGU_DISPATCHER` and `SUPER_ADMIN`,
 `409` for a duplicate email, and `422` for a missing name, malformed email or a
-password shorter than eight characters. `GET /api/v1/auth/me` is the only route
-that verifies the token and returns `401` without a valid `Authorization`
+password shorter than eight characters. `GET /api/v1/auth/me` returns the
+caller's identity from the token and `401` without a valid `Authorization`
 header.
 
 `send-verification` returns the code in the response body unless

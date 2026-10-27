@@ -228,7 +228,7 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 | Risk                                       | Impact                                  | Mitigation                                                                            |
 | ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------- |
 | Model outputs judged unrealistic           | Benefits unrealisable; credibility lost | Declare calibration as configuration; validate against documented events              |
-| Route authorisation not delivered          | Cannot be used with real data           | CR-001 adds tokens and roles; route enforcement (TSD LIM-022) gates real data         |
+| Route authorisation not delivered          | Cannot be used with real data           | Delivered 27 Oct 2026: tokens plus per-route role checks; rate limiting (TSD LIM-006) gates real data |
 | No baseline data                           | Benefits unquantifiable                 | Use audit-trail and risk benefits; collect baseline during the pilot                  |
 | Hosted costs exceed the free tier          | Operating cost rises                    | Keep hosting provider-agnostic; the container image is portable                       |
 | Provider quota or outage                   | Live rainfall or imagery unavailable    | Manual rainfall, OSM tiles and cached derived data; monitor usage                     |
