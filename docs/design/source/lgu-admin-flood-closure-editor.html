@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-50">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MetroFlow LGU - Flood/Road Closure Editor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: "#f0f7ff",
+                100: "#e0effe",
+                500: "#0284c7",
+                800: "#075985",
+                900: "#0c4a6e",
+                950: "#082f49",
+              },
+              navy: {
+                800: "#0f2942",
+                900: "#0a1a2b",
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+      }
+
+      /* Map pattern simulation */
+      .map-bg {
+        background-color: #f0f9ff;
+        background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+
+      /* Toggle Switch Custom Styling (Tailwind peer approach) */
+      .toggle-checkbox:checked {
+        right: 0;
+        border-color: #68d391;
+      }
+      .toggle-checkbox:checked + .toggle-label {
+        background-color: #0f2942;
+      }
+    </style>
+  </head>
+  <body class="h-full flex text-slate-800 antialiased overflow-hidden">
+    <!-- LEFT SIDEBAR -->
+    <aside
+      class="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 shadow-sm z-20"
+    >
+      <!-- Logo Area -->
+      <div class="h-16 flex items-center px-6 border-b border-slate-100">
+        <div
+          class="w-8 h-8 bg-navy-900 rounded-lg flex items-center justify-center text-white mr-3 shadow-md shadow-navy-900/20"
+        >
+          <i data-lucide="waves" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div
+            class="text-sm font-extrabold text-navy-900 tracking-tight leading-tight"
+          >
+            MetroFlow
+          </div>
+          <div
+            class="text-[9px] font-semibold text-slate-500 uppercase tracking-widest leading-tight"
+          >
+            LGU Operations
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Alert Badge -->
+      <div class="p-4">
+        <div
+          className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center"
+        >
+          <div
+            class="flex items-center space-x-2 text-xs font-bold text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200"
+          >
+            <div
+              class="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"
+            ></div>
+            <span>Status: Level 2 Alert</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="flex-1 px-3 space-y-1">
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="radar" class="w-4 h-4 mr-3 text-slate-400"></i>
+          Dispatch Radar
+        </a>
+        <!-- Active State -->
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm bg-navy-900 text-white font-semibold shadow-md shadow-navy-900/10 transition-all"
+        >
+          <i data-lucide="droplets" class="w-4 h-4 mr-3 text-sky-400"></i>
+          Sensors & Water Level
+        </a>
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="truck" class="w-4 h-4 mr-3 text-slate-400"></i> Rescue
+          Units & Fleet
+        </a>
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="home" class="w-4 h-4 mr-3 text-slate-400"></i>
+          Evacuation Centers
+        </a>
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="radio" class="w-4 h-4 mr-3 text-slate-400"></i> Civic
+          Broadcasts
+        </a>
+      </nav>
+
+      <!-- Bottom Badge -->
+      <div class="p-4 border-t border-slate-100">
+        <div
+          class="bg-slate-50 border border-slate-200 rounded-lg p-3 flex justify-between items-start"
+        >
+          <div>
+            <div
+              class="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5"
+            >
+              MDRRMC Unit
+            </div>
+            <div class="text-xs font-bold text-navy-900">HQ Sector Delta</div>
+          </div>
+          <i data-lucide="shield" class="w-4 h-4 text-sky-600 opacity-80"></i>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Top Header -->
+      <header
+        class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shadow-sm flex-shrink-0"
+      >
+        <div class="flex items-center space-x-3">
+          <div
+            class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 shadow-inner"
+          >
+            <i data-lucide="map" class="w-4 h-4 text-sky-600"></i>
+          </div>
+          <div>
+            <h1 class="text-sm font-bold text-slate-800">
+              MetroFlow LGU Dispatch
+            </h1>
+            <div class="text-[10px] text-slate-500 font-medium tracking-wide">
+              MDRRMC Operations Portal
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-5">
+          <div class="flex items-center space-x-3">
+            <span
+              class="flex items-center bg-sky-50 text-sky-700 text-xs font-bold px-3 py-1.5 rounded-full border border-sky-100 shadow-sm"
+            >
+              <i data-lucide="cloud-rain" class="w-3.5 h-3.5 mr-1.5"></i> 28°C
+              Rain Advisory
+            </span>
+            <span
+              class="flex items-center bg-rose-50 text-rose-700 text-xs font-bold px-3 py-1.5 rounded-full border border-rose-100 shadow-sm"
+            >
+              <i
+                data-lucide="siren"
+                class="w-3.5 h-3.5 mr-1.5 text-rose-500"
+              ></i>
+              Active SOS: 14
+            </span>
+          </div>
+          <div class="w-px h-6 bg-slate-200"></div>
+          <div class="flex items-center space-x-3 cursor-pointer">
+            <div class="text-right">
+              <div class="text-sm font-bold text-slate-800">Maria Santos</div>
+              <div class="text-[10px] text-slate-500 font-medium">
+                Lead Dispatch Officer
+              </div>
+            </div>
+            <div
+              class="w-9 h-9 bg-navy-900 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md"
+            >
+              MS
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Sub-header (Action Bar) -->
+      <div
+        class="bg-white px-6 py-3 border-b border-slate-200 shadow-sm flex items-center justify-between flex-shrink-0"
+      >
+        <div class="flex space-x-2">
+          <button
+            class="bg-navy-900 text-white px-4 py-1.5 rounded-lg text-sm font-medium flex items-center shadow-sm"
+          >
+            <i data-lucide="hexagon" class="w-4 h-4 mr-2"></i> Flood Polygon
+          </button>
+          <button
+            class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-4 py-1.5 rounded-lg text-sm font-medium flex items-center transition-colors"
+          >
+            <i data-lucide="minus" class="w-4 h-4 mr-2 stroke-[3]"></i> Road
+            Closure
+          </button>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="flex items-center text-xs font-medium text-slate-600">
+            <div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+            Telemetry Sync: Active
+          </div>
+          <button
+            class="flex items-center text-sm font-medium text-slate-500 hover:text-slate-800 bg-slate-100 px-3 py-1 rounded-lg"
+          >
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 mr-1.5"></i> Reset
+            Canvas
+          </button>
+        </div>
+      </div>
+
+      <!-- Editor Content (Split Layout) -->
+      <main class="flex-1 overflow-hidden p-6 flex gap-6">
+        <!-- Left Pane (Map Section) -->
+        <div class="flex-1 flex flex-col min-w-0">
+          <!-- Map Container -->
+          <div
+            class="flex-1 relative bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col"
+          >
+            <!-- Map Canvas Area -->
+            <div class="flex-1 relative map-bg">
+              <!-- Floating Toolbar -->
+              <div
+                class="absolute top-4 left-4 bg-white border border-slate-200 rounded-lg shadow-md flex flex-col p-1 space-y-1 z-10"
+              >
+                <button class="p-2 bg-navy-900 rounded text-white">
+                  <i data-lucide="mouse-pointer-2" class="w-4 h-4"></i>
+                </button>
+                <button class="p-2 hover:bg-slate-50 rounded text-slate-500">
+                  <i data-lucide="map-pin" class="w-4 h-4"></i>
+                </button>
+                <button class="p-2 hover:bg-slate-50 rounded text-slate-500">
+                  <i data-lucide="hexagon" class="w-4 h-4"></i>
+                </button>
+                <button class="p-2 hover:bg-slate-50 rounded text-slate-500">
+                  <i data-lucide="git-commit" class="w-4 h-4"></i>
+                </button>
+                <div class="h-px bg-slate-200 mx-2 my-1"></div>
+                <button class="p-2 hover:bg-rose-50 rounded text-rose-500">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <!-- Zoom Controls -->
+              <div
+                class="absolute top-4 right-4 bg-white border border-slate-200 rounded-lg shadow-md flex flex-col p-1 z-10"
+              >
+                <button class="p-1.5 hover:bg-slate-50 rounded text-slate-600">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                </button>
+                <div class="h-px bg-slate-200 mx-1"></div>
+                <button class="p-1.5 hover:bg-slate-50 rounded text-slate-600">
+                  <i data-lucide="minus" class="w-4 h-4"></i>
+                </button>
+                <div class="h-px bg-slate-200 mx-1 my-1"></div>
+                <button class="p-1.5 hover:bg-slate-50 rounded text-slate-600">
+                  <i data-lucide="layers" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <!-- SVG Map Overlays -->
+              <svg
+                class="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 800 500"
+                preserveAspectRatio="xMidYMid slice"
+              >
+                <!-- Flood Polygon -->
+                <polygon
+                  points="350,150 480,180 430,300 300,270"
+                  fill="rgba(14, 165, 233, 0.3)"
+                  stroke="#0284c7"
+                  stroke-width="2"
+                />
+                <!-- Polygon Nodes -->
+                <circle
+                  cx="350"
+                  cy="150"
+                  r="4"
+                  fill="white"
+                  stroke="#0284c7"
+                  stroke-width="2"
+                  class="pointer-events-auto cursor-pointer"
+                />
+                <circle
+                  cx="480"
+                  cy="180"
+                  r="4"
+                  fill="white"
+                  stroke="#0284c7"
+                  stroke-width="2"
+                  class="pointer-events-auto cursor-pointer"
+                />
+                <circle
+                  cx="430"
+                  cy="300"
+                  r="4"
+                  fill="white"
+                  stroke="#0284c7"
+                  stroke-width="2"
+                  class="pointer-events-auto cursor-pointer"
+                />
+                <circle
+                  cx="300"
+                  cy="270"
+                  r="4"
+                  fill="white"
+                  stroke="#0284c7"
+                  stroke-width="2"
+                  class="pointer-events-auto cursor-pointer"
+                />
+
+                <!-- Road Closure Line -->
+                <path
+                  d="M 280,240 L 400,280"
+                  fill="none"
+                  stroke="#e11d48"
+                  stroke-width="4"
+                  stroke-dasharray="8,4"
+                />
+                <!-- Red Pin -->
+                <circle cx="280" cy="240" r="5" fill="#e11d48" />
+                <circle cx="400" cy="280" r="5" fill="#e11d48" />
+              </svg>
+
+              <!-- Floating Labels (HTML over SVG for better text rendering) -->
+              <div
+                class="absolute top-[180px] left-[350px] bg-white/95 px-3 py-2 rounded shadow border border-slate-200 text-center backdrop-blur-sm"
+              >
+                <div
+                  class="text-xs font-bold text-slate-800 flex items-center justify-center"
+                >
+                  <i data-lucide="waves" class="w-3 h-3 mr-1 text-sky-600"></i>
+                  1.4m Depth Est.
+                </div>
+                <div class="text-[9px] text-slate-500 uppercase tracking-wide">
+                  Submerged Area
+                </div>
+              </div>
+
+              <div
+                class="absolute top-[245px] left-[310px] bg-rose-600 px-2 py-0.5 rounded shadow text-center transform -rotate-12"
+              >
+                <div class="text-[9px] font-bold text-white uppercase">
+                  Rizal Ave. Closed
+                </div>
+              </div>
+            </div>
+
+            <!-- Map Footer Info Bar -->
+            <div
+              class="bg-white border-t border-slate-200 p-3 text-xs flex justify-between items-center z-10"
+            >
+              <div class="flex items-center space-x-6">
+                <div class="flex items-center font-medium text-slate-700">
+                  <div
+                    class="w-3 h-3 bg-sky-500 mr-2 rounded-sm border border-sky-600"
+                  ></div>
+                  Polygon: San Pedro Flood Perimeter
+                </div>
+                <div class="flex items-center font-medium text-slate-700">
+                  <div class="w-4 h-1.5 bg-rose-500 mr-2 rounded-sm"></div>
+                  Closure: Rizal Avenue Segment 4
+                </div>
+              </div>
+            </div>
+            <div
+              class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-xs flex justify-between items-center text-slate-600"
+            >
+              <div class="flex items-center space-x-4">
+                <span
+                  ><i
+                    data-lucide="scaling"
+                    class="w-3.5 h-3.5 inline mr-1 text-slate-400"
+                  ></i>
+                  Calculated Area:
+                  <strong class="text-slate-800">142,850 m²</strong></span
+                >
+                <span
+                  ><i
+                    data-lucide="route"
+                    class="w-3.5 h-3.5 inline mr-1 text-slate-400"
+                  ></i>
+                  Perimeter:
+                  <strong class="text-slate-800">1.68 km</strong></span
+                >
+              </div>
+              <div class="font-mono">
+                Active Coordinate:
+                <strong class="text-slate-800">14.5995° N, 121.0223° E</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive Edit Info -->
+          <div
+            class="mt-4 bg-sky-50 border border-sky-100 p-4 rounded-xl flex items-start justify-between"
+          >
+            <div class="flex items-start space-x-3">
+              <i
+                data-lucide="mouse-pointer-click"
+                class="w-5 h-5 text-sky-600 mt-0.5"
+              ></i>
+              <div>
+                <h4 class="text-sm font-semibold text-slate-800">
+                  Interactive Node Edit Mode
+                </h4>
+                <p class="text-xs text-slate-600 mt-0.5">
+                  Drag the white vertex handles to reshape boundary walls. Click
+                  any path midpoint to spawn an additional control point.
+                </p>
+              </div>
+            </div>
+            <a
+              href="#"
+              class="text-sm font-medium text-sky-600 hover:text-sky-700 whitespace-nowrap"
+              >View Guidelines</a
+            >
+          </div>
+
+          <!-- Telemetry Cards Row -->
+          <div class="mt-4 grid grid-cols-3 gap-4">
+            <div
+              class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm"
+            >
+              <div class="flex justify-between items-center mb-2">
+                <h4
+                  class="text-xs font-semibold text-slate-500 uppercase tracking-wide"
+                >
+                  Real-Time Sensor Telemetry
+                </h4>
+                <i data-lucide="radio" class="w-3.5 h-3.5 text-sky-500"></i>
+              </div>
+              <div class="text-lg font-bold text-slate-800 mb-1">
+                4.8 m
+                <span class="text-rose-600 text-sm font-semibold"
+                  >+0.3m / hr</span
+                >
+              </div>
+              <p class="text-[10px] text-slate-500 leading-tight">
+                Linked to Marikina River Weather & Hydro Sensor #04. Level 2
+                overflow breached at 11:20 AM.
+              </p>
+            </div>
+
+            <div
+              class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col justify-between"
+            >
+              <div class="flex justify-between items-start mb-2">
+                <div>
+                  <h4
+                    class="text-xs font-semibold text-slate-500 uppercase tracking-wide"
+                  >
+                    Ground Truth Verification
+                  </h4>
+                </div>
+                <div class="text-right">
+                  <div
+                    class="text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded"
+                  >
+                    Photo #FR-0248
+                  </div>
+                </div>
+              </div>
+              <div class="flex space-x-3 items-center">
+                <div
+                  class="w-12 h-10 bg-slate-800 rounded object-cover flex-shrink-0 relative overflow-hidden flex items-center justify-center"
+                >
+                  <i data-lucide="image" class="w-4 h-4 text-slate-400"></i>
+                  <!-- Mock image background -->
+                  <div
+                    class="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542282088-fe8426682b8f?auto=format&fit=crop&q=80&w=100')] bg-cover opacity-80 mix-blend-overlay"
+                  ></div>
+                </div>
+                <div>
+                  <div class="text-xs font-bold text-slate-800 leading-tight">
+                    Brgy. San Pedro Resident Submersion
+                  </div>
+                  <div class="text-[9px] text-slate-500">
+                    Validated by Drone Recon Alpha at 11:38 AM
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm"
+            >
+              <div class="flex justify-between items-center mb-2">
+                <h4
+                  class="text-xs font-semibold text-slate-500 uppercase tracking-wide"
+                >
+                  Rescue Fleet Impact
+                </h4>
+                <i data-lucide="truck" class="w-4 h-4 text-sky-600"></i>
+              </div>
+              <div class="flex items-center space-x-3 mb-2">
+                <div
+                  class="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200"
+                >
+                  A
+                </div>
+                <div>
+                  <div class="text-sm font-bold text-slate-800 leading-none">
+                    3 Units Rerouted
+                  </div>
+                  <div class="text-[9px] text-slate-500 mt-0.5">
+                    Amphibious Truck RU-03 & 2 Rubber Boats
+                  </div>
+                </div>
+              </div>
+              <div class="text-xs font-medium text-slate-600">
+                ETA Adjustment:
+                <span class="font-bold text-rose-600">+8 mins</span>
+                <span
+                  class="text-emerald-600 font-bold ml-1 border-l border-slate-300 pl-2"
+                  >Reroute Safe</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Pane (Forms Section) -->
+        <div
+          class="w-[360px] flex-shrink-0 flex flex-col space-y-4 overflow-y-auto pr-2 pb-10"
+        >
+          <!-- Card 1: Flood Polygon -->
+          <div
+            class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4"
+          >
+            <div
+              class="flex justify-between items-center border-b border-slate-100 pb-3"
+            >
+              <h3 class="text-sm font-bold text-slate-800 flex items-center">
+                <i
+                  data-lucide="hexagon"
+                  class="w-4 h-4 mr-2 text-sky-600 fill-sky-100"
+                ></i>
+                Flood Polygon
+              </h3>
+              <span
+                class="text-[10px] font-mono text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-100"
+                >ID: FP-2025-08</span
+              >
+            </div>
+
+            <div>
+              <label
+                class="block text-[11px] font-semibold text-slate-500 mb-1.5"
+                >Polygon Identifier / Name</label
+              >
+              <div class="relative">
+                <i
+                  data-lucide="map-pin"
+                  class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"
+                ></i>
+                <input
+                  type="text"
+                  class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 font-medium text-slate-700"
+                  value="San Pedro Flood Area"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                class="block text-[11px] font-semibold text-slate-500 mb-1.5"
+                >Obstruction Severity Level</label
+              >
+              <div class="relative">
+                <select
+                  class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-3 pr-8 text-sm focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-slate-700 appearance-none font-medium"
+                >
+                  <option>High (Impassable to all civilian vehicles)</option>
+                  <option>Moderate</option>
+                  <option>Low</option>
+                </select>
+                <i
+                  data-lucide="chevron-down"
+                  class="w-4 h-4 absolute right-3 top-2.5 text-slate-400 pointer-events-none"
+                ></i>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <div class="text-[10px] text-slate-500 font-semibold mb-0.5">
+                  Avg. Depth
+                </div>
+                <input
+                  type="text"
+                  class="bg-transparent w-full text-sm font-bold text-sky-700 focus:outline-none"
+                  value="1.4 meters"
+                />
+              </div>
+              <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                <div class="text-[10px] text-slate-500 font-semibold mb-0.5">
+                  Est. Residents
+                </div>
+                <input
+                  type="text"
+                  class="bg-transparent w-full text-sm font-bold text-slate-700 focus:outline-none"
+                  value="1,240 citizens"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 mb-2"
+                >Map Overlay Color Swatch</label
+              >
+              <div class="flex space-x-3">
+                <button
+                  class="w-7 h-7 rounded-full bg-[#1e3a8a] ring-2 ring-offset-2 ring-sky-500 shadow-sm"
+                ></button>
+                <button
+                  class="w-7 h-7 rounded-full bg-[#60a5fa] hover:scale-110 transition-transform shadow-sm"
+                ></button>
+                <button
+                  class="w-7 h-7 rounded-full bg-[#f59e0b] hover:scale-110 transition-transform shadow-sm"
+                ></button>
+                <button
+                  class="w-7 h-7 rounded-full bg-[#dc2626] hover:scale-110 transition-transform shadow-sm"
+                ></button>
+                <button
+                  class="w-7 h-7 rounded-full bg-[#7f1d1d] hover:scale-110 transition-transform shadow-sm"
+                ></button>
+              </div>
+            </div>
+
+            <button
+              class="w-full py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-sm font-bold rounded-lg shadow-md transition-colors flex items-center justify-center mt-2"
+            >
+              <i data-lucide="save" class="w-4 h-4 mr-2 opacity-80"></i> Save
+              Polygon
+            </button>
+          </div>
+
+          <!-- Card 2: Road Closure -->
+          <div
+            class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4"
+          >
+            <div
+              class="flex justify-between items-center border-b border-slate-100 pb-3"
+            >
+              <h3 class="text-sm font-bold text-slate-800 flex items-center">
+                <i
+                  data-lucide="minus-circle"
+                  class="w-4 h-4 mr-2 text-rose-600 fill-rose-100"
+                ></i>
+                Road Closure
+              </h3>
+              <span
+                class="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded"
+                >Active Barricade</span
+              >
+            </div>
+
+            <div>
+              <label
+                class="block text-[11px] font-semibold text-slate-500 mb-1.5"
+                >Target Road Segment</label
+              >
+              <div class="relative">
+                <input
+                  type="text"
+                  class="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-3 pr-9 text-sm focus:outline-none focus:border-sky-500 font-medium text-slate-700"
+                  value="Rizal Avenue (San Pedro - Bridge)"
+                />
+                <i
+                  data-lucide="filter"
+                  class="w-3.5 h-3.5 absolute right-3 top-2.5 text-slate-400"
+                ></i>
+              </div>
+            </div>
+
+            <div>
+              <label
+                class="block text-[11px] font-semibold text-slate-500 mb-1.5"
+                >Closure Reason</label
+              >
+              <div class="relative">
+                <input
+                  type="text"
+                  class="w-full bg-white border border-rose-200 rounded-lg py-2 pl-3 pr-9 text-sm focus:outline-none focus:border-rose-500 font-medium text-slate-700"
+                  value="Flooding / Heavy Submersion"
+                />
+                <i
+                  data-lucide="alert-triangle"
+                  class="w-4 h-4 absolute right-3 top-2.5 text-slate-400"
+                ></i>
+              </div>
+            </div>
+
+            <div
+              class="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100"
+            >
+              <div>
+                <div class="text-xs font-semibold text-slate-800">
+                  Physical Barrier Deployed
+                </div>
+                <div class="text-[9px] text-slate-500 mt-0.5">
+                  PNP / LGU Traffic Marshal on Site
+                </div>
+              </div>
+              <!-- Toggle Switch -->
+              <div
+                class="relative inline-block w-10 align-middle select-none transition duration-200 ease-in"
+              >
+                <input
+                  type="checkbox"
+                  name="toggle"
+                  id="toggle"
+                  class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-300 transition-all duration-200 z-10"
+                  checked
+                />
+                <label
+                  for="toggle"
+                  class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-300 cursor-pointer transition-colors duration-200"
+                ></label>
+              </div>
+            </div>
+
+            <div
+              class="bg-indigo-50/50 border border-indigo-100 p-3 rounded-lg"
+            >
+              <div
+                class="text-[10px] font-bold uppercase tracking-wider text-indigo-800 mb-1"
+              >
+                Suggested Reroute
+              </div>
+              <textarea
+                class="w-full bg-transparent border-none text-xs text-slate-700 focus:outline-none resize-none"
+                rows="3"
+              >
+Traffic diverted via J.P. Rizal Highway north bound lanes. Estimated delay: +14 mins.</textarea>
+            </div>
+
+            <button
+              class="w-full py-2.5 bg-[#e0effe] hover:bg-[#bae6fd] text-sky-900 border border-sky-200 text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center justify-center mt-2"
+            >
+              <i
+                data-lucide="save"
+                class="w-4 h-4 mr-2 opacity-70 text-sky-700"
+              ></i>
+              Save Closure
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Initialize Icons -->
+    <script>
+      lucide.createIcons();
+    </script>
+  </body>
+</html>

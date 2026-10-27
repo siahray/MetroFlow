@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetroFlow PWA - Map & Routing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        navy: { 800: '#1e293b', 900: '#0f172a' },
+                        brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-800 min-h-screen flex items-center justify-center p-8 gap-8 overflow-x-auto hide-scrollbar">
+
+    <!-- ========================================== -->
+    <!-- SCREEN 1: SET DESTINATION                  -->
+    <!-- ========================================== -->
+    <div class="w-[375px] h-[812px] bg-slate-50 rounded-[2rem] overflow-hidden relative shadow-2xl shrink-0 border-[6px] border-slate-900 flex flex-col">
+        
+        <!-- Header -->
+        <div class="bg-white px-5 pt-12 pb-4 flex items-center justify-between shrink-0 border-b border-slate-100 z-20 relative">
+            <div class="flex items-center gap-3">
+                <button class="text-slate-600 hover:text-slate-900">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </button>
+                <div class="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100">
+                    <i data-lucide="waves" class="w-4 h-4 text-blue-600"></i>
+                </div>
+                <h1 class="text-[15px] font-semibold text-slate-800">Active Route Turn By Tu</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <i data-lucide="phone" class="w-4 h-4 text-red-500"></i>
+                <img src="https://i.pravatar.cc/100?img=33" class="w-7 h-7 rounded-full border border-slate-200">
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto hide-scrollbar pb-32">
+            <!-- Monitored Basins Banner -->
+            <div class="px-5 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                    <span class="text-[11px] font-medium text-slate-600">Metro Monitored Basins: 14 Active Flow Gauges</span>
+                </div>
+                <div class="flex items-center gap-1 text-[10px] font-bold text-blue-600">
+                    <i data-lucide="check-circle-2" class="w-3 h-3"></i> Real-time
+                </div>
+            </div>
+
+            <!-- Routing Inputs -->
+            <div class="px-5 py-5 bg-white">
+                <div class="relative pl-8">
+                    <!-- Vertical Line -->
+                    <div class="absolute left-3 top-4 bottom-5 w-0.5 bg-slate-200"></div>
+                    
+                    <!-- Start Point -->
+                    <div class="relative mb-4">
+                        <div class="absolute -left-8 top-2.5 w-4 h-4 rounded-full bg-blue-100 border border-blue-300 flex items-center justify-center">
+                            <div class="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+                        </div>
+                        <label class="block text-[10px] font-medium text-slate-500 mb-1">Starting Point</label>
+                        <div class="flex items-center justify-between bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-100">
+                            <span class="text-[13px] font-medium text-slate-800">Current Location (Rizal Ave, Sector 4)</span>
+                            <i data-lucide="navigation" class="w-4 h-4 text-blue-500"></i>
+                        </div>
+                    </div>
+
+                    <!-- Destination -->
+                    <div class="relative">
+                        <div class="absolute -left-8 top-2.5 w-4 h-4 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center z-10">
+                            <i data-lucide="map-pin" class="w-2 h-2 text-slate-600"></i>
+                        </div>
+                        <label class="block text-[10px] font-medium text-slate-500 mb-1">Destination</label>
+                        <div class="flex items-center justify-between bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200 ring-1 ring-slate-200 shadow-sm">
+                            <span class="text-[14px] font-semibold text-slate-900">Financial District Tower</span>
+                            <i data-lucide="x-circle" class="w-4 h-4 text-slate-400"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="flex items-center gap-2 mt-4 overflow-x-auto hide-scrollbar">
+                    <button class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full shrink-0">
+                        <i data-lucide="droplet" class="w-3 h-3 text-blue-600"></i>
+                        <span class="text-[11px] font-medium text-blue-800">Avoid Deep Water (>15cm)</span>
+                    </button>
+                    <button class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-full shrink-0 text-slate-600">
+                        <i data-lucide="trending-up" class="w-3 h-3"></i>
+                        <span class="text-[11px] font-medium">Higher Elevation</span>
+                    </button>
+                    <button class="px-2 py-1.5 bg-slate-100 rounded-full shrink-0 text-slate-500"><i data-lucide="settings-2" class="w-3 h-3"></i></button>
+                </div>
+            </div>
+
+            <!-- Quick Picks -->
+            <div class="px-5 py-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-[14px] font-semibold text-slate-900">Quick Picks</h3>
+                    <span class="text-[11px] font-medium text-blue-600">Custom Pins</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i></div>
+                            <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">12.4 km</span>
+                        </div>
+                        <div>
+                            <p class="text-[13px] font-semibold text-slate-800">Work HQ</p>
+                            <p class="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5"><i data-lucide="check-circle-2" class="w-3 h-3 text-emerald-500"></i> Expressway Clear</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><i data-lucide="home" class="w-4 h-4 text-slate-600"></i></div>
+                            <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">6.8 km</span>
+                        </div>
+                        <div>
+                            <p class="text-[13px] font-semibold text-slate-800">Home</p>
+                            <p class="text-[10px] text-red-500 flex items-center gap-1 mt-0.5"><i data-lucide="alert-triangle" class="w-3 h-3"></i> River Runoff</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><i data-lucide="dumbbell" class="w-4 h-4 text-slate-600"></i></div>
+                            <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">3.2 km</span>
+                        </div>
+                        <div>
+                            <p class="text-[13px] font-semibold text-slate-800">Metro Gym</p>
+                            <p class="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5"><i data-lucide="check-circle-2" class="w-3 h-3 text-blue-500"></i> Dry Route</p>
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center"><i data-lucide="shopping-bag" class="w-4 h-4 text-slate-600"></i></div>
+                            <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">8.1 km</span>
+                        </div>
+                        <div>
+                            <p class="text-[13px] font-semibold text-slate-800">Grand Mall Plaza</p>
+                            <p class="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5"><i data-lucide="shield" class="w-3 h-3 text-blue-500"></i> Designated Safe Hub</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Passability Overview -->
+            <div class="px-5 py-2">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-[14px] font-semibold text-slate-900">Passability Overview</h3>
+                    <span class="text-[10px] font-medium text-slate-500">Live Satellite Mesh</span>
+                </div>
+                <div class="w-full h-28 rounded-2xl relative overflow-hidden bg-slate-200 border border-slate-200">
+                    <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" class="w-full h-full object-cover">
+                    <!-- Overlay gradient -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"></div>
+                    <div class="absolute bottom-3 left-3 right-3 flex items-end justify-between">
+                        <div class="flex gap-2">
+                            <div class="w-6 h-6 rounded-full bg-blue-500/20 backdrop-blur border border-blue-400 flex items-center justify-center text-blue-100">
+                                <i data-lucide="waves" class="w-3 h-3"></i>
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-semibold text-white">Rizal Avenue Passable</p>
+                                <p class="text-[9px] text-slate-300">Clear for all vehicles under 3.5t</p>
+                            </div>
+                        </div>
+                        <span class="px-1.5 py-0.5 bg-slate-900/80 text-white text-[9px] font-bold rounded">2 MIN AGO</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Searches -->
+            <div class="px-5 py-4 pb-8">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-[14px] font-semibold text-slate-900">Recent Safe Searches</h3>
+                    <span class="text-[11px] font-medium text-blue-600">Clear History</span>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                            <i data-lucide="history" class="w-4 h-4 text-slate-500"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-[13px] font-semibold text-slate-800">St. Jude Medical Center</p>
+                            <p class="text-[11px] text-slate-500">Civic Rescue Point • High Ground</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-slate-400">
+                            <span class="text-[11px] font-medium bg-slate-100 px-1.5 rounded">15 min</span>
+                            <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                            <i data-lucide="history" class="w-4 h-4 text-slate-500"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-[13px] font-semibold text-slate-800">Northport Freight Terminal</p>
+                            <p class="text-[11px] text-red-500">Crest warning nearby (+18 cm)</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-slate-400">
+                            <span class="text-[10px] font-medium bg-red-50 text-red-600 px-1.5 rounded">Caution</span>
+                            <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                            <i data-lucide="history" class="w-4 h-4 text-slate-500"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-[13px] font-semibold text-slate-800">East River School Evac Zone</p>
+                            <p class="text-[11px] text-slate-500">Verified open gate, pump operational</p>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-slate-400">
+                            <span class="text-[11px] font-medium bg-slate-100 px-1.5 rounded">22 min</span>
+                            <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fixed Bottom Button -->
+        <div class="absolute bottom-0 inset-x-0 bg-white border-t border-slate-100 p-5 z-20">
+            <div class="flex items-center justify-between mb-3 text-[11px]">
+                <span class="flex items-center gap-1 text-slate-600 font-medium"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-blue-500"></i> 2 dry alternative corridors ready</span>
+                <span class="text-slate-800 font-bold">ETA ~ 26-32 min</span>
+            </div>
+            <button class="w-full bg-navy-900 text-white rounded-xl py-3.5 flex items-center justify-center gap-2 font-bold text-[14px] shadow-lg">
+                <i data-lucide="git-merge" class="w-4 h-4 rotate-180"></i> Find Flood-Safe Route
+            </button>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- SCREEN 2: HOME & MAP                       -->
+    <!-- ========================================== -->
+    <div class="w-[375px] h-[812px] bg-slate-50 rounded-[2rem] overflow-hidden relative shadow-2xl shrink-0 border-[6px] border-slate-900 flex flex-col">
+        
+        <!-- Header -->
+        <div class="bg-white px-5 pt-12 pb-3 flex items-center justify-between z-20 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full border border-blue-100 flex items-center justify-center">
+                    <i data-lucide="waves" class="w-4 h-4 text-blue-600"></i>
+                </div>
+                <div>
+                    <p class="text-[9px] font-bold text-blue-600 tracking-wider uppercase mb-[-2px]">MetroFlow</p>
+                    <h1 class="text-[18px] font-bold text-slate-900 leading-none">Home</h1>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <i data-lucide="bell" class="w-5 h-5 text-slate-600"></i>
+                <img src="https://i.pravatar.cc/100?img=33" class="w-8 h-8 rounded-full border border-slate-200 shadow-sm">
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto hide-scrollbar relative pb-24">
+            
+            <!-- User Bar -->
+            <div class="px-5 py-3 bg-white flex items-center justify-between border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                    <img src="https://i.pravatar.cc/100?img=33" class="w-8 h-8 rounded-full">
+                    <div>
+                        <p class="text-[13px] font-bold text-slate-800">Carlos Reyes</p>
+                        <p class="text-[10px] text-slate-500">Active Driver • Fleet</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-100 rounded-full">
+                    <i data-lucide="droplet" class="w-3 h-3 text-blue-500"></i>
+                    <span class="text-[10px] font-semibold text-blue-800">Sensor Online</span>
+                    <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse ml-1"></div>
+                </div>
+            </div>
+
+            <!-- Hazard Alert Banner -->
+            <div class="mx-4 mt-4 mb-2 bg-red-50 border border-red-100 rounded-xl p-3 flex items-center gap-3 shadow-sm">
+                <div class="w-8 h-8 rounded bg-red-500 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 text-white"></i>
+                </div>
+                <div class="flex-1">
+                    <p class="text-[11px] font-bold text-red-700">HAZARD SURGE ALERT • <span class="font-medium text-red-500">Zone 4B</span></p>
+                    <p class="text-[11px] text-slate-700">Flooded roads detected • <span class="font-semibold">Tap to review details</span></p>
+                </div>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-red-400 shrink-0"></i>
+            </div>
+
+            <!-- Map Area -->
+            <div class="mx-4 h-[280px] bg-slate-200 rounded-2xl relative overflow-hidden shadow-inner border border-slate-200">
+                <!-- Map Image -->
+                <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" class="w-full h-full object-cover opacity-80 mix-blend-multiply">
+                
+                <!-- Map UI Overlay Top -->
+                <div class="absolute top-3 left-3 flex gap-2">
+                    <div class="bg-white/90 backdrop-blur px-2.5 py-1.5 rounded-full text-[10px] font-bold text-navy-900 flex items-center gap-1.5 shadow-sm">
+                        <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                        LIVE SAFEFLOW ROUTING
+                    </div>
+                </div>
+                <div class="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1.5 rounded-full text-[10px] font-bold text-slate-700 flex items-center gap-1 shadow-sm border border-slate-200">
+                    <i data-lucide="cloud-rain" class="w-3.5 h-3.5 text-slate-400"></i> 26°C • Mist
+                </div>
+
+                <!-- Fake Red Hazard Zone on Map -->
+                <div class="absolute top-1/3 left-1/4 w-24 h-24 bg-red-500/20 border-2 border-red-500 border-dashed rounded-lg flex items-center justify-center z-10 backdrop-blur-[1px]"></div>
+
+                <!-- Map Controls Right -->
+                <div class="absolute right-3 top-[35%] flex flex-col gap-2 z-20">
+                    <button class="w-8 h-8 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow border border-slate-200 text-slate-700"><i data-lucide="layers" class="w-4 h-4"></i></button>
+                    <button class="w-8 h-8 bg-navy-900 rounded-full flex items-center justify-center shadow text-white"><i data-lucide="navigation" class="w-4 h-4"></i></button>
+                    <div class="flex flex-col bg-white/90 backdrop-blur rounded-full shadow border border-slate-200 mt-2 overflow-hidden">
+                        <button class="w-8 h-8 flex items-center justify-center text-slate-700 border-b border-slate-200"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                        <button class="w-8 h-8 flex items-center justify-center text-slate-700"><i data-lucide="minus" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+
+                <!-- Estuary Badge -->
+                <div class="absolute bottom-3 left-3 bg-white/95 backdrop-blur px-3 py-2 rounded-xl shadow-md flex items-center gap-2 border border-slate-200">
+                    <i data-lucide="waves" class="w-4 h-4 text-blue-500"></i>
+                    <div class="leading-tight">
+                        <p class="text-[10px] text-slate-500 font-medium">Estuary Surge</p>
+                        <p class="text-[11px] font-bold text-slate-800">+0.12m Safe</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Elevated Path Planner Search -->
+            <div class="mx-4 mt-4 relative">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i data-lucide="search" class="w-5 h-5 text-blue-500"></i>
+                </div>
+                <input type="text" placeholder="Where to? Search destination..." class="w-full bg-white shadow-sm border border-slate-200 rounded-2xl pl-12 pr-12 py-3.5 text-[13px] font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="absolute inset-y-0 left-12 top-2 pointer-events-none">
+                    <span class="text-[9px] font-bold text-blue-600 uppercase tracking-wider block">Elevated Path Planner</span>
+                </div>
+                <div class="absolute inset-y-0 right-0 pr-4 flex items-center">
+                    <i data-lucide="mic" class="w-5 h-5 text-slate-400"></i>
+                </div>
+            </div>
+
+            <!-- Horizontal Scroll Pills -->
+            <div class="flex gap-3 px-4 mt-4 overflow-x-auto hide-scrollbar">
+                <div class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 shadow-sm shrink-0">
+                    <div class="w-7 h-7 bg-blue-50 rounded flex items-center justify-center"><i data-lucide="briefcase" class="w-3.5 h-3.5 text-blue-600"></i></div>
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-800 leading-tight">Work Terminal</p>
+                        <p class="text-[10px] text-slate-500">12.4 km • Clear</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 shadow-sm shrink-0">
+                    <div class="w-7 h-7 bg-slate-50 rounded flex items-center justify-center"><i data-lucide="home" class="w-3.5 h-3.5 text-slate-600"></i></div>
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-800 leading-tight">Home Bay</p>
+                        <p class="text-[10px] text-slate-500">6.8 km</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 shadow-sm shrink-0">
+                    <div class="w-7 h-7 bg-slate-50 rounded flex items-center justify-center"><i data-lucide="activity" class="w-3.5 h-3.5 text-slate-600"></i></div>
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-800 leading-tight">Civic Center</p>
+                        <p class="text-[10px] text-slate-500">3.1 km</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Urban Drainage Status -->
+            <div class="mx-4 mt-6">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <h3 class="text-[14px] font-bold text-navy-900">Urban Drainage Status</h3>
+                    </div>
+                    <span class="text-[10px] font-medium bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Updated 2m ago</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100">
+                        <p class="text-[10px] font-semibold text-slate-500 mb-1">Open Pumping</p>
+                        <p class="text-[18px] font-bold text-navy-900 leading-none">14/16</p>
+                        <p class="text-[10px] text-blue-600 font-medium mt-1">92% Cap</p>
+                    </div>
+                    <div class="bg-red-50 p-2.5 rounded-xl border border-red-100">
+                        <p class="text-[10px] font-semibold text-slate-500 mb-1">Blocked Pave</p>
+                        <p class="text-[18px] font-bold text-red-600 leading-none">3 Segs</p>
+                        <p class="text-[10px] text-red-500 font-medium mt-1">Avoid Area</p>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] font-semibold text-slate-500 mb-1">Tide Level</p>
+                        <p class="text-[18px] font-bold text-slate-800 leading-none">+1.1m</p>
+                        <p class="text-[10px] text-blue-500 font-medium mt-1">Ebbing Low</p>
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between px-1">
+                    <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i> Municipal sensors validated
+                    </div>
+                    <a href="#" class="text-[11px] font-semibold text-blue-600 flex items-center gap-1">Full Drainage Map <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation Menu -->
+        <div class="absolute bottom-0 w-full bg-white border-t border-slate-100 px-6 py-3 pb-6 flex justify-between items-center z-30">
+            <button class="flex flex-col items-center gap-1 text-blue-600">
+                <i data-lucide="droplet" class="w-6 h-6 fill-blue-50 text-blue-600"></i>
+                <span class="text-[10px] font-bold">Home</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i data-lucide="map" class="w-6 h-6"></i>
+                <span class="text-[10px] font-medium">Map</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i data-lucide="bell" class="w-6 h-6"></i>
+                <span class="text-[10px] font-medium">Report</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <div class="relative">
+                    <span class="text-[10px] font-extrabold text-slate-400 tracking-wider">SOS</span>
+                </div>
+                <span class="text-[10px] font-medium">Rescue</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i data-lucide="user" class="w-6 h-6"></i>
+                <span class="text-[10px] font-medium">Profile</span>
+            </button>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- SCREEN 3: ROUTE & ALERTS                   -->
+    <!-- ========================================== -->
+    <div class="w-[375px] h-[812px] bg-white rounded-[2rem] overflow-hidden relative shadow-2xl shrink-0 border-[6px] border-slate-900 flex flex-col">
+        
+        <!-- Map Background Top Half -->
+        <div class="absolute top-0 inset-x-0 h-[45%] bg-slate-200">
+            <img src="https://images.unsplash.com/photo-1524661135-423995f22d0b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" class="w-full h-full object-cover">
+            
+            <!-- Map Route Polyline Mock -->
+            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 375 350">
+                <path d="M 50,250 C 150,200 200,300 250,150 L 300,100" fill="none" stroke="#0284c7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="50" cy="250" r="5" fill="#0284c7" stroke="white" stroke-width="2"/>
+                <circle cx="300" cy="100" r="5" fill="#0f172a" stroke="white" stroke-width="2"/>
+            </svg>
+
+            <!-- Water Level Tag -->
+            <div class="absolute top-[45%] left-[30%] bg-white px-2 py-1 rounded shadow-md border border-slate-200 flex items-center gap-1 text-[9px] font-bold text-red-600">
+                <div class="w-1.5 h-1.5 bg-red-500 rounded-full"></div> Water Level: +42cm
+            </div>
+
+            <!-- Map Controls -->
+            <div class="absolute right-3 top-32 flex flex-col gap-2">
+                <button class="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-lg border border-slate-100 text-slate-700"><i data-lucide="compass" class="w-5 h-5"></i></button>
+                <button class="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-lg border border-slate-100 text-slate-700"><i data-lucide="layers" class="w-5 h-5"></i></button>
+            </div>
+        </div>
+
+        <!-- Floating Header -->
+        <div class="absolute top-12 left-4 right-4 flex items-center justify-between z-20">
+            <div class="flex items-center gap-2 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
+                <div class="w-6 h-6 rounded-full border border-blue-100 flex items-center justify-center bg-white">
+                    <i data-lucide="waves" class="w-3 h-3 text-blue-600"></i>
+                </div>
+                <div>
+                    <p class="text-[8px] font-bold text-blue-600 tracking-wider uppercase leading-none">MetroFlow</p>
+                    <h1 class="text-[13px] font-bold text-slate-900 leading-tight">Flood Ma...</h1>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 bg-white/90 backdrop-blur p-1.5 pr-3 rounded-full shadow-sm">
+                <i data-lucide="bell" class="w-4 h-4 text-slate-600 ml-1.5"></i>
+                <img src="https://i.pravatar.cc/100?img=33" class="w-6 h-6 rounded-full border border-slate-200">
+            </div>
+        </div>
+
+        <!-- From/To Card -->
+        <div class="absolute top-28 left-4 right-4 bg-white rounded-2xl p-4 shadow-xl border border-slate-100 z-20">
+            <div class="flex justify-between items-center relative">
+                <div class="flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <div>
+                            <p class="text-[9px] font-semibold text-slate-500 uppercase">From</p>
+                            <p class="text-[13px] font-bold text-slate-900">Your current location</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="map-pin" class="w-3 h-3 text-slate-400 ml-[-2px]"></i>
+                        <div>
+                            <p class="text-[9px] font-semibold text-slate-500 uppercase">To</p>
+                            <p class="text-[13px] font-bold text-slate-900">Work <span class="text-slate-500 font-medium">(12.4 km • 32 min)</span></p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Swap Icon -->
+                <button class="w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center border border-slate-200 text-slate-600 absolute right-0 top-3">
+                    <i data-lucide="arrow-up-down" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Sheet Wrapper -->
+        <div class="absolute bottom-[72px] inset-x-0 bg-white rounded-t-3xl pt-2 px-5 flex flex-col shadow-[0_-8px_30px_rgba(0,0,0,0.12)] z-30 h-[58%] overflow-y-auto hide-scrollbar border-t border-slate-100 pb-6">
+            
+            <!-- Drag Handle -->
+            <div class="w-10 h-1.5 bg-slate-200 rounded-full mx-auto mb-4"></div>
+
+            <!-- Alert Card -->
+            <div class="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-start justify-between mb-5">
+                <div class="flex items-start gap-3">
+                    <div class="w-8 h-8 rounded bg-white shadow-sm flex items-center justify-center shrink-0 border border-red-100">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-red-500"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <h3 class="text-[15px] font-bold text-red-700">Flooded area ahead</h3>
+                            <span class="px-2 py-0.5 bg-red-100 text-red-700 text-[9px] font-bold rounded">Active</span>
+                        </div>
+                        <p class="text-[11px] text-red-600/80 leading-snug pr-4">Water surge detected along Franklin St Corridor. Tap for details and live depth feed.</p>
+                    </div>
+                </div>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-red-400 mt-1 shrink-0"></i>
+            </div>
+
+            <!-- Route Suggestions -->
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="text-[11px] font-bold text-blue-800 uppercase tracking-wider">Route Suggestions</h4>
+                <span class="text-[10px] font-medium text-slate-500 flex items-center gap-1"><div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Live hydrologic sync</span>
+            </div>
+
+            <!-- Route Option 1 (Selected) -->
+            <div class="bg-blue-50/50 border-2 border-blue-500 rounded-2xl p-4 mb-3 relative overflow-hidden">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2 text-[14px] font-bold text-slate-900">
+                        <i data-lucide="check-circle-2" class="w-5 h-5 text-blue-600"></i>
+                        Alternative (Bypass Safe)
+                    </div>
+                    <span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded">Recommended</span>
+                </div>
+                <div class="flex items-end gap-2 mb-3 px-7">
+                    <span class="text-2xl font-bold text-slate-900 leading-none">27<span class="text-[14px] font-semibold text-slate-600 ml-1">min</span></span>
+                    <span class="text-[12px] font-medium text-slate-500 mb-0.5">• 10.8 km •</span>
+                    <span class="text-[12px] font-medium text-blue-600 mb-0.5">Clear of runoff</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-100/50 px-2.5 py-1.5 rounded-lg w-max ml-7">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Safer route avoids flooded area
+                </div>
+            </div>
+
+            <!-- Route Option 2 (Current/Hazard) -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2 text-[13px] font-semibold text-slate-600">
+                        <i data-lucide="git-branch" class="w-4 h-4 text-slate-400"></i>
+                        Current Route (Direct)
+                    </div>
+                    <span class="bg-red-50 border border-red-100 text-red-600 text-[9px] font-bold px-2 py-1 rounded flex items-center gap-1"><i data-lucide="waves" class="w-3 h-3"></i> Hazard</span>
+                </div>
+                <div class="flex items-end gap-2 mb-2 px-6">
+                    <span class="text-xl font-bold text-slate-800 leading-none">32<span class="text-[12px] font-semibold text-slate-500 ml-1">min</span></span>
+                    <span class="text-[11px] font-medium text-slate-400 mb-0.5">• 12.4 km •</span>
+                    <span class="text-[11px] font-medium text-red-500 mb-0.5">+5 min delay</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[10px] font-semibold text-red-700 bg-red-50 px-2 py-1 rounded w-max ml-6">
+                    <i data-lucide="alert-triangle" class="w-3 h-3"></i> Caution: Rising Water (+22cm at Underpass)
+                </div>
+            </div>
+
+            <!-- Security info -->
+            <div class="flex items-start gap-3 bg-slate-50 p-3 rounded-xl mb-4 border border-slate-100">
+                <div class="w-7 h-7 bg-blue-50 rounded-full flex items-center justify-center shrink-0 border border-blue-100"><i data-lucide="shield" class="w-3.5 h-3.5 text-blue-500"></i></div>
+                <p class="text-[10px] text-slate-500 leading-relaxed font-medium">City Flood Defense team verified safe elevation on Hudson Viaduct bypass 4 mins ago.</p>
+            </div>
+
+            <!-- CTA -->
+            <button class="w-full bg-navy-900 text-white rounded-xl py-3.5 flex items-center justify-center gap-2 font-bold text-[15px] shadow-lg mb-2">
+                <i data-lucide="navigation" class="w-4 h-4 text-blue-400"></i> Start Navigation
+            </button>
+            <p class="text-center text-[9px] text-slate-400 font-medium">Real-time rerouting automatically updates if water rises.</p>
+        </div>
+
+        <!-- Bottom Navigation Menu (Same as Screen 2) -->
+        <div class="absolute bottom-0 w-full bg-white border-t border-slate-100 px-6 py-3 pb-6 flex justify-between items-center z-40">
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i data-lucide="droplet" class="w-6 h-6"></i>
+                <span class="text-[10px] font-medium">Home</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-blue-600">
+                <i data-lucide="map" class="w-6 h-6 fill-blue-50 text-blue-600"></i>
+                <span class="text-[10px] font-bold">Map</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i data-lucide="bell" class="w-6 h-6"></i>
+                <span class="text-[10px] font-medium">Report</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <div class="relative">
+                    <span class="text-[10px] font-extrabold text-slate-400 tracking-wider">SOS</span>
+                </div>
+                <span class="text-[10px] font-medium">Rescue</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i data-lucide="user" class="w-6 h-6"></i>
+                <span class="text-[10px] font-medium">Profile</span>
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

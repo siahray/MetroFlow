@@ -22,9 +22,31 @@ labels its own status honestly rather than assuming the target state.
 | Functional Specification       | [FSD.md](FSD.md)                                   | MF-FSD-001 | Defines actors, functional requirements, screens and tests           | Developers, QA, panel   |
 | Technical Specification        | [TSD.md](TSD.md)                                   | MF-TSD-001 | Defines architecture, algorithms, data design, security and CI/CD    | Developers, panel       |
 | Project Management Plan        | [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) | MF-PMP-001 | Defines schedule, quality, risk, communications and change control   | Team, adviser           |
-| Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the driver app, hazards, fleet, sensors | Sponsor, team, panel    |
+| Approval Register              | [APPROVALS.md](APPROVALS.md)                       | MF-APR-001 | Lists every document, change request and gate that needs approval    | Adviser, panel, team    |
+| Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the Expo driver app, hazards, fleet, sensors | Sponsor, team, panel  |
+| Change Request CR-002          | [CR-002.md](CR-002.md)                             | MF-CR-002  | Final-product Offline Areas; pilot scope unchanged                   | Adviser, team, panel    |
+| Change Request CR-003          | [CR-003.md](CR-003.md)                             | MF-CR-003  | Sentinel-1 advisory flood observations; pilot scope unchanged        | Adviser, team, panel    |
 | Progress Report                | [../PROGRESS_REPORT.md](../PROGRESS_REPORT.md)      | —          | Records what is implemented on the current branch                    | Team, panel             |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
+
+## Design artifacts
+
+The design baselines record the supplied interfaces, the tokens and shell, the
+screen and component map, the traceability to the FSD, and the data or API gaps
+that must be closed before implementation.
+
+| Artifact            | File                                                                                                       | Status     | Purpose                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- | ---------- | -------------------------------------------------- |
+| Admin UI Baseline   | [design/ADMIN_UI_BASELINE.md](design/ADMIN_UI_BASELINE.md)                                                 | For Review | Admin screens, components, states and traceability |
+| Driver App Baseline | [design/DRIVER_APP_BASELINE.md](design/DRIVER_APP_BASELINE.md)                                             | For Review | Driver screens, states and traceability            |
+| UI 1 — Editor       | [design/source/lgu-admin-flood-closure-editor.html](design/source/lgu-admin-flood-closure-editor.html)     | Reference  | Flood / Road Closure Editor                        |
+| UI 2 — Verification | [design/source/lgu-admin-report-verification.html](design/source/lgu-admin-report-verification.html)       | Reference  | Report Verification Detail                         |
+| UI 3 — Public Alert | [design/source/lgu-admin-published-hazard-alert.html](design/source/lgu-admin-published-hazard-alert.html) | Reference  | Published Hazard Alert / Civic Broadcasts          |
+| UI 4 — Rescue       | [design/source/lgu-admin-rescue-tracking.html](design/source/lgu-admin-rescue-tracking.html)               | Reference  | Rescue Unit Tracking / Fleet Detail                |
+| Driver UI — Login   | [design/source/driver/metroflow-driver-splash-login.html](design/source/driver/metroflow-driver-splash-login.html) | Reference | Splash and sign-in                                 |
+| Driver UI — Map     | [design/source/driver/metroflow-driver-map-routing.html](design/source/driver/metroflow-driver-map-routing.html)   | Reference | Map and route                                      |
+| Driver UI — Report  | [design/source/driver/metroflow-driver-report-sos.html](design/source/driver/metroflow-driver-report-sos.html)     | Reference | Report and SOS                                     |
+| Driver UI — Profile | [design/source/driver/metroflow-driver-profile.html](design/source/driver/metroflow-driver-profile.html)           | Reference | Profile and offline areas                          |
 
 ## Document templates
 

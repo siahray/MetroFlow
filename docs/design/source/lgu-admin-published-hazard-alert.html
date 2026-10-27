@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en" class="h-full bg-slate-50">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MetroFlow LGU - Published Hazard Alert</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Custom Configuration -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              navy: {
+                800: "#1e293b",
+                900: "#0f172a", // Very dark blue/slate
+                950: "#020617",
+              },
+            },
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+    </style>
+  </head>
+  <body
+    class="h-full flex text-slate-800 antialiased overflow-hidden font-sans"
+  >
+    <!-- LEFT SIDEBAR -->
+    <aside
+      class="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-20 hidden md:flex"
+    >
+      <!-- Logo Area -->
+      <div class="h-16 flex items-center px-6 border-b border-slate-100">
+        <div
+          class="w-8 h-8 bg-navy-900 rounded-lg flex items-center justify-center text-white mr-3 shadow-sm"
+        >
+          <i data-lucide="home" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div
+            class="text-sm font-extrabold text-navy-900 tracking-tight leading-tight"
+          >
+            MetroFlow
+          </div>
+          <div
+            class="text-[9px] font-semibold text-slate-500 uppercase tracking-widest leading-tight"
+          >
+            LGU Operations
+          </div>
+        </div>
+      </div>
+
+      <!-- Status Alert Badge -->
+      <div class="p-4">
+        <div
+          class="bg-blue-50 border border-blue-100 rounded-lg p-2.5 flex items-center shadow-sm"
+        >
+          <div class="w-2.5 h-2.5 bg-blue-500 rounded-full mr-2.5"></div>
+          <span class="text-xs font-bold text-navy-900"
+            >Status: Level 2 Alert</span
+          >
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="flex-1 px-3 space-y-1.5 mt-2">
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="radar" class="w-4 h-4 mr-3 text-slate-400"></i>
+          Dispatch Radar
+        </a>
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="droplets" class="w-4 h-4 mr-3 text-slate-400"></i>
+          Sensors & Water Level
+        </a>
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="truck" class="w-4 h-4 mr-3 text-slate-400"></i> Rescue
+          Units & Fleet
+        </a>
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+        >
+          <i data-lucide="building" class="w-4 h-4 mr-3 text-slate-400"></i>
+          Evacuation Centers
+        </a>
+        <!-- Active State -->
+        <a
+          href="#"
+          class="w-full flex items-center px-3 py-2.5 rounded-lg text-sm bg-navy-900 text-white font-semibold shadow-md transition-all"
+        >
+          <i data-lucide="radio" class="w-4 h-4 mr-3 text-blue-400"></i> Civic
+          Broadcasts
+        </a>
+      </nav>
+
+      <!-- Bottom Badge -->
+      <div class="p-4 border-t border-slate-100">
+        <div
+          class="bg-blue-50/50 border border-blue-100 rounded-lg p-3 flex justify-between items-start"
+        >
+          <div>
+            <div
+              class="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5"
+            >
+              MDRRMC Unit
+            </div>
+            <div class="text-xs font-bold text-navy-900">HQ Sector Delta</div>
+          </div>
+          <i data-lucide="shield" class="w-4 h-4 text-blue-600 opacity-80"></i>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Top Header -->
+      <header
+        class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 flex-shrink-0 z-10 shadow-sm"
+      >
+        <div class="flex items-center space-x-3">
+          <div
+            class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200"
+          >
+            <i data-lucide="activity" class="w-4 h-4 text-blue-600"></i>
+          </div>
+          <div>
+            <h1 class="text-sm font-bold text-slate-800">
+              MetroFlow LGU Dispatch
+            </h1>
+            <div class="text-[10px] text-slate-500 font-medium tracking-wide">
+              MDRRMC Operations Portal
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-5">
+          <div class="flex items-center space-x-3">
+            <span
+              class="flex items-center bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full border border-blue-100 shadow-sm"
+            >
+              <i data-lucide="cloud-rain" class="w-3.5 h-3.5 mr-1.5"></i> 28°C
+              Rain Advisory
+            </span>
+            <span
+              class="flex items-center bg-rose-50 text-rose-700 text-xs font-bold px-3 py-1.5 rounded-full border border-rose-100 shadow-sm"
+            >
+              <i
+                data-lucide="siren"
+                class="w-3.5 h-3.5 mr-1.5 text-rose-500"
+              ></i>
+              Active SOS: 14
+            </span>
+          </div>
+          <div class="w-px h-6 bg-slate-200"></div>
+          <div class="flex items-center space-x-3">
+            <div class="text-right">
+              <div class="text-sm font-bold text-slate-800">Maria Santos</div>
+              <div class="text-[10px] text-slate-500 font-medium">
+                Lead Dispatch Officer
+              </div>
+            </div>
+            <div
+              class="w-9 h-9 bg-navy-900 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md"
+            >
+              <i data-lucide="user" class="w-4 h-4"></i>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Scrollable Content -->
+      <main class="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50">
+        <div class="max-w-7xl mx-auto space-y-6">
+          <!-- Action Bar -->
+          <div
+            class="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm"
+          >
+            <div class="flex items-center space-x-4 pl-2">
+              <a
+                href="#"
+                class="text-sm font-semibold text-slate-600 hover:text-slate-900 flex items-center transition-colors"
+              >
+                <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Back to
+                Alerts
+              </a>
+              <div class="w-1 h-1 bg-slate-300 rounded-full"></div>
+              <span class="text-xs text-slate-500 font-medium"
+                >ALERT ID: ADV-2025-0427-09</span
+              >
+            </div>
+
+            <div class="flex items-center space-x-3">
+              <span
+                class="flex items-center text-xs font-bold text-slate-700 mr-2"
+              >
+                <div
+                  class="w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-pulse"
+                ></div>
+                Live Public Broadcast
+              </span>
+              <button
+                class="flex items-center px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-50 shadow-sm transition-colors"
+              >
+                <i
+                  data-lucide="share-2"
+                  class="w-3.5 h-3.5 mr-2 text-slate-500"
+                ></i>
+                Share Bulletin
+              </button>
+              <button
+                class="flex items-center px-4 py-2 bg-navy-900 text-white text-xs font-bold rounded-lg hover:bg-navy-800 shadow-md transition-colors"
+              >
+                <i data-lucide="edit-3" class="w-3.5 h-3.5 mr-2"></i> Review
+                Advisory
+              </button>
+            </div>
+          </div>
+
+          <!-- Two Column Grid Layout -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- LEFT COLUMN: Main Advisory Document -->
+            <div class="lg:col-span-7 flex flex-col space-y-4">
+              <!-- Main Document Card -->
+              <div
+                class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
+              >
+                <!-- Header Banner -->
+                <div
+                  class="bg-rose-50 border-b border-rose-100 p-5 flex justify-between items-center"
+                >
+                  <div class="flex items-center space-x-3">
+                    <div
+                      class="bg-rose-600 text-white p-2 rounded-lg shadow-sm"
+                    >
+                      <i data-lucide="triangle-alert" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                      <div
+                        class="text-[10px] font-bold text-rose-600 tracking-widest uppercase mb-0.5"
+                      >
+                        Official Civic Protocol
+                      </div>
+                      <div
+                        class="text-xl font-black text-rose-700 tracking-tight leading-none"
+                      >
+                        FLOOD WARNING
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    class="bg-rose-600 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center shadow-sm uppercase tracking-wide"
+                  >
+                    <i data-lucide="shield-alert" class="w-3 h-3 mr-1.5"></i>
+                    High Risk
+                  </span>
+                </div>
+
+                <!-- Document Body -->
+                <div class="p-6 space-y-6">
+                  <!-- Title & Meta -->
+                  <div>
+                    <h2
+                      class="text-3xl font-extrabold text-navy-900 tracking-tight mb-3"
+                    >
+                      Metro City — Flood Advisory
+                    </h2>
+                    <div class="flex items-center space-x-3 mb-4">
+                      <span
+                        class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-1 rounded"
+                        >Level 3 Response</span
+                      >
+                    </div>
+                    <div
+                      class="flex items-center space-x-4 text-xs text-slate-500 font-medium"
+                    >
+                      <span class="flex items-center"
+                        ><i
+                          data-lucide="clock"
+                          class="w-3.5 h-3.5 mr-1.5 text-slate-400"
+                        ></i>
+                        Issued: Apr 27, 2025 11:45 AM</span
+                      >
+                      <span class="flex items-center"
+                        ><i
+                          data-lucide="building"
+                          class="w-3.5 h-3.5 mr-1.5 text-slate-400"
+                        ></i>
+                        By: MDRRMC Command Bureau</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Description -->
+                  <p class="text-sm text-slate-600 leading-relaxed font-medium">
+                    Moderate to heavy rains may cause rapid flooding in
+                    low-lying residential sectors and transport arteries.
+                    Citizens are strongly urged to stay alert, avoid unnecessary
+                    travel to flood-prone areas, and prepare personal evacuation
+                    bags.
+                  </p>
+
+                  <!-- Areas Affected Grid -->
+                  <div>
+                    <div class="flex justify-between items-end mb-3">
+                      <h3 class="text-sm font-bold text-slate-800">
+                        Areas Affected
+                      </h3>
+                      <span
+                        class="text-[10px] font-bold text-rose-600 uppercase tracking-widest"
+                        >3 Priority Zones</span
+                      >
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div
+                        class="bg-rose-50/50 border border-rose-100 rounded-lg p-3"
+                      >
+                        <div
+                          class="flex items-center text-sm font-bold text-slate-800 mb-1"
+                        >
+                          <i
+                            data-lucide="map-pin"
+                            class="w-3.5 h-3.5 mr-1 text-rose-500"
+                          ></i>
+                          Rizal Avenue
+                        </div>
+                        <div
+                          class="text-[10px] text-slate-500 leading-tight mb-2"
+                        >
+                          San Pedro to Central Bridge
+                        </div>
+                        <div
+                          class="flex items-center text-[10px] font-bold text-rose-700"
+                        >
+                          <div
+                            class="w-1.5 h-1.5 bg-rose-600 rounded-full mr-1.5"
+                          ></div>
+                          Severe Inundation
+                        </div>
+                      </div>
+                      <div
+                        class="bg-rose-50/50 border border-rose-100 rounded-lg p-3"
+                      >
+                        <div
+                          class="flex items-center text-sm font-bold text-slate-800 mb-1"
+                        >
+                          <i
+                            data-lucide="map-pin"
+                            class="w-3.5 h-3.5 mr-1 text-rose-500"
+                          ></i>
+                          Brgy. San Pedro
+                        </div>
+                        <div
+                          class="text-[10px] text-slate-500 leading-tight mb-2"
+                        >
+                          Residential lowlands
+                        </div>
+                        <div
+                          class="flex items-center text-[10px] font-bold text-rose-700"
+                        >
+                          <div
+                            class="w-1.5 h-1.5 bg-rose-600 rounded-full mr-1.5"
+                          ></div>
+                          1.5 - 2.0 ft Water Level
+                        </div>
+                      </div>
+                      <div
+                        class="bg-blue-50/50 border border-blue-100 rounded-lg p-3"
+                      >
+                        <div
+                          class="flex items-center text-sm font-bold text-slate-800 mb-1"
+                        >
+                          <i
+                            data-lucide="map-pin"
+                            class="w-3.5 h-3.5 mr-1 text-blue-500"
+                          ></i>
+                          Brgy. Malaya
+                        </div>
+                        <div
+                          class="text-[10px] text-slate-500 leading-tight mb-2"
+                        >
+                          Riverbank district
+                        </div>
+                        <div
+                          class="flex items-center text-[10px] font-bold text-blue-700"
+                        >
+                          <div
+                            class="w-1.5 h-1.5 bg-blue-600 rounded-full mr-1.5"
+                          ></div>
+                          Rapid Creek Overflow
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Imagery Verification -->
+                  <div>
+                    <h3
+                      class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3"
+                    >
+                      Ground Telemetry & Imagery Verification
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4">
+                      <div
+                        class="relative h-32 rounded-lg overflow-hidden border border-slate-200 shadow-inner group"
+                      >
+                        <img
+                          src="https://images.unsplash.com/photo-1542282088-fe8426682b8f?auto=format&fit=crop&q=80&w=600"
+                          alt="Ground Photo"
+                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div
+                          class="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"
+                        ></div>
+                        <div
+                          class="absolute bottom-2 left-2 bg-navy-900/90 text-white text-[10px] font-bold px-2 py-1 rounded backdrop-blur border border-white/10"
+                        >
+                          FR-0248 Ground Photo
+                        </div>
+                      </div>
+                      <div
+                        class="relative h-32 rounded-lg overflow-hidden border border-slate-200 shadow-inner group"
+                      >
+                        <img
+                          src="https://images.unsplash.com/photo-1518558997970-4fdc4de5dafa?auto=format&fit=crop&q=80&w=600"
+                          alt="CCTV Photo"
+                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div
+                          class="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"
+                        ></div>
+                        <div
+                          class="absolute bottom-2 left-2 bg-blue-900/90 text-white text-[10px] font-bold px-2 py-1 rounded backdrop-blur border border-white/10"
+                        >
+                          CCTV Station 04 Malaya
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer Buttons -->
+                <div
+                  class="bg-slate-50 p-4 border-t border-slate-100 grid grid-cols-3 gap-3"
+                >
+                  <button
+                    class="col-span-2 flex items-center justify-center py-2.5 bg-navy-900 text-white text-sm font-bold rounded-lg hover:bg-navy-800 shadow-md transition-colors"
+                  >
+                    <i data-lucide="map" class="w-4 h-4 mr-2"></i> View Affected
+                    Roads & Areas
+                  </button>
+                  <button
+                    class="col-span-1 flex items-center justify-center py-2.5 bg-white border border-slate-300 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-50 shadow-sm transition-colors"
+                  >
+                    <i
+                      data-lucide="printer"
+                      class="w-4 h-4 mr-2 text-slate-500"
+                    ></i>
+                    Print PDF
+                  </button>
+                </div>
+              </div>
+
+              <!-- Evacuation Assignment Card -->
+              <div
+                class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between"
+              >
+                <div class="flex items-center space-x-3">
+                  <div
+                    class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100"
+                  >
+                    <i data-lucide="shield" class="w-5 h-5 text-blue-600"></i>
+                  </div>
+                  <div>
+                    <div
+                      class="text-[10px] font-bold text-blue-600 uppercase mb-0.5"
+                    >
+                      Assigned Evacuation Sanctuary
+                    </div>
+                    <div class="text-xs font-semibold text-slate-700">
+                      San Pedro Central Elementary Complex (Capacity: 74%)
+                    </div>
+                  </div>
+                </div>
+                <button
+                  class="px-4 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50 shadow-sm"
+                >
+                  Check Capacity
+                </button>
+              </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Map, Telemetry, Broadcasts -->
+            <div class="lg:col-span-5 flex flex-col space-y-6">
+              <!-- Sector Impact Map -->
+              <div
+                class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"
+              >
+                <div class="flex justify-between items-center mb-4">
+                  <h3
+                    class="text-sm font-bold text-slate-800 flex items-center"
+                  >
+                    <i data-lucide="map" class="w-4 h-4 mr-2 text-blue-600"></i>
+                    Sector Impact Geospatial
+                  </h3>
+                  <span
+                    class="bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    >2 Roads Closed</span
+                  >
+                </div>
+
+                <div
+                  class="relative h-48 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shadow-inner"
+                >
+                  <img
+                    src="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&q=80&w=800"
+                    alt="Map Base"
+                    class="w-full h-full object-cover opacity-70"
+                  />
+
+                  <!-- Overlays -->
+                  <div
+                    class="absolute top-2 left-2 bg-white/90 backdrop-blur px-2 py-1 rounded border border-slate-200 shadow-sm flex items-center"
+                  >
+                    <div
+                      class="w-2 h-2 bg-rose-600 rounded-full mr-1.5 animate-pulse"
+                    ></div>
+                    <span class="text-[10px] font-bold text-slate-800"
+                      >Rizal Ave Segment: 100% Inundated</span
+                    >
+                  </div>
+
+                  <!-- Route lines representation -->
+                  <svg
+                    class="absolute inset-0 w-full h-full"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M 50 100 L 150 120 L 200 80"
+                      fill="transparent"
+                      stroke="#e11d48"
+                      stroke-width="4"
+                      stroke-linecap="round"
+                    />
+                    <path
+                      d="M 150 120 L 250 180 L 300 150"
+                      fill="transparent"
+                      stroke="#3b82f6"
+                      stroke-width="4"
+                      stroke-dasharray="4 4"
+                      stroke-linecap="round"
+                      class="animate-pulse"
+                    />
+                  </svg>
+
+                  <div
+                    class="absolute bottom-2 left-2 right-2 bg-white/95 backdrop-blur px-2 py-1.5 rounded border border-slate-200 shadow-sm flex items-center justify-center"
+                  >
+                    <i
+                      data-lucide="triangle-alert"
+                      class="w-3 h-3 text-blue-600 mr-1.5"
+                    ></i>
+                    <span class="text-[10px] font-bold text-blue-800"
+                      >Safe Detour Active: Bypass Route 4B</span
+                    >
+                  </div>
+                </div>
+              </div>
+
+              <!-- Active Sensor Telemetry -->
+              <div
+                class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"
+              >
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-sm font-bold text-slate-800">
+                    Active Sensor Telemetry
+                  </h3>
+                  <span class="text-[10px] font-bold text-blue-600"
+                    >Auto-sync 30s</span
+                  >
+                </div>
+
+                <div class="space-y-3">
+                  <!-- Sensor 1 -->
+                  <div
+                    class="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 border border-transparent transition-colors"
+                  >
+                    <div class="flex items-center">
+                      <div class="w-2 h-2 bg-rose-500 rounded-full mr-2"></div>
+                      <span class="text-xs font-semibold text-slate-700"
+                        >Marikina River</span
+                      >
+                    </div>
+                    <div class="flex items-center space-x-3">
+                      <span class="text-sm font-bold text-slate-800"
+                        >4.8 m</span
+                      >
+                      <span
+                        class="w-16 text-center bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-1 rounded"
+                        >Critical</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Sensor 2 -->
+                  <div
+                    class="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 border border-transparent transition-colors"
+                  >
+                    <div class="flex items-center">
+                      <div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                      <span class="text-xs font-semibold text-slate-700"
+                        >San Pedro Creek</span
+                      >
+                    </div>
+                    <div class="flex items-center space-x-3">
+                      <span class="text-sm font-bold text-slate-800"
+                        >3.2 m</span
+                      >
+                      <span
+                        class="w-16 text-center bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded"
+                        >High</span
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Sensor 3 -->
+                  <div
+                    class="flex justify-between items-center p-2 rounded-lg hover:bg-slate-50 border border-transparent transition-colors"
+                  >
+                    <div class="flex items-center">
+                      <div class="w-2 h-2 bg-slate-400 rounded-full mr-2"></div>
+                      <span class="text-xs font-semibold text-slate-700"
+                        >Tullahan River</span
+                      >
+                    </div>
+                    <div class="flex items-center space-x-3">
+                      <span class="text-sm font-bold text-slate-800"
+                        >2.1 m</span
+                      >
+                      <span
+                        class="w-16 text-center bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded"
+                        >Normal</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Broadcast Channels -->
+              <div
+                class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex-1"
+              >
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-sm font-bold text-slate-800">
+                    Broadcast Channels
+                  </h3>
+                  <span
+                    class="text-[10px] font-bold text-slate-400 uppercase tracking-widest"
+                    >Status</span
+                  >
+                </div>
+
+                <div class="space-y-3">
+                  <!-- Channel 1 -->
+                  <div
+                    class="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm"
+                  >
+                    <div class="flex items-center space-x-3">
+                      <div
+                        class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"
+                      >
+                        <i data-lucide="radio" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <div class="text-xs font-bold text-slate-800">
+                          Emergency Cell Broadcast (CB)
+                        </div>
+                        <div class="text-[10px] text-slate-500">
+                          Geo-targeted radius: 4.5 km
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      class="bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold px-2.5 py-1 rounded"
+                      >Dispatched</span
+                    >
+                  </div>
+
+                  <!-- Channel 2 -->
+                  <div
+                    class="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm"
+                  >
+                    <div class="flex items-center space-x-3">
+                      <div
+                        class="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"
+                      >
+                        <i data-lucide="message-square" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <div class="text-xs font-bold text-slate-800">
+                          Citizen SMS Gateway
+                        </div>
+                        <div class="text-[10px] text-slate-500">
+                          14,820 Residents Notified
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      class="bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow-sm"
+                      >100% Sent</span
+                    >
+                  </div>
+
+                  <!-- Channel 3 -->
+                  <div
+                    class="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm"
+                  >
+                    <div class="flex items-center space-x-3">
+                      <div
+                        class="w-8 h-8 bg-navy-900 rounded-lg flex items-center justify-center text-white shadow-sm"
+                      >
+                        <i data-lucide="megaphone" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <div class="text-xs font-bold text-slate-800">
+                          Community Siren Arrays
+                        </div>
+                        <div class="text-[10px] text-slate-500">
+                          Zone 1 & 4 Sirens Active
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      class="bg-rose-50 text-rose-600 border border-rose-100 text-[10px] font-bold px-2.5 py-1 rounded flex items-center"
+                    >
+                      <div
+                        class="w-1.5 h-1.5 bg-rose-500 rounded-full mr-1.5 animate-ping"
+                      ></div>
+                      Wailing Sound
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Initialize Icons -->
+    <script>
+      lucide.createIcons();
+    </script>
+  </body>
+</html>
