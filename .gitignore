@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # MetroFlow monorepo
 # ---------------------------------------------------------------------------
-# web-lgu/ carries its own Next.js .gitignore. This file covers the Python
+# metroflow-admin/ carries its own Next.js .gitignore. This file covers the Python
 # backend, the toolchain, and OS/editor noise at the repository root.
 
 # --- Python / backend -------------------------------------------------------
@@ -19,7 +19,7 @@ __pycache__/
 htmlcov/
 
 # --- Node / root tooling ----------------------------------------------------
-# The root package.json only carries husky. web-lgu/ has its own .gitignore.
+# The root package.json only carries husky. metroflow-admin/ has its own .gitignore.
 node_modules/
 
 # --- Environment / secrets --------------------------------------------------

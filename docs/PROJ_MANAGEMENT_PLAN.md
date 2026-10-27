@@ -22,7 +22,7 @@ Version 1.2
 | ------- | ----------- | --------------------------- | ------------------------------------------------- | -------- |
 | 0.1     | 21 Oct 2026 | «Project Team Lead»         | Initial Draft                                     | Draft    |
 | 1.0     | 21 Oct 2026 | «QA and Documentation Lead» | Review release                                    | Review   |
-| 1.1     | 21 Oct 2026 | «Project Team Lead»         | CR-001: driver PWA, realtime, fleet, sensors      | Proposed |
+| 1.1     | 21 Oct 2026 | «Project Team Lead»         | CR-001: driver app, realtime, fleet, sensors      | Proposed |
 | 1.2     | 22 Oct 2026 | «Project Team Lead»         | Provider keys, Supabase Auth, Mapbox, template UI | Proposed |
 
 ## Approval Sign-Off
@@ -54,8 +54,8 @@ Version 1.2
 MetroFlow gives the LGU operations centre a verified picture of road passability
 during flooding, a traceable path from field report to dispatch decision, and a
 way to warn and reroute drivers before they enter the water. The pilot covers one
-corridor, a simulation and routing API, a browser-based dispatch portal and an
-installable driver PWA.
+corridor, a simulation and routing API, a browser-based dispatch portal and a
+native Expo driver app.
 
 This plan defines how the work is executed and controlled: schedule, resources,
 cost, risk, quality, communication and change. The project is delivered
@@ -64,7 +64,7 @@ milestone rather than a single delivery at the end.
 
 Current position: the baseline API, schema and portal are built and tested. The
 CR-001 increment — authentication, report intake, live map, hazard publishing,
-fleet dispatch, sensors and the driver PWA — is proposed and planned, pending
+fleet dispatch, sensors and the driver app — is proposed and planned, pending
 sponsor approval. Every unconfirmed date or amount is marked `[TBC]`.
 
 ## Project Overview
@@ -72,8 +72,8 @@ sponsor approval. Every unconfirmed date or amount is marked `[TBC]`.
 | Item         | Description                                                                                           |
 | ------------ | ----------------------------------------------------------------------------------------------------- |
 | Purpose      | Replace unverifiable verbal coordination with a shared network picture and a recorded triage decision |
-| Users        | LGU dispatchers, rescue commanders, field responders and drivers/commuters using the PWA              |
-| Deliverables | API engine, LGU portal, driver PWA, versioned database, CI/CD pipeline, document set, demonstration   |
+| Users        | LGU dispatchers, rescue commanders, field responders and drivers/commuters using the app              |
+| Deliverables | API engine, LGU portal, driver app, versioned database, CI/CD pipeline, document set, demonstration   |
 | Out of scope | Native store builds, real CCTV, carrier-grade SOS, offline tiles, multi-LGU tenancy, public portal    |
 | Constraints  | Academic term, part-time effort, no paid Code Security, synthetic data only                           |
 
@@ -93,7 +93,7 @@ Weekly iterations, each producing something demonstrable:
 | I8        | Auth, report API, hazard publishing and SSE          |
 | I9        | LGU live map, moderation and evidence desk           |
 | I10       | Fleet, SOS, nearest-unit dispatch and rescue routing |
-| I11       | Driver PWA, offline mode and sensor ingestion        |
+| I11       | Driver app, offline mode and sensor ingestion        |
 
 **Definition of done:** merged to `main`; tests pass for the affected area; lint
 and build pass when the web app is touched; the FSD status reflects reality; no
@@ -108,11 +108,11 @@ new High or Medium ZAP finding.
   hazard avoidance.
 - LGU portal: authenticated login, live map, queue, evidence desk, drawing
   tools, fleet, dispatch actions and operations log.
-- Driver PWA: navigation, rerouting, proximity alerts, reports, offline mode,
+- Driver app: navigation, rerouting, proximity alerts, reports, offline mode,
   telemetry and SOS.
 - Hazard verification and live publication over SSE.
 - River and rain gauge ingestion with advisory road impact.
-- Supabase Auth, RBAC and audit writes.
+- API-issued session tokens, route-level RBAC and audit writes.
 - Versioned PostGIS schema with row-level security.
 - Automated build, test, security and migration pipeline for web and mobile.
 
@@ -154,7 +154,7 @@ in Appendix B.
 | CR-001 requirements and design         | Week 17 · [TBC] | Week 17 · [TBC] | In Progress |
 | Development — realtime, reports, fleet | Week 18 · [TBC] | Week 19 · [TBC] | Planned     |
 | Development — LGU map and moderation   | Week 19 · [TBC] | Week 20 · [TBC] | Planned     |
-| Development — driver PWA and sensors   | Week 20 · [TBC] | Week 21 · [TBC] | Planned     |
+| Development — driver app and sensors   | Week 20 · [TBC] | Week 21 · [TBC] | Planned     |
 | CR-001 hardening and SIT               | Week 21 · [TBC] | Week 22 · [TBC] | Planned     |
 | Final documentation and defence        | Week 22 · [TBC] | Week 22 · [TBC] | Planned     |
 
@@ -173,10 +173,10 @@ Milestones:
 | M6  | Baseline documentation and demo     | Baseline document set accepted; baseline demonstrated |
 | M7  | Realtime, reports and fleet API     | Auth, reports, hazards, SSE and fleet contract tests  |
 | M8  | LGU map, moderation and dispatch    | Map, evidence, draw/publish and dispatch E2E          |
-| M9  | Driver PWA, sensors and defence     | Offline E2E, sensor impact and panel demonstration    |
+| M9  | Driver app, sensors and defence     | Offline E2E, sensor impact and panel demonstration    |
 
 **Critical path:** requirements → data model → simulation → routing → auth →
-reports and hazards → SSE → fleet and dispatch → map → driver PWA → hardening →
+reports and hazards → SSE → fleet and dispatch → map → driver app → hardening →
 defence. The sensor path runs in parallel but is not done until a threshold
 breach reaches the map as an advisory without publishing a hazard.
 
@@ -189,7 +189,7 @@ breach reaches the map as an advisory without publishing a hazard.
 | Architect                  | «Project Team Lead»         | 30%        |
 | Backend Developers         | «Backend Lead»              | 100%       |
 | Frontend Developers        | «Frontend Lead»             | 100%       |
-| Mobile/PWA Developer       | «Mobile Lead»               | 100%       |
+| Mobile Developer           | «Mobile Lead»               | 100%       |
 | UX Designer                | «UX Lead»                   | 40%        |
 | QA and Documentation       | «QA and Documentation Lead» | 60%        |
 | Adviser                    | «Project Adviser»           | 5%         |
@@ -203,10 +203,10 @@ may hold more than one role; every role must have a named person before M2.
 | Category                                    | Amount (PHP) |
 | ------------------------------------------- | ------------ |
 | Baseline development effort (in-kind)       | [TBC]        |
-| CR-001 PWA and realtime increment (in-kind) | [TBC]        |
+| CR-001 native app and realtime increment (in-kind) | [TBC]        |
 | Hosted database                             | [TBC]        |
 | Application hosting                         | [TBC]        |
-| PWA hosting and CDN                         | [TBC]        |
+| EAS build, app distribution and developer accounts | [TBC]        |
 | Evidence storage                            | [TBC]        |
 | Map, weather and data services              | [TBC]        |
 | Domain and TLS                              | [TBC]        |
@@ -239,8 +239,8 @@ Rules:
 | R-012 | Risk       | Dispatchers reject the tool                                       | Frontend Lead    | Medium | Open          |
 | R-013 | Risk       | A commercial platform is chosen later                             | PM               | Low    | Open          |
 | R-014 | Risk       | Personal data incident during testing                             | QA               | Medium | Open          |
-| R-015 | Risk       | Drivers do not adopt the PWA                                      | PM               | High   | Open          |
-| R-016 | Risk       | PWA background limits on iOS                                      | Mobile Lead      | Medium | Open          |
+| R-015 | Risk       | Drivers do not adopt the app                                      | PM               | High   | Open          |
+| R-016 | Risk       | Background-location limits on iOS                                 | Mobile Lead      | Medium | Open          |
 | R-017 | Risk       | Driver location privacy incident                                  | QA               | Medium | Open          |
 | R-018 | Risk       | Sensor false positives trigger unnecessary closures               | Backend Lead     | Medium | Open          |
 | R-019 | Risk       | Event stream overload or dropped updates                          | Backend Lead     | Medium | Open          |
@@ -282,7 +282,7 @@ R = responsible, A = accountable, C = consulted, I = informed.
 | Architecture           | I       | A   | C   | R   | C   |
 | Backend development    | I       | A   | I   | R   | C   |
 | Portal development     | I       | A   | C   | R   | C   |
-| Driver PWA development | I       | A   | C   | R   | C   |
+| Driver app development | I       | A   | C   | R   | C   |
 | Realtime event stream  | I       | A   | I   | R   | C   |
 | Sensor ingestion       | I       | A   | C   | R   | C   |
 | Test strategy          | I       | A   | I   | C   | R   |
@@ -371,7 +371,7 @@ product. Risks scoring 6 or above are reviewed weekly.
 | R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible         | Secret absent at M5                 |
 | R-005 | Late security findings         | 2   | 3   | 6     | Weekly ZAP gate from the first increment                         | New Medium finding                  |
 | R-006 | Format mismatch                | 2   | 2   | 4     | Confirm the rubric at M1                                         | Adviser requests restructuring      |
-| R-007 | Authentication not delivered   | 3   | 3   | 9     | CR-001 makes Supabase Auth/RBAC a release gate before acceptance | Pilot asked to handle real data     |
+| R-007 | Route authorisation not delivered | 3 | 3   | 9     | CR-001 adds tokens and roles; route enforcement (TSD LIM-022) gates real data | Pilot asked to handle real data     |
 | R-008 | No baseline data               | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot          | Baseline absent at M1 review        |
 | R-009 | Corridor changes late          | 2   | 3   | 6     | Freeze the corridor at M2                                        | New barangay list arrives           |
 | R-010 | Hosted costs exceed free tier  | 2   | 2   | 4     | Keep hosting provider-agnostic                                   | Usage warning from provider         |
@@ -379,8 +379,8 @@ product. Risks scoring 6 or above are reviewed weekly.
 | R-012 | Dispatchers reject the tool    | 2   | 3   | 6     | Usability sessions from M4; keep the radio process running       | Negative feedback in session        |
 | R-013 | Commercial alternative chosen  | 1   | 2   | 2     | Publish the API contract; routing engine outlives the portal     | Procurement announcement            |
 | R-014 | Personal data incident         | 1   | 3   | 3     | Synthetic data only; RLS verified; no personal data in logs      | Any real report used in a demo      |
-| R-015 | Drivers do not adopt the PWA   | 3   | 3   | 9     | Usability tests; QR onboarding; synthetic reports fallback       | Low install or report count at M9   |
-| R-016 | PWA background limits          | 2   | 2   | 4     | Foreground telemetry; document the limit                         | Telemetry gap on iOS devices        |
+| R-015 | Drivers do not adopt the app   | 3   | 3   | 9     | Usability tests; QR onboarding; synthetic reports fallback       | Low install or report count at M9   |
+| R-016 | Background-location limits     | 2   | 2   | 4     | Foreground fallback; permission tests; document the limit        | Telemetry gap on iOS devices        |
 | R-017 | Location privacy incident      | 2   | 3   | 6     | Rounding, hashing, retention, role-only access                   | Unrounded coordinate in a response  |
 | R-018 | Sensor false positive          | 2   | 2   | 4     | Advisory until confirmed; debounce; per-sensor thresholds        | Advisory without a matching flood   |
 | R-019 | Event stream overload          | 2   | 2   | 4     | Redis pub/sub; bounded queues; reconnect snapshot                | SSE lag above target                |
@@ -426,7 +426,7 @@ Confidence in next:   <high/medium/low + reason>
 | Public keys       | `NEXT_PUBLIC_*` only; origin- and scope-restricted, never secrets |
 | UI source         | Client HTML/CSS template; no bespoke design without a change      |
 | Pre-commit        | Husky: Ruff for Python, ESLint and Prettier for web and mobile    |
-| Driver PWA        | Separate Bun package in `mobile-driver/`; own lockfile and build  |
+| Driver app        | Separate package in `metroflow-mobile/`; Expo Router, own lockfile and Expo build |
 | Document versions | Increment on approval; revision history updated                   |
 | Traceability      | Requirement ids are stable; changes add rows, never renumber      |
 | Unknowns          | `[TBC]` and `«placeholder»` are explicit, never silently invented |
@@ -439,9 +439,10 @@ Confidence in next:   <high/medium/low + reason>
 | ADR-002 | Supabase as hosted Postgres            | [TBC] | «Project Team Lead» | TSD §6                        |
 | ADR-007 | RLS deny-by-default                    | [TBC] | «Backend Lead»      | TSD §6                        |
 | ADR-011 | Portal ships with mock data            | [TBC] | «Project Team Lead» | TSD §6 (superseded by CR-001) |
-| ADR-014 | Driver client is a PWA                 | [TBC] | «Project Team Lead» | TSD §6                        |
+| ADR-014 | Driver client is a native Expo app     | [TBC] | «Project Team Lead» | TSD §6                        |
 | ADR-015 | SSE over Redis pub/sub                 | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-016 | Supabase Auth + app RBAC               | [TBC] | «Backend Lead»      | TSD §6                        |
+| ADR-016 | Supabase Auth + app RBAC               | [TBC] | «Backend Lead»      | TSD §6 (superseded by ADR-021) |
+| ADR-021 | API-issued HS256 tokens + bcrypt       | 27 Oct 2026 | «Backend Lead» | TSD §6                        |
 | ADR-017 | Local evidence volume                  | [TBC] | «Backend Lead»      | TSD §6                        |
 | ADR-018 | Offline uses cached graph              | [TBC] | «Mobile Lead»       | TSD §6                        |
 | ADR-019 | Mapbox tiles in MapLibre               | [TBC] | «Frontend Lead»     | TSD §6                        |
@@ -452,7 +453,7 @@ Confidence in next:   <high/medium/low + reason>
 - [ ] All `Must` functional requirements accepted (FSD), including BR-013 to BR-018.
 - [ ] CI green on `main`; ZAP clean at High/Medium.
 - [ ] Hosted database at head, or the limitation documented.
-- [ ] Supabase Auth/RBAC verified; role violations return 403 and change nothing.
+- [ ] Token enforcement on every privileged route; role violations return 403 and change nothing.
 - [ ] Offline E2E and hazard publish latency tests pass.
 - [ ] Simulated sensors and demo CCTV labelled in the product.
 - [ ] Document set approved, including CR-001.

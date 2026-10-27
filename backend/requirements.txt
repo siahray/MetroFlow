@@ -6,9 +6,14 @@ psycopg2-binary>=2.9.13
 geoalchemy2>=0.20.0
 pydantic>=2.14.1
 pydantic-settings>=2.16.1
+# Loads backend/.env for the non-prefixed variables (DATABASE_URL, REDIS_URL).
+python-dotenv>=1.1.0
 numpy>=2.5.4
 scipy>=1.18.1
 python-jose[cryptography]>=3.5.0
+# auth_utils signs and verifies session tokens with PyJWT (``import jwt``).
+# python-jose is a different library and does not provide that module name.
+PyJWT>=2.15.1
 passlib[bcrypt]>=1.7.4
 redis>=8.1.0
 websockets>=17.3

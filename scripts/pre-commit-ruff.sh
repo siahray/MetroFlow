@@ -2,7 +2,7 @@
 #
 # Ruff check + format for staged Python files.
 #
-# Kept separate from lint-staged because lint-staged lives inside web-lgu/ and
+# Kept separate from lint-staged because lint-staged lives inside metroflow-admin/ and
 # owns the Node toolchain; this side only needs the backend virtualenv.
 set -eo pipefail
 

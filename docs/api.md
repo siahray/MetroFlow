@@ -40,17 +40,29 @@ current code baseline and must not be treated as a live contract. The generated
 
 ### 1.2 Authentication
 
-**None in the baseline.** Every implemented endpoint is public. The pilot must
-not be exposed to the internet or given real personal data until authentication
-is implemented (FSD-FR-021, TSD LIM-001). This is a stated limitation, not an
-oversight.
+The API issues its own session tokens. Clients post credentials to
+`POST /api/v1/auth/login`; the API verifies the bcrypt hash stored on the
+`users` row and returns a signed HS256 JWT. `GET /api/v1/auth/me` requires that
+token and returns the caller's identity and role.
 
-Under CR-001, clients sign in through Supabase Auth and privileged endpoints
-require the resulting bearer token. The portal keeps the session in an HttpOnly
-cookie; the driver PWA holds a short-lived access token in memory. The API
-verifies tokens through the project JWKS and enforces roles server-side. The
-anon key is used only for sign-in and session refresh; it never grants table
-access. Planned scopes are described in §9.
+Two role families exist. `LGU_DISPATCHER` and `SUPER_ADMIN` are portal roles and
+are provisioned by the operator, never self-registered. `EMERGENCY_DRIVER` is
+the field role and is created by `POST /api/v1/auth/register`; the endpoint
+refuses to mint an administrative role.
+
+`GET /api/v1/auth/me` is the only route that validates a token today. The
+CR-001 routes in §9 issue and accept credentials but do **not** yet enforce them
+(TSD LIM-022), so the deployment must stay off the public internet until that
+gate lands. The portal keeps the token in `sessionStorage` for the browser
+session and the driver app keeps it in memory for the app session.
+
+Two operational notes. `METROFLOW_ADMIN_EMAIL` and `METROFLOW_ADMIN_PASSWORD`
+seed the first dispatcher when the user table is empty, because registration
+cannot create one. Email verification codes are held in process memory by the
+current `verification_store` module, so they do not survive a restart or a
+second instance; requiring a code is therefore not enabled by default.
+
+### 1.3 Response headers
 
 ### 1.3 Response headers
 
@@ -64,7 +76,8 @@ Every response carries:
 | `X-Frame-Options`              | `DENY`                            |
 
 CORS currently allows any origin, including credentialed requests (TSD
-SEC-002). CR-001 replaces this with a portal and PWA allowlist.
+SEC-002). CR-001 replaces this with a portal allowlist; the native app uses
+bearer tokens and package identifiers rather than an origin.
 
 ### 1.4 Passability status
 
@@ -85,12 +98,11 @@ Both comparisons are inclusive. `clearance_cm` defaults to 30 cm and must be
 | `422`  | Parameter fails validation                             | FastAPI validation object (see §6)    |
 | `500`  | Unhandled server or database error                     | `{"detail": "Internal Server Error"}` |
 
-### 1.6 External services (planned)
+### 1.6 External services
 
 | Service        | Consumed by    | Role                                         |
 | -------------- | -------------- | -------------------------------------------- |
-| Supabase Auth  | Portal and PWA | Sign-in, session refresh; API verifies JWKS  |
-| Mapbox         | Portal and PWA | Raster basemap; OSM fallback when unset      |
+| Mapbox         | Portal and driver app | Raster basemap; OSM fallback when unset      |
 | OpenWeather    | Backend        | Optional rainfall; manual entry fallback     |
 | OpenTopography | Preprocessing  | Terrain model; cached, not called at runtime |
 | Copernicus     | Preprocessing  | Imagery and land cover; cached               |
@@ -565,91 +577,85 @@ document has a defect.
 
 ---
 
-## 9. Planned endpoints under CR-001
+## 9. CR-001 endpoints
 
-> **Not implemented.** These routes are specified in
-> [TSD.md](TSD.md) and traced in [FSD.md](FSD.md). They do not exist in the
-> current code baseline. Contracts will move into the body of this reference
-> when they are implemented and tested.
+These routes exist and are called by the portal and the driver app. Request and
+response models live in `backend/schemas.py`. None of them validates a bearer
+token yet (TSD LIM-022), so the §1.2 deployment constraint still applies.
 
-### 9.1 Authentication and roles
+### 9.1 Authentication
 
-Sign-in happens against Supabase Auth, not the MetroFlow API. The API exposes
-only the current-user lookup.
+| Method | Path                           | Body / query                          | Response                    | Reference               |
+| ------ | ------------------------------ | ------------------------------------- | --------------------------- | ----------------------- |
+| `POST` | `/api/v1/auth/login`           | `email`, `password`                   | `access_token`, `user`      | BR-009 / FSD-FR-018–023 |
+| `POST` | `/api/v1/auth/register`        | `name`, `email`, `password`, `role`   | `user` (`201`)              | BR-009 / FSD-FR-018–023 |
+| `GET`  | `/api/v1/auth/me`              | Bearer token                          | `user`                      | BR-009 / FSD-FR-020     |
+| `POST` | `/api/v1/auth/send-verification` | `email`                             | `message`, dev-only `code`  | BR-009 / FSD-FR-022     |
+| `POST` | `/api/v1/auth/verify`          | `email`, `code`                       | `verified`                  | BR-009 / FSD-FR-022     |
 
-| Method | Path              | Access | Purpose                          | Reference               |
-| ------ | ----------------- | ------ | -------------------------------- | ----------------------- |
-| `GET`  | `/api/v1/auth/me` | Bearer | Return the current user and role | BR-009 / FSD-FR-018–023 |
+Registration accepts `DRIVER`, `COMMUTER` or `EMERGENCY_DRIVER` and stores
+`EMERGENCY_DRIVER`. It returns `403` for `LGU_DISPATCHER` and `SUPER_ADMIN`,
+`409` for a duplicate email, and `422` for a missing name, malformed email or a
+password shorter than eight characters. `GET /api/v1/auth/me` is the only route
+that verifies the token and returns `401` without a valid `Authorization`
+header.
 
-Roles: `SUPER_ADMIN`, `LGU_COMMANDER`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER`.
-Verification, publishing and dispatch require an LGU role; configuration
-requires `SUPER_ADMIN`.
+`send-verification` returns the code in the response body unless
+`FASTAPI_ENV=production`. The code store is in-process, so a restart clears it.
 
-### 9.2 Reports and moderation
+### 9.2 SOS and dispatch
 
-| Method | Path                           | Access           | Purpose                                    | Reference               |
-| ------ | ------------------------------ | ---------------- | ------------------------------------------ | ----------------------- |
-| `POST` | `/api/v1/reports`              | Device or bearer | Multipart report with photo, depth and GPS | BR-014 / FSD-FR-065–067 |
-| `GET`  | `/api/v1/reports`              | LGU role         | Moderation queue, ordered by urgency       | BR-014 / FSD-FR-077     |
-| `GET`  | `/api/v1/reports/{id}`         | LGU role         | Evidence desk detail                       | BR-014 / FSD-FR-078–079 |
-| `POST` | `/api/v1/reports/{id}/approve` | LGU role         | Create and publish a verified hazard       | BR-014 / FSD-FR-080     |
-| `POST` | `/api/v1/reports/{id}/reject`  | LGU role         | Reject or mark duplicate with a reason     | BR-014 / FSD-FR-081     |
+| Method | Path                               | Body                   | Response | Reference                |
+| ------ | ---------------------------------- | ---------------------- | -------- | ------------------------ |
+| `POST` | `/api/v1/sos`                      | `latitude`, `longitude`, `note?` | `sos`    | BR-015 / FSD-FR-073      |
+| `GET`  | `/api/v1/sos`                      | —                      | `sos[]`  | BR-015 / FSD-FR-074, 087 |
+| `POST` | `/api/v1/sos/{sos_id}/assign`      | `vehicle_id`           | `sos`    | BR-016 / FSD-FR-088–089  |
+| `POST` | `/api/v1/dispatch/{sos_id}/confirm` | `note?`               | `sos`    | BR-016 / FSD-FR-089      |
 
-### 9.3 Hazards and events
+A new SOS is created with `status = "pending"`. Assignment sets the vehicle and
+moves the status to `"assigned"`, returning `404` when either the SOS or the
+vehicle does not exist. Confirmation appends the note to the existing one rather
+than replacing it, so the original distress text survives.
 
-| Method   | Path                     | Access        | Purpose                                      | Reference               |
-| -------- | ------------------------ | ------------- | -------------------------------------------- | ----------------------- |
-| `GET`    | `/api/v1/hazards/active` | Public/device | Active hazards and closures for the map      | BR-013 / FSD-FR-059     |
-| `POST`   | `/api/v1/hazards`        | LGU role      | Publish a drawn polygon or closure           | BR-016 / FSD-FR-082–085 |
-| `PATCH`  | `/api/v1/hazards/{id}`   | LGU role      | Change obstruction level or validity         | BR-016 / FSD-FR-084–085 |
-| `DELETE` | `/api/v1/hazards/{id}`   | LGU role      | Withdraw a hazard without deleting its audit | BR-016 / FSD-FR-085     |
-| `GET`    | `/api/v1/hazards/stream` | Bearer/device | SSE stream of hazard changes                 | BR-013 / FSD-FR-086     |
+### 9.3 Hazards
 
-### 9.4 Fleet, SOS and dispatch
+| Method  | Path                              | Body                                                        | Response | Reference               |
+| ------- | --------------------------------- | ----------------------------------------------------------- | -------- | ----------------------- |
+| `POST`  | `/api/v1/hazards`                 | `name`, `obstruction_level`, `avg_depth_cm`, `edge_id`, `notes?` | `hazard` | BR-016 / FSD-FR-082–085 |
+| `PATCH` | `/api/v1/hazards/{hazard_id}`     | any of the above fields, plus `active`                      | `hazard` | BR-016 / FSD-FR-084–085 |
+| `POST`  | `/api/v1/hazards/{hazard_id}/publish` | —                                                       | `hazard` | BR-016 / FSD-FR-085     |
+| `GET`   | `/api/v1/hazards`                 | —                                                           | `hazard[]` | BR-013 / FSD-FR-059   |
 
-| Method  | Path                              | Access   | Purpose                           | Reference                |
-| ------- | --------------------------------- | -------- | --------------------------------- | ------------------------ |
-| `GET`   | `/api/v1/vehicles`                | LGU role | Fleet status and active tasks     | BR-016 / FSD-FR-075–076  |
-| `PATCH` | `/api/v1/vehicles/{id}/status`    | LGU role | Manual status transition          | BR-016 / FSD-FR-076      |
-| `POST`  | `/api/v1/vehicles/{id}/telemetry` | Device   | Throttled position batch          | BR-013 / FSD-FR-072      |
-| `GET`   | `/api/v1/vehicles/stream`         | LGU role | SSE stream of fleet changes       | BR-016 / FSD-FR-086      |
-| `POST`  | `/api/v1/sos`                     | Device   | Create a distress request         | BR-015 / FSD-FR-073      |
-| `GET`   | `/api/v1/sos`                     | LGU role | Distress incidents on the map     | BR-015 / FSD-FR-074, 087 |
-| `POST`  | `/api/v1/sos/{id}/assign`         | LGU role | Assign the nearest available unit | BR-016 / FSD-FR-088–089  |
-| `GET`   | `/api/v1/dispatch/{id}/route`     | LGU role | Flood-safe rescue route preview   | BR-016 / FSD-FR-089      |
+A hazard is created active but unpublished; `publish` stamps `published_at` and
+is the step the portal performs before dispatch. Depth is in centimetres.
 
-### 9.5 Sensors
+### 9.4 Fleet
 
-| Method | Path                       | Access        | Purpose                                | Reference           |
-| ------ | -------------------------- | ------------- | -------------------------------------- | ------------------- |
-| `POST` | `/api/v1/sensors/readings` | Gateway token | Ingest a river or rain gauge reading   | BR-017 / FSD-FR-090 |
-| `GET`  | `/api/v1/sensors`          | LGU role      | Sensor list, thresholds and advisories | BR-017 / FSD-FR-091 |
+| Method  | Path                            | Body                                                       | Response    | Reference               |
+| ------- | ------------------------------- | ---------------------------------------------------------- | ----------- | ----------------------- |
+| `GET`   | `/api/v1/vehicles`              | —                                                          | `vehicle[]` | BR-016 / FSD-FR-075–076 |
+| `POST`  | `/api/v1/vehicles`              | `call_sign`, `vehicle_type`, `clearance_cm`, `speed_kmh`   | `vehicle`   | BR-016 / FSD-FR-075     |
+| `PATCH` | `/api/v1/vehicles/{vehicle_id}` | any of the above, plus `status`                            | `vehicle`   | BR-016 / FSD-FR-076     |
 
-### 9.6 Routing changes
+Clearance is in centimetres and speed in km/h, matching §2 and the driver UI.
 
-The existing `GET /api/v1/routing/navigate` is extended, not replaced:
+### 9.5 Not yet implemented
 
-| Parameter                  | Type   | Purpose                                                   |
-| -------------------------- | ------ | --------------------------------------------------------- |
-| `origin_lat`, `origin_lon` | number | Device position; snapped to the nearest node              |
-| `target_lat`, `target_lon` | number | Destination point; snapped to the nearest node            |
-| `avoid_hazard_ids`         | string | Comma-separated hazard ids the caller already knows about |
-| `mode`                     | string | `driver` or `rescue`; changes clearance and hazard policy |
+The following remain specified but absent, and must not be assumed by a client:
 
-Response additions: ordered `instructions[]` with manoeuvre, road name and
-distance; `avoided_hazard_ids[]`; and `rerouted` when the server had to leave
-the requested path. Existing required parameters and responses remain valid.
+- field report intake and moderation (`/api/v1/reports*`, `/api/v1/reports/{id}/approve`);
+- server-sent event streams (`/hazards/stream`, `/vehicles/stream`);
+- sensor ingestion and thresholds (`/api/v1/sensors*`);
+- vehicle telemetry batches (`/vehicles/{id}/telemetry`);
+- rescue route preview (`/dispatch/{id}/route`);
+- hazard withdrawal (`DELETE /api/v1/hazards/{id}`).
 
-### 9.7 Planned error additions
+### 9.6 Error additions in this slice
 
-| Status | Condition                                              |
-| ------ | ------------------------------------------------------ |
-| `401`  | Missing, expired or invalid Supabase token             |
-| `403`  | Role not permitted for the action                      |
-| `413`  | Evidence photo exceeds the size limit                  |
-| `415`  | Evidence photo type is not accepted                    |
-| `409`  | Report already moderated, or vehicle not assignable    |
-| `429`  | Rate limit exceeded; `Retry-After` returned            |
-| `503`  | Event stream unavailable; client should use a snapshot |
-
-Full error semantics are in TSD §Error Handling (`E008`–`E015`).
+| Status | Condition                                   |
+| ------ | ------------------------------------------- |
+| `401`  | Missing, expired or invalid session token   |
+| `403`  | Registration asked for an administrative role |
+| `404`  | SOS, vehicle or hazard id not found         |
+| `409`  | Email already registered                    |
+| `422`  | Validation failure on a body field          |

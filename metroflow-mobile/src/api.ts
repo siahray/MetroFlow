@@ -59,13 +59,6 @@ export function sendVerification(email: string): Promise<{ message: string; code
   });
 }
 
-export function verifyCode(email: string, code: string): Promise<{ verified: boolean }> {
-  return request<{ verified: boolean }>("/api/v1/auth/verify", {
-    method: "POST",
-    body: JSON.stringify({ email, code }),
-  });
-}
-
 export function createSOS(data: {
   latitude: number;
   longitude: number;

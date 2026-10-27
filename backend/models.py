@@ -1,7 +1,17 @@
 from datetime import UTC, datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -80,13 +90,15 @@ class HazardZone(Base):
     __tablename__ = "hazard_zones"
     hazard_id = Column(Integer, primary_key=True, index=True)
     name = Column(String(120), nullable=False)
-    obstruction_level = Column(String(20), nullable=False)
-    avg_depth_cm = Column(Integer, nullable=True)
+    obstruction_level = Column(String(20), nullable=False, index=True)
+    # SMALLINT matches the deployed column: depths are centimetres and never
+    # leave the 32k range. Widening it here would make ``alembic check`` drift.
+    avg_depth_cm = Column(SmallInteger, nullable=True)
     geometry = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=True)
     edge_id = Column(Integer, ForeignKey("road_edges.edge_id"), nullable=True)
     notes = Column(Text, nullable=True)
     published_at = Column(DateTime, nullable=True)
-    active = Column(Boolean, default=True)
+    active = Column(Boolean, default=True, index=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -94,10 +106,12 @@ class HazardZone(Base):
 class Vehicle(Base):
     __tablename__ = "vehicles"
     vehicle_id = Column(Integer, primary_key=True, index=True)
-    call_sign = Column(String(50), unique=True, nullable=False)
-    vehicle_type = Column(String(30), nullable=False)
+    # ``unique=True`` with ``index=True`` renders the unique index the deployed
+    # database has; ``unique`` alone would ask Alembic for a table constraint.
+    call_sign = Column(String(50), unique=True, index=True, nullable=False)
+    vehicle_type = Column(String(30), nullable=False, index=True)
     clearance_cm = Column(Integer, nullable=True)
-    status = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, index=True)
     current_location_lat = Column(Float, nullable=True)
     current_location_lon = Column(Float, nullable=True)
     speed_kmh = Column(Float, nullable=True)
@@ -112,6 +126,6 @@ class SOSRequest(Base):
     longitude = Column(Float, nullable=False)
     note = Column(Text, nullable=True)
     vehicle_id = Column(Integer, ForeignKey("vehicles.vehicle_id"), nullable=True)
-    status = Column(String(20), default="pending")
+    status = Column(String(20), default="pending", index=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)

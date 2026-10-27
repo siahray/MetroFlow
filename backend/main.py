@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
+import bcrypt
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-import bcrypt
 
 import models
+from auth_utils import get_current_user
 from config import settings
 from database import get_db
 from geometry import backfill_geometry
@@ -47,6 +48,13 @@ from schemas import (
 # ---------------------------------------------------------------------------
 # Seeding + geometry backfill
 # ---------------------------------------------------------------------------
+
+
+# Portal roles and field roles are separate: a driver account is authenticated
+# but never privileged, so the two sets are kept explicit.
+ADMIN_ROLES = {"LGU_DISPATCHER", "SUPER_ADMIN"}
+DRIVER_ROLES = {"EMERGENCY_DRIVER"}
+ALLOWED_ROLES = ADMIN_ROLES | DRIVER_ROLES
 
 
 def seed_database(db: Session) -> None:
@@ -113,6 +121,31 @@ def seed_database(db: Session) -> None:
     db.commit()
 
 
+def seed_dispatcher_account(db: Session) -> None:
+    """
+    Provision the bootstrap LGU dispatcher when no users exist.
+
+    Registration only ever creates driver accounts, so without this the portal
+    has no account it can sign in with on a fresh database.
+    """
+    if db.query(models.User).count() > 0:
+        return
+
+    password_hash = bcrypt.hashpw(settings.admin_password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
+    db.add(
+        models.User(
+            name="LGU Dispatcher",
+            email=settings.admin_email.strip().lower(),
+            password_hash=password_hash,
+            role="SUPER_ADMIN",
+        )
+    )
+    db.commit()
+    print(f"[startup] provisioned dispatcher account {settings.admin_email}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # The schema is owned by Alembic (backend/migrations), not create_all:
@@ -122,6 +155,7 @@ async def lifespan(app: FastAPI):
     db = next(get_db())
     try:
         seed_database(db)
+        seed_dispatcher_account(db)
         result = backfill_geometry(db)
         print(
             f"[startup] geometry backfill: {result['nodes_updated']} nodes, "
@@ -491,16 +525,23 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     import models
     from auth_utils import create_access_token
 
-    user = db.query(models.User).filter(models.User.email == request.email).first()
+    email = request.email.strip().lower()
+    user = db.query(models.User).filter(func.lower(models.User.email) == email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     try:
-        if not bcrypt.checkpw(request.password.encode("utf-8"), user.password_hash.encode("utf-8")):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-    except Exception:
+        password_ok = bcrypt.checkpw(
+            request.password.encode("utf-8"), user.password_hash.encode("utf-8")
+        )
+    except ValueError:
+        # A malformed stored hash must not distinguish itself from a wrong password.
+        password_ok = False
+    if not password_ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    if user.role not in ["LGU_DISPATCHER", "SUPER_ADMIN"]:
-        raise HTTPException(status_code=403, detail="Only authorized admin accounts can access this system")
+    if user.role not in ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=403, detail="This account is not permitted to use MetroFlow"
+        )
     token = create_access_token({"sub": user.email})
     return {
         "access_token": token,
@@ -514,18 +555,14 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     }
 
 
-@app.get("/api/v1/auth/me")
-def get_me(email: str, db: Session = Depends(get_db)):
-    import models
-
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+@app.get("/api/v1/auth/me", response_model=UserResponse)
+def get_me(current_user: models.User = Depends(get_current_user)):
+    """Return the account behind the presented bearer token."""
     return {
-        "user_id": user.user_id,
-        "name": user.name,
-        "email": user.email,
-        "role": user.role,
+        "user_id": current_user.user_id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
     }
 
 
@@ -540,6 +577,7 @@ def send_verification(request: SendVerifyRequest):
     code = create_code(request.email)
     # In production, send via email. For now, still return code for dev; in prod remove.
     import os
+
     if os.getenv("ENV") == "production":
         return {"message": "Verification code sent to email"}
     return {"message": "Verification code sent", "code": code}
@@ -559,9 +597,64 @@ def verify(request: VerifyRequest):
     return {"verified": True}
 
 
-@app.post("/api/v1/auth/register")
+@app.post("/api/v1/auth/register", response_model=UserResponse, status_code=201)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
-    raise HTTPException(status_code=403, detail="Registration is disabled. Only admin can access this system.")
+    """
+    Create a driver account.
+
+    The portal's dispatcher accounts are provisioned by the LGU, so this endpoint
+    deliberately refuses to mint an administrative role. Drivers and commuters
+    self-register and get the same non-privileged role.
+    """
+    import models
+
+    name = request.name.strip()
+    email = request.email.strip().lower()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name is required")
+    if "@" not in email or "." not in email.split("@", 1)[1]:
+        raise HTTPException(status_code=422, detail="A valid email address is required")
+    if len(request.password) < 8:
+        raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
+
+    role = (request.role or "EMERGENCY_DRIVER").strip().upper()
+    if role in {"DRIVER", "COMMUTER"}:
+        role = "EMERGENCY_DRIVER"
+    if role in ADMIN_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Dispatcher accounts are provisioned by the LGU, not self-registered",
+        )
+    if role not in ALLOWED_ROLES:
+        raise HTTPException(status_code=422, detail="Unknown role")
+
+    existing = db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    if request.verification_code:
+        from verification_store import verify_code
+
+        if not verify_code(email, request.verification_code):
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+
+    user = models.User(
+        name=name,
+        email=email,
+        password_hash=bcrypt.hashpw(request.password.encode("utf-8"), bcrypt.gensalt()).decode(
+            "utf-8"
+        ),
+        role=role,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {
+        "user_id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@
 # produced one PR per dependency instead. Groups here therefore take every
 # update type, and a major bump is reviewed in the same PR as its siblings.
 #
-# web-lgu is built with Bun. The `npm` ecosystem cannot parse `bun.lock` and
+# metroflow-admin is built with Bun. The `npm` ecosystem cannot parse `bun.lock` and
 # fails the update job outright ("Set package-ecosystem: bun"), so `bun` is the
 # correct ecosystem here, not npm.
 version: 2
@@ -32,7 +32,7 @@ updates:
       - backend
 
   - package-ecosystem: bun
-    directory: /web-lgu
+    directory: /metroflow-admin
     schedule:
       interval: weekly
       day: monday
