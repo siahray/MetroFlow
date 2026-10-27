@@ -2,8 +2,8 @@
 
 **Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System  
 **Date:** October 27, 2026  
-**Branch:** `feat/scope-resolution-slice`  
-**Status:** Piloted locally — sign-in, SOS, hazards, fleet and dispatch persist through the API
+**Branch:** `feat/token-enforcement` (`chore/api-deploy` stacked on it)  
+**Status:** Deployed — portal on Vercel, API as a Vercel Python function, Supabase hosted
 
 ---
 
@@ -12,9 +12,10 @@
 MetroFlow is a dual-interface flood-aware urban mobility system consisting of a FastAPI backend, an LGU web dashboard (`metroflow-admin/`) and an Expo driver app. The system covers flood simulation, clearance-aware routing, SOS/emergency dispatch and flood-hazard publishing. All application data flows through the backend API into Supabase Postgres. Accounts are real: the API issues its own session tokens and checks bcrypt credentials against the `users` table.
 
 This is a working pilot, not a production service. Every route except the four
-auth entry points now requires a session token, and writes require a portal role
-(TSD SEC-001 closed); rate limiting and a WAF are still missing (LIM-006), so the
-stack stays off the public internet until those gateway controls exist.
+auth entry points requires a session token, and writes require a portal role
+(TSD SEC-001 closed). The API and portal are hosted, so the stack is reachable:
+rate limiting and a WAF are the remaining gateway controls (LIM-006), and the
+hosted API still connects with the project's `postgres` role (LIM-023).
 
 ---
 
@@ -40,6 +41,15 @@ stack stays off the public internet until those gateway controls exist.
 - **Provisioning:** created once at startup from `METROFLOW_ADMIN_EMAIL` / `METROFLOW_ADMIN_PASSWORD` when the `users` table is empty
 - **Driver accounts:** created by `POST /api/v1/auth/register`, always `EMERGENCY_DRIVER`
 - **Escalation:** registration refuses `LGU_DISPATCHER` and `SUPER_ADMIN` with `403`
+- **Rotated:** the hosted dispatcher password was changed from the demo default before the API became reachable; the value lives in `backend/.env` on the operator's machine
+
+### Hosting
+| Component | Status | Details |
+|---|---|---|
+| API | Deployed | Vercel project `metroflow-api`, Python 3.12 function, region `icn1`, `https://metroflow-api-siahrays-projects.vercel.app` |
+| Portal | Deployed | Vercel Git deployment, root `metroflow-admin`, `https://metroflow-web-lgu.vercel.app` |
+| Database | Hosted | Supabase Seoul; the API reaches it through the session pooler |
+| Verification | Passing | health `200`; unauthenticated read `401`; sign-in `200` as `SUPER_ADMIN`; network state, vehicles, hazards and SOS `200` with the token; portal origin allowed by CORS and other origins refused |
 
 ---
 

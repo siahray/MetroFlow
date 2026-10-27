@@ -852,12 +852,51 @@ IPv4 runners, so the session pooler host is required for CI migrations. A runtim
 host with IPv6 connectivity may use the direct host, but the session pooler is the
 portable choice. Both forms require `sslmode=require`.
 
-The runtime connects as a dedicated `metroflow_app` role with no superuser,
-`BYPASSRLS` or schema-owner rights. The `postgres` superuser is reserved for
-migrations and never appears in `DATABASE_URL`. The browser never connects to
-Postgres: the API never uses the anon key, and it remains the only data path.
+The runtime connects as the `postgres` project role through the session pooler.
+That is broader than the API needs: the startup geometry backfill issues
+`CREATE INDEX IF NOT EXISTS`, which needs table ownership, so a dedicated role
+would have to own the tables the migrations create. Creating that role and
+handing schema ownership to it is recorded as LIM-023. The browser never
+connects to Postgres: the API never uses the anon key, and it remains the only
+data path.
 
-### 5.3 Workflows
+### 5.3 Hosted API
+
+The API runs as a Vercel Python function built from `backend/`. Vercel detects
+FastAPI from `main.py`, so there is no image to publish and no second provider to
+operate.
+
+| Property      | Value                                                                    |
+| ------------- | ------------------------------------------------------------------------ |
+| Project       | `metroflow-api` (team `siahrays-projects`)                                |
+| URL           | `https://metroflow-api-siahrays-projects.vercel.app`                      |
+| Runtime       | Python 3.12 function on Fluid Compute, 60 s maximum duration              |
+| Region        | `icn1` (Seoul), the same region as the hosted database                    |
+| Entrypoint    | `backend/main.py`; `vercel.json` carries no build configuration           |
+| Deploy        | `cd backend && vercel deploy --prod --scope siahrays-projects --project metroflow-api` |
+
+Environment variables, all set for production and preview:
+
+| Variable                     | Value / source                                                    |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `FASTAPI_ENV`                | `production` (no demo seed, no `/docs` or `/redoc` UI)             |
+| `DATABASE_URL`               | Supabase session pooler, `sslmode=require`                          |
+| `JWT_SECRET`                 | generated per deployment; signs the HS256 session tokens           |
+| `METROFLOW_CORS_ORIGINS`     | `https://metroflow-web-lgu.vercel.app`                             |
+| `METROFLOW_ADMIN_EMAIL`      | bootstrap dispatcher, used only when the `users` table is empty    |
+| `METROFLOW_ADMIN_PASSWORD`   | the live dispatcher password; rotate outside the demo defaults     |
+| `NEXT_PUBLIC_API_BASE_URL`   | set on `metroflow-web-lgu`, not here                               |
+
+Because the platform scales to zero, the first request after idle pays a cold
+start of roughly five seconds; warm requests measured from the portal's region
+run in 0.25–0.9 s. The lifespan hook runs on every cold start: it provisions the
+bootstrap dispatcher only when the table is empty and runs the idempotent
+geometry backfill, which takes an advisory lock and issues `CREATE INDEX IF NOT
+EXISTS`. Deployment protection is disabled for this project so that browsers can
+reach it; the bearer token is the gate, which is why LIM-001 and LIM-022 had to
+close first.
+
+### 5.4 Workflows
 
 | Workflow                      | Trigger                                     | Gate                                                            |
 | ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
@@ -876,9 +915,13 @@ change ──► pull request ──► Backend CI ──┐
                        ├──► Web CI     ──┤
                        └──► Mobile CI  ──┴──► merge to main
                                               ├──► Backend CI ──► Supabase migrations
-                                              ├──► Web CI ──► Vercel Git preview
+                                              ├──► Web CI ──► Vercel Git deployment (portal)
                                               └──► tag backend-v* ──► GHCR image
 ```
+
+The API is not in that chain yet: `metroflow-api` runs whatever the last
+`vercel deploy --prod` uploaded rather than what is on `main` (LIM-024), so the
+deploy command in §5.3 is part of releasing a backend change.
 
 ## 6. Architecture Decisions
 
@@ -932,6 +975,8 @@ change ──► pull request ──► Backend CI ──┐
 | LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | OSM fallback, manual rainfall override, cached derived data and labelled degradation                         |
 | LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
 | LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
+| LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Create `metroflow_app`, move table ownership to it and rotate `DATABASE_URL`                                 |
+| LIM-024 | API deployments are manual, not git-connected      | The deployed code can drift from `main`          | Connect `metroflow-api` to the repository with root directory `backend/`                                     |
 
 LIM-001 and LIM-022 are closed. Every route except the four auth entry points
 (`login`, `register`, `send-verification`, `verify`) requires a bearer token:

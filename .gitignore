@@ -37,3 +37,7 @@ Thumbs.db
 # --- Documentation build tooling --------------------------------------------
 .docx-venv/
 ~$*.docx
+
+# --- Vercel CLI -------------------------------------------------------------
+# `vercel link` writes project metadata per directory; it is machine-local.
+.vercel/
