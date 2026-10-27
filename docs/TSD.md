@@ -425,7 +425,7 @@ Full request and response contracts, examples and error bodies are in
 | VAL-020       | BR-013  | FSD-FR-072 | Telemetry accepts at most one batch per five seconds per vehicle                                                         |
 | VAL-021       | BR-015  | FSD-FR-073 | SOS requires a location fix no older than 60 seconds                                                                     |
 | VAL-022       | BR-016  | FSD-FR-089 | A unit can be assigned only when `AVAILABLE`, and the route must avoid inactive or non-blocking hazards                  |
-| VAL-023       | BR-009  | FSD-FR-092 | Session token signature, expiry and role are verified before any privileged write (enforcement tracked by LIM-022)         |
+| VAL-023       | BR-009  | FSD-FR-092 | Session token signature, expiry and role are verified before any privileged write         |
 | VAL-024       | BR-017  | FSD-FR-090 | Sensor is known and active; value is inside its configured range; timestamp is not in the future                         |
 
 ## Security Design
@@ -456,7 +456,7 @@ Full request and response contracts, examples and error bodies are in
 
 | ID      | Risk                                              | Severity | Disposition                                                                 |
 | ------- | ------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
-| SEC-001 | Most endpoints do not check the session token     | High     | Sign-in and roles exist; route-level enforcement is LIM-022 and must land before exposure |
+| SEC-001 | Most endpoints did not check the session token    | High     | Resolved 27 Oct 2026: every route except the auth entry points requires a token, and writes require a portal role |
 | SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist in CR-001; the app uses bearer tokens        |
 | SEC-003 | Baseline has no rate limiting                     | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS               |
 | SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Activates automatically when public or licensed                             |
@@ -910,7 +910,7 @@ change ──► pull request ──► Backend CI ──┐
 
 | ID      | Limitation                                         | Impact                                           | Planned resolution                                                                                           |
 | ------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| LIM-001 | Most endpoints do not check the session token      | Cannot handle real personal data                 | Sign-in and roles exist (CR-001); route enforcement tracked by LIM-022                                        |
+| LIM-001 | Baseline had no route-level authorisation         | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-002 | Baseline incident data is mocked                   | Triage is demonstrated, not operational          | Persisted report API in CR-001                                                                               |
 | LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | CR-001 adds optional OpenWeather and labelled simulated gauges; real gauge feeds need agreements             |
 | LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
@@ -928,10 +928,19 @@ change ──► pull request ──► Backend CI ──┐
 | LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration          | Agreement and feed integration post-pilot                                                                    |
 | LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic      | Optional tile cache if storage and licensing allow                                                           |
 | LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
-| LIM-019 | Authentication requires Supabase reachability      | An offline app cannot refresh an expired session | Cached session within its grace period; explicit re-authentication once online; no privileged offline action |
+| LIM-019 | Authentication requires API and database reachability | An offline app cannot sign in                | Sign in when online; the token lasts 24 hours; no privileged offline action                                  |
 | LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | OSM fallback, manual rainfall override, cached derived data and labelled degradation                         |
 | LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
-| LIM-022 | CR-001 endpoints do not yet enforce the session token | A caller with network access can act without signing in | Deploy off the public internet until route-level enforcement lands; `GET /auth/me` is the only guarded route |
+| LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
+
+LIM-001 and LIM-022 are closed. Every route except the four auth entry points
+(`login`, `register`, `send-verification`, `verify`) requires a bearer token:
+`401` without one. Authorisation is enforced per route through
+`auth_utils.require_roles`, so publishing hazards, changing the fleet, running a
+simulation, reading the incident queue and confirming dispatch require
+`LGU_DISPATCHER` or `SUPER_ADMIN`; a driver account gets `403`. Both clients now
+store and send the token, which is why these are no longer open limitations. The
+remaining gateway controls are rate limiting and a WAF (LIM-006).
 
 ## 8. Repository and Commands
 

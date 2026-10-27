@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-from auth_utils import get_current_user
+from auth_utils import get_current_user, require_roles
 from config import settings
 from database import get_db
 from geometry import backfill_geometry
@@ -55,6 +55,12 @@ from schemas import (
 ADMIN_ROLES = {"LGU_DISPATCHER", "SUPER_ADMIN"}
 DRIVER_ROLES = {"EMERGENCY_DRIVER"}
 ALLOWED_ROLES = ADMIN_ROLES | DRIVER_ROLES
+
+# Route-level enforcement (TSD LIM-022). Every /api/v1 route requires a token
+# except the four auth entry points; writes are further limited to portal roles,
+# because a driver account is authenticated but never privileged.
+require_user = get_current_user
+require_admin = require_roles(*ADMIN_ROLES)
 
 
 def seed_database(db: Session) -> None:
@@ -356,6 +362,7 @@ def get_network_state(
     clearance_cm: Annotated[
         float, Query(gt=0, le=200, description="Vehicle clearance in cm")
     ] = settings.default_clearance_cm,
+    _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -376,6 +383,7 @@ def trigger_rainfall_simulation(
     clearance_cm: Annotated[
         float, Query(gt=0, le=200, description="Vehicle clearance in cm")
     ] = settings.default_clearance_cm,
+    _user: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -420,6 +428,7 @@ def get_optimal_route(
     clearance_cm: Annotated[
         float, Query(gt=0, le=200, description="Vehicle clearance in cm")
     ] = settings.default_clearance_cm,
+    _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -676,7 +685,11 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v1/sos", response_model=SOSResponse)
-def create_sos(sos: SOSCreate, db: Session = Depends(get_db)):
+def create_sos(
+    sos: SOSCreate,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     import models
 
     # Create a simple auto-incrementing id by getting max
@@ -695,7 +708,11 @@ def create_sos(sos: SOSCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v1/hazards", response_model=HazardResponse)
-def create_hazard(hazard: HazardCreate, db: Session = Depends(get_db)):
+def create_hazard(
+    hazard: HazardCreate,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     max_id = db.query(func.max(models.HazardZone.hazard_id)).scalar() or 0
@@ -715,7 +732,12 @@ def create_hazard(hazard: HazardCreate, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/v1/hazards/{hazard_id}", response_model=HazardResponse)
-def update_hazard(hazard_id: int, hazard: HazardUpdate, db: Session = Depends(get_db)):
+def update_hazard(
+    hazard_id: int,
+    hazard: HazardUpdate,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     db_hazard = db.query(models.HazardZone).filter(models.HazardZone.hazard_id == hazard_id).first()
@@ -739,7 +761,11 @@ def update_hazard(hazard_id: int, hazard: HazardUpdate, db: Session = Depends(ge
 
 
 @app.post("/api/v1/hazards/{hazard_id}/publish", response_model=HazardResponse)
-def publish_hazard(hazard_id: int, db: Session = Depends(get_db)):
+def publish_hazard(
+    hazard_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     db_hazard = db.query(models.HazardZone).filter(models.HazardZone.hazard_id == hazard_id).first()
@@ -753,7 +779,12 @@ def publish_hazard(hazard_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v1/sos/{sos_id}/assign", response_model=SOSResponse)
-def assign_sos(sos_id: int, assign_req: AssignRequest, db: Session = Depends(get_db)):
+def assign_sos(
+    sos_id: int,
+    assign_req: AssignRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
@@ -772,7 +803,12 @@ def assign_sos(sos_id: int, assign_req: AssignRequest, db: Session = Depends(get
 
 
 @app.post("/api/v1/dispatch/{sos_id}/confirm", response_model=SOSResponse)
-def confirm_dispatch(sos_id: int, confirm_req: ConfirmRequest, db: Session = Depends(get_db)):
+def confirm_dispatch(
+    sos_id: int,
+    confirm_req: ConfirmRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
@@ -790,14 +826,21 @@ def confirm_dispatch(sos_id: int, confirm_req: ConfirmRequest, db: Session = Dep
 
 
 @app.get("/api/v1/vehicles", response_model=list[VehicleResponse])
-def list_vehicles(db: Session = Depends(get_db)):
+def list_vehicles(
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     import models
 
     return db.query(models.Vehicle).all()
 
 
 @app.get("/api/v1/sos", response_model=list[SOSResponse])
-def list_sos(status: str | None = None, db: Session = Depends(get_db)):
+def list_sos(
+    status: str | None = None,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     query = db.query(models.SOSRequest)
@@ -807,7 +850,11 @@ def list_sos(status: str | None = None, db: Session = Depends(get_db)):
 
 
 @app.get("/api/v1/hazards", response_model=list[HazardResponse])
-def list_hazards(active: bool | None = None, db: Session = Depends(get_db)):
+def list_hazards(
+    active: bool | None = None,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     import models
 
     query = db.query(models.HazardZone)
@@ -817,7 +864,11 @@ def list_hazards(active: bool | None = None, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v1/vehicles", response_model=VehicleResponse)
-def create_vehicle(vehicle: VehicleCreate, db: Session = Depends(get_db)):
+def create_vehicle(
+    vehicle: VehicleCreate,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     max_id = db.query(func.max(models.Vehicle.vehicle_id)).scalar() or 0
@@ -837,7 +888,12 @@ def create_vehicle(vehicle: VehicleCreate, db: Session = Depends(get_db)):
 
 
 @app.patch("/api/v1/vehicles/{vehicle_id}", response_model=VehicleResponse)
-def update_vehicle(vehicle_id: int, vehicle: VehicleUpdate, db: Session = Depends(get_db)):
+def update_vehicle(
+    vehicle_id: int,
+    vehicle: VehicleUpdate,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     import models
 
     db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()

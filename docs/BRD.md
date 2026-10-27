@@ -158,7 +158,7 @@ Business-level risks. The full register, scoring and responses are in
 | Risk                                              | Impact                                     | Mitigation                                                                                     |
 | ------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | Model outputs judged unrealistic by practitioners | Trust collapses; the tool is not adopted   | Declare calibration constants; validate against documented events; present as decision support |
-| Route-level authorisation not delivered before acceptance | Cannot be used with real data       | CR-001 adds API-issued tokens and roles; route enforcement (TSD LIM-022) is a release gate before any real data |
+| Route-level authorisation not delivered before acceptance | Cannot be used with real data       | Delivered 27 Oct 2026: every route requires a token and writes require a portal role; rate limiting (TSD LIM-006) remains a release gate |
 | No baseline data from the client                  | Benefits cannot be quantified              | Use audit-trail and risk benefits; collect the baseline during the pilot                       |
 | Dispatchers find the portal slower than radio     | They bypass the system                     | Usability sessions from M4; keep the existing process running in parallel                      |
 | Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require a change request                                    |
@@ -204,7 +204,7 @@ does, so this document is also an honest statement of scope.
 | BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                     |
 | BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — decisions append to the operations log                            |
 | BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Partly met — schema exists; write path planned under CR-001                           |
-| BR-009 | Restrict access to authorised personnel by role                              | Must     | Partly met — API-issued tokens, bcrypt credentials and role checks exist; most routes do not yet require the token (TSD LIM-022) |
+| BR-009 | Restrict access to authorised personnel by role                              | Must     | Met — API-issued tokens, bcrypt credentials and per-route role checks; no route is reachable without a token |
 | BR-010 | Operate on the equipment the LGU already has                                 | Should   | Met — browser-based portal                                                            |
 | BR-011 | Protect the personal data of reporters                                       | Must     | Partly met — database access denied to public API roles; privacy controls planned     |
 | BR-012 | Provide management information after an event                                | Could    | Not met — future release                                                              |

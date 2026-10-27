@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Camera, MapPin, AlertTriangle, Droplets } from 'lucide-react-native';
 import { useAuth } from '../../auth';
-import { createSOS } from '../../api';
+import { ApiError, createSOS } from '../../api';
 
 type Depth = 'ankle' | 'knee' | 'waist';
 type Passability = 'all' | 'high' | 'none';
@@ -49,8 +49,13 @@ export default function ReportScreen() {
       await createSOS({ latitude: 14.5547, longitude: 121.0244, note });
       setMsg('Report submitted. MDRRMC has been notified.');
       setTimeout(() => router.replace('/(tabs)/home'), 1200);
-    } catch {
-      setMsg('Submission failed. Please try again.');
+    } catch (error) {
+      const needsSignIn = error instanceof ApiError && error.status === 401;
+      setMsg(
+        needsSignIn
+          ? 'Sign in to submit a report.'
+          : 'Submission failed. Please try again.',
+      );
       setSubmitting(false);
     }
   }

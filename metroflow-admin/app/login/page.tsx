@@ -11,8 +11,8 @@ function LoginPage() {
   const { show } = useToast();
 
   const signIn = useCallback(
-    (userData?: SessionUser) => {
-      storeSessionUser(userData ?? null);
+    (userData?: SessionUser, token?: string) => {
+      storeSessionUser(userData ?? null, token ?? null);
       const name = userData?.name || "";
       show(name ? `Authenticated as ${name} (Lead Dispatcher)` : "Authenticated");
       setTimeout(() => router.push("/triage"), 300);

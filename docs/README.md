@@ -134,6 +134,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch and sensors            |
 | 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI      |
 | 1.3     | 27 Oct 2026 | «Project Team» | CR-001 approved; ADR-021 tokens; implementation status aligned with the code |
+| 1.4     | 27 Oct 2026 | «Project Team» | Route-level token enforcement and role checks; LIM-001 and LIM-022 closed |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same

@@ -1,10 +1,11 @@
 /**
  * Portal session cache.
  *
- * `POST /api/v1/auth/login` returns the user record and the token is kept in
- * `sessionStorage` for the browser session. This module is the only place that
- * reads or writes that value, so the shell, the login screen and the pages all
- * agree on its shape.
+ * `POST /api/v1/auth/login` returns a token and the user record. Both are kept
+ * in `sessionStorage` for the browser session, so a reload keeps the operator
+ * signed in and a closed tab signs them out. This module is the only place that
+ * reads or writes those values, so the shell, the login screen and the pages all
+ * agree on their shape.
  */
 
 export type SessionUser = {
@@ -14,7 +15,8 @@ export type SessionUser = {
   role?: string;
 };
 
-const STORAGE_KEY = "metroflow_user";
+const USER_KEY = "metroflow_user";
+const TOKEN_KEY = "metroflow_token";
 
 function parseUser(raw: string | null): SessionUser | null {
   if (!raw) return null;
@@ -30,12 +32,18 @@ function parseUser(raw: string | null): SessionUser | null {
 let cachedRaw: string | null = null;
 let cachedUser: SessionUser | null = null;
 
+const listeners = new Set<() => void>();
+
+function notify(): void {
+  for (const listener of listeners) listener();
+}
+
 /**
  * Snapshot for `useSyncExternalStore`. It must return the same object until the
  * stored value changes, otherwise React re-renders forever.
  */
 export function getSessionUser(): SessionUser | null {
-  const raw = typeof window === "undefined" ? null : sessionStorage.getItem(STORAGE_KEY);
+  const raw = typeof window === "undefined" ? null : sessionStorage.getItem(USER_KEY);
   if (raw !== cachedRaw) {
     cachedRaw = raw;
     cachedUser = parseUser(raw);
@@ -43,22 +51,37 @@ export function getSessionUser(): SessionUser | null {
   return cachedUser;
 }
 
-/** Reads are pull-based; nothing pushes session updates across tabs. */
-export function subscribeToSession(): () => void {
-  return () => {};
+/** The bearer token for the API, or `null` when signed out. */
+export function getSessionToken(): string | null {
+  return typeof window === "undefined" ? null : sessionStorage.getItem(TOKEN_KEY);
+}
+
+/** Session changes notify the shell so a rejected token can sign the user out. */
+export function subscribeToSession(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function clearSessionUser(): void {
   storeSessionUser(null);
 }
 
-export function storeSessionUser(user: SessionUser | null): void {
+export function storeSessionUser(user: SessionUser | null, token?: string | null): void {
   if (typeof window === "undefined") return;
   if (user) {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (token) {
+      sessionStorage.setItem(TOKEN_KEY, token);
+    } else if (token === null) {
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
   } else {
-    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
   }
   // Invalidate the snapshot so the next read reflects the write.
   cachedRaw = "\u0000";
+  notify();
 }

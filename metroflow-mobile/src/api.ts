@@ -1,13 +1,31 @@
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
+/** The bearer token for the current app session; null for guests. */
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-    ...init,
-  });
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(text || `Request failed: ${res.status}`);
+    throw new ApiError(res.status, text || `Request failed: ${res.status}`);
   }
   return (await res.json()) as T;
 }
@@ -36,20 +54,27 @@ export function login(email: string, password: string): Promise<AuthUser> {
       method: "POST",
       body: JSON.stringify({ email, password }),
     },
-  ).then((res) => res.user || (res as any));
+  ).then((res) => {
+    // Every route except the auth entry points requires this token (TSD
+    // LIM-022), so it is kept for the app session rather than discarded.
+    setAuthToken(res.access_token);
+    return res.user;
+  });
 }
 
-export function register(data: {
+export async function register(data: {
   name: string;
   email: string;
   password: string;
   role?: string;
   verification_code?: string;
 }): Promise<AuthUser> {
-  return request<AuthUser>("/api/v1/auth/register", {
+  await request<AuthUser>("/api/v1/auth/register", {
     method: "POST",
     body: JSON.stringify(data),
   });
+  // Registration returns the account, not a token, so sign in to get one.
+  return login(data.email, data.password);
 }
 
 export function sendVerification(email: string): Promise<{ message: string; code?: string }> {
