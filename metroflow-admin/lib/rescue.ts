@@ -12,6 +12,8 @@ export type RescueUnit = {
   speed_kmh: number;
   location: string;
   eta_min?: number;
+  /** Backend vehicle id, present once the fleet is loaded from the API. */
+  vehicleId?: number;
 };
 
 export type DistressBeacon = {

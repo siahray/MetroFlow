@@ -7,7 +7,6 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
-  Droplets,
   FileText,
   MapPin,
   MessageSquare,
@@ -44,6 +43,15 @@ const BASE_ACTIONS = [
   },
 ];
 
+const UNIT_STATUSES = ["AVAILABLE", "EN_ROUTE", "ON_SCENE", "OFFLINE"] as const;
+
+function toUnitStatus(value: string | null | undefined): RescueUnit["status"] {
+  const upper = String(value ?? "").toUpperCase();
+  return (UNIT_STATUSES as readonly string[]).includes(upper)
+    ? (upper as RescueUnit["status"])
+    : "AVAILABLE";
+}
+
 export function IncidentDetail({
   incident,
   logs,
@@ -56,7 +64,7 @@ export function IncidentDetail({
   const [note, setNote] = useState("");
   const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<1 | 2 | 3>(1);
-  const [vehicles, setVehicles] = useState<RescueUnit[]>([]);
+  const [vehicles, setVehicles] = useState<RescueUnit[]>(RESCUE_UNITS);
   const [selectedUnit, setSelectedUnit] = useState<RescueUnit | null>(null);
 
   useEffect(() => {
@@ -64,19 +72,20 @@ export function IncidentDetail({
       try {
         const data = await listVehicles();
         if (data && data.length > 0) {
-          const mapped = data.map((v: any) => ({
+          const mapped: RescueUnit[] = data.map((v) => ({
             callSign: v.call_sign,
             type: v.vehicle_type,
-            status: (String(v.status || "AVAILABLE").toUpperCase()) as any,
-            clearance_cm: v.clearance_cm || 0,
-            speed_kmh: v.speed_kmh || 0,
+            status: toUnitStatus(v.status),
+            clearance_cm: v.clearance_cm ?? 0,
+            speed_kmh: v.speed_kmh ?? 0,
             location: "Depot",
-          })) as RescueUnit[];
+            vehicleId: v.vehicle_id,
+          }));
           setVehicles(mapped);
           setSelectedUnit(mapped[0]);
         }
-      } catch (e) {
-        // keep fallback
+      } catch {
+        // The static fallback list stays in place when the fleet API is down.
       }
     };
     load();
@@ -102,18 +111,28 @@ export function IncidentDetail({
     try {
       const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
       if (!isNaN(sosId)) {
-        try {
-          await assignSOS(sosId, 1);
-        } catch (e) {
-          // ignore assignment errors if no mapping
+        const vehicleId = selectedUnit?.vehicleId;
+        if (vehicleId !== undefined) {
+          try {
+            await assignSOS(sosId, vehicleId);
+          } catch {
+            // The assignment is best-effort; confirmation below still records
+            // the dispatcher's decision in the log.
+          }
+        } else {
+          // A unit from the static fallback list has no backend id, so there is
+          // nothing to assign. Surface it instead of assigning an arbitrary row.
+          onAction(
+            `Could not assign ${selectedUnit?.callSign ?? "unit"}: unit is not in the fleet API`,
+          );
         }
         try {
           if (selectedUnit) await confirmDispatch(sosId, `Dispatched ${selectedUnit.callSign}`);
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
     setDispatchModalOpen(false);
