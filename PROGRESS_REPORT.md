@@ -78,7 +78,7 @@ This is a working pilot, not a production service. Most endpoints still accept u
 ## 3. LGU Web Dashboard (`metroflow-admin/`, Next.js)
 
 - **Separate pages:** `/login` and the operational screens (`/triage`, `/dashboard`, `/radar`, `/fleet`, `/hazards`)
-- **Real sign-in** against the API; the token is kept in `sessionStorage`
+- **Real sign-in** against the API; only the signed-in profile is kept for the session (no token is sent yet — TSD LIM-022)
 - **Live data** — SOS requests, vehicles and hazards load from the API
 - **Mixed data** — the SOS live panel is API-backed; the remaining queue entries are still seed/demo records
 - **Dispatch** assigns the selected fleet unit by its backend `vehicle_id` instead of a hardcoded id
@@ -106,7 +106,7 @@ This is a working pilot, not a production service. Most endpoints still accept u
 | Pipeline | State |
 |---|---|
 | Backend CI | pytest against the unit and contract suites |
-| Web CI | Bun install, ESLint, `next build`, Playwright E2E |
+| Web CI | Bun install, ESLint, `next build` |
 | Mobile CI | Bun install (`bun.lock`), `tsc --noEmit` |
 | Deploy Web | Vercel Git integration, root `metroflow-admin/` (branch previews, production from `main`; no Actions job) |
 | Deploy Backend | Container image to GHCR |

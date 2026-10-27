@@ -220,7 +220,7 @@ provider fallback. Existing identifiers are unchanged.
 | PostgreSQL + PostGIS  | BR-001  | FSD-FR-001, FSD-FR-053 | System of record for the road graph and live state      |
 | Supabase (hosted)     | BR-011  | FSD-FR-051             | Managed Postgres with row-level security                |
 | API auth module       | BR-009  | FSD-FR-018 to 023      | Sign-in, HS256 session tokens and role lookup           |
-| OpenWeather           | BR-002  | FSD-FR-006, 007        | Optional rainfall input with manual fallback            |
+| OpenWeather           | BR-002  | FSD-FR-006, 007        | Optional rainfall input with manual fallback (planned)  |
 | OpenTopography        | BR-001  | FSD-FR-001             | Offline elevation model for derived terrain             |
 | Copernicus            | BR-017  | FSD-FR-090             | Offline imagery and land cover for validation           |
 | Browser               | BR-010  | FSD-FR-018 to 049      | Dispatch portal runtime                                 |
@@ -228,7 +228,7 @@ provider fallback. Existing identifiers are unchanged.
 | Hazard event stream   | BR-013  | FSD-FR-059, FSD-FR-086 | SSE feed of published, updated and withdrawn hazards    |
 | Report upload API     | BR-014  | FSD-FR-065 to 067      | Multipart report with photo, depth and GPS metadata     |
 | Device camera and GPS | BR-014  | FSD-FR-066, FSD-FR-067 | Camera and geolocation modules in the native app        |
-| Map tile source       | BR-013  | FSD-FR-056, FSD-FR-075 | Mapbox raster via MapLibre; OSM fallback; graph offline |
+| Map tile source       | BR-013  | FSD-FR-056, FSD-FR-075 | Mapbox raster via MapLibre (planned); OSM fallback; graph offline |
 | Sensor gateway        | BR-017  | FSD-FR-090             | River and rain gauge readings with identity             |
 | Redis pub/sub         | BR-018  | FSD-FR-086             | Fan-out for hazard, fleet and SOS events                |
 
@@ -339,7 +339,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested                                     |
 | Rainfall simulation      | FSD-FR-006 to 010 | Implemented | Contract-tested; overrides respected                |
 | Routing                  | FSD-FR-011 to 017 | Implemented | Unit and contract tests                             |
-| Portal access            | FSD-FR-018 to 023 | Partial     | Real sign-in against `/auth/login`; token kept in `sessionStorage`; no route guard |
+| Portal access            | FSD-FR-018 to 023 | Partial     | Real sign-in against `/auth/login`; only the profile is kept for the session (no token is sent, no route guard) |
 | Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS panel polls the API; remaining entries are mock data |
 | Incident detail          | FSD-FR-032 to 038 | Partial     | Renders live SOS; evidence files not linked         |
 | Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
@@ -422,9 +422,10 @@ Actor: dispatcher. Postcondition: dashboard visible.
 2. Actor submits the form.
 3. System shows a confirmation and reveals the dashboard after a short delay.
 
-Current limitation: the portal stores the returned token but does not yet guard
-every route client-side. CR-001 adds server-side role checks; route-level
-token enforcement is tracked as TSD LIM-022.
+Current limitation: the portal keeps the returned profile for the session but
+does not store or send the token, and does not guard every route client-side.
+CR-001 adds server-side role checks; route-level token enforcement is tracked as
+TSD LIM-022.
 Requirements: FSD-FR-018 to 023, FSD-FR-092.
 
 ### UC-005 — Triage an incident

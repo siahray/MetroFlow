@@ -4,7 +4,7 @@
 | ------------------------- | ------------------------------------------------------------------------ |
 | Document ID               | MF-API-001                                                               |
 | Version                   | 1.2 (Draft)                                                              |
-| Status                    | Sections 2–8 match `main` @ `9605e38`; section 9 is planned under CR-001 |
+| Status                    | All sections match `feat/scope-resolution-slice`; §9 is the approved CR-001 contract |
 | Date                      | 22 October 2026                                                          |
 | Base URL (local)          | `http://localhost:8000`                                                  |
 | Machine-readable contract | `GET /openapi.json`                                                      |
@@ -15,10 +15,11 @@
 The API computes flood depth over a road graph and returns clearance-aware
 routes. Responses are JSON; geometry is GeoJSON.
 
-Sections 2–8 document the **implemented** core API. Section 9 lists the
-endpoints added by [CR-001](CR-001.md); they are **not available** in the
-current code baseline and must not be treated as a live contract. The generated
-`/openapi.json` is always authoritative for what is running.
+Sections 2–8 document the core API. Section 9 documents the endpoints added by
+[CR-001](CR-001.md), which is approved and implemented in this branch for auth,
+SOS, hazards, vehicles and dispatch; the remaining CR-001 endpoints are listed
+as absent in §9.5. The generated `/openapi.json` is always authoritative for
+what is running.
 
 | Method | Path                       | Purpose                                                  |
 | ------ | -------------------------- | -------------------------------------------------------- |
@@ -35,7 +36,7 @@ current code baseline and must not be treated as a live contract. The generated
 | Units            | Distance metres, speed km/h, water depth centimetres, rainfall mm/hr |
 | Timestamps       | ISO 8601, UTC (`2026-10-21T12:00:00Z`)                               |
 | Content type     | `application/json`                                                   |
-| Parameters       | All query parameters; no request bodies                              |
+| Parameters       | Query parameters on `GET` routes; JSON bodies on `POST`/`PATCH` routes |
 | Versioning       | Path prefix `/api/v1`; breaking changes move to `/api/v2`            |
 
 ### 1.2 Authentication
@@ -53,16 +54,15 @@ refuses to mint an administrative role.
 `GET /api/v1/auth/me` is the only route that validates a token today. The
 CR-001 routes in §9 issue and accept credentials but do **not** yet enforce them
 (TSD LIM-022), so the deployment must stay off the public internet until that
-gate lands. The portal keeps the token in `sessionStorage` for the browser
-session and the driver app keeps it in memory for the app session.
+gate lands. The token is returned to both clients but neither sends it on later
+requests yet: the portal persists only the signed-in profile for the browser
+session, and the driver app keeps the profile in memory.
 
 Two operational notes. `METROFLOW_ADMIN_EMAIL` and `METROFLOW_ADMIN_PASSWORD`
 seed the first dispatcher when the user table is empty, because registration
 cannot create one. Email verification codes are held in process memory by the
 current `verification_store` module, so they do not survive a restart or a
 second instance; requiring a code is therefore not enabled by default.
-
-### 1.3 Response headers
 
 ### 1.3 Response headers
 
@@ -75,9 +75,11 @@ Every response carries:
 | `Referrer-Policy`              | `strict-origin-when-cross-origin` |
 | `X-Frame-Options`              | `DENY`                            |
 
-CORS currently allows any origin, including credentialed requests (TSD
-SEC-002). CR-001 replaces this with a portal allowlist; the native app uses
-bearer tokens and package identifiers rather than an origin.
+CORS allows any origin by default; set `METROFLOW_CORS_ORIGINS` to a
+comma-separated portal allowlist before exposure (TSD SEC-002 / LIM-005).
+Credentialed requests are only advertised when that list is explicit, because a
+wildcard and credentials cannot be combined safely. The native app sends no
+`Origin` header and uses bearer tokens, so this setting does not affect it.
 
 ### 1.4 Passability status
 
@@ -102,8 +104,8 @@ Both comparisons are inclusive. `clearance_cm` defaults to 30 cm and must be
 
 | Service        | Consumed by    | Role                                         |
 | -------------- | -------------- | -------------------------------------------- |
-| Mapbox         | Portal and driver app | Raster basemap; OSM fallback when unset      |
-| OpenWeather    | Backend        | Optional rainfall; manual entry fallback     |
+| Mapbox         | Clients (planned, CR-001) | Raster basemap; OSM fallback when unset      |
+| OpenWeather    | Backend (planned, CR-001) | Optional rainfall; manual entry fallback     |
 | OpenTopography | Preprocessing  | Terrain model; cached, not called at runtime |
 | Copernicus     | Preprocessing  | Imagery and land cover; cached               |
 

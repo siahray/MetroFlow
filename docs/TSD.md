@@ -128,7 +128,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Frontend        | Next.js (App Router)                          | 16.4.2                                     |
 | Driver client   | Expo + React Native                           | Expo SDK 58, React Native 0.88, React 19.3 |
 | Mobile tooling  | Expo Router, React Navigation, expo-location   | Current at implementation                  |
-| Mapping         | MapLibre GL JS (portal); react-native-maps (driver) | Current at implementation            |
+| Mapping         | react-native-maps (driver, in use); MapLibre GL JS (portal, CR-001 work) | Partial — the driver renders a native map; the portal draws no map yet (LIM-007) |
 | UI runtime      | React (portal); React Native (driver)         | 19.3 / 0.88                                |
 | Styling         | Tailwind CSS                                  | 4.x                                        |
 | UI source       | Client-supplied HTML/CSS template             | Figma-derived; adapted to React components |
@@ -136,15 +136,15 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Realtime        | SSE + Redis pub/sub                           | Redis 7                                    |
 | Auth            | API-issued HS256 JWT; bcrypt password hashes  | PyJWT 2.15, passlib/bcrypt                 |
 | Evidence        | Pillow, python-multipart                      | current at implementation                  |
-| Tests           | pytest, Bun test, Playwright, ESLint, builds  | see repository                             |
+| Tests           | pytest, Ruff, ESLint, `tsc --noEmit`, framework builds | In CI today; Playwright and `bun test` are planned (LIM-009) |
 
 ### External data services
 
 | Service        | Mode              | Used for                        | Failure behaviour                                        |
 | -------------- | ----------------- | ------------------------------- | -------------------------------------------------------- |
 | Supabase (Postgres) | Runtime      | Hosted database                 | API unavailable; no fallback                             |
-| Mapbox         | Runtime (browser) | Raster basemap                  | OpenStreetMap raster fallback                            |
-| OpenWeather    | Runtime, optional | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
+| Mapbox         | Planned (CR-001)  | Raster basemap                  | OpenStreetMap raster fallback; no client requests tiles today |
+| OpenWeather    | Planned (CR-001)  | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
 | OpenTopography | Offline           | Digital elevation model         | Cached derived terrain; no runtime impact                |
 | Copernicus     | Offline           | Sentinel imagery and land cover | Cached derived layers; no runtime impact                 |
 
@@ -733,15 +733,16 @@ Rules:
 
 ### 4.1 Backend
 
-`FASTAPI_ENV` selects runtime behaviour: `development` enables the demo seed and
-the interactive OpenAPI docs; `test` disables both; `production` disables the
-seed, requires HTTPS origins and secure cookies, and serves no interactive docs.
-Calibration and threshold settings keep the `METROFLOW_` prefix and may be
-supplied in a local `.env`.
+`FASTAPI_ENV` selects runtime behaviour. `development` enables the demo network
+seed and the interactive OpenAPI docs. `test` disables the seed but keeps the
+docs. `production` disables the seed and serves no `/docs` or `/redoc`; the
+schema remains at `/openapi.json`. The demo seed only fills an empty graph, so it
+never overwrites a real network. Calibration and threshold settings keep the
+`METROFLOW_` prefix and may be supplied in a local `.env`.
 
 | Variable                            | Default                | Effect                                                           | Class          |
 | ----------------------------------- | ---------------------- | ---------------------------------------------------------------- | -------------- |
-| `FASTAPI_ENV`                       | `development`          | Runtime mode; gates seed data, docs and cookie security          | Server config  |
+| `FASTAPI_ENV`                       | `development`          | Runtime mode; gates the demo seed and, in production, the docs UI | Server config  |
 | `DATABASE_URL`                      | local PostGIS DSN      | SQLAlchemy DSN for the runtime application role                  | Secret         |
 | `REDIS_URL`                         | `redis://redis:6379/0` | Event bus and throttle counters                                  | Secret if used |
 | `JWT_SECRET`                        | dev fallback           | Signs the HS256 session tokens the API issues                    | Secret         |
@@ -759,13 +760,21 @@ supplied in a local `.env`.
 | `METROFLOW_CAUTION_DEPTH_CM`        | 10.0                   | Light-flood threshold                                            | Server config  |
 | `METROFLOW_DEFAULT_CLEARANCE_CM`    | 30.0                   | Clearance when omitted                                           | Server config  |
 | `RUN_MIGRATIONS`                    | true                   | Apply migrations on container start                              | Server config  |
-| `METROFLOW_CORS_ORIGINS`            | localhost origins      | Comma-separated portal origins; the app uses bearer tokens        | Server config  |
+| `METROFLOW_CORS_ORIGINS`            | `*` (any origin)       | Comma-separated portal origins; credentials are only advertised for an explicit list | Server config  |
 | `METROFLOW_UPLOAD_DIR`              | `/data/evidence`       | Evidence volume mount                                            | Server config  |
 | `METROFLOW_MAX_UPLOAD_MB`           | 8                      | Photo size cap                                                   | Server config  |
 | `METROFLOW_DRIVER_RETENTION_HOURS`  | 24                     | Driver location purge window                                     | Server config  |
 | `METROFLOW_TELEMETRY_MIN_SECONDS`   | 5                      | Server-side telemetry throttle                                   | Server config  |
 | `METROFLOW_WARNING_RADIUS_M`        | [TBC]                  | Driver proximity alert radius                                    | Server config  |
 | `METROFLOW_SENSOR_DEBOUNCE_MINUTES` | 10                     | Duplicate advisory suppression                                   | Server config  |
+
+Read by the code today: `FASTAPI_ENV`, `DATABASE_URL`, `JWT_SECRET`, the two
+bootstrap dispatcher values, the five `METROFLOW_*` calibration/threshold values,
+`METROFLOW_CORS_ORIGINS` and `RUN_MIGRATIONS` (container entrypoint). The
+remaining rows — `REDIS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENWEATHER_API_KEY`,
+`METROFLOW_SENSOR_TOKEN`, the upload, retention, telemetry, warning-radius and
+sensor-debounce settings — are reserved for the CR-001 work packages that are
+still planned (see CR-001 §8).
 
 `METROFLOW_REDIS_URL` is accepted as a deprecated alias of `REDIS_URL` so an
 existing deployment does not break; new configuration uses `REDIS_URL`.
@@ -853,7 +862,7 @@ Postgres: the API never uses the anon key, and it remains the only data path.
 | Workflow                      | Trigger                                     | Gate                                                            |
 | ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
 | Backend CI                    | Push/PR touching `backend/**`; manual       | Unit tests, contract tests, `alembic upgrade`, `alembic check`  |
-| Web CI                        | Push/PR touching `metroflow-admin/**`; manual       | Bun install, ESLint, `bun test`, `next build`, Playwright E2E   |
+| Web CI                        | Push/PR touching `metroflow-admin/**`; manual       | Bun install, ESLint, `next build` (type-checks the app)         |
 | Mobile CI                     | Push/PR touching `metroflow-mobile/**`; manual | Bun install (`bun.lock`), `tsc --noEmit`                    |
 | Security — OWASP ZAP API Scan | Weekly cron and manual                      | Fails on findings at or above threshold; no `continue-on-error` |
 | Security — CodeQL             | Push/PR to `main`, weekly, manual           | Skips with a visible warning when code scanning is unavailable  |
@@ -867,7 +876,7 @@ change ──► pull request ──► Backend CI ──┐
                        ├──► Web CI     ──┤
                        └──► Mobile CI  ──┴──► merge to main
                                               ├──► Backend CI ──► Supabase migrations
-                                              ├──► Web CI ──► Playwright E2E
+                                              ├──► Web CI ──► Vercel Git preview
                                               └──► tag backend-v* ──► GHCR image
 ```
 
@@ -893,7 +902,7 @@ change ──► pull request ──► Backend CI ──┐
 | ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Superseded by ADR-021                        |
 | ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (CR-001, 27 Oct 2026)               |
 | ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Accepted (CR-001, 27 Oct 2026)               |
-| ADR-019 | Mapbox raster tiles rendered by MapLibre                 | Mapbox GL JS, OSM raster only        | MapLibre is already integrated; raster tiles accept the public token and OSM remains a no-key fallback                        | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-019 | Mapbox raster tiles rendered by MapLibre                 | Mapbox GL JS, OSM raster only        | MapLibre is the chosen portal renderer (not yet integrated — LIM-007); raster tiles accept the public token and OSM remains a no-key fallback | Accepted (CR-001, 27 Oct 2026)               |
 | ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (CR-001, 27 Oct 2026)               |
 | ADR-021 | Session tokens are issued by the API (PyJWT + bcrypt)     | Supabase Auth (ADR-016), shared passcode | No Supabase Auth project is provisioned, both clients already call `/auth/login`, and bcrypt keeps dispatcher and driver accounts in the one table the API authorises against. Revisit when managed identity exists | Accepted 27 Oct 2026; supersedes ADR-016 |
 
@@ -909,7 +918,7 @@ change ──► pull request ──► Backend CI ──┐
 | LIM-006 | No rate limiting or WAF                            | DoS and credential-stuffing exposure             | CR-001 Redis-backed limits; WAF before public exposure                                                       |
 | LIM-007 | No map in the baseline portal                      | GeoJSON served but not drawn                     | MapLibre map in CR-001                                                                                       |
 | LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions                  | CR-001 write path with hash chaining                                                                         |
-| LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright added to Web and Mobile CI                                                                        |
+| LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright planned for Web and Mobile CI; not present yet                                                    |
 | LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
 | LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
 | LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | Define RPO/RTO and test restore                                                                              |
@@ -966,9 +975,9 @@ MetroFlow/
 | Contract tests     | `cd backend && pytest -m integration`               |
 | Run the portal     | `cd metroflow-admin && bun run dev`                         |
 | Run the driver app | `cd metroflow-mobile && bun run start`               |
-| Web tests          | `cd metroflow-admin && bun test`                            |
+| Web checks         | `cd metroflow-admin && bun run lint && bun run build`       |
 | Driver checks      | `cd metroflow-mobile && bunx tsc --noEmit`                  |
-| Browser E2E        | `cd metroflow-admin && bunx playwright test`                |
+| Browser E2E        | Planned — `bunx playwright test`; not yet in the repository |
 | Lint and build     | `cd metroflow-admin && bun run lint && bun run build`       |
 | Driver export      | `cd metroflow-mobile && bunx expo export`                   |
 | Inspect contract   | `curl http://localhost:8000/openapi.json`           |
