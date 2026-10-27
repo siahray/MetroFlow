@@ -853,7 +853,7 @@ only data path.
 | ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
 | Backend CI                    | Push/PR touching `backend/**`; manual       | Unit tests, contract tests, `alembic upgrade`, `alembic check`  |
 | Web CI                        | Push/PR touching `metroflow-admin/**`; manual       | Bun install, ESLint, `bun test`, `next build`, Playwright E2E   |
-| Mobile CI                     | Push/PR touching `metroflow-mobile/**`; manual | npm install, `tsc --noEmit`, `npm run lint`                    |
+| Mobile CI                     | Push/PR touching `metroflow-mobile/**`; manual | npm ci, `tsc --noEmit`, `npm run lint`                    |
 | Security — OWASP ZAP API Scan | Weekly cron and manual                      | Fails on findings at or above threshold; no `continue-on-error` |
 | Security — CodeQL             | Push/PR to `main`, weekly, manual           | Skips with a visible warning when code scanning is unavailable  |
 | Supabase — Apply migrations   | After Backend CI succeeds on `main`; manual | Serialised; no-ops without `SUPABASE_DB_URL`                    |
