@@ -3,9 +3,12 @@
 ## Project Setup
 
 ### Environment Configuration
-- **Backend:** `backend/.env` - Needs `SUPABASE_SERVICE_ROLE_KEY` from Supabase dashboard
-- **Admin UI:** `metroflow-admin/.env.local` - Supabase anon key (public)
-- **Driver App:** `metroflow-mobile/.env` - Supabase anon key (public, uses `EXPO_PUBLIC_` prefix)
+- **Backend:** `backend/.env` - `DATABASE_URL` (Supabase Postgres), `JWT_SECRET`, optional `METROFLOW_ADMIN_EMAIL` / `METROFLOW_ADMIN_PASSWORD`
+- **Admin UI:** `metroflow-admin/.env.local` - `NEXT_PUBLIC_API_BASE_URL` only; no Supabase key
+- **Driver App:** `metroflow-mobile/.env` - `EXPO_PUBLIC_API_BASE_URL` only; no Supabase key
+
+Neither client talks to Supabase directly. The API owns the database connection and
+issues its own HS256 session tokens; see `docs/TSD.md` ADR-021.
 
 ### Database
 - **Provider:** Supabase (PostgreSQL + PostGIS)

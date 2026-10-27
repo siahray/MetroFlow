@@ -441,7 +441,8 @@ Confidence in next:   <high/medium/low + reason>
 | ADR-011 | Portal ships with mock data            | [TBC] | «Project Team Lead» | TSD §6 (superseded by CR-001) |
 | ADR-014 | Driver client is a native Expo app     | [TBC] | «Project Team Lead» | TSD §6                        |
 | ADR-015 | SSE over Redis pub/sub                 | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-016 | Supabase Auth + app RBAC               | [TBC] | «Backend Lead»      | TSD §6                        |
+| ADR-016 | Supabase Auth + app RBAC               | [TBC] | «Backend Lead»      | TSD §6 (superseded by ADR-021) |
+| ADR-021 | API-issued HS256 tokens + bcrypt       | 27 Oct 2026 | «Backend Lead» | TSD §6                        |
 | ADR-017 | Local evidence volume                  | [TBC] | «Backend Lead»      | TSD §6                        |
 | ADR-018 | Offline uses cached graph              | [TBC] | «Mobile Lead»       | TSD §6                        |
 | ADR-019 | Mapbox tiles in MapLibre               | [TBC] | «Frontend Lead»     | TSD §6                        |

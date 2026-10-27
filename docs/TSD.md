@@ -744,8 +744,10 @@ supplied in a local `.env`.
 | `FASTAPI_ENV`                       | `development`          | Runtime mode; gates seed data, docs and cookie security          | Server config  |
 | `DATABASE_URL`                      | local PostGIS DSN      | SQLAlchemy DSN for the runtime application role                  | Secret         |
 | `REDIS_URL`                         | `redis://redis:6379/0` | Event bus and throttle counters                                  | Secret if used |
-| `SUPABASE_URL`                      | no default             | Project URL shared with the portal and app; the API does not fetch JWKS | Server config  |
-| `SUPABASE_SERVICE_ROLE_KEY`         | no default             | Seed accounts and administrative provisioning; bypasses RLS      | Secret         |
+| `JWT_SECRET`                        | dev fallback           | Signs the HS256 session tokens the API issues                    | Secret         |
+| `METROFLOW_ADMIN_EMAIL`             | `dispatcher@metroflow.local` | First dispatcher, created once when the user table is empty | Server config  |
+| `METROFLOW_ADMIN_PASSWORD`          | `metroflow-dev`        | Password for that seeded dispatcher; change before any exposure  | Secret         |
+| `SUPABASE_SERVICE_ROLE_KEY`         | no default             | Reserved for evidence storage and provisioning; no code path reads it yet | Secret |
 | `OPENWEATHER_API_KEY`               | no default             | Optional live rainfall; manual rainfall remains the fallback     | Secret         |
 | `OPENTOPOGRAPHY_API_KEY`            | no default             | Offline DEM acquisition only                                     | Secret         |
 | `COPERNICUS_CLIENT_ID`              | no default             | Offline imagery acquisition only                                 | Secret         |
@@ -767,31 +769,31 @@ supplied in a local `.env`.
 
 `METROFLOW_REDIS_URL` is accepted as a deprecated alias of `REDIS_URL` so an
 existing deployment does not break; new configuration uses `REDIS_URL`.
-Authentication settings are Supabase project settings, not MetroFlow variables;
-there is no MetroFlow-issued token signing secret.
+
+Authentication does not involve Supabase. `POST /api/v1/auth/login` checks the
+bcrypt hash on the `users` row and the API signs its own HS256 token with
+`JWT_SECRET` (ADR-021). The development fallback in `auth_utils.py` is public,
+so every real deployment must set the variable. The database is reached only
+through `DATABASE_URL`; no Supabase client library is loaded and no Supabase key
+is read.
 
 ### 4.2 Portal and driver app
 
-Both clients read the same public values. The portal reads `NEXT_PUBLIC_*` at
-build time and the Expo app reads `EXPO_PUBLIC_*` at build time. Both are public
-by design and may point at the same Supabase project and Mapbox token; only the
-variable names differ by platform.
+Both clients read one public value: the API origin. The portal reads
+`NEXT_PUBLIC_*` at build time and the Expo app reads `EXPO_PUBLIC_*` at build
+time. Neither client loads a Supabase client or holds a database credential;
+every read and write goes through the API, which owns the database connection.
 
 | Variable                          | Required | Effect                                                           | Class  |
 | --------------------------------- | -------- | ---------------------------------------------------------------- | ------ |
 | `NEXT_PUBLIC_API_BASE_URL`        | Yes      | Portal: API origin; defaults to `http://localhost:8000`          | Public |
-| `NEXT_PUBLIC_SUPABASE_URL`        | Yes      | Supabase project URL                                             | Public |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Yes      | Sign-in and session refresh only; RLS denies direct table access | Public |
-| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Optional | Portal: Mapbox raster tiles; OpenStreetMap fallback when unset   | Public |
 | `EXPO_PUBLIC_API_BASE_URL`        | Yes      | Driver app: API origin; defaults to `http://localhost:8000`      | Public |
-| `EXPO_PUBLIC_SUPABASE_URL`        | Yes      | Driver app: Supabase project URL                                 | Public |
-| `EXPO_PUBLIC_SUPABASE_ANON_KEY`   | Yes      | Driver app: sign-in and session refresh only                     | Public |
-| `EXPO_PUBLIC_MAPBOX_TOKEN`        | Optional | Driver app: Mapbox raster tiles; OSM fallback when unset         | Public |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | No       | Reserved for raster tiles; the portal map is a local schematic today | Public |
+| `EXPO_PUBLIC_MAPBOX_TOKEN`        | No       | Reserved; the app uses the platform map provider                 | Public |
 
 `NEXT_PUBLIC_*` values are embedded in the browser bundle and `EXPO_PUBLIC_*`
-values in the app bundle. They are protected by key scope, allowed origins and
-rotation, never by secrecy. The service-role key must never appear in either
-client.
+values in the app bundle, so they are public by design. Neither carries a
+secret, and no service-role key may ever appear in either client.
 
 ### 4.3 Secret ownership
 
@@ -805,10 +807,10 @@ client.
 | `COPERNICUS_CLIENT_ID` / `_SECRET`       | Preprocessing environment | Used offline; not present on the runtime host                     |
 | `REDIS_URL`                              | Backend host environment  | May embed a password                                              |
 | `METROFLOW_SENSOR_TOKEN`                 | Backend and gateway       | Generated per deployment; rotated on suspicion                    |
-| `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Vercel project env        | Public by design; anon key is auth-only                           |
-| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`        | Vercel project env        | Public by design; restrict by URL and scope                       |
-| `EXPO_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Driver app env file       | Public by design; anon key is auth-only                           |
-| `EXPO_PUBLIC_MAPBOX_TOKEN`               | Driver app env file       | Public by design; restrict by bundle identifier and scope         |
+| `JWT_SECRET`                             | Backend host environment  | Signs API tokens; the code fallback is development-only           |
+| `NEXT_PUBLIC_API_BASE_URL`               | Vercel project env        | Not a secret; the only variable the portal reads                  |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`        | Vercel project env        | Public by design; unused until the raster map lands               |
+| `EXPO_PUBLIC_API_BASE_URL`               | Driver app env file       | Not a secret; the only variable the app reads                     |
 
 ## 5. Deployment and CI/CD
 

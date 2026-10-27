@@ -6,9 +6,9 @@ Add the following secrets under Settings > Secrets and variables > Actions:
 | Secret | Required | Description |
 | --- | --- | --- |
 | `SUPABASE_DB_URL` | Yes (for migrations) | Session pooler connection string for Supabase Postgres with `?sslmode=require`. Format: `postgresql://postgres.<ref>:<password>@<region>.pooler.supabase.com:5432/postgres` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service role key from Supabase (for backend API) |
 | `DATABASE_URL` | Yes | Database URL used by backend in production |
-| `JWT_SECRET` | Yes | Secret for JWT token signing |
+| `JWT_SECRET` | Yes | Signs the HS256 session tokens the API issues; the code fallback is public and development-only |
+| `SUPABASE_SERVICE_ROLE_KEY` | No | Reserved for evidence storage; no code path reads it yet. Keep it server-side whenever it is added |
 
 ## Web (Vercel)
 | Secret | Required | Description |
