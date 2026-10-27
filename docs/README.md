@@ -135,6 +135,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI      |
 | 1.3     | 27 Oct 2026 | «Project Team» | CR-001 approved; ADR-021 tokens; implementation status aligned with the code |
 | 1.4     | 27 Oct 2026 | «Project Team» | Route-level token enforcement and role checks; LIM-001 and LIM-022 closed |
+| 1.5     | 27 Oct 2026 | «Project Team» | API hosted as a Vercel Python function; portal pointed at it; LIM-023 and LIM-024 recorded |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
@@ -148,7 +149,7 @@ change, per the configuration management rules in the PMP.
 | Driver app (Expo, CR-001)    | `metroflow-mobile/`                               |
 | UI template (client-supplied) | `docs/design/`                                  |
 | Environment templates        | `backend/.env.example`, `metroflow-admin/.env.example`, `metroflow-mobile/.env.example` |
-| OpenAPI document (generated) | `http://localhost:8000/openapi.json`           |
+| OpenAPI document (generated) | `/openapi.json` on the API host, e.g. `https://metroflow-api-siahrays-projects.vercel.app/openapi.json` |
 | CI/CD workflows              | `.github/workflows/`                           |
 | Database migrations          | `backend/migrations/`                          |
 | Agent/contributor notes      | `metroflow-admin/AGENTS.md`                            |

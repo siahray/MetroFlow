@@ -3,10 +3,11 @@
 | Field                     | Value                                                                    |
 | ------------------------- | ------------------------------------------------------------------------ |
 | Document ID               | MF-API-001                                                               |
-| Version                   | 1.2 (Draft)                                                              |
-| Status                    | All sections match `feat/scope-resolution-slice`; §9 is the approved CR-001 contract |
-| Date                      | 22 October 2026                                                          |
+| Version                   | 1.3                                                                      |
+| Status                    | Matches `main` after route enforcement; §9 is the approved CR-001 contract |
+| Date                      | 27 October 2026                                                          |
 | Base URL (local)          | `http://localhost:8000`                                                  |
+| Base URL (hosted)         | `https://metroflow-api-siahrays-projects.vercel.app`                     |
 | Machine-readable contract | `GET /openapi.json`                                                      |
 | Related documents         | [FSD.md](FSD.md), [TSD.md](TSD.md)                                       |
 
