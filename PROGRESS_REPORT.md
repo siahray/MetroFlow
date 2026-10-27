@@ -108,7 +108,7 @@ This is a working pilot, not a production service. Most endpoints still accept u
 | Backend CI | pytest against the unit and contract suites |
 | Web CI | Bun install, ESLint, `next build`, Playwright E2E |
 | Mobile CI | Bun install (`bun.lock`), `tsc --noEmit` |
-| Deploy Web | Vercel project rooted at `metroflow-admin/` |
+| Deploy Web | Vercel Git integration, root `metroflow-admin/` (branch previews, production from `main`; no Actions job) |
 | Deploy Backend | Container image to GHCR |
 
 The mobile app has no `package-lock.json`; Bun is its package manager (TSD LIM-021).
