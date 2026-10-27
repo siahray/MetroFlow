@@ -1,4 +1,9 @@
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Settings() reads ``.env`` for the prefixed fields, but that does not populate
+# os.environ, which the non-prefixed variables (DATABASE_URL, REDIS_URL) rely on.
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -31,6 +36,13 @@ class Settings(BaseSettings):
     caution_depth_cm: float = 10.0
     # Default vehicle clearance used when the client does not supply one.
     default_clearance_cm: float = 30.0
+
+    # --- Bootstrap dispatcher --------------------------------------------------
+    # Registration only ever creates driver accounts, so the first LGU
+    # dispatcher has to come from configuration. These values are used once, when
+    # the user table is empty; set both in any real deployment.
+    admin_email: str = "dispatcher@metroflow.local"
+    admin_password: str = "metroflow-dev"
 
 
 settings = Settings()
