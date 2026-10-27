@@ -7,7 +7,7 @@
 | Version | Date        | Author         | Description                                                        |
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
 | 1.0     | 21 Oct 2026 | «Project Team» | Initial Version                                                    |
-| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver PWA, live hazards, fleet dispatch, sensor ingestion |
+| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch, sensor ingestion |
 | 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI |
 
 ## Approvals
@@ -26,11 +26,11 @@ view of which roads are still passable, so rescue units are delayed and sometime
 routed into water they cannot cross.
 
 MetroFlow addresses this with a flood simulation engine, a clearance-aware
-routing engine, an LGU dispatch portal and a driver PWA. The engine computes
+routing engine, an LGU dispatch portal and a driver app. The engine computes
 street-level flood depth across a road graph; the router returns the fastest
 path a vehicle of a given clearance can actually drive; the portal presents the
 network state, a live map and a triage queue with evidence and an auditable
-action trail; the driver PWA turns verified hazards into navigation warnings and
+action trail; the driver app turns verified hazards into navigation warnings and
 reroutes, and carries field reports back to the operations centre even when the
 network drops.
 
@@ -141,13 +141,13 @@ Appendix A.
 | NFR-015 | API instances can be added horizontally behind a load balancer.                                                    |
 | NFR-016 | Recovery point and recovery time objectives are defined and tested `[TBC]`.                                        |
 | NFR-017 | Times shown in PHT, distances in metres/kilometres, depths in centimetres.                                         |
-| NFR-018 | The driver PWA navigates and accepts reports from the cached corridor when offline `[TBC]`.                        |
+| NFR-018 | The driver app navigates and accepts reports from the cached corridor when offline `[TBC]`.                        |
 | NFR-019 | A published hazard reaches every connected SSE client in 100 ms at p95, server-side.                               |
 | NFR-020 | Every privileged LGU action is role-checked; unauthorised calls return 403 and change nothing.                     |
 | NFR-021 | Driver positions are rounded to 50 m, device ids salted-hashed, and retained at most 24 hours.                     |
 | NFR-022 | Telemetry is throttled to at most one batch per five seconds per device.                                           |
 | NFR-023 | Storm and night themes keep AA text contrast and pair colour with a text or shape cue.                             |
-| NFR-024 | The driver PWA becomes interactive within 5 s on a mid-range phone over 4G `[TBC]`.                                |
+| NFR-024 | The driver app becomes interactive within 5 s on a mid-range phone over 4G `[TBC]`.                                |
 | NFR-025 | The LGU map renders the pilot network and active hazards at a usable frame rate while panning and zooming `[TBC]`. |
 
 ## Risks
@@ -165,8 +165,8 @@ Business-level risks. The full register, scoring and responses are in
 | Personal data incident during testing             | Legal and ethical exposure                 | Synthetic data only; row-level security verified; no personal data in logs                     |
 | Hosted database secret never supplied             | Hosted deployment not demonstrated         | Local stack is the primary demonstration; the CD workflow is gated and visible                 |
 | CR-001 scope exceeds the remaining term           | Schedule overrun; nothing accepted on time | Phase gates; `Must` requirements first; every further addition requires a change request       |
-| Drivers do not adopt the PWA                      | Field evidence stays thin                  | Usability tests from M7; QR onboarding; synthetic reports remain a fallback                    |
-| PWA background limits on iOS                      | Telemetry gaps during navigation           | Foreground-only telemetry; limitation recorded; native build explicitly out of scope           |
+| Drivers do not adopt the app                      | Field evidence stays thin                  | Usability tests from M7; QR onboarding; synthetic reports remain a fallback                    |
+| Background location limits on iOS                 | Telemetry gaps during navigation           | Foreground-only telemetry; limitation recorded                                                  |
 | Driver location privacy incident                  | Legal and ethical exposure                 | Rounding, hashing, 24-hour retention, role-only access, synthetic test data                    |
 | Sensor threshold false positives                  | Unnecessary closures and reroutes          | Advisory state until a dispatcher confirms; threshold configured per sensor                    |
 | Realtime stream overload                          | Late or dropped hazard warnings            | Redis pub/sub, bounded queues, reconnect with a full snapshot                                  |
@@ -223,7 +223,7 @@ BR-018 are the largest open items; CR-001 is the vehicle that closes them.
 - Flood simulation across a defined pilot road graph.
 - Clearance-aware route computation with coordinates, hazard avoidance and turn
   instructions.
-- Driver PWA: destination, turn-by-turn, rerouting, proximity alerts, reports,
+- Driver app: destination, turn-by-turn, rerouting, proximity alerts, reports,
   offline operation, telemetry and SOS.
 - LGU web portal: authenticated login, live MapLibre map, moderation queue,
   evidence desk, drawing tools, fleet monitoring and dispatch.
@@ -290,7 +290,7 @@ place. Those items are recorded in TSD §7 and are not implied by this release.
 | Constraint | C-003 | No paid GitHub Code Security, so CodeQL cannot analyse the private repo   |
 | Constraint | C-004 | Only synthetic or public data may be used                                 |
 | Constraint | C-005 | Credentials are never committed; public keys are restricted by origin     |
-| Constraint | C-006 | The driver client ships as an installable PWA, not a store build          |
+| Constraint | C-006 | The driver client ships as a native Expo app, not a public store release |
 | Constraint | C-007 | No real CCTV feed is available; a labelled demo registry is used          |
 | Constraint | C-008 | Basemap tiles are online-only; offline mode uses the cached graph         |
 | Constraint | C-009 | The pilot is single-LGU and single-region                                 |
@@ -316,13 +316,13 @@ place. Those items are recorded in TSD §7 and are not implied by this release.
 | EXIF              | Photo metadata, including capture time and GPS, when present  |
 | GeoJSON           | JSON encoding of geographic features                          |
 | Hazard polygon    | Verified flood area drawn or approved by the LGU              |
-| IndexedDB         | Browser database used for offline PWA data                    |
+| SQLite            | On-device database used for offline driver data               |
 | LGU               | Local Government Unit                                         |
 | MDRRMC            | Disaster Risk Reduction and Management Council                |
 | Node              | An intersection or endpoint on the road graph                 |
 | Passability       | Whether a vehicle can drive an edge given current water depth |
 | PostGIS           | Spatial extension for PostgreSQL                              |
-| PWA               | Installable progressive web application                       |
+| Expo              | React Native framework used for the native driver app         |
 | RBAC              | Role-based access control                                     |
 | Runoff            | Rainfall that does not infiltrate and flows over the surface  |
 | SCS-CN            | Soil Conservation Service Curve Number runoff method          |

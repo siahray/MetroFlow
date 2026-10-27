@@ -13,7 +13,7 @@ Version 1.2
 | Version     | 1.2                                                              |
 | Prepared By | «Project Team»                                                   |
 | Baseline    | `main` @ `9605e38` (last code commit)                            |
-| Change      | CR-001 adds the driver PWA, event stream, fleet, SOS and sensors |
+| Change      | CR-001 adds the driver app, event stream, fleet, SOS and sensors |
 
 Version 1.2 describes the **target architecture** for CR-001, including the
 approved provider keys and Supabase Auth. Sections marked `Planned` are not
@@ -36,19 +36,19 @@ FSD §Implementation Status for the current position.
 | BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI             |
 | BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy                |
 | BR-012 | FSD-FR-049                           | Reporting and export (planned)                        |
-| BR-013 | FSD-FR-054 to FSD-FR-064             | Driver PWA, routing extensions, SSE client            |
+| BR-013 | FSD-FR-054 to FSD-FR-064             | Driver app, routing extensions, SSE client            |
 | BR-014 | FSD-FR-065 to FSD-FR-081             | Report service, evidence store, moderation            |
 | BR-015 | FSD-FR-073, 074, 087                 | SOS service and distress incidents                    |
 | BR-016 | FSD-FR-075 to FSD-FR-089             | Map UI, fleet service, dispatch engine                |
 | BR-017 | FSD-FR-090, FSD-FR-091               | Sensor service and impact rules                       |
-| BR-018 | FSD-FR-059, 068 to 071               | PWA cache, offline queue, sync                        |
+| BR-018 | FSD-FR-059, 068 to 071               | Native offline cache, queue, sync                     |
 
 ## 1. Solution Architecture
 
 ```text
-   driver PWA (mobile-driver)                    LGU portal (web-lgu)
+   driver app (metroflow-mobile, Expo)           LGU portal (metroflow-admin)
    nav · alerts · report · SOS                   map · moderation · draw · fleet
-   IndexedDB cache · offline queue               SSE client · dispatch
+   SQLite cache · offline queue                  SSE client · dispatch
             │                                              │
             └────────────── HTTPS + SSE ──────────────────┘
                                    │
@@ -66,8 +66,9 @@ FSD §Implementation Status for the current position.
 The API is stateless apart from the evidence volume and Redis: every request
 loads its data from PostgreSQL, and events fan out through Redis, so instances
 can be added horizontally. The portal is a Next.js App Router application; the
-driver client is a separately deployable Vite PWA so that its service worker and
-IndexedDB cache have no server-runtime dependency.
+driver client is a native Expo app built with React Native and Expo Router. It is
+distributed separately from the portal and uses native background tasks, SQLite
+and SecureStore rather than browser storage.
 
 The event path is deliberately narrow. A privileged mutation commits to
 PostgreSQL, writes its audit record, publishes to a Redis channel, and returns;
@@ -84,10 +85,10 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Fail closed at the edges            | Security scan and migration gates block rather than warn              |
 | Honest boundaries                   | Mock data and unimplemented features are labelled, not implied        |
 | One event bus                       | Hazard, fleet and SOS updates follow one publish path                 |
-| Offline is a first-class state      | The PWA models pending, synced and stale rather than assuming online  |
+| Offline is a first-class state      | The driver app models pending, synced and stale, not online-only      |
 | Evidence is untrusted input         | Photos are re-encoded, stripped and size-checked before storage       |
 | Privilege is explicit               | Every mutating LGU route declares the roles allowed to call it        |
-| Design is supplied, not invented    | Portal and PWA UI follow the client HTML/CSS template, not new design |
+| Design is supplied, not invented    | Portal and driver UI follow the client HTML/CSS template, not new design |
 
 ## Application Components
 
@@ -110,7 +111,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Dispatch Service      | BR-016 / FSD-FR-087 to 089           | Distress incidents, assignment, flood-safe rescue route                    |
 | Sensor Service        | BR-017 / FSD-FR-090, 091             | Reading validation, thresholds, impact radius, advisory roads              |
 | Evidence Store        | BR-014 / FSD-FR-066, 067             | Local volume for the pilot; MIME check, re-encode, EXIF strip              |
-| Driver PWA            | BR-013 to BR-018 / FSD-FR-054 to 074 | Navigation, alerts, reports, offline cache and SOS                         |
+| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074 | Navigation, alerts, reports, offline cache and SOS                         |
 | LGU Map UI            | BR-016 / FSD-FR-075, 076, 082–089    | MapLibre layers, draw tools, fleet and dispatch panels                     |
 
 ### Technology stack
@@ -125,10 +126,10 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Database        | PostgreSQL + PostGIS                          | 15 + 3.3 local; 17 hosted                  |
 | Driver          | psycopg2-binary                               | ≥ 2.9.13                                   |
 | Frontend        | Next.js (App Router)                          | 16.4.2                                     |
-| Driver client   | Vite + React PWA                              | Vite 7.x, React 19.3.1                     |
-| PWA tooling     | `vite-plugin-pwa`, `idb`                      | Current at implementation                  |
-| Mapping         | MapLibre GL JS                                | 6.x                                        |
-| UI runtime      | React                                         | 19.3.1                                     |
+| Driver client   | Expo + React Native                           | Expo SDK 58, React Native 0.88, React 19.3 |
+| Mobile tooling  | Expo Router, React Navigation, expo-location   | Current at implementation                  |
+| Mapping         | MapLibre GL JS (portal); react-native-maps (driver) | Current at implementation            |
+| UI runtime      | React (portal); React Native (driver)         | 19.3 / 0.88                                |
 | Styling         | Tailwind CSS                                  | 4.x                                        |
 | UI source       | Client-supplied HTML/CSS template             | Figma-derived; adapted to React components |
 | Package manager | Bun                                           | 1.4.3                                      |
@@ -445,7 +446,7 @@ Full request and response contracts, examples and error bodies are in
 | Service-role key confined to the backend; never shipped to a client                    | BR-011 / FSD-FR-051          |
 | Evidence upload validation: MIME sniff, size cap, re-encode and EXIF strip             | BR-014 / FSD-FR-066, 067     |
 | Rate limits on login, reports, telemetry and SOS                                       | BR-009 / FSD-FR-092          |
-| CORS allowlist for the portal and driver PWA                                           | BR-011 / FSD-FR-051          |
+| CORS allowlist for the portal; bearer tokens for the native app                        | BR-011 / FSD-FR-051          |
 | Location minimisation: 50 m rounding, salted hash, 24-hour retention                   | BR-011 / NFR-021             |
 | Immutable audit writes for privileged actions                                          | BR-008 / FSD-FR-093          |
 | Authenticated SSE subscriptions                                                        | BR-013 / FSD-FR-086          |
@@ -456,7 +457,7 @@ Full request and response contracts, examples and error bodies are in
 | ID      | Risk                                              | Severity | Disposition                                                                 |
 | ------- | ------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
 | SEC-001 | Baseline API has no authentication                | High     | CR-001 makes Supabase Auth/RBAC a release gate; do not expose baseline data |
-| SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal/PWA allowlist in CR-001                               |
+| SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist in CR-001; the app uses bearer tokens        |
 | SEC-003 | Baseline has no rate limiting                     | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS               |
 | SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Activates automatically when public or licensed                             |
 | SEC-005 | Audit hash column has no write path               | Low      | Implement with FSD-FR-093                                                   |
@@ -465,7 +466,7 @@ Full request and response contracts, examples and error bodies are in
 | SEC-008 | Driver location can be re-identified              | Medium   | Round, hash the device id, restrict access, purge after 24 hours            |
 | SEC-009 | Demo CCTV may be mistaken for live footage        | Medium   | Label the feed as demo in the API and UI                                    |
 | SEC-010 | A sensor reading can be spoofed                   | Medium   | Gateway credential, sensor allowlist, range and timestamp checks            |
-| SEC-011 | PWA session theft on a shared device              | Medium   | Short-lived access token; refresh token cleared on sign-out                 |
+| SEC-011 | Driver app session theft on a shared device       | Medium   | Short-lived access token in device storage; refresh token cleared on sign-out |
 | SEC-012 | Service-role key leak bypasses every RLS policy   | High     | Server-only storage, no client bundling, rotation on suspicion              |
 | SEC-013 | Public keys or provider credentials exhaust quota | Medium   | URL and scope restrictions, usage alerts, OSM and manual fallback           |
 
@@ -617,7 +618,7 @@ at the seam. A straight line is used when geometry is missing.
 The server is authoritative for hazard avoidance. A route is computed against
 the current active hazards: any edge whose geometry intersects an active
 `FLOOD` polygon or `CLOSURE` line is excluded when its obstruction level blocks
-the vehicle. The PWA performs the same test on the remaining route only to
+the vehicle. The driver app performs the same test on the remaining route only to
 decide whether to ask for a new route; it never invents a path locally.
 
 ```text
@@ -756,7 +757,7 @@ supplied in a local `.env`.
 | `METROFLOW_CAUTION_DEPTH_CM`        | 10.0                   | Light-flood threshold                                            | Server config  |
 | `METROFLOW_DEFAULT_CLEARANCE_CM`    | 30.0                   | Clearance when omitted                                           | Server config  |
 | `RUN_MIGRATIONS`                    | true                   | Apply migrations on container start                              | Server config  |
-| `METROFLOW_CORS_ORIGINS`            | localhost origins      | Comma-separated portal and PWA origins                           | Server config  |
+| `METROFLOW_CORS_ORIGINS`            | localhost origins      | Comma-separated portal origins; the app uses bearer tokens        | Server config  |
 | `METROFLOW_UPLOAD_DIR`              | `/data/evidence`       | Evidence volume mount                                            | Server config  |
 | `METROFLOW_MAX_UPLOAD_MB`           | 8                      | Photo size cap                                                   | Server config  |
 | `METROFLOW_DRIVER_RETENTION_HOURS`  | 24                     | Driver location purge window                                     | Server config  |
@@ -769,20 +770,28 @@ existing deployment does not break; new configuration uses `REDIS_URL`.
 Authentication settings are Supabase project settings, not MetroFlow variables;
 there is no MetroFlow-issued token signing secret.
 
-### 4.2 Portal and driver PWA
+### 4.2 Portal and driver app
 
-Both clients read the same public variables. The driver PWA configures Vite with
-`envPrefix: ['VITE_', 'NEXT_PUBLIC_']` so one set of names serves both apps.
+Both clients read the same public values. The portal reads `NEXT_PUBLIC_*` at
+build time and the Expo app reads `EXPO_PUBLIC_*` at build time. Both are public
+by design and may point at the same Supabase project and Mapbox token; only the
+variable names differ by platform.
 
 | Variable                          | Required | Effect                                                           | Class  |
 | --------------------------------- | -------- | ---------------------------------------------------------------- | ------ |
+| `NEXT_PUBLIC_API_BASE_URL`        | Yes      | Portal: API origin; defaults to `http://localhost:8000`          | Public |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Yes      | Supabase project URL                                             | Public |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Yes      | Sign-in and session refresh only; RLS denies direct table access | Public |
-| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Optional | Mapbox raster tiles; OpenStreetMap fallback when unset           | Public |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Optional | Portal: Mapbox raster tiles; OpenStreetMap fallback when unset   | Public |
+| `EXPO_PUBLIC_API_BASE_URL`        | Yes      | Driver app: API origin; defaults to `http://localhost:8000`      | Public |
+| `EXPO_PUBLIC_SUPABASE_URL`        | Yes      | Driver app: Supabase project URL                                 | Public |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY`   | Yes      | Driver app: sign-in and session refresh only                     | Public |
+| `EXPO_PUBLIC_MAPBOX_TOKEN`        | Optional | Driver app: Mapbox raster tiles; OSM fallback when unset         | Public |
 
-`NEXT_PUBLIC_*` values are embedded in the browser bundle. They are protected by
-key scope, allowed origins and rotation, never by secrecy. The service-role key
-must never appear in either client.
+`NEXT_PUBLIC_*` values are embedded in the browser bundle and `EXPO_PUBLIC_*`
+values in the app bundle. They are protected by key scope, allowed origins and
+rotation, never by secrecy. The service-role key must never appear in either
+client.
 
 ### 4.3 Secret ownership
 
@@ -798,6 +807,8 @@ must never appear in either client.
 | `METROFLOW_SENSOR_TOKEN`                 | Backend and gateway       | Generated per deployment; rotated on suspicion                    |
 | `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Vercel project env        | Public by design; anon key is auth-only                           |
 | `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`        | Vercel project env        | Public by design; restrict by URL and scope                       |
+| `EXPO_PUBLIC_SUPABASE_URL` / `_ANON_KEY` | Driver app env file       | Public by design; anon key is auth-only                           |
+| `EXPO_PUBLIC_MAPBOX_TOKEN`               | Driver app env file       | Public by design; restrict by bundle identifier and scope         |
 
 ## 5. Deployment and CI/CD
 
@@ -808,7 +819,7 @@ must never appear in either client.
 | `postgres` | `postgis/postgis:15-3.3-alpine`            | 5432 | `pg_isready`         |
 | `redis`    | `redis:7-alpine`                           | 6379 | `redis-cli ping`     |
 | `backend`  | built from `backend/Dockerfile`            | 8000 | `curl /openapi.json` |
-| `mobile`   | `mobile-driver/` Vite dev server (planned) | 5173 | `bun run dev`        |
+| `mobile`   | `metroflow-mobile/` Expo Metro dev server | 8081 | `bun run start`      |
 
 Redis carries the hazard, fleet and SOS event channels and the rate-limit and
 telemetry counters. It is no longer a provisioned-but-unused container once
@@ -841,8 +852,8 @@ only data path.
 | Workflow                      | Trigger                                     | Gate                                                            |
 | ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
 | Backend CI                    | Push/PR touching `backend/**`; manual       | Unit tests, contract tests, `alembic upgrade`, `alembic check`  |
-| Web CI                        | Push/PR touching `web-lgu/**`; manual       | Bun install, ESLint, `bun test`, `next build`, Playwright E2E   |
-| Mobile CI                     | Push/PR touching `mobile-driver/**`; manual | Bun install, ESLint, `bun test`, PWA production build           |
+| Web CI                        | Push/PR touching `metroflow-admin/**`; manual       | Bun install, ESLint, `bun test`, `next build`, Playwright E2E   |
+| Mobile CI                     | Push/PR touching `metroflow-mobile/**`; manual | npm install, `tsc --noEmit`, `npm run lint`                    |
 | Security — OWASP ZAP API Scan | Weekly cron and manual                      | Fails on findings at or above threshold; no `continue-on-error` |
 | Security — CodeQL             | Push/PR to `main`, weekly, manual           | Skips with a visible warning when code scanning is unavailable  |
 | Supabase — Apply migrations   | After Backend CI succeeds on `main`; manual | Serialised; no-ops without `SUPABASE_DB_URL`                    |
@@ -876,7 +887,7 @@ change ──► pull request ──► Backend CI ──┐
 | ADR-011 | Portal ships with mock incident data                     | Block the UI until intake exists     | Demonstrates the workflow and fixes the visual contract early                                                                 | Superseded by CR-001            |
 | ADR-012 | Security headers in middleware                           | Reverse proxy only                   | Headers exist even without a proxy, which is how ZAP sees the app                                                             | Accepted                        |
 | ADR-013 | Redis provisioned but unused                             | Remove it                            | Keeps parity with the intended production topology                                                                            | Accepted; activates with CR-001 |
-| ADR-014 | Driver client is an installable PWA                      | Native iOS/Android, Expo             | One codebase, real service worker and IndexedDB, testable without an emulator; store builds are out of scope                  | Proposed (CR-001)               |
+| ADR-014 | Driver client is a native Expo app                       | Progressive web app, bare React Native | Native background location, push notifications, SQLite/SecureStore and app distribution; Expo Router keeps one TypeScript codebase | Proposed (CR-001); direction selected 22 Oct 2026 |
 | ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Proposed (CR-001)               |
 | ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Proposed (CR-001)               |
 | ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Proposed (CR-001)               |
@@ -902,11 +913,11 @@ change ──► pull request ──► Backend CI ──┐
 | LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | Define RPO/RTO and test restore                                                                              |
 | LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                         | Documented in migration rules                                                                                |
 | LIM-014 | Seeded graph is four nodes                         | Routing demonstration is narrow                  | Import the real road network                                                                                 |
-| LIM-015 | Driver app is not distributed through an app store | Users install it from the browser                | Accepted for the pilot; native build out of scope                                                            |
+| LIM-015 | Driver app is not distributed through public app stores | Users need an EAS or TestFlight build        | Internal distribution for the pilot; public store release is a separate gate                                 |
 | LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration          | Agreement and feed integration post-pilot                                                                    |
 | LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic      | Optional tile cache if storage and licensing allow                                                           |
 | LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
-| LIM-019 | Authentication requires Supabase reachability      | An offline PWA cannot refresh an expired session | Cached session within its grace period; explicit re-authentication once online; no privileged offline action |
+| LIM-019 | Authentication requires Supabase reachability      | An offline app cannot refresh an expired session | Cached session within its grace period; explicit re-authentication once online; no privileged offline action |
 | LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | OSM fallback, manual rainfall override, cached derived data and labelled degradation                         |
 
 ## 8. Repository and Commands
@@ -931,11 +942,13 @@ MetroFlow/
 │   ├── tests/               unit and integration suites
 │   ├── Dockerfile
 │   └── entrypoint.sh
-├── web-lgu/                 Next.js LGU portal (template-derived UI, map, queue, dispatch)
-├── mobile-driver/           Vite React PWA (CR-001)
-│   ├── src/                 template-derived UI, navigation, reports, offline, SOS
-│   ├── public/              manifest and icons
-│   └── vite.config.ts       PWA and build configuration
+├── metroflow-admin/                 Next.js LGU portal (template-derived UI, map, queue, dispatch)
+├── metroflow-mobile/        Expo React Native app (CR-001)
+│   ├── src/app/             Expo Router routes and screens
+│   ├── src/components/      template-derived UI and screens
+│   ├── src/constants/       driver design tokens and copy
+│   ├── assets/              app icon, adaptive icon and splash
+│   └── app.json             Expo configuration
 ├── docs/                    this document set
 ├── scripts/                 pre-commit helper and doc builder
 ├── .github/workflows/       CI/CD
@@ -950,11 +963,11 @@ MetroFlow/
 | Check drift        | `cd backend && alembic check`                       |
 | Unit tests         | `cd backend && pytest -m "not integration"`         |
 | Contract tests     | `cd backend && pytest -m integration`               |
-| Run the portal     | `cd web-lgu && bun run dev`                         |
-| Run the driver PWA | `cd mobile-driver && bun run dev`                   |
-| Web tests          | `cd web-lgu && bun test`                            |
-| Driver tests       | `cd mobile-driver && bun test`                      |
-| Browser E2E        | `cd web-lgu && bunx playwright test`                |
-| Lint and build     | `cd web-lgu && bun run lint && bun run build`       |
-| Driver build       | `cd mobile-driver && bun run lint && bun run build` |
+| Run the portal     | `cd metroflow-admin && bun run dev`                         |
+| Run the driver app | `cd metroflow-mobile && bun run start`               |
+| Web tests          | `cd metroflow-admin && bun test`                            |
+| Driver checks      | `cd metroflow-mobile && bunx tsc --noEmit`                  |
+| Browser E2E        | `cd metroflow-admin && bunx playwright test`                |
+| Lint and build     | `cd metroflow-admin && bun run lint && bun run build`       |
+| Driver export      | `cd metroflow-mobile && bunx expo export`                   |
 | Inspect contract   | `curl http://localhost:8000/openapi.json`           |

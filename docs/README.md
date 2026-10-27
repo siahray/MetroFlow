@@ -6,7 +6,7 @@ documents, the API reference, and the Word templates the documents follow.
 
 **Document baseline:** v1.2 (CR-001) · **Code baseline:** `main` @ `9605e38` · 22 October 2026
 
-CR-001 extends the scope to the driver PWA, live hazard publication, fleet
+CR-001 extends the scope to the driver app, live hazard publication, fleet
 dispatch and sensor ingestion. The implementation is **planned**; the documents
 describe the target behaviour and label the status honestly.
 
@@ -20,7 +20,7 @@ describe the target behaviour and label the status honestly.
 | Functional Specification       | [FSD.md](FSD.md)                                   | MF-FSD-001 | Defines actors, functional requirements, screens and tests           | Developers, QA, panel   |
 | Technical Specification        | [TSD.md](TSD.md)                                   | MF-TSD-001 | Defines architecture, algorithms, data design, security and CI/CD    | Developers, panel       |
 | Project Management Plan        | [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) | MF-PMP-001 | Defines schedule, quality, risk, communications and change control   | Team, adviser           |
-| Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the driver PWA, hazards, fleet, sensors | Sponsor, team, panel    |
+| Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the driver app, hazards, fleet, sensors | Sponsor, team, panel    |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
 
 ## Document templates
@@ -106,7 +106,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | ------- | ----------- | -------------- | ----------------------------------------------------------------------- |
 | 0.1     | 21 Oct 2026 | «Project Team» | Initial draft of the six project documents and the API reference        |
 | 1.0     | 21 Oct 2026 | «Project Team» | Restructured to the supplied Word templates; template identifier scheme |
-| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver PWA, live hazards, fleet dispatch and sensors            |
+| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch and sensors            |
 | 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI      |
 
 Each document carries its own revision history and approval block. A change to
@@ -117,11 +117,11 @@ change, per the configuration management rules in the PMP.
 
 | Material                     | Location                                       |
 | ---------------------------- | ---------------------------------------------- |
-| Runnable system              | `backend/`, `web-lgu/`, `docker-compose.yml`   |
-| Driver PWA (planned, CR-001) | `mobile-driver/`                               |
+| Runnable system              | `backend/`, `metroflow-admin/`, `docker-compose.yml`   |
+| Driver app (planned, CR-001) | `metroflow-mobile/`                               |
 | UI template (to be supplied) | Client HTML/CSS, Figma-derived                 |
-| Environment templates        | `backend/.env.example`, `web-lgu/.env.example` |
+| Environment templates        | `backend/.env.example`, `metroflow-admin/.env.example`, `metroflow-mobile/.env.example` |
 | OpenAPI document (generated) | `http://localhost:8000/openapi.json`           |
 | CI/CD workflows              | `.github/workflows/`                           |
 | Database migrations          | `backend/migrations/`                          |
-| Agent/contributor notes      | `web-lgu/AGENTS.md`                            |
+| Agent/contributor notes      | `metroflow-admin/AGENTS.md`                            |

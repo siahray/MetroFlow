@@ -12,7 +12,7 @@ Version 1.2
 | Prepared By | «Project Team»                                                                 |
 | Version     | 1.2                                                                            |
 | Status      | For Review — CR-001 planned                                                    |
-| Change      | CR-001 extends the FSD to the driver PWA, live map, fleet dispatch and sensors |
+| Change      | CR-001 extends the FSD to the driver app, live map, fleet dispatch and sensors |
 
 Version 1.2 records the provider configuration, Supabase Auth, Mapbox tiles and
 template-sourced UI under [CR-001](CR-001.md). It adds `TC-045` and `TC-046` for
@@ -227,7 +227,7 @@ provider fallback. Existing identifiers are unchanged.
 | GitHub Actions        | BR-008  | FSD-FR-047             | Automated tests, security scan and schema migration     |
 | Hazard event stream   | BR-013  | FSD-FR-059, FSD-FR-086 | SSE feed of published, updated and withdrawn hazards    |
 | Report upload API     | BR-014  | FSD-FR-065 to 067      | Multipart report with photo, depth and GPS metadata     |
-| Device camera and GPS | BR-014  | FSD-FR-066, FSD-FR-067 | Browser media and geolocation APIs in the PWA           |
+| Device camera and GPS | BR-014  | FSD-FR-066, FSD-FR-067 | Camera and geolocation modules in the native app        |
 | Map tile source       | BR-013  | FSD-FR-056, FSD-FR-075 | Mapbox raster via MapLibre; OSM fallback; graph offline |
 | Sensor gateway        | BR-017  | FSD-FR-090             | River and rain gauge readings with identity             |
 | Redis pub/sub         | BR-018  | FSD-FR-086             | Fan-out for hazard, fleet and SOS events                |
@@ -346,15 +346,15 @@ statement; the FSD identifiers above remain stable as items move.
 | Audit and administration | FSD-FR-047 to 049 | Planned     | Entity exists; no write path                        |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
 | Authentication and RBAC  | FSD-FR-092, 093   | Planned     | CR-001; Supabase Auth, roles and audit writes       |
-| Driver navigation        | FSD-FR-054 to 064 | Planned     | CR-001; PWA, MapLibre, turn-by-turn, reroute        |
+| Driver navigation        | FSD-FR-054 to 064 | Planned     | CR-001; Expo app, MapLibre, turn-by-turn, reroute   |
 | Field reporting          | FSD-FR-065 to 067 | Planned     | CR-001; multipart upload, depth, EXIF               |
-| Offline operation        | FSD-FR-068 to 071 | Planned     | CR-001; IndexedDB queue, cached graph               |
+| Offline operation        | FSD-FR-068 to 071 | Planned     | CR-001; on-device queue, cached graph               |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Planned     | CR-001; throttled pings, distress request           |
 | Live operational map     | FSD-FR-075, 076   | Planned     | CR-001; MapLibre layers, fleet panel                |
 | Moderation and evidence  | FSD-FR-077 to 081 | Planned     | CR-001; API queue, evidence desk, decisions         |
 | Hazard authoring         | FSD-FR-082 to 086 | Planned     | CR-001; draw, obstruction level, publish, SSE       |
 | Distress and dispatch    | FSD-FR-087 to 089 | Planned     | CR-001; incidents, nearest unit, rescue route       |
-| Portal and PWA UI        | FSD-FR-054 to 089 | Planned     | Template-derived UI; implementation not started     |
+| Portal and driver app UI | FSD-FR-054 to 089 | Planned     | Template-derived UI; implementation not started     |
 | Sensor ingestion         | FSD-FR-090, 091   | Planned     | CR-001; readings, threshold impact                  |
 
 ## Actors
@@ -363,11 +363,11 @@ statement; the FSD identifiers above remain stable as items move.
 | ------- | ------------------ | -------------------------------------- | -------------------------------------- |
 | ACT-001 | Dispatcher         | Verifies reports and commits resources | Portal, no authentication              |
 | ACT-002 | MDRRMC commander   | Oversees operations across barangays   | Not distinguished from dispatcher      |
-| ACT-003 | Field responder    | Consumes route guidance                | None (planned driver PWA, CR-001)      |
+| ACT-003 | Field responder    | Consumes route guidance                | None (planned driver app, CR-001)      |
 | ACT-004 | Citizen reporter   | Submits reports                        | None (planned report API, CR-001)      |
 | ACT-005 | Administrator      | Manages users and configuration        | None (future)                          |
 | ACT-006 | Integration client | Calls the API programmatically         | Open in baseline; bearer token planned |
-| ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | None (planned PWA, CR-001)             |
+| ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | None (planned Expo app, CR-001)        |
 | ACT-008 | Rescue commander   | Approves dispatch and rescue routes    | None (planned, CR-001)                 |
 | ACT-009 | Sensor gateway     | Posts river and rain gauge readings    | None (planned, CR-001)                 |
 | ACT-010 | CCTV demo feed     | Labelled reference footage in evidence | None (demo registry, CR-001)           |
@@ -469,7 +469,7 @@ Requirements: FSD-FR-054 to 064.
 
 ### UC-008 — Report a hazard while offline
 
-Actor: driver. Precondition: the PWA is open with location permission.
+Actor: driver. Precondition: the app is open with location permission.
 Postcondition: the report is queued and later reaches the moderation queue once.
 
 1. Driver selects the depth: `Ankle-Deep`, `Knee-Deep` or `Impassable`.
@@ -550,7 +550,7 @@ Requirements: FSD-FR-090, FSD-FR-091.
 
 ## Out of Scope for This Release
 
-- Native iOS and Android store builds; the driver client is an installable PWA.
+- Public App Store and Play Store releases; pilot distribution uses EAS internal builds.
 - Real CCTV integration; a labelled demo feed registry is used.
 - Production SMS, telephony or carrier delivery for SOS.
 - Offline basemap tiles; offline mode renders the cached road graph.

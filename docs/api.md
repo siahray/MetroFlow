@@ -47,7 +47,7 @@ oversight.
 
 Under CR-001, clients sign in through Supabase Auth and privileged endpoints
 require the resulting bearer token. The portal keeps the session in an HttpOnly
-cookie; the driver PWA holds a short-lived access token in memory. The API
+cookie; the driver app holds a short-lived access token in device storage. The API
 verifies tokens through the project JWKS and enforces roles server-side. The
 anon key is used only for sign-in and session refresh; it never grants table
 access. Planned scopes are described in §9.
@@ -64,7 +64,8 @@ Every response carries:
 | `X-Frame-Options`              | `DENY`                            |
 
 CORS currently allows any origin, including credentialed requests (TSD
-SEC-002). CR-001 replaces this with a portal and PWA allowlist.
+SEC-002). CR-001 replaces this with a portal allowlist; the native app uses
+bearer tokens and package identifiers rather than an origin.
 
 ### 1.4 Passability status
 
@@ -89,8 +90,8 @@ Both comparisons are inclusive. `clearance_cm` defaults to 30 cm and must be
 
 | Service        | Consumed by    | Role                                         |
 | -------------- | -------------- | -------------------------------------------- |
-| Supabase Auth  | Portal and PWA | Sign-in, session refresh; API verifies JWKS  |
-| Mapbox         | Portal and PWA | Raster basemap; OSM fallback when unset      |
+| Supabase Auth  | Portal and driver app | Sign-in, session refresh; API verifies JWKS  |
+| Mapbox         | Portal and driver app | Raster basemap; OSM fallback when unset      |
 | OpenWeather    | Backend        | Optional rainfall; manual entry fallback     |
 | OpenTopography | Preprocessing  | Terrain model; cached, not called at runtime |
 | Copernicus     | Preprocessing  | Imagery and land cover; cached               |

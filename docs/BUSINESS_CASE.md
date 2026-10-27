@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-**Version 1.2** — revised by [CR-001](CR-001.md) to include the driver PWA,
+**Version 1.2** — revised by [CR-001](CR-001.md) to include the driver app,
 live hazard publication, fleet dispatch, sensor ingestion, provider keys and
 template-sourced UI. Monetary figures remain `[TBC]`.
 
@@ -28,11 +28,12 @@ cheaper, but because the two capabilities that create the value
 LGU owns) are the two that commercial platforms customise least and charge most
 for.
 
-The pilot is scoped to one corridor and deliberately excludes native app-store
-builds, real CCTV, carrier-grade SOS and multi-LGU tenancy. It now includes the
-driver side of the loop: an installable PWA, live hazard publication, fleet
-dispatch and labelled sensor ingestion. That extension is the CR-001 increment
-and is costed separately so the baseline commitment remains visible.
+The pilot is scoped to one corridor and deliberately excludes public App Store
+and Play Store releases, real CCTV, carrier-grade SOS and multi-LGU tenancy. It
+now includes the driver side of the loop: a native Expo app, live hazard
+publication, fleet dispatch and labelled sensor ingestion. That extension is the
+CR-001 increment and is costed separately so the baseline commitment remains
+visible.
 
 All monetary figures are `[TBC]` pending quotations. The cost model and formulae
 are complete so figures can be inserted without reworking the document.
@@ -139,9 +140,9 @@ and fits the academic term.
 
 The recommendation is conditional on:
 
-1. CR-001 being approved and its boundary held: installable PWA rather than
-   native store builds, labelled demo CCTV, simulated gauges where real data is
-   unavailable, and no carrier-grade SOS.
+1. CR-001 being approved and its boundary held: native Expo app with EAS
+   internal distribution rather than a public store release, labelled demo CCTV,
+   simulated gauges where real data is unavailable, and no carrier-grade SOS.
 2. Baseline data collection scheduled in M1 so benefits can be measured.
 3. Supabase Auth and RBAC (BR-009) delivered as a release gate, not
    deferred past acceptance.
@@ -156,7 +157,7 @@ The recommendation is conditional on:
 | No. | Category                               | Basis                      | Amount (PHP) |
 | --- | -------------------------------------- | -------------------------- | ------------ |
 | 1   | Baseline development effort            | «N» person-months × «rate» | [TBC]        |
-| 2   | CR-001 increment: PWA, realtime, fleet | «N» person-months × «rate» | [TBC]        |
+| 2   | CR-001 increment: native app, realtime, fleet | «N» person-months × «rate» | [TBC]        |
 | 3   | Test devices and data                  | «Institution»              | [TBC]        |
 | 4   | Contingency                            | 10% of the above           | [TBC]        |
 |     | **Total CAPEX**                        |                            | **[TBC]**    |
@@ -170,7 +171,7 @@ The recommendation is conditional on:
 | 3   | Domain and TLS                    | Registrar                      | [TBC]     | [TBC]     | [TBC]     |
 | 4   | Training and handover             | «N» days × «rate»              | [TBC]     | —         | —         |
 | 5   | Maintenance and support           | 15–20% of development per year | —         | [TBC]     | [TBC]     |
-| 6   | PWA hosting and CDN               | Plan                           | [TBC]     | [TBC]     | [TBC]     |
+| 6   | EAS build and app distribution    | Plan                           | [TBC]     | [TBC]     | [TBC]     |
 | 7   | Evidence photo storage            | Volume or object storage       | [TBC]     | [TBC]     | [TBC]     |
 | 8   | Redis / event infrastructure      | Plan                           | [TBC]     | [TBC]     | [TBC]     |
 | 9   | Map, weather and imagery services | Plan                           | [TBC]     | [TBC]     | [TBC]     |
@@ -185,7 +186,7 @@ The recommendation is conditional on:
 | CA-003 | All libraries used are open source; no licence fees                                                                                    |
 | CA-004 | Training is delivered to a small group (≤ 10 users) at the operations centre                                                           |
 | CA-005 | Year-2 maintenance assumes dependency and security updates only, no major feature work                                                 |
-| CA-006 | The driver client is a PWA, so there are no app-store fees or native build pipeline costs                                              |
+| CA-006 | The driver client is a native Expo app. Any Apple/Google developer-program fee, signing cost or paid store account is outside the no-fee boundary and remains `[TBC]`; EAS internal builds are the preferred no-cost path |
 | CA-007 | Evidence storage grows with report volume; the pilot assumes a capped volume and a documented retention period `[TBC]`                 |
 | CA-008 | Simulated gauges and demo CCTV carry no data-supplier licence in the pilot                                                             |
 | CA-009 | Mapbox, OpenWeather, OpenTopography and Copernicus usage stays within free or institutional tiers; overage is `[TBC]`                  |
@@ -200,7 +201,7 @@ The recommendation is conditional on:
 | BEN-004 | Accountable decision trail               | Tangible   | Percentage of decisions with actor, time and rationale  | MDRRMC          |
 | BEN-005 | Shared situational picture               | Intangible | Dispatcher feedback; one source of truth in use         | Operations lead |
 | BEN-006 | Institutional learning                   | Intangible | Post-event review possible from exported logs           | MDRRMC          |
-| BEN-007 | Reusable technical capability            | Intangible | Routing and simulation reused by the driver PWA         | «Project Team»  |
+| BEN-007 | Reusable technical capability            | Intangible | Routing and simulation reused by the driver app         | «Project Team»  |
 | BEN-008 | Drivers avoid verified flooded roads     | Tangible   | Hazard encounters per 100 active routes                 | Operations lead |
 | BEN-009 | Faster field observation to verification | Tangible   | Median report submission → publish minutes              | Operations lead |
 | BEN-010 | Better use of available rescue units     | Tangible   | Units assigned within the target time / available units | Rescue command  |
@@ -233,9 +234,9 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 | Dispatchers reject the tool                | Adoption fails regardless of capability | Usability sessions from M3; keep the radio process running in parallel                |
 | A commercial alternative is chosen later   | Sunk cost                               | Publish the API contract so the routing engine outlives the portal                    |
 | Personal data incident during testing      | Legal and ethical exposure              | Synthetic data only; RLS verified; no personal data in logs                           |
-| Drivers do not adopt the PWA               | Field evidence stays thin               | Usability tests; QR onboarding; synthetic reports as fallback                         |
+| Drivers do not adopt the app               | Field evidence stays thin               | Usability tests; QR onboarding; synthetic reports as fallback                         |
 | Location data re-identifies a driver       | Privacy breach and legal exposure       | 50 m rounding, salted hash, 24-hour retention, role-only access                       |
-| PWA background limits on iOS               | Telemetry gaps                          | Foreground-only telemetry; documented limitation; native build excluded               |
+| Background location limits on iOS          | Telemetry gaps                          | Foreground-only telemetry; documented limitation                                      |
 | Sensor or demo CCTV mistaken for live data | Wrong operational decision              | Label simulated and demo sources in the API and UI                                    |
 
 Full scoring and owners are in [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
@@ -297,7 +298,7 @@ model above is the worksheet; no figure in this section is assumed.
 | M6  | Baseline documentation accepted     | Week 16 · [TBC] |
 | M7  | Realtime, reports and fleet API     | Week 18 · [TBC] |
 | M8  | LGU map, moderation and dispatch    | Week 20 · [TBC] |
-| M9  | Driver PWA, sensors and defence     | Week 22 · [TBC] |
+| M9  | Driver app, sensors and defence     | Week 22 · [TBC] |
 
 Approval is requested at M1; the baseline demonstration is M6 and the final
 CR-001 demonstration is M9. The schedule assumes one academic term, part-time
@@ -321,9 +322,9 @@ effort and a six-week increment `[TBC]`.
 | A-001 | A PostGIS-capable database is available                              | Core capability cannot be demonstrated  |
 | A-003 | Free or institutional tiers suffice                                  | Additional recurring cost               |
 | A-004 | Dispatchers have a modern browser and connectivity                   | Portal unusable during an event         |
-| A-007 | Drivers have a smartphone with camera and geolocation                | Driver PWA cannot be piloted            |
+| A-007 | Drivers have a smartphone with camera and geolocation                | Driver app cannot be piloted            |
 | A-008 | Connectivity can drop during an event                                | Offline mode is essential, not optional |
-| C-006 | The driver client is a PWA, not a store build                        | Distribution limited to browser install |
+| C-006 | The driver client is a native Expo app; public store release is a later gate | Distribution limited to EAS/TestFlight for the pilot |
 | D-001 | Hosted database credentials are supplied as a repository secret      | Hosted migration not demonstrated       |
 | D-003 | Client confirms the pilot corridor                                   | Seed data and demonstration rework      |
 | D-004 | Supabase credentials and pilot accounts are supplied at deployment   | Authentication cannot start             |
@@ -341,7 +342,7 @@ conditions in §6.
 | Decision maker     | «Project Sponsor»                                                      |
 | Decision           | [TBC]                                                                  |
 | Date               | [TBC]                                                                  |
-| Conditions         | CR-001 boundary, Supabase Auth/RBAC gate, labelled demo data, PWA only |
+| Conditions         | CR-001 boundary, Supabase Auth/RBAC gate, labelled demo data, Expo native app |
 | Budget approved    | PHP [TBC]                                                              |
 
 | Role            | Name                    | Signature | Date  |
