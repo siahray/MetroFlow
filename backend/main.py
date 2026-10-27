@@ -154,7 +154,12 @@ async def lifespan(app: FastAPI):
     # entrypoint and CI run `alembic upgrade head` before this starts.
     db = next(get_db())
     try:
-        seed_database(db)
+        # Demo nodes and edges exist so a fresh development database renders a
+        # map. A real deployment supplies its own network data, so FASTAPI_ENV
+        # gates the seed (TSD §4.1). The bootstrap dispatcher is still created,
+        # because registration cannot mint an administrative role.
+        if settings.is_development:
+            seed_database(db)
         seed_dispatcher_account(db)
         result = backfill_geometry(db)
         print(
@@ -171,13 +176,21 @@ app = FastAPI(
     description="Intelligent Urban Mobility & Flood Simulation System",
     version="1.0.0",
     lifespan=lifespan,
+    # Interactive docs are a development aid; production serves the schema to
+    # clients but no Swagger or ReDoc UI (TSD §4.1).
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url="/openapi.json",
 )
 
-# Enable CORS for Next.js & React Native Frontend Clients
+# CORS for the Next.js portal. The Expo app is native and sends no Origin, so it
+# is unaffected by this list. credentials are only advertised for an explicit
+# allowlist: a wildcard and credentials cannot be combined safely (TSD SEC-002).
+_cors_origins = settings.cors_origin_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -575,10 +588,10 @@ def send_verification(request: SendVerifyRequest):
 
         create_code = verification_store.create_code
     code = create_code(request.email)
-    # In production, send via email. For now, still return code for dev; in prod remove.
-    import os
-
-    if os.getenv("ENV") == "production":
+    # There is no mail transport yet, so the code is only ever returned in
+    # development and test. Production answers without it rather than leaking a
+    # usable code to the caller.
+    if settings.is_production:
         return {"message": "Verification code sent to email"}
     return {"message": "Verification code sent", "code": code}
 
@@ -714,6 +727,8 @@ def update_hazard(hazard_id: int, hazard: HazardUpdate, db: Session = Depends(ge
         db_hazard.obstruction_level = hazard.obstruction_level
     if hazard.avg_depth_cm is not None:
         db_hazard.avg_depth_cm = hazard.avg_depth_cm
+    if hazard.edge_id is not None:
+        db_hazard.edge_id = hazard.edge_id
     if hazard.active is not None:
         db_hazard.active = hazard.active
     if hazard.notes is not None:

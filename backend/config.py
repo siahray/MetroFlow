@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Settings() reads ``.env`` for the prefixed fields, but that does not populate
@@ -18,7 +19,20 @@ class Settings(BaseSettings):
         env_prefix="METROFLOW_",
         env_file=".env",
         extra="ignore",
+        # Lets tests build a Settings with field names instead of env aliases.
+        populate_by_name=True,
     )
+
+    # --- Runtime mode ----------------------------------------------------------
+    # ``FASTAPI_ENV`` deliberately carries no prefix: it is a deployment switch,
+    # not a calibration knob. The alias means the prefix is not applied.
+    fastapi_env: str = Field(default="development", validation_alias="FASTAPI_ENV")
+
+    # --- CORS ------------------------------------------------------------------
+    # Comma-separated browser origins. The default keeps the pilot reachable from
+    # any port on any host; an explicit allowlist is required before exposure
+    # (TSD SEC-002 / LIM-005).
+    cors_origins: str = Field(default="*", validation_alias="METROFLOW_CORS_ORIGINS")
 
     # --- Hydrology calibration -------------------------------------------------
     # SCS-CN Curve Number for urban concrete / asphalt catchments.
@@ -43,6 +57,22 @@ class Settings(BaseSettings):
     # the user table is empty; set both in any real deployment.
     admin_email: str = "dispatcher@metroflow.local"
     admin_password: str = "metroflow-dev"
+
+    @property
+    def is_production(self) -> bool:
+        """True only for ``FASTAPI_ENV=production``, case and padding aside."""
+        return self.fastapi_env.strip().lower() == "production"
+
+    @property
+    def is_development(self) -> bool:
+        """True only for ``FASTAPI_ENV=development``; gates the demo seed."""
+        return self.fastapi_env.strip().lower() == "development"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """The CORS allowlist, never empty (an empty value means any origin)."""
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return origins or ["*"]
 
 
 settings = Settings()

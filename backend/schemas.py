@@ -132,6 +132,7 @@ class HazardUpdate(BaseModel):
     name: str | None = None
     obstruction_level: str | None = None
     avg_depth_cm: int | None = None
+    edge_id: int | None = None
     active: bool | None = None
     notes: str | None = None
 
