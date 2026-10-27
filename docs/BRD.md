@@ -158,7 +158,7 @@ Business-level risks. The full register, scoring and responses are in
 | Risk                                              | Impact                                     | Mitigation                                                                                     |
 | ------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | Model outputs judged unrealistic by practitioners | Trust collapses; the tool is not adopted   | Declare calibration constants; validate against documented events; present as decision support |
-| Authentication not delivered before acceptance    | Cannot be used with real data              | CR-001 makes Supabase Auth and RBAC a release gate; no privileged action ships without it      |
+| Route-level authorisation not delivered before acceptance | Cannot be used with real data       | CR-001 adds API-issued tokens and roles; route enforcement (TSD LIM-022) is a release gate before any real data |
 | No baseline data from the client                  | Benefits cannot be quantified              | Use audit-trail and risk benefits; collect the baseline during the pilot                       |
 | Dispatchers find the portal slower than radio     | They bypass the system                     | Usability sessions from M4; keep the existing process running in parallel                      |
 | Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require a change request                                    |
@@ -204,14 +204,14 @@ does, so this document is also an honest statement of scope.
 | BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                     |
 | BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — decisions append to the operations log                            |
 | BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Partly met — schema exists; write path planned under CR-001                           |
-| BR-009 | Restrict access to authorised personnel by role                              | Must     | Not met — the login screen is presentational; Supabase Auth/RBAC planned under CR-001 |
+| BR-009 | Restrict access to authorised personnel by role                              | Must     | Partly met — API-issued tokens, bcrypt credentials and role checks exist; most routes do not yet require the token (TSD LIM-022) |
 | BR-010 | Operate on the equipment the LGU already has                                 | Should   | Met — browser-based portal                                                            |
 | BR-011 | Protect the personal data of reporters                                       | Must     | Partly met — database access denied to public API roles; privacy controls planned     |
 | BR-012 | Provide management information after an event                                | Could    | Not met — future release                                                              |
 | BR-013 | Give drivers flood-aware navigation that reroutes around verified hazards    | Must     | Not met — planned under CR-001                                                        |
 | BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Not met — planned under CR-001                                                        |
-| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Not met — planned under CR-001                                                        |
-| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Not met — planned under CR-001                                                        |
+| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Partly met — SOS creation and listing persist through the API; no native telephony    |
+| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Partly met — fleet, hazard and dispatch calls persist through the API; map layers are static |
 | BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Not met — planned under CR-001                                                        |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Not met — planned under CR-001                                                        |
 
@@ -229,7 +229,7 @@ BR-018 are the largest open items; CR-001 is the vehicle that closes them.
   evidence desk, drawing tools, fleet monitoring and dispatch.
 - Verification and publishing of hazards to connected clients.
 - River and rain gauge ingestion with advisory road impact.
-- Supabase Auth, role-based access control and audit writes.
+- API-issued session tokens, role-based access control and audit writes.
 - Hosted database with versioned schema and access controls.
 - Automated build, test and security checks, including the mobile client.
 

@@ -1,15 +1,17 @@
 # MetroFlow - Progress Report
 
 **Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System  
-**Date:** October 24, 2026  
+**Date:** October 27, 2026  
 **Branch:** `feat/scope-resolution-slice`  
-**Status:** Production-ready with Supabase integration
+**Status:** Piloted locally — sign-in, SOS, hazards, fleet and dispatch persist through the API
 
 ---
 
 ## Executive Summary
 
-MetroFlow is a dual-interface flood-aware urban mobility system consisting of a FastAPI backend, LGU web dashboard, and driver mobile application. The system enables real-time flood monitoring, SOS/emergency response coordination, and flood-aware route planning. All core data flows through Supabase as the single source of truth. Only the designated admin account can access the system. All mock data has been removed.
+MetroFlow is a dual-interface flood-aware urban mobility system consisting of a FastAPI backend, an LGU web dashboard (`metroflow-admin/`) and an Expo driver app. The system covers flood simulation, clearance-aware routing, SOS/emergency dispatch and flood-hazard publishing. All application data flows through the backend API into Supabase Postgres. Accounts are real: the API issues its own session tokens and checks bcrypt credentials against the `users` table.
+
+This is a working pilot, not a production service. Most endpoints still accept unauthenticated calls (TSD LIM-022), so the stack must stay off the public internet until route-level enforcement lands.
 
 ---
 
@@ -30,60 +32,86 @@ MetroFlow is a dual-interface flood-aware urban mobility system consisting of a 
 | RLS | Enabled | Row Level Security enabled on all tables |
 | Privileges | Restricted | Restricted to `postgres` and `service_role` roles |
 
-### Admin Account
-- **Email:** `admin@metroflow.gov.ph`
-- **Role:** `SUPER_ADMIN`
-- **Access:** Only admin account exists in database; registration disabled
+### Accounts
+- **Bootstrap dispatcher:** `dispatcher@metroflow.local`, role `SUPER_ADMIN`
+- **Provisioning:** created once at startup from `METROFLOW_ADMIN_EMAIL` / `METROFLOW_ADMIN_PASSWORD` when the `users` table is empty
+- **Driver accounts:** created by `POST /api/v1/auth/register`, always `EMERGENCY_DRIVER`
+- **Escalation:** registration refuses `LGU_DISPATCHER` and `SUPER_ADMIN` with `403`
 
 ---
 
 ## 2. Backend API (FastAPI)
 
 ### Authentication
-- **JWT tokens** for secure authentication
-- **Login restricted** to `LGU_DISPATCHER` and `SUPER_ADMIN` roles only
-- **Registration disabled** - only admin can access
-- **Email verification** with in-memory store (dev mode returns code)
+- **JWT tokens** issued by the API (`PyJWT`, HS256) and returned by `/api/v1/auth/login`
+- **Passwords** bcrypt-hashed on the `users` row
+- **Login** accepts `LGU_DISPATCHER`, `SUPER_ADMIN` and `EMERGENCY_DRIVER`
+- **Registration** creates driver accounts only
+- **`GET /api/v1/auth/me`** is the only route that currently validates the token
+- **Email verification** uses an in-process store (dev mode returns the code); it does not survive a restart
+- **Open gap:** the remaining routes do not require a token yet (TSD LIM-022)
 
 ### Endpoints
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/v1/auth/login` | POST | JWT-based login (admin only) |
+| `/api/v1/auth/login` | POST | Credential check, returns a session token |
+| `/api/v1/auth/register` | POST | Create a driver account |
+| `/api/v1/auth/me` | GET | Current user; requires a bearer token |
 | `/api/v1/auth/send-verification` | POST | Send verification code |
 | `/api/v1/auth/verify` | POST | Verify code |
 | `/api/v1/sos` | POST | Create SOS request |
+| `/api/v1/sos` | GET | List SOS requests |
 | `/api/v1/hazards` | POST | Create hazard zone (cm) |
+| `/api/v1/hazards` | GET | List hazard zones |
 | `/api/v1/hazards/{id}` | PATCH | Update hazard zone |
 | `/api/v1/hazards/{id}/publish` | POST | Publish hazard (dispatch step 1) |
 | `/api/v1/sos/{id}/assign` | POST | Assign vehicle (dispatch step 2) |
 | `/api/v1/dispatch/{id}/confirm` | POST | Confirm dispatch (dispatch step 3) |
 | `/api/v1/vehicles` | GET/POST | List/create vehicles |
 | `/api/v1/vehicles/{id}` | PATCH | Update vehicle |
+| `/api/v1/network/state` | GET | Road graph with live depths |
+| `/api/v1/simulation/rain` | POST | Apply a rainfall event |
+| `/api/v1/routing/navigate` | GET | Clearance-aware route |
 
 ---
 
-## 3. LGU Web Dashboard (Next.js)
+## 3. LGU Web Dashboard (`metroflow-admin/`, Next.js)
 
-- **Separate pages:** `/login` and `/dashboard` (refactored from single-page portal)
-- **Admin-only login** - no prefilled credentials
-- **Live data only** - all SOS, vehicles, hazards from Supabase
-- **No mock data** - all hardcoded incidents/fleets removed
-- **PII protection** - phone numbers masked by default
+- **Separate pages:** `/login` and the operational screens (`/triage`, `/dashboard`, `/radar`, `/fleet`, `/hazards`)
+- **Real sign-in** against the API; the token is kept in `sessionStorage`
+- **Live data** — SOS requests, vehicles and hazards load from the API
+- **Mixed data** — the SOS live panel is API-backed; the remaining queue entries are still seed/demo records
+- **Dispatch** assigns the selected fleet unit by its backend `vehicle_id` instead of a hardcoded id
+- **PII protection** — phone numbers masked by default
 - **Units:** cm for depths/clearance, km/h for speed
 - **Colors:** `slate-900` primary, `emerald-500` success
 - **Out of scope disabled:** Civic Broadcasts, Evacuation Centers, Air-Asset Escalation
 
 ---
 
-## 4. Driver Mobile App (React Native/Expo)
+## 4. Driver Mobile App (Expo / React Native)
 
-- **Email/password auth** with verification flow
-- **No prefilled values** in forms
+- **Expo Router tab layout** — Map, Report, SOS and Profile tabs
+- **Email/password auth** with a registration path for driver accounts
 - **Profile:** displays clearance in cm
-- **SOS/Report:** submits to backend, no mock data
+- **SOS/Report:** submits to the backend
 - **Offline Maps:** visual placeholder only (no SQLite/download)
 - **No emergency phone/911 references**
-- **AuthProvider** integrated
+- **`AuthProvider`** mounted in the root layout
+
+---
+
+## 5. CI and Deployment
+
+| Pipeline | State |
+|---|---|
+| Backend CI | pytest against the unit and contract suites |
+| Web CI | Bun install, ESLint, `next build`, Playwright E2E |
+| Mobile CI | Bun install (`bun.lock`), `tsc --noEmit` |
+| Deploy Web | Vercel project rooted at `metroflow-admin/` |
+| Deploy Backend | Container image to GHCR |
+
+The mobile app has no `package-lock.json`; Bun is its package manager (TSD LIM-021).
 
 ---
 

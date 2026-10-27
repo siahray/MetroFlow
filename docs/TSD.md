@@ -16,7 +16,7 @@ Version 1.2
 | Change      | CR-001 adds the driver app, event stream, fleet, SOS and sensors |
 
 Version 1.2 describes the **target architecture** for CR-001, including the
-approved provider keys and Supabase Auth. Sections marked `Planned` are not
+approved provider keys and API-issued session tokens. Sections marked `Planned` are not
 implemented in the baseline. See [CR-001.md](CR-001.md) for the change record and
 FSD §Implementation Status for the current position.
 
@@ -32,7 +32,7 @@ FSD §Implementation Status for the current position.
 | BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                                 |
 | BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log                   |
 | BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration                        |
-| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — Supabase Auth/RBAC (planned, CR-001) |
+| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — API-issued JWT with role checks (CR-001) |
 | BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI             |
 | BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy                |
 | BR-012 | FSD-FR-049                           | Reporting and export (planned)                        |
@@ -52,7 +52,7 @@ FSD §Implementation Status for the current position.
             │                                              │
             └────────────── HTTPS + SSE ──────────────────┘
                                    │
-                     FastAPI  (Supabase Auth · RBAC · rate limits)
+                     FastAPI  (session tokens · RBAC · rate limits)
         network · routing · simulation · reports · hazards
         vehicles · telemetry · SOS · dispatch · sensors
                      │                              │
@@ -103,7 +103,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Dispatch Portal       | BR-004 to BR-007 / FSD-FR-018 to 046 | Login, queue, detail, operations log, dispatch actions                     |
 | Security Middleware   | BR-011 / FSD-FR-051                  | Response headers on every request                                          |
 | Delivery Pipeline     | BR-008 / FSD-FR-047                  | Lint, test, scan, migrate, publish image                                   |
-| Auth Service          | BR-009 / FSD-FR-092                  | Supabase session verification via JWKS, role dependency, audit context     |
+| Auth Service          | BR-009 / FSD-FR-092                  | Session token issue and verification, role dependency (audit context planned) |
 | Report Service        | BR-014 / FSD-FR-065 to 081           | Multipart intake, EXIF extraction, urgency, dedupe, moderation             |
 | Hazard Service        | BR-013 / FSD-FR-059 to 064, 082–086  | Polygon/line validation, obstruction level, publish and withdraw           |
 | Event Stream          | BR-018 / FSD-FR-086                  | Redis pub/sub fan-out over SSE with reconnect snapshots                    |
@@ -134,7 +134,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | UI source       | Client-supplied HTML/CSS template             | Figma-derived; adapted to React components |
 | Package manager | Bun                                           | 1.4.3                                      |
 | Realtime        | SSE + Redis pub/sub                           | Redis 7                                    |
-| Auth            | Supabase Auth (GoTrue) with JWKS verification | Hosted service                             |
+| Auth            | API-issued HS256 JWT; bcrypt password hashes  | PyJWT 2.15, passlib/bcrypt                 |
 | Evidence        | Pillow, python-multipart                      | current at implementation                  |
 | Tests           | pytest, Bun test, Playwright, ESLint, builds  | see repository                             |
 
@@ -142,7 +142,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 
 | Service        | Mode              | Used for                        | Failure behaviour                                        |
 | -------------- | ----------------- | ------------------------------- | -------------------------------------------------------- |
-| Supabase Auth  | Runtime           | Identity, sessions and JWKS     | Sign-in unavailable; existing sessions last until expiry |
+| Supabase (Postgres) | Runtime      | Hosted database                 | API unavailable; no fallback                             |
 | Mapbox         | Runtime (browser) | Raster basemap                  | OpenStreetMap raster fallback                            |
 | OpenWeather    | Runtime, optional | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
 | OpenTopography | Offline           | Digital elevation model         | Cached derived terrain; no runtime impact                |
@@ -425,7 +425,7 @@ Full request and response contracts, examples and error bodies are in
 | VAL-020       | BR-013  | FSD-FR-072 | Telemetry accepts at most one batch per five seconds per vehicle                                                         |
 | VAL-021       | BR-015  | FSD-FR-073 | SOS requires a location fix no older than 60 seconds                                                                     |
 | VAL-022       | BR-016  | FSD-FR-089 | A unit can be assigned only when `AVAILABLE`, and the route must avoid inactive or non-blocking hazards                  |
-| VAL-023       | BR-009  | FSD-FR-092 | Supabase token signature, expiry and role are verified before any privileged write                                       |
+| VAL-023       | BR-009  | FSD-FR-092 | Session token signature, expiry and role are verified before any privileged write (enforcement tracked by LIM-022)         |
 | VAL-024       | BR-017  | FSD-FR-090 | Sensor is known and active; value is inside its configured range; timestamp is not in the future                         |
 
 ## Security Design
@@ -456,7 +456,7 @@ Full request and response contracts, examples and error bodies are in
 
 | ID      | Risk                                              | Severity | Disposition                                                                 |
 | ------- | ------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
-| SEC-001 | Baseline API has no authentication                | High     | CR-001 makes Supabase Auth/RBAC a release gate; do not expose baseline data |
+| SEC-001 | Most endpoints do not check the session token     | High     | Sign-in and roles exist; route-level enforcement is LIM-022 and must land before exposure |
 | SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist in CR-001; the app uses bearer tokens        |
 | SEC-003 | Baseline has no rate limiting                     | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS               |
 | SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Activates automatically when public or licensed                             |
@@ -744,7 +744,7 @@ supplied in a local `.env`.
 | `FASTAPI_ENV`                       | `development`          | Runtime mode; gates seed data, docs and cookie security          | Server config  |
 | `DATABASE_URL`                      | local PostGIS DSN      | SQLAlchemy DSN for the runtime application role                  | Secret         |
 | `REDIS_URL`                         | `redis://redis:6379/0` | Event bus and throttle counters                                  | Secret if used |
-| `SUPABASE_URL`                      | no default             | Project URL used to fetch the JWKS; same value as the public URL | Server config  |
+| `SUPABASE_URL`                      | no default             | Project URL shared with the portal and app; the API does not fetch JWKS | Server config  |
 | `SUPABASE_SERVICE_ROLE_KEY`         | no default             | Seed accounts and administrative provisioning; bypasses RLS      | Secret         |
 | `OPENWEATHER_API_KEY`               | no default             | Optional live rainfall; manual rainfall remains the fallback     | Secret         |
 | `OPENTOPOGRAPHY_API_KEY`            | no default             | Offline DEM acquisition only                                     | Secret         |
@@ -844,8 +844,7 @@ portable choice. Both forms require `sslmode=require`.
 The runtime connects as a dedicated `metroflow_app` role with no superuser,
 `BYPASSRLS` or schema-owner rights. The `postgres` superuser is reserved for
 migrations and never appears in `DATABASE_URL`. The browser never connects to
-Postgres: the anon key is used only against Supabase Auth, and the API remains the
-only data path.
+Postgres: the API never uses the anon key, and it remains the only data path.
 
 ### 5.3 Workflows
 
@@ -853,7 +852,7 @@ only data path.
 | ----------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
 | Backend CI                    | Push/PR touching `backend/**`; manual       | Unit tests, contract tests, `alembic upgrade`, `alembic check`  |
 | Web CI                        | Push/PR touching `metroflow-admin/**`; manual       | Bun install, ESLint, `bun test`, `next build`, Playwright E2E   |
-| Mobile CI                     | Push/PR touching `metroflow-mobile/**`; manual | npm ci, `tsc --noEmit`, `npm run lint`                    |
+| Mobile CI                     | Push/PR touching `metroflow-mobile/**`; manual | Bun install (`bun.lock`), `tsc --noEmit`                    |
 | Security — OWASP ZAP API Scan | Weekly cron and manual                      | Fails on findings at or above threshold; no `continue-on-error` |
 | Security — CodeQL             | Push/PR to `main`, weekly, manual           | Skips with a visible warning when code scanning is unavailable  |
 | Supabase — Apply migrations   | After Backend CI succeeds on `main`; manual | Serialised; no-ops without `SUPABASE_DB_URL`                    |
@@ -887,19 +886,20 @@ change ──► pull request ──► Backend CI ──┐
 | ADR-011 | Portal ships with mock incident data                     | Block the UI until intake exists     | Demonstrates the workflow and fixes the visual contract early                                                                 | Superseded by CR-001            |
 | ADR-012 | Security headers in middleware                           | Reverse proxy only                   | Headers exist even without a proxy, which is how ZAP sees the app                                                             | Accepted                        |
 | ADR-013 | Redis provisioned but unused                             | Remove it                            | Keeps parity with the intended production topology                                                                            | Accepted; activates with CR-001 |
-| ADR-014 | Driver client is a native Expo app                       | Progressive web app, bare React Native | Native background location, push notifications, SQLite/SecureStore and app distribution; Expo Router keeps one TypeScript codebase | Proposed (CR-001); direction selected 22 Oct 2026 |
-| ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Proposed (CR-001)               |
-| ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Proposed (CR-001)               |
-| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Proposed (CR-001)               |
-| ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Proposed (CR-001)               |
-| ADR-019 | Mapbox raster tiles rendered by MapLibre                 | Mapbox GL JS, OSM raster only        | MapLibre is already integrated; raster tiles accept the public token and OSM remains a no-key fallback                        | Proposed (CR-001)               |
-| ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Proposed (CR-001)               |
+| ADR-014 | Driver client is a native Expo app                       | Progressive web app, bare React Native | Native background location, push notifications, SQLite/SecureStore and app distribution; Expo Router keeps one TypeScript codebase | Accepted (CR-001, 27 Oct 2026); direction selected 22 Oct 2026 |
+| ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Superseded by ADR-021                        |
+| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-019 | Mapbox raster tiles rendered by MapLibre                 | Mapbox GL JS, OSM raster only        | MapLibre is already integrated; raster tiles accept the public token and OSM remains a no-key fallback                        | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-021 | Session tokens are issued by the API (PyJWT + bcrypt)     | Supabase Auth (ADR-016), shared passcode | No Supabase Auth project is provisioned, both clients already call `/auth/login`, and bcrypt keeps dispatcher and driver accounts in the one table the API authorises against. Revisit when managed identity exists | Accepted 27 Oct 2026; supersedes ADR-016 |
 
 ## 7. Known Limitations
 
 | ID      | Limitation                                         | Impact                                           | Planned resolution                                                                                           |
 | ------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| LIM-001 | Baseline has no authentication                     | Cannot handle real personal data; API is open    | Supabase Auth/RBAC is a CR-001 release gate                                                                  |
+| LIM-001 | Most endpoints do not check the session token      | Cannot handle real personal data                 | Sign-in and roles exist (CR-001); route enforcement tracked by LIM-022                                        |
 | LIM-002 | Baseline incident data is mocked                   | Triage is demonstrated, not operational          | Persisted report API in CR-001                                                                               |
 | LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | CR-001 adds optional OpenWeather and labelled simulated gauges; real gauge feeds need agreements             |
 | LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
@@ -919,6 +919,8 @@ change ──► pull request ──► Backend CI ──┐
 | LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
 | LIM-019 | Authentication requires Supabase reachability      | An offline app cannot refresh an expired session | Cached session within its grace period; explicit re-authentication once online; no privileged offline action |
 | LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | OSM fallback, manual rainfall override, cached derived data and labelled degradation                         |
+| LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
+| LIM-022 | CR-001 endpoints do not yet enforce the session token | A caller with network access can act without signing in | Deploy off the public internet until route-level enforcement lands; `GET /auth/me` is the only guarded route |
 
 ## 8. Repository and Commands
 
@@ -932,12 +934,9 @@ MetroFlow/
 │   ├── geometry.py          PostGIS backfill
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
-│   ├── auth.py              Supabase token verification and roles (CR-001)
-│   ├── reports.py           report intake and moderation (CR-001)
-│   ├── hazards.py           hazard authoring and publishing (CR-001)
-│   ├── fleet.py             vehicles, telemetry and dispatch (CR-001)
-│   ├── sensors.py           readings and impact rules (CR-001)
-│   ├── events.py            Redis pub/sub and SSE (CR-001)
+│   ├── auth_utils.py        session token issue/verify and role lookup
+│   ├── verification_store.py in-process email verification codes
+│   ├── database.py          engine, session lifecycle
 │   ├── migrations/          Alembic history
 │   ├── tests/               unit and integration suites
 │   ├── Dockerfile

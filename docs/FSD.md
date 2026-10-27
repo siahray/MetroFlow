@@ -11,11 +11,11 @@ Version 1.2
 | Project     | MetroFlow                                                                      |
 | Prepared By | «Project Team»                                                                 |
 | Version     | 1.2                                                                            |
-| Status      | For Review — CR-001 planned                                                    |
+| Status      | For Review — CR-001 approved 27 October 2026                                   |
 | Change      | CR-001 extends the FSD to the driver app, live map, fleet dispatch and sensors |
 
-Version 1.2 records the provider configuration, Supabase Auth, Mapbox tiles and
-template-sourced UI under [CR-001](CR-001.md). It adds `TC-045` and `TC-046` for
+Version 1.2 records the provider configuration, API-issued session tokens, Mapbox
+tiles and template-sourced UI under [CR-001](CR-001.md). It adds `TC-045` and `TC-046` for
 provider fallback. Existing identifiers are unchanged.
 
 ## BRD Requirements Reference
@@ -65,7 +65,7 @@ provider fallback. Existing identifiers are unchanged.
 | FSD-FR-018 | BR-009         | Present a login screen with email and password fields, both required                                          |
 | FSD-FR-019 | BR-009         | Allow the user to reveal and hide the password                                                                |
 | FSD-FR-020 | BR-009         | Offer a forgot-password affordance that states how to obtain a reset                                          |
-| FSD-FR-021 | BR-009         | Authenticate through Supabase Auth and reject invalid credentials                                             |
+| FSD-FR-021 | BR-009         | Authenticate against `POST /api/v1/auth/login` and reject invalid credentials                                 |
 | FSD-FR-022 | BR-009         | Maintain a session and end it on sign-out                                                                     |
 | FSD-FR-023 | BR-009         | Restrict screens and actions by role                                                                          |
 | FSD-FR-024 | BR-004         | List incidents ordered by descending urgency score                                                            |
@@ -219,7 +219,7 @@ provider fallback. Existing identifiers are unchanged.
 | Routing API           | BR-003  | FSD-FR-011 to 017      | Clearance-aware route and travel time                   |
 | PostgreSQL + PostGIS  | BR-001  | FSD-FR-001, FSD-FR-053 | System of record for the road graph and live state      |
 | Supabase (hosted)     | BR-011  | FSD-FR-051             | Managed Postgres with row-level security                |
-| Supabase Auth         | BR-009  | FSD-FR-018 to 023      | Sign-in, session refresh and JWKS verification          |
+| API auth module       | BR-009  | FSD-FR-018 to 023      | Sign-in, HS256 session tokens and role lookup           |
 | OpenWeather           | BR-002  | FSD-FR-006, 007        | Optional rainfall input with manual fallback            |
 | OpenTopography        | BR-001  | FSD-FR-001             | Offline elevation model for derived terrain             |
 | Copernicus            | BR-017  | FSD-FR-090             | Offline imagery and land cover for validation           |
@@ -339,23 +339,23 @@ statement; the FSD identifiers above remain stable as items move.
 | Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested                                     |
 | Rainfall simulation      | FSD-FR-006 to 010 | Implemented | Contract-tested; overrides respected                |
 | Routing                  | FSD-FR-011 to 017 | Implemented | Unit and contract tests                             |
-| Portal access            | FSD-FR-018 to 023 | Partial     | Screen and reveal toggle only; no credential check  |
-| Incident queue           | FSD-FR-024 to 031 | Partial     | Implemented on mock data; no live refresh           |
-| Incident detail          | FSD-FR-032 to 038 | Partial     | Implemented on mock data; evidence files not linked |
-| Dispatch actions         | FSD-FR-039 to 046 | Partial     | In-memory log; no persistence or undo               |
+| Portal access            | FSD-FR-018 to 023 | Partial     | Real sign-in against `/auth/login`; token kept in `sessionStorage`; no route guard |
+| Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS panel polls the API; remaining entries are mock data |
+| Incident detail          | FSD-FR-032 to 038 | Partial     | Renders live SOS; evidence files not linked         |
+| Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
 | Audit and administration | FSD-FR-047 to 049 | Planned     | Entity exists; no write path                        |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
-| Authentication and RBAC  | FSD-FR-092, 093   | Planned     | CR-001; Supabase Auth, roles and audit writes       |
-| Driver navigation        | FSD-FR-054 to 064 | Planned     | CR-001; Expo app, MapLibre, turn-by-turn, reroute   |
-| Field reporting          | FSD-FR-065 to 067 | Planned     | CR-001; multipart upload, depth, EXIF               |
-| Offline operation        | FSD-FR-068 to 071 | Planned     | CR-001; on-device queue, cached graph               |
-| Telemetry and SOS        | FSD-FR-072 to 074 | Planned     | CR-001; throttled pings, distress request           |
-| Live operational map     | FSD-FR-075, 076   | Planned     | CR-001; MapLibre layers, fleet panel                |
-| Moderation and evidence  | FSD-FR-077 to 081 | Planned     | CR-001; API queue, evidence desk, decisions         |
-| Hazard authoring         | FSD-FR-082 to 086 | Planned     | CR-001; draw, obstruction level, publish, SSE       |
-| Distress and dispatch    | FSD-FR-087 to 089 | Planned     | CR-001; incidents, nearest unit, rescue route       |
-| Portal and driver app UI | FSD-FR-054 to 089 | Planned     | Template-derived UI; implementation not started     |
-| Sensor ingestion         | FSD-FR-090, 091   | Planned     | CR-001; readings, threshold impact                  |
+| Authentication and RBAC  | FSD-FR-092, 093   | Partial     | Login, registration, roles and `/auth/me` exist; tokens are not yet enforced (LIM-022) |
+| Driver navigation        | FSD-FR-054 to 064 | Partial     | Expo app with map and a routing screen; turn-by-turn list and reroute absent |
+| Field reporting          | FSD-FR-065 to 067 | Planned     | Camera, depth and EXIF capture not implemented      |
+| Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
+| Telemetry and SOS        | FSD-FR-072 to 074 | Partial     | SOS create and list work; telemetry pings absent    |
+| Live operational map     | FSD-FR-075, 076   | Partial     | Fleet and hazards load from the API; map layers are static |
+| Moderation and evidence  | FSD-FR-077 to 081 | Planned     | No report intake or evidence desk                   |
+| Hazard authoring         | FSD-FR-082 to 086 | Partial     | Create, update and publish via the API; SSE stream absent |
+| Distress and dispatch    | FSD-FR-087 to 089 | Partial     | Incident list, assignment and confirmation; rescue route absent |
+| Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |
+| Sensor ingestion         | FSD-FR-090, 091   | Planned     | No readings or threshold evaluation                 |
 
 ## Actors
 
@@ -422,8 +422,9 @@ Actor: dispatcher. Postcondition: dashboard visible.
 2. Actor submits the form.
 3. System shows a confirmation and reveals the dashboard after a short delay.
 
-Current limitation: credentials are not verified. CR-001 replaces the
-presentational login with Supabase Auth sessions and role checks.
+Current limitation: the portal stores the returned token but does not yet guard
+every route client-side. CR-001 adds server-side role checks; route-level
+token enforcement is tracked as TSD LIM-022.
 Requirements: FSD-FR-018 to 023, FSD-FR-092.
 
 ### UC-005 — Triage an incident

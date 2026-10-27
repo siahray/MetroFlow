@@ -4,11 +4,13 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v1.2 (CR-001) · **Code baseline:** `main` @ `9605e38` · 22 October 2026
+**Document baseline:** v1.2 (CR-001, approved 27 October 2026) · **Code baseline:** `feat/scope-resolution-slice` · 27 October 2026
 
-CR-001 extends the scope to the driver app, live hazard publication, fleet
-dispatch and sensor ingestion. The implementation is **planned**; the documents
-describe the target behaviour and label the status honestly.
+CR-001 extends the scope to the Expo driver app, live hazard publication, fleet
+dispatch and sensor ingestion. The change request is **approved** and partly
+implemented: authentication, SOS, hazards, fleet and dispatch persist through the
+API, while reports, sensors and event streams remain planned. Each document
+labels its own status honestly rather than assuming the target state.
 
 ## Documents
 
@@ -21,6 +23,7 @@ describe the target behaviour and label the status honestly.
 | Technical Specification        | [TSD.md](TSD.md)                                   | MF-TSD-001 | Defines architecture, algorithms, data design, security and CI/CD    | Developers, panel       |
 | Project Management Plan        | [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) | MF-PMP-001 | Defines schedule, quality, risk, communications and change control   | Team, adviser           |
 | Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the driver app, hazards, fleet, sensors | Sponsor, team, panel    |
+| Progress Report                | [../PROGRESS_REPORT.md](../PROGRESS_REPORT.md)      | —          | Records what is implemented on the current branch                    | Team, panel             |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
 
 ## Document templates

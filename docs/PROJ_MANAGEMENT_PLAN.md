@@ -112,7 +112,7 @@ new High or Medium ZAP finding.
   telemetry and SOS.
 - Hazard verification and live publication over SSE.
 - River and rain gauge ingestion with advisory road impact.
-- Supabase Auth, RBAC and audit writes.
+- API-issued session tokens, route-level RBAC and audit writes.
 - Versioned PostGIS schema with row-level security.
 - Automated build, test, security and migration pipeline for web and mobile.
 
@@ -371,7 +371,7 @@ product. Risks scoring 6 or above are reviewed weekly.
 | R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible         | Secret absent at M5                 |
 | R-005 | Late security findings         | 2   | 3   | 6     | Weekly ZAP gate from the first increment                         | New Medium finding                  |
 | R-006 | Format mismatch                | 2   | 2   | 4     | Confirm the rubric at M1                                         | Adviser requests restructuring      |
-| R-007 | Authentication not delivered   | 3   | 3   | 9     | CR-001 makes Supabase Auth/RBAC a release gate before acceptance | Pilot asked to handle real data     |
+| R-007 | Route authorisation not delivered | 3 | 3   | 9     | CR-001 adds tokens and roles; route enforcement (TSD LIM-022) gates real data | Pilot asked to handle real data     |
 | R-008 | No baseline data               | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot          | Baseline absent at M1 review        |
 | R-009 | Corridor changes late          | 2   | 3   | 6     | Freeze the corridor at M2                                        | New barangay list arrives           |
 | R-010 | Hosted costs exceed free tier  | 2   | 2   | 4     | Keep hosting provider-agnostic                                   | Usage warning from provider         |
@@ -452,7 +452,7 @@ Confidence in next:   <high/medium/low + reason>
 - [ ] All `Must` functional requirements accepted (FSD), including BR-013 to BR-018.
 - [ ] CI green on `main`; ZAP clean at High/Medium.
 - [ ] Hosted database at head, or the limitation documented.
-- [ ] Supabase Auth/RBAC verified; role violations return 403 and change nothing.
+- [ ] Token enforcement on every privileged route; role violations return 403 and change nothing.
 - [ ] Offline E2E and hazard publish latency tests pass.
 - [ ] Simulated sensors and demo CCTV labelled in the product.
 - [ ] Document set approved, including CR-001.

@@ -144,8 +144,9 @@ The recommendation is conditional on:
    internal distribution rather than a public store release, labelled demo CCTV,
    simulated gauges where real data is unavailable, and no carrier-grade SOS.
 2. Baseline data collection scheduled in M1 so benefits can be measured.
-3. Supabase Auth and RBAC (BR-009) delivered as a release gate, not
-   deferred past acceptance.
+3. Authentication and RBAC (BR-009) delivered as a release gate, not
+   deferred past acceptance: sign-in, roles and route-level enforcement before
+   any real data is handled.
 4. A decision review at M8, before final defence, using the conservative
    scenario.
 5. Every simulated sensor or demo video source labelled as such in the product.
@@ -227,7 +228,7 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 | Risk                                       | Impact                                  | Mitigation                                                                            |
 | ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------- |
 | Model outputs judged unrealistic           | Benefits unrealisable; credibility lost | Declare calibration as configuration; validate against documented events              |
-| Authentication not delivered               | Cannot be used with real data           | CR-001 makes Supabase Auth/RBAC a release gate; no privileged action ships without it |
+| Route authorisation not delivered          | Cannot be used with real data           | CR-001 adds tokens and roles; route enforcement (TSD LIM-022) gates real data         |
 | No baseline data                           | Benefits unquantifiable                 | Use audit-trail and risk benefits; collect baseline during the pilot                  |
 | Hosted costs exceed the free tier          | Operating cost rises                    | Keep hosting provider-agnostic; the container image is portable                       |
 | Provider quota or outage                   | Live rainfall or imagery unavailable    | Manual rainfall, OSM tiles and cached derived data; monitor usage                     |
@@ -342,7 +343,7 @@ conditions in §6.
 | Decision maker     | «Project Sponsor»                                                      |
 | Decision           | [TBC]                                                                  |
 | Date               | [TBC]                                                                  |
-| Conditions         | CR-001 boundary, Supabase Auth/RBAC gate, labelled demo data, Expo native app |
+| Conditions         | CR-001 boundary, authentication/RBAC gate, labelled demo data, Expo native app |
 | Budget approved    | PHP [TBC]                                                              |
 
 | Role            | Name                    | Signature | Date  |
