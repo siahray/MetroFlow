@@ -15,7 +15,7 @@ Add the following secrets under Settings > Secrets and variables > Actions:
 | --- | --- | --- |
 | `VERCEL_TOKEN` | Yes | Vercel CLI token from Account Settings > Tokens |
 | `VERCEL_ORG_ID` | Yes | Found in `.vercel/project.json` or Vercel team settings |
-| `VERCEL_PROJECT_ID` | Yes | Found in `.vercel/project.json` for web-lgu project |
+| `VERCEL_PROJECT_ID` | Yes | Found in `.vercel/project.json` for metroflow-admin project |
 
 ## Backend Deployment (Optional)
 | Secret | Required | Description |

@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "web-lgu/**"
+      - "metroflow-admin/**"
       - ".github/workflows/web.yml"
   pull_request:
     paths:
-      - "web-lgu/**"
+      - "metroflow-admin/**"
       - ".github/workflows/web.yml"
   workflow_dispatch:
 
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web-lgu
+        working-directory: metroflow-admin
     steps:
       - uses: actions/checkout@v7
 
@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('web-lgu/bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('metroflow-admin/bun.lock') }}
           restore-keys: |
             ${{ runner.os }}-bun-
 

@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "web-lgu/**"
+      - "metroflow-admin/**"
       - ".github/workflows/deploy-web.yml"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - "web-lgu/**"
+      - "metroflow-admin/**"
       - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web-lgu
+        working-directory: metroflow-admin
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}

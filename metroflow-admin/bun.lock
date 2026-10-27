@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "web-lgu",
+      "name": "metroflow-admin",
       "dependencies": {
         "clsx": "^2.1.1",
         "lucide-react": "^1.61.0",
