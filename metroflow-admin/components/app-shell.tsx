@@ -2,11 +2,12 @@
 
 import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Sidebar, type NavItem } from "./sidebar";
 import { listSOS } from "@/lib/sos-live";
 import { listVehicles } from "@/lib/dispatch";
+import { clearSessionUser, getSessionUser, subscribeToSession } from "@/lib/session";
 
 type AppShellProps = {
   activeItem: NavItem;
@@ -16,24 +17,15 @@ type AppShellProps = {
 
 export function AppShell({ activeItem, title, children }: AppShellProps) {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  // The portal has no server-side session, so the shell reads the browser cache
+  // through useSyncExternalStore instead of copying it into state from an effect.
+  const user = useSyncExternalStore(subscribeToSession, getSessionUser, () => null);
   const [queueCount, setQueueCount] = useState(0);
   const [fleetCount, setFleetCount] = useState(0);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = sessionStorage.getItem("metroflow_user");
-      if (!stored) {
-        router.replace("/login");
-        return;
-      }
-      try {
-        setUser(JSON.parse(stored));
-      } catch {
-        router.replace("/login");
-      }
-    }
-  }, [router]);
+    if (!user) router.replace("/login");
+  }, [user, router]);
 
   useEffect(() => {
     const load = async () => {
@@ -54,9 +46,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
   }, []);
 
   const handleSignOut = () => {
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("metroflow_user");
-    }
+    clearSessionUser();
     router.push("/login");
   };
 

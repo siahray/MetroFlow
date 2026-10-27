@@ -21,7 +21,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
-import { RESCUE_UNITS, type RescueUnit } from "@/lib/rescue";
+import { RESCUE_UNITS, toUnitStatus, type RescueUnit } from "@/lib/rescue";
 import { assignSOS, confirmDispatch, listVehicles } from "@/lib/dispatch";
 
 type IncidentDetailProps = {
@@ -42,15 +42,6 @@ const BASE_ACTIONS = [
     className: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
   },
 ];
-
-const UNIT_STATUSES = ["AVAILABLE", "EN_ROUTE", "ON_SCENE", "OFFLINE"] as const;
-
-function toUnitStatus(value: string | null | undefined): RescueUnit["status"] {
-  const upper = String(value ?? "").toUpperCase();
-  return (UNIT_STATUSES as readonly string[]).includes(upper)
-    ? (upper as RescueUnit["status"])
-    : "AVAILABLE";
-}
 
 export function IncidentDetail({
   incident,

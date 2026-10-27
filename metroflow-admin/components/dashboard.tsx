@@ -1,17 +1,6 @@
 "use client";
 
-import {
-  Bot,
-  ChevronRight,
-  CircleCheck,
-  CloudRain,
-  Shield,
-  Siren,
-  Timer,
-  TrendingUp,
-  Truck,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronRight, CircleCheck, Shield, Siren, Truck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DispatchRadar } from "./dispatch-radar";
@@ -21,14 +10,11 @@ import { IncidentQueue } from "./incident-queue";
 import { RescueTracking } from "./rescue-tracking";
 import { Sidebar } from "./sidebar";
 import { useToast } from "./toast-provider";
-import {
-  type LogEntry,
-  type QueueFilter,
-  type Incident,
-} from "@/lib/incidents";
+import { type LogEntry, type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
+import type { SessionUser } from "@/lib/session";
 import { listHazards, type HazardZone } from "@/lib/hazards";
 
 type View = "triage" | "radar" | "sensors" | "fleet";
@@ -44,7 +30,13 @@ function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export function Dashboard({ user, onSignOut }: { user?: any; onSignOut: () => void }) {
+export function Dashboard({
+  user,
+  onSignOut,
+}: {
+  user?: SessionUser | null;
+  onSignOut: () => void;
+}) {
   const { show } = useToast();
   const [view, setView] = useState<View>("triage");
   const [filter, setFilter] = useState<QueueFilter>("all");
@@ -73,7 +65,7 @@ export function Dashboard({ user, onSignOut }: { user?: any; onSignOut: () => vo
         } else if (incidents.length === 0) {
           setSelectedId("");
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
@@ -109,7 +101,10 @@ export function Dashboard({ user, onSignOut }: { user?: any; onSignOut: () => vo
     });
   }, [allIncidents, filter, query]);
 
-  const selected = selectedId ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null) : allIncidents[0] ?? null;
+  const selected = selectedId
+    ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null)
+    : (allIncidents[0] ?? null);
+  const activeId = selected?.id ?? "";
   const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
   const pendingCount = allIncidents.length - dismissed.size;
 
@@ -134,24 +129,24 @@ export function Dashboard({ user, onSignOut }: { user?: any; onSignOut: () => vo
 
   const handleAction = useCallback(
     (label: string) => {
-      if (selected?.id) {
-        show(`${label} executed for #${selected.id}`);
-        appendLog(selected.id, `Action: ${label} by Operator M. Santos.`, "action");
+      if (activeId) {
+        show(`${label} executed for #${activeId}`);
+        appendLog(activeId, `Action: ${label} by Operator M. Santos.`, "action");
       } else {
         show(label);
       }
     },
-    [appendLog, selected?.id, show],
+    [appendLog, activeId, show],
   );
 
   const handleAddNote = useCallback(
     (text: string) => {
-      if (selected?.id) {
-        appendLog(selected.id, `Note: ${text}`, "note");
+      if (activeId) {
+        appendLog(activeId, `Note: ${text}`, "note");
       }
       show("Internal note saved to incident log");
     },
-    [appendLog, selected?.id, show],
+    [appendLog, activeId, show],
   );
 
   const handleNavigate = useCallback(

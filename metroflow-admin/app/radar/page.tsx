@@ -47,7 +47,8 @@ function RadarContent() {
   }, [requestedId, selectedId]);
 
   const selected = incidents.find((i) => i.id === selectedId) || incidents[0] || null;
-  const selectedLogs = selected ? logs[selected.id] ?? [] : [];
+  const activeId = selected?.id ?? "";
+  const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
 
   const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
     setLogs((current) => ({
@@ -58,24 +59,24 @@ function RadarContent() {
 
   const handleAction = useCallback(
     (label: string) => {
-      if (selected?.id) {
-        show(`${label} executed for #${selected.id}`);
-        appendLog(selected.id, `Action: ${label} by Dispatch Officer.`, "action");
+      if (activeId) {
+        show(`${label} executed for #${activeId}`);
+        appendLog(activeId, `Action: ${label} by Dispatch Officer.`, "action");
       } else {
         show(label);
       }
     },
-    [appendLog, selected?.id, show],
+    [appendLog, activeId, show],
   );
 
   const handleAddNote = useCallback(
     (text: string) => {
-      if (selected?.id) {
-        appendLog(selected.id, `Note: ${text}`, "note");
+      if (activeId) {
+        appendLog(activeId, `Note: ${text}`, "note");
       }
       show("Internal note saved to incident log");
     },
-    [appendLog, selected?.id, show],
+    [appendLog, activeId, show],
   );
 
   return (
@@ -115,9 +116,12 @@ function RadarContent() {
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white p-12 text-center space-y-3">
-          <p className="text-sm font-semibold text-slate-700">No active distress signals in queue</p>
+          <p className="text-sm font-semibold text-slate-700">
+            No active distress signals in queue
+          </p>
           <p className="text-xs text-slate-400">
-            Emergency Dispatch Radar tracks live citizen SOS telemetry when active incidents are reported.
+            Emergency Dispatch Radar tracks live citizen SOS telemetry when active incidents are
+            reported.
           </p>
           <Link
             href="/triage"

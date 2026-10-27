@@ -16,6 +16,22 @@ export type RescueUnit = {
   vehicleId?: number;
 };
 
+/** A unit loaded from the fleet API, carrying the dispatch it is assigned to. */
+export type FleetUnit = RescueUnit & { assignedSosId?: number };
+
+export const RESCUE_UNIT_STATUSES = ["AVAILABLE", "EN_ROUTE", "ON_SCENE", "OFFLINE"] as const;
+
+/**
+ * The API stores status as free text. Anything unrecognised becomes AVAILABLE so
+ * the UI never renders an empty badge.
+ */
+export function toUnitStatus(value: string | null | undefined): RescueUnit["status"] {
+  const upper = String(value ?? "").toUpperCase();
+  return (RESCUE_UNIT_STATUSES as readonly string[]).includes(upper)
+    ? (upper as RescueUnit["status"])
+    : "AVAILABLE";
+}
+
 export type DistressBeacon = {
   incidentId: string;
   barangay: string;

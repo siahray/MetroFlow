@@ -7,7 +7,6 @@ import {
   Camera,
   CheckCircle,
   Clock,
-  Droplets,
   Eye,
   EyeOff,
   FileText,
@@ -145,9 +144,7 @@ export function DispatchRadar({
                 RADAR SWEEP: ACTIVE MONITORING
               </span>
             </div>
-            <div className="font-mono text-xs text-slate-400">
-              Anchor: {(incident as any).location?.lat?.toFixed?.(4) ?? incident.location}° N, {(incident as any).location?.lng?.toFixed?.(4) ?? ''}° E
-            </div>
+            <div className="font-mono text-xs text-slate-400">Anchor: {incident.location}</div>
           </div>
 
           {/* Interactive Pins on Radar */}
@@ -257,7 +254,9 @@ export function DispatchRadar({
             <div className="grid grid-cols-2 gap-2 text-center">
               <div className="rounded border border-slate-200 bg-slate-50 p-2">
                 <div className="text-[9px] font-bold text-slate-400 uppercase">Source</div>
-                <div className="text-xs font-semibold text-slate-700 uppercase">{incident.source}</div>
+                <div className="text-xs font-semibold text-slate-700 uppercase">
+                  {incident.source}
+                </div>
               </div>
               <div className="rounded border border-sky-100 bg-sky-50 p-2">
                 <div className="text-[9px] font-bold text-sky-600 uppercase">AI Confidence</div>

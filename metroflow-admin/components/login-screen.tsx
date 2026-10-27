@@ -4,10 +4,11 @@ import { ArrowRight, Eye, EyeOff, Lock, ShieldAlert, ShieldCheck, User, Waves } 
 import { useState, type FormEvent } from "react";
 
 import { useToast } from "./toast-provider";
+import type { SessionUser } from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-export function LoginScreen({ onSignIn }: { onSignIn: (user?: any) => void }) {
+export function LoginScreen({ onSignIn }: { onSignIn: (user?: SessionUser) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -29,15 +30,15 @@ export function LoginScreen({ onSignIn }: { onSignIn: (user?: any) => void }) {
       if (!res.ok) {
         throw new Error("Invalid credentials");
       }
-      const data = await res.json();
+      const data: SessionUser & { user?: SessionUser } = await res.json();
       setIsSubmitting(false);
-      const user = data.user || data;
+      const user: SessionUser = data.user ?? data;
       if (user.role !== "LGU_DISPATCHER" && user.role !== "SUPER_ADMIN") {
         setError("Only authorized admin accounts can access this system");
         return;
       }
       onSignIn(user);
-    } catch (e) {
+    } catch {
       setIsSubmitting(false);
       setError("Invalid credentials");
       show("Authentication failed");

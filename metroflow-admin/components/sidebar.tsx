@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CheckSquare, LogOut, Map, Radar, Shield, Truck, Waves } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import type { SessionUser } from "@/lib/session";
 
 export type NavItem = "triage" | "radar" | "hazards" | "fleet";
 
@@ -15,7 +16,7 @@ export const NAV_ITEMS = [
 type SidebarProps = {
   activeItem?: string;
   queueCount: number;
-  user?: any;
+  user?: SessionUser | null;
   fleetCount?: number;
   onSignOut: () => void;
   onNavigate?: (id: string, label: string) => void;
@@ -35,7 +36,10 @@ export function Sidebar({
     <aside className="flex w-64 flex-shrink-0 select-none flex-col justify-between border-r border-slate-800 bg-slate-900 text-slate-300">
       <div>
         {/* App Logo Header */}
-        <Link href="/triage" className="flex items-center gap-3 border-b border-slate-800 p-4 hover:bg-slate-800/40 transition-colors">
+        <Link
+          href="/triage"
+          className="flex items-center gap-3 border-b border-slate-800 p-4 hover:bg-slate-800/40 transition-colors"
+        >
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500 text-white shadow-md shadow-sky-500/20">
             <Waves className="h-5 w-5" />
           </div>
@@ -80,9 +84,7 @@ export function Sidebar({
           <span
             className={cn(
               "rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",
-              isAlertActive
-                ? "bg-amber-400/20 text-amber-300"
-                : "bg-slate-700/50 text-slate-400",
+              isAlertActive ? "bg-amber-400/20 text-amber-300" : "bg-slate-700/50 text-slate-400",
             )}
           >
             {queueCount} SOS

@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  CircleCheck,
-  Shield,
-  Siren,
-  Truck,
-} from "lucide-react";
+import { CircleCheck, Shield, Siren, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -13,11 +8,7 @@ import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
 import { IncidentQueue } from "@/components/incident-queue";
 import { useToast } from "@/components/toast-provider";
-import {
-  type LogEntry,
-  type QueueFilter,
-  type Incident,
-} from "@/lib/incidents";
+import { type LogEntry, type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
@@ -92,7 +83,10 @@ export default function TriagePage() {
     });
   }, [allIncidents, filter, query]);
 
-  const selected = selectedId ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null) : allIncidents[0] ?? null;
+  const selected = selectedId
+    ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null)
+    : (allIncidents[0] ?? null);
+  const activeId = selected?.id ?? "";
   const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
   const pendingCount = allIncidents.length - dismissed.size;
 
@@ -117,24 +111,24 @@ export default function TriagePage() {
 
   const handleAction = useCallback(
     (label: string) => {
-      if (selected?.id) {
-        show(`${label} executed for #${selected.id}`);
-        appendLog(selected.id, `Action: ${label} by Dispatch Officer.`, "action");
+      if (activeId) {
+        show(`${label} executed for #${activeId}`);
+        appendLog(activeId, `Action: ${label} by Dispatch Officer.`, "action");
       } else {
         show(label);
       }
     },
-    [appendLog, selected?.id, show],
+    [appendLog, activeId, show],
   );
 
   const handleAddNote = useCallback(
     (text: string) => {
-      if (selected?.id) {
-        appendLog(selected.id, `Note: ${text}`, "note");
+      if (activeId) {
+        appendLog(activeId, `Note: ${text}`, "note");
       }
       show("Internal note saved to incident log");
     },
-    [appendLog, selected?.id, show],
+    [appendLog, activeId, show],
   );
 
   const handleDispatchConfirmed = useCallback(
@@ -213,14 +207,18 @@ export default function TriagePage() {
                 <div className="mt-1 flex items-baseline gap-2">
                   <span className="text-2xl font-bold text-slate-900">{card.value}</span>
                   {card.trend ? (
-                    <span className={`flex items-center text-xs font-medium ${card.trend.className}`}>
+                    <span
+                      className={`flex items-center text-xs font-medium ${card.trend.className}`}
+                    >
                       {card.trend.text}
                     </span>
                   ) : null}
                 </div>
                 <p className="mt-1 text-[11px] text-slate-400">{card.detail}</p>
               </div>
-              <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${card.iconClassName}`}>
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-lg border ${card.iconClassName}`}
+              >
                 <Icon className="h-5 w-5" />
               </div>
             </div>

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dashboard } from "./dashboard";
 import { LoginScreen } from "./login-screen";
 import { ToastProvider, useToast } from "./toast-provider";
+import type { SessionUser } from "@/lib/session";
 
 type Screen = "login" | "dashboard";
 
@@ -18,13 +19,13 @@ export function Portal() {
 
 function PortalScreens() {
   const [screen, setScreen] = useState<Screen>("login");
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const { show } = useToast();
   const transition = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const signIn = useCallback(
-    (userData?: any) => {
-      setUser(userData || null);
+    (userData?: SessionUser) => {
+      setUser(userData ?? null);
       const name = userData?.name || "";
       show(name ? `Authenticated as ${name} (Lead Dispatcher)` : "Authenticated");
 
@@ -49,5 +50,9 @@ function PortalScreens() {
     [],
   );
 
-  return screen === "login" ? <LoginScreen onSignIn={signIn} /> : <Dashboard user={user} onSignOut={signOut} />;
+  return screen === "login" ? (
+    <LoginScreen onSignIn={signIn} />
+  ) : (
+    <Dashboard user={user} onSignOut={signOut} />
+  );
 }

@@ -12,7 +12,7 @@ export function SOSLivePanel() {
       try {
         const data = await listSOS();
         setSos(data);
-      } catch (e) {
+      } catch {
         // ignore
       }
     };

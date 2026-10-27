@@ -1,10 +1,8 @@
 "use client";
 
 import {
-  Activity,
   AlertTriangle,
   ArrowLeft,
-  Battery,
   Check,
   CheckCircle,
   Clock,
@@ -16,15 +14,14 @@ import {
   Radio,
   RefreshCw,
   Truck,
-  User,
   Wifi,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
-import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
+import { listVehicles, type SOSRequest } from "@/lib/dispatch";
 import { listSOS } from "@/lib/sos-live";
-import type { RescueUnit } from "@/lib/rescue";
+import { toUnitStatus, type FleetUnit, type MissionMilestone } from "@/lib/rescue";
 
 type RescueTrackingProps = {
   onBack: () => void;
@@ -32,7 +29,7 @@ type RescueTrackingProps = {
 };
 
 export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
-  const [fleet, setFleet] = useState<RescueUnit[]>([]);
+  const [fleet, setFleet] = useState<FleetUnit[]>([]);
   const [sosList, setSosList] = useState<SOSRequest[]>([]);
 
   useEffect(() => {
@@ -44,24 +41,28 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         ]);
 
         if (vehiclesData && vehiclesData.length > 0) {
-          const mapped = vehiclesData.map((v: any) => {
+          const mapped: FleetUnit[] = vehiclesData.map((v) => {
             const assignedSos = sosData.find(
-              (s) => s.vehicle_id === v.vehicle_id && (s.status === "assigned" || s.status === "confirmed"),
+              (s) =>
+                s.vehicle_id === v.vehicle_id &&
+                (s.status === "assigned" || s.status === "confirmed"),
             );
             return {
               callSign: v.call_sign,
               type: v.vehicle_type,
-              status: (assignedSos ? "EN_ROUTE" : String(v.status || "AVAILABLE").toUpperCase()) as any,
-              clearance_cm: v.clearance_cm || 0,
-              speed_kmh: v.speed_kmh || 0,
-              location: assignedSos ? `Assigned #FR-${assignedSos.sos_id.toString().padStart(4, "0")}` : "Depot",
-              assignedSosId: assignedSos ? assignedSos.sos_id : undefined,
-            } as RescueUnit & { assignedSosId?: number };
+              status: assignedSos ? "EN_ROUTE" : toUnitStatus(v.status),
+              clearance_cm: v.clearance_cm ?? 0,
+              speed_kmh: v.speed_kmh ?? 0,
+              location: assignedSos
+                ? `Assigned #FR-${assignedSos.sos_id.toString().padStart(4, "0")}`
+                : "Depot",
+              assignedSosId: assignedSos?.sos_id,
+            };
           });
           setFleet(mapped);
         }
         setSosList(sosData);
-      } catch (e) {
+      } catch {
         // keep fallback
       }
     };
@@ -73,7 +74,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const activeMission = sosList.find(
     (s) => s.vehicle_id != null && (s.status === "assigned" || s.status === "confirmed"),
   );
-  const activeUnit = fleet.find((u) => (u as any).assignedSosId === activeMission?.sos_id) || fleet[0];
+  const activeUnit = fleet.find((u) => u.assignedSosId === activeMission?.sos_id) || fleet[0];
 
   return (
     <div className="space-y-6">
@@ -206,11 +207,11 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
               </div>
 
               <div className="text-[11px] text-slate-600">
-                {unit.status === "EN_ROUTE" && (unit as any).assignedSosId ? (
+                {unit.status === "EN_ROUTE" && unit.assignedSosId ? (
                   <span>
                     Task:{" "}
                     <strong className="text-slate-900">
-                      Distress #FR-{String((unit as any).assignedSosId).padStart(4, "0")}
+                      Distress #FR-{String(unit.assignedSosId).padStart(4, "0")}
                     </strong>
                   </span>
                 ) : unit.status === "AVAILABLE" ? (
@@ -264,8 +265,8 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                   <h3 className="text-sm font-bold text-slate-900">Active Incident Mission</h3>
                   <p className="font-mono text-[11px] text-slate-500 flex items-center mt-0.5">
                     <MapPin className="mr-1 h-3 w-3 text-rose-500" />
-                    {activeMission.latitude.toFixed(4)}° N, {activeMission.longitude.toFixed(4)}° E •
-                    Sector Delta
+                    {activeMission.latitude.toFixed(4)}° N, {activeMission.longitude.toFixed(4)}° E
+                    • Sector Delta
                   </p>
                 </div>
 
@@ -447,9 +448,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
             <Clock className="h-3 w-3" /> Estimated Arrival (ETA)
           </div>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-slate-900">
-              {activeMission ? "12" : "--"}
-            </span>
+            <span className="text-2xl font-bold text-slate-900">{activeMission ? "12" : "--"}</span>
             <span className="text-xs text-slate-500">{activeMission ? "min" : "Standby"}</span>
           </div>
           <p className="mt-1 font-mono text-[11px] text-slate-400">
@@ -477,9 +476,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
             <Droplets className="h-3 w-3 text-sky-600" /> Flood Depth En Route
           </div>
           <div className="mt-1 flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-sky-700">
-              {activeMission ? "30" : "--"}
-            </span>
+            <span className="text-2xl font-bold text-sky-700">{activeMission ? "30" : "--"}</span>
             <span className="text-xs text-sky-600">{activeMission ? "cm" : "Clear"}</span>
           </div>
           <p className="mt-1 font-mono text-[11px] text-sky-700">
@@ -505,7 +502,10 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900">
-              Mission Milestone Timeline: {activeMission ? `#FR-${activeMission.sos_id.toString().padStart(4, "0")}` : "Standby"}
+              Mission Milestone Timeline:{" "}
+              {activeMission
+                ? `#FR-${activeMission.sos_id.toString().padStart(4, "0")}`
+                : "Standby"}
             </h3>
             <p className="text-xs text-slate-500">
               {activeMission
@@ -520,26 +520,28 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
 
         {/* Stepper */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {[
-            {
-              label: "Step 1: Dispatched",
-              time: activeMission ? "Immediate" : "--",
-              detail: activeMission ? "Depot Delta Station" : "Awaiting assignment",
-              state: activeMission ? "done" : "pending",
-            },
-            {
-              label: "Step 2: En Route",
-              time: activeMission ? "Active" : "--",
-              detail: activeMission ? "Flood-safe corridor active" : "Standby at base",
-              state: activeMission ? "current" : "pending",
-            },
-            {
-              label: "Step 3: On Scene",
-              time: activeMission ? "Pending" : "--",
-              detail: activeMission ? "Target perimeter" : "Standby",
-              state: "pending",
-            },
-          ].map((milestone: any) => (
+          {(
+            [
+              {
+                label: "Step 1: Dispatched",
+                time: activeMission ? "Immediate" : "--",
+                detail: activeMission ? "Depot Delta Station" : "Awaiting assignment",
+                state: activeMission ? "done" : "pending",
+              },
+              {
+                label: "Step 2: En Route",
+                time: activeMission ? "Active" : "--",
+                detail: activeMission ? "Flood-safe corridor active" : "Standby at base",
+                state: activeMission ? "current" : "pending",
+              },
+              {
+                label: "Step 3: On Scene",
+                time: activeMission ? "Pending" : "--",
+                detail: activeMission ? "Target perimeter" : "Standby",
+                state: "pending",
+              },
+            ] satisfies MissionMilestone[]
+          ).map((milestone) => (
             <div
               key={milestone.label}
               className={cn(
@@ -579,7 +581,10 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => activeUnit?.callSign && onAction(`Rerouted ${activeUnit.callSign} via high-ground bypass`)}
+              onClick={() =>
+                activeUnit?.callSign &&
+                onAction(`Rerouted ${activeUnit.callSign} via high-ground bypass`)
+              }
               className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
             >
               Reroute via High Ground

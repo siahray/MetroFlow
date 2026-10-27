@@ -61,7 +61,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
       try {
         const data = await listHazards();
         setHazards(data);
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
@@ -82,7 +82,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
       const published = await publishHazard(created.hazard_id);
       setHazards((current) => [published, ...current]);
       onAction(`Published Hazard #${published.hazard_id}: ${polygonName} (${depthCm} cm)`);
-    } catch (e) {
+    } catch {
       onAction(`Failed to publish hazard ${polygonName}`);
     } finally {
       setSaving(false);
