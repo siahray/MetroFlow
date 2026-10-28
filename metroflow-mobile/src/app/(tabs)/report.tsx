@@ -50,11 +50,13 @@ export default function ReportScreen() {
       setMsg('Report submitted. MDRRMC has been notified.');
       setTimeout(() => router.replace('/(tabs)/home'), 1200);
     } catch (error) {
-      const needsSignIn = error instanceof ApiError && error.status === 401;
+      const apiError = error instanceof ApiError ? error : null;
       setMsg(
-        needsSignIn
+        apiError?.status === 401
           ? 'Sign in to submit a report.'
-          : 'Submission failed. Please try again.',
+          : apiError?.status === 429
+            ? `${apiError.message} Reports are limited to prevent false floods.`
+            : 'Submission failed. Please try again.',
       );
       setSubmitting(false);
     }

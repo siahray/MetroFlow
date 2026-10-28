@@ -4,6 +4,7 @@ import { ArrowRight, Eye, EyeOff, Lock, ShieldAlert, ShieldCheck, User, Waves } 
 import { useState, type FormEvent } from "react";
 
 import { useToast } from "./toast-provider";
+import { readErrorMessage, ApiError } from "@/lib/api";
 import type { SessionUser } from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -32,7 +33,10 @@ export function LoginScreen({
         body: JSON.stringify({ email: username, password }),
       });
       if (!res.ok) {
-        throw new Error("Invalid credentials");
+        // The API explains itself on a 429 (with the wait), and a 401 here just
+        // means the pair was wrong: do not tell an operator who is being
+        // throttled that their password is wrong.
+        throw new ApiError(res.status, await readErrorMessage(res));
       }
       const data = (await res.json()) as { access_token?: string; user?: SessionUser };
       setIsSubmitting(false);
@@ -42,9 +46,10 @@ export function LoginScreen({
         return;
       }
       onSignIn(user, data.access_token);
-    } catch {
+    } catch (err) {
       setIsSubmitting(false);
-      setError("Invalid credentials");
+      const message = err instanceof ApiError ? err.message : "Invalid credentials";
+      setError(message);
       show("Authentication failed");
     }
   }
