@@ -339,7 +339,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested                                     |
 | Rainfall simulation      | FSD-FR-006 to 010 | Implemented | Contract-tested; overrides respected                |
 | Routing                  | FSD-FR-011 to 017 | Implemented | Unit and contract tests                             |
-| Portal access            | FSD-FR-018 to 023 | Partial     | Real sign-in against `/auth/login`; only the profile is kept for the session (no token is sent, no route guard) |
+| Portal access            | FSD-FR-018 to 023 | Implemented | Real sign-in against `/auth/login`; the token and profile are kept for the session, every request sends the token, and the shell returns to `/login` without one or when the API answers `401` |
 | Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS panel polls the API; remaining entries are mock data |
 | Incident detail          | FSD-FR-032 to 038 | Partial     | Renders live SOS; evidence files not linked         |
 | Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
@@ -361,13 +361,13 @@ statement; the FSD identifiers above remain stable as items move.
 
 | ID      | Actor              | Description                            | Access today                           |
 | ------- | ------------------ | -------------------------------------- | -------------------------------------- |
-| ACT-001 | Dispatcher         | Verifies reports and commits resources | Portal, no authentication              |
+| ACT-001 | Dispatcher         | Verifies reports and commits resources | Portal behind `/login`; `LGU_DISPATCHER` or `SUPER_ADMIN` token required |
 | ACT-002 | MDRRMC commander   | Oversees operations across barangays   | Not distinguished from dispatcher      |
 | ACT-003 | Field responder    | Consumes route guidance                | None (planned driver app, CR-001)      |
 | ACT-004 | Citizen reporter   | Submits reports                        | None (planned report API, CR-001)      |
 | ACT-005 | Administrator      | Manages users and configuration        | None (future)                          |
-| ACT-006 | Integration client | Calls the API programmatically         | Open in baseline; bearer token planned |
-| ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | None (planned Expo app, CR-001)        |
+| ACT-006 | Integration client | Calls the API programmatically         | Bearer token from `/auth/login`; role decides the routes |
+| ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | Expo app; driver account token for `/sos` |
 | ACT-008 | Rescue commander   | Approves dispatch and rescue routes    | None (planned, CR-001)                 |
 | ACT-009 | Sensor gateway     | Posts river and rain gauge readings    | None (planned, CR-001)                 |
 | ACT-010 | CCTV demo feed     | Labelled reference footage in evidence | None (demo registry, CR-001)           |
