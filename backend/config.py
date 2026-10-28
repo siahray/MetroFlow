@@ -55,8 +55,8 @@ class Settings(BaseSettings):
     # Registration only ever creates driver accounts, so the first LGU
     # dispatcher has to come from configuration. These values are used once, when
     # the user table is empty; set both in any real deployment.
-    admin_email: str = "dispatcher@metroflow.local"
-    admin_password: str = "metroflow-dev"
+    admin_email: str = "admin@metroflow.lgu"
+    admin_password: str = "Admin.123"
 
     # --- Request ceilings ------------------------------------------------------
     # Requests per minute per client address for the routes worth abusing
