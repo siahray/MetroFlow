@@ -458,7 +458,7 @@ Full request and response contracts, examples and error bodies are in
 | ------- | ------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
 | SEC-001 | Most endpoints did not check the session token    | High     | Resolved 27 Oct 2026: every route except the auth entry points requires a token, and writes require a portal role |
 | SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist in CR-001; the app uses bearer tokens        |
-| SEC-003 | Baseline has no rate limiting                     | Medium   | Add Redis-backed limits for login, reports, telemetry and SOS               |
+| SEC-003 | Baseline has no rate limiting                     | Medium   | Closed 28 Oct 2026 for the routes that exist: login, registration, SOS and simulation are limited per address in Postgres. Report and telemetry limits land with those routes |
 | SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Activates automatically when public or licensed                             |
 | SEC-005 | Audit hash column has no write path               | Low      | Implement with FSD-FR-093                                                   |
 | SEC-006 | Uploaded evidence can exhaust or poison storage   | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution                  |
@@ -832,10 +832,13 @@ secret, and no service-role key may ever appear in either client.
 | `backend`  | built from `backend/Dockerfile`            | 8000 | `curl /openapi.json` |
 | `mobile`   | `metroflow-mobile/` Expo Metro dev server | 8081 | `bun run start`      |
 
-Redis carries the hazard, fleet and SOS event channels and the rate-limit and
-telemetry counters. It is no longer a provisioned-but-unused container once
-CR-001 lands. The backend container runs as uid 10001, mounts the evidence
-volume read-write, and applies migrations on start unless `RUN_MIGRATIONS=false`.
+Redis carries the hazard, fleet and SOS event channels. It is no longer a
+provisioned-but-unused container once CR-001 lands. Rate limits do not use it:
+their counter is in Postgres, because the hosted API has no Redis and a
+serverless instance cannot hold one in memory (§5.3). The telemetry throttle is
+a setting, not a counter. The backend container runs as uid 10001, mounts the
+evidence volume read-write, and applies migrations on start unless
+`RUN_MIGRATIONS=false`.
 
 ### 5.2 Hosted database
 
