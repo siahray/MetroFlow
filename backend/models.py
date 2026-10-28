@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from geoalchemy2 import Geometry
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -89,16 +90,26 @@ class AuditLog(Base):
 class HazardZone(Base):
     __tablename__ = "hazard_zones"
     hazard_id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(120), nullable=False)
-    obstruction_level = Column(String(20), nullable=False, index=True)
+    name = Column(String(120), nullable=False, comment="Operator label for the hazard")
+    obstruction_level = Column(
+        String(20),
+        nullable=False,
+        index=True,
+        comment="CAUTION, LEVEL_2, LEVEL_3, IMPASSABLE",
+    )
     # SMALLINT matches the deployed column: depths are centimetres and never
     # leave the 32k range. Widening it here would make ``alembic check`` drift.
-    avg_depth_cm = Column(SmallInteger, nullable=True)
+    avg_depth_cm = Column(SmallInteger, nullable=True, comment="Average water depth in centimeters")
     geometry = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=True)
-    edge_id = Column(Integer, ForeignKey("road_edges.edge_id"), nullable=True)
-    notes = Column(Text, nullable=True)
-    published_at = Column(DateTime, nullable=True)
-    active = Column(Boolean, default=True, index=True)
+    edge_id = Column(
+        Integer,
+        ForeignKey("road_edges.edge_id"),
+        nullable=True,
+        comment="FK to road_edges for closure hazards",
+    )
+    notes = Column(Text, nullable=True, comment="Internal operator notes only")
+    published_at = Column(DateTime, nullable=True, comment="Timestamp when hazard was published")
+    active = Column(Boolean, default=True, index=True, comment="Whether hazard is currently active")
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -108,13 +119,29 @@ class Vehicle(Base):
     vehicle_id = Column(Integer, primary_key=True, index=True)
     # ``unique=True`` with ``index=True`` renders the unique index the deployed
     # database has; ``unique`` alone would ask Alembic for a table constraint.
-    call_sign = Column(String(50), unique=True, index=True, nullable=False)
-    vehicle_type = Column(String(30), nullable=False, index=True)
-    clearance_cm = Column(Integer, nullable=True)
-    status = Column(String(20), nullable=False, index=True)
+    call_sign = Column(
+        String(50),
+        unique=True,
+        index=True,
+        nullable=False,
+        comment="Unit call sign (e.g., RU-03)",
+    )
+    vehicle_type = Column(
+        String(30),
+        nullable=False,
+        index=True,
+        comment="AMBULANCE, RESCUE_BOAT, FIRE_TRUCK, PATROL",
+    )
+    clearance_cm = Column(Integer, nullable=True, comment="Vehicle ground clearance in centimeters")
+    status = Column(
+        String(20),
+        nullable=False,
+        index=True,
+        comment="AVAILABLE, DISPATCHED, OUT_OF_SERVICE",
+    )
     current_location_lat = Column(Float, nullable=True)
     current_location_lon = Column(Float, nullable=True)
-    speed_kmh = Column(Float, nullable=True)
+    speed_kmh = Column(Float, nullable=True, comment="Current speed in km/h")
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -124,8 +151,34 @@ class SOSRequest(Base):
     sos_id = Column(Integer, primary_key=True, index=True)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
-    note = Column(Text, nullable=True)
-    vehicle_id = Column(Integer, ForeignKey("vehicles.vehicle_id"), nullable=True)
-    status = Column(String(20), default="pending", index=True)
+    note = Column(Text, nullable=True, comment="Optional text note")
+    vehicle_id = Column(
+        Integer,
+        ForeignKey("vehicles.vehicle_id"),
+        nullable=True,
+        comment="FK to vehicles for assigned unit",
+    )
+    status = Column(
+        String(20),
+        default="pending",
+        index=True,
+        comment="PENDING, ASSIGNED, RESOLVED",
+    )
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class RateLimitCounter(Base):
+    """
+    One fixed window of requests for one counter bucket (TSD LIM-006).
+
+    ``window_start`` is epoch seconds aligned to the window size. An integer
+    rather than a timestamp keeps the atomic upsert free of timezone handling on
+    both sides, and the pair is the primary key, so the increment is a single
+    statement with no read-then-write race between serverless instances.
+    """
+
+    __tablename__ = "rate_limit_counters"
+    bucket = Column(String(200), primary_key=True)
+    window_start = Column(BigInteger, primary_key=True, index=True)
+    request_count = Column(Integer, nullable=False)

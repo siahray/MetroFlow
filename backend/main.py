@@ -7,6 +7,7 @@ import bcrypt
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import models
@@ -15,6 +16,8 @@ from config import settings
 from database import get_db
 from geometry import backfill_geometry
 from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
+from rate_limit import prune as prune_rate_limits
+from rate_limit import rate_limit
 from routing import classify_passability, td_a_star_search
 from schemas import (
     AssignRequest,
@@ -172,6 +175,17 @@ async def lifespan(app: FastAPI):
             f"[startup] geometry backfill: {result['nodes_updated']} nodes, "
             f"{result['edges_updated']} edges populated"
         )
+        # Dead rate-limit windows are inert once their window has passed. Doing
+        # this at startup rather than on a schedule keeps the deployment free of
+        # background jobs; a cold start is frequent enough on the host.
+        try:
+            pruned = prune_rate_limits(db)
+            if pruned:
+                print(f"[startup] pruned {pruned} expired rate-limit windows")
+        except SQLAlchemyError:
+            # The table arrives with the migration; a database that has not been
+            # upgraded yet must not stop the API from booting.
+            print("[startup] rate-limit cleanup skipped: table unavailable")
     finally:
         db.close()
     yield
@@ -377,7 +391,11 @@ def get_network_state(
     return _build_network_state(db, clearance_cm)
 
 
-@app.post("/api/v1/simulation/rain", response_model=SimulationResponse)
+@app.post(
+    "/api/v1/simulation/rain",
+    response_model=SimulationResponse,
+    dependencies=[Depends(rate_limit("simulation", settings.rate_limit_simulation_per_min))],
+)
 def trigger_rainfall_simulation(
     rainfall_mm_hr: Annotated[float, Query(ge=0, le=250, description="Rainfall intensity (mm/hr)")],
     clearance_cm: Annotated[
@@ -542,7 +560,11 @@ def get_optimal_route(
 # ---------------------------------------------------------------------------
 
 
-@app.post("/api/v1/auth/login", response_model=TokenResponse)
+@app.post(
+    "/api/v1/auth/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("login", settings.rate_limit_login_per_min))],
+)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     import models
     from auth_utils import create_access_token
@@ -588,7 +610,10 @@ def get_me(current_user: models.User = Depends(get_current_user)):
     }
 
 
-@app.post("/api/v1/auth/send-verification")
+@app.post(
+    "/api/v1/auth/send-verification",
+    dependencies=[Depends(rate_limit("send-verification", settings.rate_limit_register_per_min))],
+)
 def send_verification(request: SendVerifyRequest):
     try:
         from verification_store import create_code
@@ -605,7 +630,10 @@ def send_verification(request: SendVerifyRequest):
     return {"message": "Verification code sent", "code": code}
 
 
-@app.post("/api/v1/auth/verify")
+@app.post(
+    "/api/v1/auth/verify",
+    dependencies=[Depends(rate_limit("verify", settings.rate_limit_register_per_min))],
+)
 def verify(request: VerifyRequest):
     try:
         from verification_store import verify_code
@@ -619,7 +647,12 @@ def verify(request: VerifyRequest):
     return {"verified": True}
 
 
-@app.post("/api/v1/auth/register", response_model=UserResponse, status_code=201)
+@app.post(
+    "/api/v1/auth/register",
+    response_model=UserResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("register", settings.rate_limit_register_per_min))],
+)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     Create a driver account.
@@ -684,7 +717,11 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 
-@app.post("/api/v1/sos", response_model=SOSResponse)
+@app.post(
+    "/api/v1/sos",
+    response_model=SOSResponse,
+    dependencies=[Depends(rate_limit("sos", settings.rate_limit_sos_per_min))],
+)
 def create_sos(
     sos: SOSCreate,
     _user: models.User = Depends(require_user),
