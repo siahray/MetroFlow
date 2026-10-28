@@ -13,9 +13,11 @@ issues its own HS256 session tokens; see `docs/TSD.md` ADR-021.
 ### Hosted deployment
 - **API:** https://metroflow-api-siahrays-projects.vercel.app (Vercel project
   `metroflow-api`, team `siahrays-projects`, region `icn1`, Python function built
-  from `backend/`). Releasing a backend change means
-  `cd backend && vercel deploy --prod --scope siahrays-projects --project metroflow-api`;
-  the project is not git-connected yet (TSD LIM-024).
+  from `backend/`). The project is connected to this repository with production
+  branch `main` and root directory `backend`, so **merging to `main` deploys
+  production** and a branch push produces a preview. `cd backend && vercel deploy
+  --prod --scope siahrays-projects --project metroflow-api` remains available for
+  an out-of-band release.
 - **Portal:** https://metroflow-web-lgu.vercel.app (Vercel Git integration, root
   `metroflow-admin`); it reads `NEXT_PUBLIC_API_BASE_URL` at build time.
 - **Runtime env vars** live in the Vercel projects, not in the repository. The

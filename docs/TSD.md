@@ -876,7 +876,7 @@ operate.
 | Runtime       | Python 3.12 function on Fluid Compute, 60 s maximum duration              |
 | Region        | `icn1` (Seoul), the same region as the hosted database                    |
 | Entrypoint    | `backend/main.py`; `vercel.json` carries no build configuration           |
-| Deploy        | `cd backend && vercel deploy --prod --scope siahrays-projects --project metroflow-api` |
+| Deploy        | Git integration on `siahray/MetroFlow`: production branch `main`, root directory `backend`; merging to `main` deploys production, a branch push deploys a preview |
 
 Environment variables, all set for production and preview:
 
@@ -928,13 +928,15 @@ change ──► pull request ──► Backend CI ──┐
                        ├──► Web CI     ──┤
                        └──► Mobile CI  ──┴──► merge to main
                                               ├──► Backend CI ──► Supabase migrations
-                                              ├──► Web CI ──► Vercel Git deployment (portal)
+                                              ├──► Vercel Git deployment (portal, root metroflow-admin)
+                                              ├──► Vercel Git deployment (API, root backend)
                                               └──► tag backend-v* ──► GHCR image
 ```
 
-The API is not in that chain yet: `metroflow-api` runs whatever the last
-`vercel deploy --prod` uploaded rather than what is on `main` (LIM-024), so the
-deploy command in §5.3 is part of releasing a backend change.
+`metroflow-api` builds from the same repository as the portal: root directory
+`backend`, production branch `main`, so a merge deploys the API and a branch
+push produces a preview. LIM-024 is closed; `vercel deploy --prod` remains
+available for an out-of-band release, but the normal release path is the merge.
 
 ## 6. Architecture Decisions
 
@@ -989,7 +991,7 @@ deploy command in §5.3 is part of releasing a backend change.
 | LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
 | LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Create `metroflow_app`, move table ownership to it and rotate `DATABASE_URL`                                 |
-| LIM-024 | API deployments are manual, not git-connected      | The deployed code can drift from `main`          | Connect `metroflow-api` to the repository with root directory `backend/`                                     |
+| LIM-024 | API deployments are manual, not git-connected      | Closed 28 Oct 2026                               | The project now builds from `siahray/MetroFlow` with root directory `backend` and production branch `main`     |
 | LIM-025 | Vercel WAF rate-limit rules need a paid plan       | No edge-level limit or edge bot rule             | Application limits (LIM-006) cover the abuse surface; upgrade the team before public exposure                 |
 
 LIM-001 and LIM-022 are closed. Every route except the four auth entry points
@@ -1008,6 +1010,10 @@ window, counted in Postgres (`backend/rate_limit.py`, table
 fails open on a database error. The edge half of LIM-006 — a WAF rule and bot
 protection at the platform — is not available on the Hobby plan and is recorded
 as LIM-025 rather than being left implied.
+
+LIM-024 is closed: `metroflow-api` is connected to the repository, builds from
+the `backend` root directory and deploys production from `main`, so the running
+function matches the merged commit instead of the last uploaded folder.
 
 ## 8. Repository and Commands
 

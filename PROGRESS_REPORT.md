@@ -2,7 +2,7 @@
 
 **Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System  
 **Date:** October 28, 2026  
-**Branch:** `feat/rate-limits`  
+**Branch:** `main`  
 **Status:** Deployed — portal on Vercel, API as a Vercel Python function, Supabase hosted
 
 ---
@@ -128,7 +128,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | Web CI | Bun install, ESLint, `next build` |
 | Mobile CI | Bun install (`bun.lock`), `tsc --noEmit` |
 | Deploy Web | Vercel Git integration, root `metroflow-admin/` (branch previews, production from `main`; no Actions job) |
-| Deploy Backend | Manual `vercel deploy --prod` from `backend/` to the `metroflow-api` Python function (TSD LIM-024); container image to GHCR |
+| Deploy Backend | Vercel Git integration, root `backend/` (previews on branch pushes, production from `main`; manual `vercel deploy --prod` only for an out-of-band release); container image to GHCR |
 
 The mobile app has no `package-lock.json`; Bun is its package manager (TSD LIM-021).
 
