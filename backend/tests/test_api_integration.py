@@ -347,3 +347,29 @@ def test_invalid_rainfall_is_rejected(client, rainfall):
         params={"rainfall_mm_hr": rainfall},
     )
     assert response.status_code == 422
+
+
+def test_rate_limit_counter_round_trips_against_a_real_database():
+    """The limiter's upsert is the one piece SQLite cannot vouch for.
+
+    This also proves the migration that creates the table has been applied to
+    whatever database the suite is pointed at, which is the failure a serverless
+    deployment would otherwise only discover on the first 429.
+    """
+    from uuid import uuid4
+
+    from sqlalchemy import text
+
+    from database import SessionLocal
+    from rate_limit import consume
+
+    bucket = f"integration:{uuid4()}"
+    with SessionLocal() as db:
+        try:
+            assert consume(db, bucket, 60)[0] == 1
+            assert consume(db, bucket, 60)[0] == 2
+        finally:
+            db.execute(
+                text("DELETE FROM rate_limit_counters WHERE bucket = :bucket"), {"bucket": bucket}
+            )
+            db.commit()

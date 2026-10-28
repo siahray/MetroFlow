@@ -32,12 +32,16 @@ export default function SOSScreen() {
         { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
       ]);
     } catch (error) {
-      const needsSignIn = error instanceof ApiError && error.status === 401;
+      const apiError = error instanceof ApiError ? error : null;
+      const needsSignIn = apiError?.status === 401;
+      const throttled = apiError?.status === 429;
       Alert.alert(
-        needsSignIn ? 'Sign in required' : 'Failed',
+        needsSignIn ? 'Sign in required' : throttled ? 'SOS limit reached' : 'Failed',
         needsSignIn
           ? 'Sign in or create an account to send an SOS.'
-          : 'Could not send SOS. Check your connection and try again.',
+          : throttled
+            ? `${apiError?.message ?? 'Too many requests.'} If this is a real emergency, call your local emergency line.`
+            : 'Could not send SOS. Check your connection and try again.',
       );
       setSending(false);
     }

@@ -128,9 +128,36 @@ Both comparisons are inclusive. `clearance_cm` defaults to 30 cm and must be
 | `403`  | The caller's role may not perform this action          | `{"detail": "<message>"}`             |
 | `404`  | Unknown node, or no route survives the clearance check | `{"detail": "<message>"}`             |
 | `422`  | Parameter fails validation                             | FastAPI validation object (see §6)    |
+| `429`  | The caller exceeded a request ceiling (§1.6)           | `{"detail": "<message>"}` + `Retry-After` |
 | `500`  | Unhandled server or database error                     | `{"detail": "Internal Server Error"}` |
 
-### 1.6 External services
+### 1.6 Request limits
+
+The routes worth abusing are limited per client address in fixed one-minute
+windows (TSD LIM-006). The counter lives in Postgres, not in the process, because
+a serverless instance may be replaced between two requests. Limits are set in
+`config.py` and can be disabled with `0` (the test suite does).
+
+| Route                              | Bucket             | Default | Setting |
+| ---------------------------------- | ------------------ | ------- | ------- |
+| `POST /api/v1/auth/login`          | `login`            | 15/min  | `METROFLOW_RATE_LIMIT_LOGIN_PER_MIN` |
+| `POST /api/v1/auth/register`       | `register`         | 10/min  | `METROFLOW_RATE_LIMIT_REGISTER_PER_MIN` |
+| `POST /api/v1/auth/send-verification` | `send-verification` | 10/min | `METROFLOW_RATE_LIMIT_REGISTER_PER_MIN` |
+| `POST /api/v1/auth/verify`         | `verify`           | 10/min  | `METROFLOW_RATE_LIMIT_REGISTER_PER_MIN` |
+| `POST /api/v1/sos`                 | `sos`              | 20/min  | `METROFLOW_RATE_LIMIT_SOS_PER_MIN` |
+| `POST /api/v1/simulation/rain`     | `simulation`       | 12/min  | `METROFLOW_RATE_LIMIT_SIMULATION_PER_MIN` |
+
+A refused request returns `429` with `Retry-After` in seconds; the waiting time
+is the remainder of the current window, never more than 60 seconds. A failed
+attempt counts: fifteen wrong passwords still exhaust the login quota. If the
+counter database cannot be reached the request is **allowed** and a warning is
+logged — an outage must not turn into a blanket `429`.
+
+The limit is keyed on the first `X-Forwarded-For` entry, which the host
+overwrites, falling back to the socket address. It is per address, not per
+account, so a shared office NAT shares one quota.
+
+### 1.7 External services
 
 | Service        | Consumed by    | Role                                         |
 | -------------- | -------------- | -------------------------------------------- |
@@ -383,6 +410,7 @@ inputs the full pilot graph reports: edge 1 `18.67 cm / LIGHT_FLOOD`, edge 2
 | ------ | --------------------------------------------------------------- |
 | `422`  | `rainfall_mm_hr` missing, negative, above `250`, or not numeric |
 | `422`  | `clearance_cm` outside `(0, 200]`                               |
+| `429`  | More than 12 simulations a minute from one address (§1.6)       |
 
 ### 3.6 Side effect warning
 
@@ -594,6 +622,9 @@ FastAPI returns `422` with the failing location and reason.
 4. Do not cache network state across a simulation.
 5. Handle `404` from routing as an operational outcome and show the message to
    the dispatcher; do not retry blindly.
+6. On `429`, wait for the `Retry-After` seconds before retrying and show that
+   wait to the user. Do not retry immediately: a burst of retries extends the
+   block instead of recovering from it.
 
 ---
 
@@ -694,3 +725,4 @@ The following remain specified but absent, and must not be assumed by a client:
 | `404`  | SOS, vehicle or hazard id not found         |
 | `409`  | Email already registered                    |
 | `422`  | Validation failure on a body field          |
+| `429`  | Login, registration, SOS or simulation quota exhausted (§1.6) |

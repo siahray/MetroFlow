@@ -9,12 +9,55 @@ export function setAuthToken(token: string | null): void {
 
 export class ApiError extends Error {
   status: number;
+  retryAfterSeconds: number | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, retryAfterSeconds: number | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+function parseRetryAfter(res: Response): number | null {
+  const raw = res.headers.get("Retry-After");
+  if (!raw) return null;
+  const seconds = Number.parseInt(raw, 10);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
+}
+
+/**
+ * Turn a failed response into a message the driver can act on.
+ *
+ * The API refuses an over-limit request with a 429 and a `Retry-After` header;
+ * showing the raw JSON body would tell a driver nothing, and "check your
+ * connection" would be wrong advice for a limit they simply have to wait out.
+ */
+async function readError(res: Response): Promise<ApiError> {
+  const retryAfter = parseRetryAfter(res);
+
+  if (res.status === 429) {
+    const wait =
+      retryAfter === null
+        ? 'Please wait a moment and try again.'
+        : `Try again in ${retryAfter} second${retryAfter === 1 ? '' : 's'}.`;
+    return new ApiError(429, `Too many requests. ${wait}`, retryAfter);
+  }
+
+  const text = await res.text().catch(() => '');
+  if (text) {
+    try {
+      const detail = (JSON.parse(text) as { detail?: unknown } | null)?.detail;
+      if (typeof detail === 'string' && detail.trim()) {
+        return new ApiError(res.status, detail, retryAfter);
+      }
+    } catch {
+      // Not JSON: fall through and use the body verbatim.
+    }
+    return new ApiError(res.status, text, retryAfter);
+  }
+
+  return new ApiError(res.status, `Request failed: ${res.status}`, retryAfter);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -24,8 +67,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new ApiError(res.status, text || `Request failed: ${res.status}`);
+    throw await readError(res);
   }
   return (await res.json()) as T;
 }

@@ -890,11 +890,21 @@ Environment variables, all set for production and preview:
 Because the platform scales to zero, the first request after idle pays a cold
 start of roughly five seconds; warm requests measured from the portal's region
 run in 0.25–0.9 s. The lifespan hook runs on every cold start: it provisions the
-bootstrap dispatcher only when the table is empty and runs the idempotent
-geometry backfill, which takes an advisory lock and issues `CREATE INDEX IF NOT
-EXISTS`. Deployment protection is disabled for this project so that browsers can
-reach it; the bearer token is the gate, which is why LIM-001 and LIM-022 had to
-close first.
+bootstrap dispatcher only when the table is empty, runs the idempotent geometry
+backfill, which takes an advisory lock and issues `CREATE INDEX IF NOT EXISTS`,
+and prunes expired rate-limit windows. Deployment protection is disabled for this
+project so that browsers can reach it; the bearer token is the gate, which is why
+LIM-001 and LIM-022 had to close first.
+
+Request ceilings are enforced in the application, not at the edge (LIM-006).
+Vercel's WAF rate-limit rule is not available on the team's Hobby plan — the API
+answers `401` when one is created — and an in-process counter is worthless when
+every request may land on a different instance. The counter is therefore a table
+in the same Postgres database, incremented with one atomic upsert per limited
+request, and the cleanup runs at cold start rather than on a schedule. A counter
+database that cannot be reached fails open: a database outage must not become a
+blanket `429`. §1.6 of the API reference lists the routes and thresholds.
+
 
 ### 5.4 Workflows
 
@@ -958,7 +968,7 @@ deploy command in §5.3 is part of releasing a backend change.
 | LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | CR-001 adds optional OpenWeather and labelled simulated gauges; real gauge feeds need agreements             |
 | LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
 | LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | CR-001 allowlist                                                                                             |
-| LIM-006 | No rate limiting or WAF                            | DoS and credential-stuffing exposure             | CR-001 Redis-backed limits; WAF before public exposure                                                       |
+| LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
 | LIM-007 | No map in the baseline portal                      | GeoJSON served but not drawn                     | MapLibre map in CR-001                                                                                       |
 | LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions                  | CR-001 write path with hash chaining                                                                         |
 | LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright planned for Web and Mobile CI; not present yet                                                    |
@@ -977,6 +987,7 @@ deploy command in §5.3 is part of releasing a backend change.
 | LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Create `metroflow_app`, move table ownership to it and rotate `DATABASE_URL`                                 |
 | LIM-024 | API deployments are manual, not git-connected      | The deployed code can drift from `main`          | Connect `metroflow-api` to the repository with root directory `backend/`                                     |
+| LIM-025 | Vercel WAF rate-limit rules need a paid plan       | No edge-level limit or edge bot rule             | Application limits (LIM-006) cover the abuse surface; upgrade the team before public exposure                 |
 
 LIM-001 and LIM-022 are closed. Every route except the four auth entry points
 (`login`, `register`, `send-verification`, `verify`) requires a bearer token:
@@ -984,8 +995,16 @@ LIM-001 and LIM-022 are closed. Every route except the four auth entry points
 `auth_utils.require_roles`, so publishing hazards, changing the fleet, running a
 simulation, reading the incident queue and confirming dispatch require
 `LGU_DISPATCHER` or `SUPER_ADMIN`; a driver account gets `403`. Both clients now
-store and send the token, which is why these are no longer open limitations. The
-remaining gateway controls are rate limiting and a WAF (LIM-006).
+store and send the token, which is why these are no longer open limitations.
+
+LIM-006 is closed for the abuse surface that matters on a single pilot host.
+`login`, `register`, `send-verification`, `verify`, `POST /sos` and
+`POST /simulation/rain` each enforce a per-address ceiling in a fixed one-minute
+window, counted in Postgres (`backend/rate_limit.py`, table
+`rate_limit_counters`) and answered with `429` plus `Retry-After`. The limiter
+fails open on a database error. The edge half of LIM-006 — a WAF rule and bot
+protection at the platform — is not available on the Hobby plan and is recorded
+as LIM-025 rather than being left implied.
 
 ## 8. Repository and Commands
 

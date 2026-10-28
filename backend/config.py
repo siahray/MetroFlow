@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     admin_email: str = "dispatcher@metroflow.local"
     admin_password: str = "metroflow-dev"
 
+    # --- Request ceilings ------------------------------------------------------
+    # Requests per minute per client address for the routes worth abusing
+    # (TSD LIM-006). The defaults are sized for a handful of operators on one
+    # connection: a dispatcher signs in a few times a minute at most, a driver
+    # sends one SOS, and the simulation is a deliberate act. Zero disables a
+    # limit, which the test suite uses.
+    rate_limit_login_per_min: int = 15
+    rate_limit_register_per_min: int = 10
+    rate_limit_sos_per_min: int = 20
+    rate_limit_simulation_per_min: int = 12
+
     @property
     def is_production(self) -> bool:
         """True only for ``FASTAPI_ENV=production``, case and padding aside."""

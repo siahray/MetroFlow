@@ -1,8 +1,8 @@
 # MetroFlow - Progress Report
 
 **Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System  
-**Date:** October 27, 2026  
-**Branch:** `feat/token-enforcement` (`chore/api-deploy` stacked on it)  
+**Date:** October 28, 2026  
+**Branch:** `feat/rate-limits`  
 **Status:** Deployed — portal on Vercel, API as a Vercel Python function, Supabase hosted
 
 ---
@@ -14,8 +14,11 @@ MetroFlow is a dual-interface flood-aware urban mobility system consisting of a 
 This is a working pilot, not a production service. Every route except the four
 auth entry points requires a session token, and writes require a portal role
 (TSD SEC-001 closed). The API and portal are hosted, so the stack is reachable:
-rate limiting and a WAF are the remaining gateway controls (LIM-006), and the
-hosted API still connects with the project's `postgres` role (LIM-023).
+the routes worth abusing — sign-in, registration, SOS creation and the rainfall
+simulation — now carry per-address request ceilings answered with `429` and
+`Retry-After` (TSD LIM-006 closed for application limits; an edge WAF needs a
+paid Vercel plan, LIM-025). The hosted API still connects with the project's
+`postgres` role (LIM-023).
 
 ---
 
@@ -63,7 +66,8 @@ hosted API still connects with the project's `postgres` role (LIM-023).
 - **`GET /api/v1/auth/me`** returns the caller from the token
 - **Route enforcement** — every route except the four auth entry points requires a bearer token (`401`); routes that change shared state or read incident data require a portal role (`403` for drivers)
 - **Email verification** uses an in-process store (dev mode returns the code); it does not survive a restart
-- **Open gap:** none for authentication; rate limiting and a WAF are still missing (TSD LIM-006)
+- **Request limits** — `login` (15/min), `register`/`send-verification`/`verify` (10/min), `POST /sos` (20/min) and `simulation/rain` (12/min) per client address, counted in Postgres so the ceiling holds across serverless instances; `429` carries `Retry-After`, and the limiter fails open if the counter table is unreachable
+- **Open gap:** a WAF / edge rule is a paid Vercel feature (TSD LIM-025)
 
 ### Endpoints
 | Endpoint | Method | Description |
@@ -124,7 +128,7 @@ hosted API still connects with the project's `postgres` role (LIM-023).
 | Web CI | Bun install, ESLint, `next build` |
 | Mobile CI | Bun install (`bun.lock`), `tsc --noEmit` |
 | Deploy Web | Vercel Git integration, root `metroflow-admin/` (branch previews, production from `main`; no Actions job) |
-| Deploy Backend | Container image to GHCR |
+| Deploy Backend | Manual `vercel deploy --prod` from `backend/` to the `metroflow-api` Python function (TSD LIM-024); container image to GHCR |
 
 The mobile app has no `package-lock.json`; Bun is its package manager (TSD LIM-021).
 

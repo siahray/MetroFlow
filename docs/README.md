@@ -136,6 +136,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 1.3     | 27 Oct 2026 | «Project Team» | CR-001 approved; ADR-021 tokens; implementation status aligned with the code |
 | 1.4     | 27 Oct 2026 | «Project Team» | Route-level token enforcement and role checks; LIM-001 and LIM-022 closed |
 | 1.5     | 27 Oct 2026 | «Project Team» | API hosted as a Vercel Python function; portal pointed at it; LIM-023 and LIM-024 recorded |
+| 1.6     | 28 Oct 2026 | «Project Team» | Application rate limits on login, registration, SOS and simulation (LIM-006 closed for limits; LIM-025 records the plan's missing WAF); FSD status and actors aligned |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
