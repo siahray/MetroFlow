@@ -132,31 +132,27 @@ def seed_database(db: Session) -> None:
 
 def seed_dispatcher_account(db: Session) -> None:
     """
-    Provision/update the bootstrap LGU dispatcher account.
+    Provision the bootstrap LGU dispatcher when no users exist.
+
+    Registration only ever creates driver accounts, so without this the portal
+    has no account it can sign in with on a fresh database.
     """
+    if db.query(models.User).count() > 0:
+        return
+
     password_hash = bcrypt.hashpw(settings.admin_password.encode("utf-8"), bcrypt.gensalt()).decode(
         "utf-8"
     )
-    email = settings.admin_email.strip().lower()
-    user = db.query(models.User).filter(models.User.email == email).first()
-    if user:
-        user.password_hash = password_hash
-        user.name = "LGU Dispatcher"
-        user.role = "SUPER_ADMIN"
-        db.commit()
-        print(f"[startup] updated dispatcher account {email}")
-        return
-
     db.add(
         models.User(
             name="LGU Dispatcher",
-            email=email,
+            email=settings.admin_email.strip().lower(),
             password_hash=password_hash,
             role="SUPER_ADMIN",
         )
     )
     db.commit()
-    print(f"[startup] provisioned dispatcher account {email}")
+    print(f"[startup] provisioned dispatcher account {settings.admin_email}")
 
 
 @asynccontextmanager
