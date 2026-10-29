@@ -16,10 +16,12 @@ import {
   UploadCloud,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
+import { NetworkMap } from "./network-map";
 import { cn } from "@/lib/cn";
 import { createHazard, listHazards, publishHazard, type HazardZone } from "@/lib/hazards";
+import type { NetworkSummary } from "@/lib/network";
 
 type FloodClosureEditorProps = {
   onAction: (message: string) => void;
@@ -50,11 +52,17 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   const [barrierDeployed, setBarrierDeployed] = useState(true);
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [saving, setSaving] = useState(false);
+  const [networkSummary, setNetworkSummary] = useState<NetworkSummary | null>(null);
   const [layers, setLayers] = useState({
     graph: true,
     polygons: true,
     fleet: true,
   });
+
+  // Stable so the map's summary effect does not re-run on every parent render.
+  const handleNetworkSummary = useCallback((summary: NetworkSummary) => {
+    setNetworkSummary(summary);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -260,104 +268,47 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
             </label>
           </div>
 
-          {/* Simulated SVG Map */}
-          <div className="relative flex h-full w-full items-center justify-center">
-            <svg className="h-full w-full object-cover" viewBox="0 0 800 600">
-              <rect width="800" height="600" fill="#0f172a" />
-              {/* Waterway */}
-              <path
-                d="M400,0 C420,150 380,300 440,450 C460,520 480,600 480,600"
-                fill="none"
-                stroke="#0284c7"
-                strokeWidth="24"
-                strokeOpacity="0.4"
-              />
-              <path
-                d="M400,0 C420,150 380,300 440,450 C460,520 480,600 480,600"
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="10"
-                strokeOpacity="0.8"
-              />
-
-              {/* Road Network */}
-              {layers.graph ? (
-                <>
-                  <line x1="50" y1="200" x2="750" y2="200" stroke="#334155" strokeWidth="4" />
-                  <line x1="100" y1="400" x2="700" y2="400" stroke="#334155" strokeWidth="4" />
-                  <line x1="200" y1="50" x2="200" y2="550" stroke="#334155" strokeWidth="4" />
-                  <line x1="600" y1="50" x2="600" y2="550" stroke="#334155" strokeWidth="4" />
-                  {/* Impassable closed section with Barricade Line */}
-                  <line
-                    x1="320"
-                    y1="200"
-                    x2="520"
-                    y2="200"
-                    stroke="#e11d48"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                  />
-                  {/* Road closure text badge */}
-                  <rect x="360" y="175" width="120" height="20" rx="4" fill="#e11d48" />
-                  <text
-                    x="420"
-                    y="189"
-                    fill="#ffffff"
-                    fontSize="10"
-                    fontWeight="bold"
-                    textAnchor="middle"
-                  >
-                    Rizal Ave. Closed
-                  </text>
-
-                  {/* Reroute corridor */}
-                  <polyline
-                    points="200,200 200,100 600,100 600,200"
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="200" cy="200" r="6" fill="#10b981" />
-                  <circle cx="600" cy="200" r="6" fill="#10b981" />
-                </>
-              ) : null}
-
-              {/* Flood Polygon */}
-              {layers.polygons ? (
-                <polygon
-                  points="360,140 480,130 520,240 380,260"
-                  fill="#0284c7"
-                  fillOpacity="0.45"
-                  stroke="#38bdf8"
-                  strokeWidth="2"
-                  strokeDasharray="4"
-                />
-              ) : null}
-
-              {/* Fleet Marker */}
-              {layers.fleet ? (
-                <circle cx="420" cy="200" r="8" fill="#e11d48" stroke="#fff" strokeWidth="2" />
-              ) : null}
-            </svg>
+          {/* Live road network on a keyless basemap */}
+          <div className="absolute inset-0">
+            <NetworkMap
+              showGraph={layers.graph}
+              onAction={onAction}
+              onSummary={handleNetworkSummary}
+            />
 
             {/* Bottom Context Bar on Canvas */}
-            <div className="absolute bottom-4 inset-x-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-3 font-mono text-xs text-slate-300 backdrop-blur">
-              <div className="flex items-center gap-3">
+            <div className="absolute bottom-4 inset-x-4 z-20 flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-3 font-mono text-xs text-slate-300 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center font-medium text-slate-200">
                   <span className="mr-1.5 h-2.5 w-2.5 rounded-sm bg-sky-500"></span>
                   Polygon: {polygonName}
                 </span>
-                <span className="flex items-center font-medium text-rose-300">
-                  <span className="mr-1.5 h-1.5 w-3 rounded-xs bg-rose-500"></span>
-                  Closure: Rizal Ave Segment 4
-                </span>
+                {networkSummary ? (
+                  <>
+                    <span className="flex items-center font-medium text-emerald-300">
+                      <span className="mr-1.5 h-1.5 w-3 rounded-xs bg-emerald-500"></span>
+                      {networkSummary.passable} passable
+                    </span>
+                    <span className="flex items-center font-medium text-amber-300">
+                      <span className="mr-1.5 h-1.5 w-3 rounded-xs bg-amber-500"></span>
+                      {networkSummary.lightFlood} flooded
+                    </span>
+                    <span className="flex items-center font-medium text-rose-300">
+                      <span className="mr-1.5 h-1.5 w-3 rounded-xs bg-rose-500"></span>
+                      {networkSummary.submerged} submerged
+                    </span>
+                  </>
+                ) : null}
               </div>
               <div className="flex items-center gap-3 text-slate-400">
-                <span>Area: 142,850 m²</span>
+                <span>Clearance: {networkSummary?.clearanceCm ?? "–"} cm</span>
                 <span>Depth: {depthCm} cm</span>
-                <span>14.5995° N, 121.0223° E</span>
+                <span>
+                  Graph:{" "}
+                  {networkSummary
+                    ? `${networkSummary.nodeCount}N / ${networkSummary.edgeCount}E`
+                    : "…"}
+                </span>
               </div>
             </div>
           </div>
@@ -570,10 +521,19 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
                 <div className="text-[10px] font-bold text-sky-800 uppercase tracking-wider mb-0.5">
                   Suggested Reroute
                 </div>
-                <p className="text-[11px] text-sky-900 leading-snug">
-                  Traffic diverted via J.P. Rizal Highway north bound lanes. Estimated delay: +14
-                  mins.
-                </p>
+                {networkSummary?.route ? (
+                  <p className="text-[11px] text-sky-900 leading-snug">
+                    Node {networkSummary.route.path[0]} →{" "}
+                    {networkSummary.route.path[networkSummary.route.path.length - 1]} via{" "}
+                    {networkSummary.route.nodes} nodes, {networkSummary.route.minutes.toFixed(1)}{" "}
+                    min at {networkSummary.clearanceCm} cm clearance.
+                  </p>
+                ) : (
+                  <p className="text-[11px] leading-snug text-sky-900">
+                    No route computed yet. Choose a start and target node on the map to preview the
+                    flood-safe A* reroute.
+                  </p>
+                )}
               </div>
             </div>
           </div>

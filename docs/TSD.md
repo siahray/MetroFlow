@@ -128,7 +128,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Frontend        | Next.js (App Router)                          | 16.4.2                                     |
 | Driver client   | Expo + React Native                           | Expo SDK 58, React Native 0.88, React 19.3 |
 | Mobile tooling  | Expo Router, React Navigation, expo-location   | Current at implementation                  |
-| Mapping         | react-native-maps (driver, in use); MapLibre GL JS (portal, CR-001 work) | Partial — the driver renders a native map; the portal draws no map yet (LIM-007) |
+| Mapping         | react-native-maps (driver); MapLibre GL JS over keyless Carto Positron (portal) | In use — both clients render a map; the portal draws the live GeoJSON network (LIM-007 closed) |
 | UI runtime      | React (portal); React Native (driver)         | 19.3 / 0.88                                |
 | Styling         | Tailwind CSS                                  | 4.x                                        |
 | UI source       | Client-supplied HTML/CSS template             | Figma-derived; adapted to React components |
@@ -736,9 +736,11 @@ Rules:
 `FASTAPI_ENV` selects runtime behaviour. `development` enables the demo network
 seed and the interactive OpenAPI docs. `test` disables the seed but keeps the
 docs. `production` disables the seed and serves no `/docs` or `/redoc`; the
-schema remains at `/openapi.json`. The demo seed only fills an empty graph, so it
-never overwrites a real network. Calibration and threshold settings keep the
-`METROFLOW_` prefix and may be supplied in a local `.env`.
+schema remains at `/openapi.json`. The startup seed only fills an empty graph, so
+it never overwrites a real network; bringing an existing graph up to the curated
+one is an explicit `python network_seed.py` run, which upserts the documented
+columns and deletes nothing (LIM-014). Calibration and threshold settings keep
+the `METROFLOW_` prefix and may be supplied in a local `.env`.
 
 | Variable                            | Default                | Effect                                                           | Class          |
 | ----------------------------------- | ---------------------- | ---------------------------------------------------------------- | -------------- |
@@ -960,9 +962,10 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Superseded by ADR-021                        |
 | ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (CR-001, 27 Oct 2026)               |
 | ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Accepted (CR-001, 27 Oct 2026)               |
-| ADR-019 | Mapbox raster tiles rendered by MapLibre                 | Mapbox GL JS, OSM raster only        | MapLibre is the chosen portal renderer (not yet integrated — LIM-007); raster tiles accept the public token and OSM remains a no-key fallback | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-019 | MapLibre GL JS is the portal map renderer                | Mapbox GL JS, OSM raster only        | MapLibre is integrated over a style URL, so a Mapbox or OSM raster style is a one-line swap and no renderer code changes | Accepted (CR-001, 27 Oct 2026); basemap refined by ADR-022 |
 | ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (CR-001, 27 Oct 2026)               |
 | ADR-021 | Session tokens are issued by the API (PyJWT + bcrypt)     | Supabase Auth (ADR-016), shared passcode | No Supabase Auth project is provisioned, both clients already call `/auth/login`, and bcrypt keeps dispatcher and driver accounts in the one table the API authorises against. Revisit when managed identity exists | Accepted 27 Oct 2026; supersedes ADR-016 |
+| ADR-022 | Portal basemap is the keyless Carto Positron style        | Mapbox raster (ADR-019), OSM raster  | One public style URL needs no token, so a clone runs the map without onboarding an account; the desaturated basemap keeps the network status colours the only saturated layer, and the style URL stays a constant if a licensed provider is adopted later | Accepted 29 Oct 2026; refines ADR-019 |
 
 ## 7. Known Limitations
 
@@ -974,20 +977,20 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
 | LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | CR-001 allowlist                                                                                             |
 | LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
-| LIM-007 | No map in the baseline portal                      | GeoJSON served but not drawn                     | MapLibre map in CR-001                                                                                       |
+| LIM-007 | No map in the baseline portal                      | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions                  | CR-001 write path with hash chaining                                                                         |
 | LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright planned for Web and Mobile CI; not present yet                                                    |
 | LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
 | LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
 | LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | Define RPO/RTO and test restore                                                                              |
 | LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                         | Documented in migration rules                                                                                |
-| LIM-014 | Seeded graph is four nodes                         | Routing demonstration is narrow                  | Import the real road network                                                                                 |
+| LIM-014 | Seeded graph is four nodes                         | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-015 | Driver app is not distributed through public app stores | Users need an EAS or TestFlight build        | Internal distribution for the pilot; public store release is a separate gate                                 |
 | LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration          | Agreement and feed integration post-pilot                                                                    |
 | LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic      | Optional tile cache if storage and licensing allow                                                           |
 | LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
 | LIM-019 | Authentication requires API and database reachability | An offline app cannot sign in                | Sign in when online; the token lasts 24 hours; no privileged offline action                                  |
-| LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | OSM fallback, manual rainfall override, cached derived data and labelled degradation                         |
+| LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | Keyless Carto style swapped by URL (ADR-022), manual rainfall override, cached derived data and labelled degradation |
 | LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
 | LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Create `metroflow_app`, move table ownership to it and rotate `DATABASE_URL`                                 |
@@ -1015,6 +1018,29 @@ LIM-024 is closed: `metroflow-api` is connected to the repository, builds from
 the `backend` root directory and deploys production from `main`, so the running
 function matches the merged commit instead of the last uploaded folder.
 
+LIM-007 is closed: the portal's "Live Map & Hazard Authoring" view renders the
+network on a real basemap. `components/network-map.tsx` loads MapLibre in an
+effect (it touches `window`), points the worker at the copy
+`scripts/sync-maplibre-worker.mjs` writes into `public/`, and colours each edge
+from `properties.status`, which the API already computed for the requested
+clearance. The panel around the map drives that clearance, the rainfall
+simulation and a time-dependent A\* route, so the two endpoints the map uses are
+exercised from the UI rather than only from `curl`. The basemap is the keyless
+Carto Positron style (ADR-022), which is why the map works on a fresh clone.
+
+LIM-014 is closed: `backend/network_seed.py` replaces the four-node demonstration
+graph with 34 nodes and 61 edges over the Pasig / Taguig arterials (EDSA, C5,
+Kalayaan, JP Rizal, Pasig Blvd, Ortigas Ave, Sandoval, Caruncho, Amang
+Rodriguez). It is a *synthetic* corridor grid, not surveyed geometry: the
+coordinates follow the real intersections closely enough to read correctly on the
+basemap and the elevations are calibrated so the low-lying C5 / Bagong Ilog belt
+floods first. Nodes 1-4 and edges 1-4 are unchanged, so the routing tests and the
+`ALGORITHMS_DEMO.md` walkthrough still address the same ids. Applying the seed is
+additive and idempotent — it upserts the documented columns, never deletes a row
+and never resets `live_edge_states` — which is what made it safe to run against
+the hosted database while hazards and dispatch records already referenced the
+graph. `tests/test_network_seed.py` covers those properties.
+
 ## 8. Repository and Commands
 
 ```text
@@ -1028,6 +1054,7 @@ MetroFlow/
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
 │   ├── auth_utils.py        session token issue/verify and role lookup
+│   ├── network_seed.py      curated 34-node / 61-edge pilot road network
 │   ├── verification_store.py in-process email verification codes
 │   ├── database.py          engine, session lifecycle
 │   ├── migrations/          Alembic history
@@ -1055,6 +1082,7 @@ MetroFlow/
 | Check drift        | `cd backend && alembic check`                       |
 | Unit tests         | `cd backend && pytest -m "not integration"`         |
 | Contract tests     | `cd backend && pytest -m integration`               |
+| Reseed the graph   | `cd backend && ./venv/bin/python network_seed.py --dry-run` (drop `--dry-run` to apply) |
 | Run the portal     | `cd metroflow-admin && bun run dev`                         |
 | Run the driver app | `cd metroflow-mobile && bun run start`               |
 | Web checks         | `cd metroflow-admin && bun run lint && bun run build`       |

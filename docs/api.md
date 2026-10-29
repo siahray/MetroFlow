@@ -161,7 +161,8 @@ account, so a shared office NAT shares one quota.
 
 | Service        | Consumed by    | Role                                         |
 | -------------- | -------------- | -------------------------------------------- |
-| Mapbox         | Clients (planned, CR-001) | Raster basemap; OSM fallback when unset      |
+| Carto          | Portal (basemap) | Keyless Positron vector style fetched by URL; no token, no runtime key |
+| Mapbox         | Optional swap     | A licensed raster style can replace the Carto style URL     |
 | OpenWeather    | Backend (planned, CR-001) | Optional rainfall; manual entry fallback     |
 | OpenTopography | Preprocessing  | Terrain model; cached, not called at runtime |
 | Copernicus     | Preprocessing  | Imagery and land cover; cached               |
@@ -278,7 +279,9 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
-The example is abbreviated: the pilot graph returns four edges and four nodes.
+The example is abbreviated: the pilot graph returns 34 nodes and 61 edges. Nodes
+1-4 are the original C5 spine used by the routing tests; the rest of the lattice
+covers the Pasig / Taguig arterials (TSD LIM-014).
 
 ### 2.4 Errors
 
@@ -340,7 +343,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
   "generated_at": "2026-10-21T12:00:00Z",
   "rainfall_mm_hr": 80.0,
   "runoff_mm": 43.5531,
-  "affected_edges": 4,
+  "affected_edges": 61,
   "message": "Simulated 80.0 mm/hr rainfall",
   "edges": {
     "type": "FeatureCollection",
@@ -399,10 +402,11 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
-The example omits edges 2 and 4 and all node features for brevity. With these
-inputs the full pilot graph reports: edge 1 `18.67 cm / LIGHT_FLOOD`, edge 2
+The example omits the other 57 edges and all node features for brevity. The four
+spine edges these inputs produce are: edge 1 `18.67 cm / LIGHT_FLOOD`, edge 2
 `28.51 cm / LIGHT_FLOOD`, edge 3 `30.11 cm / SUBMERGED`, edge 4
-`18.67 cm / LIGHT_FLOOD` at a 30 cm clearance.
+`18.67 cm / LIGHT_FLOOD` at a 30 cm clearance. The run writes all 61 edges: 58
+`LIGHT_FLOOD` and 3 `SUBMERGED`.
 
 ### 3.5 Errors
 
