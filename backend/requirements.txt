@@ -13,3 +13,6 @@ python-dotenv>=1.2.4
 PyJWT>=2.15.1
 # main.py hashes and verifies passwords with bcrypt directly, not through passlib.
 bcrypt>=5.0.0
+# Required by FastAPI for the multipart body on POST /api/v1/reports (a photo
+# plus its fields cannot be sent as JSON).
+python-multipart>=0.0.32

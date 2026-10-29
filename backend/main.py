@@ -1,18 +1,21 @@
 import json
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
+from uuid import UUID, uuid4
 
 import bcrypt
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 import audit
 import models
 import network_seed
+import reports
 from auth_utils import get_current_user, require_roles
 from config import settings
 from database import get_db
@@ -38,6 +41,10 @@ from schemas import (
     NodeFeatureCollection,
     NodeProperties,
     RegisterRequest,
+    ReportApproveRequest,
+    ReportPhotoInfo,
+    ReportRejectRequest,
+    ReportResponse,
     RouteResponse,
     RouteSegment,
     SendVerifyRequest,
@@ -1031,3 +1038,489 @@ def verify_audit(
     """
     entries = db.query(models.AuditLog).order_by(models.AuditLog.log_id.asc()).all()
     return audit.verify_chain(entries)
+
+
+# ---------------------------------------------------------------------------
+# Field reports and moderation (FSD-FR-065 to 067, 077 to 081)
+# ---------------------------------------------------------------------------
+
+
+def _point(latitude: float, longitude: float):
+    """PostGIS point in longitude/latitude order, as WGS84."""
+    return func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+
+
+def _report_rows(db: Session, query):
+    """Report rows plus the coordinates and photo size the contract exposes.
+
+    The photo bytes are deferred: the queue needs their size, not the megabytes
+    themselves, and only the photo endpoint ever reads the blob.
+    """
+    return query.options(defer(models.IncidentReport.photo_data)).all()
+
+
+def _neighbour_map(rows, now: datetime) -> dict[UUID, tuple[int, UUID | None]]:
+    """How many recent neighbours each pending report has, and the nearest.
+
+    One pass over the pending rows already in memory rather than one query per
+    report: the queue is bounded by the moderation limit, and this keeps the
+    duplicate hint honest about *this* queue instead of inventing a second
+    definition of "nearby".
+    """
+    window = timedelta(minutes=settings.report_duplicate_window_minutes)
+    pending = [
+        (report, latitude, longitude)
+        for report, latitude, longitude, _ in rows
+        if report.status == reports.WAITING and latitude is not None
+    ]
+
+    neighbours: dict[UUID, tuple[int, UUID | None]] = {}
+    for report, latitude, longitude, _ in rows:
+        if report.status != reports.WAITING or latitude is None:
+            neighbours[report.report_id] = (0, None)
+            continue
+
+        count = 0
+        nearest: UUID | None = None
+        nearest_distance: float | None = None
+        for other, other_lat, other_lon in pending:
+            if other.report_id == report.report_id:
+                continue
+            if (
+                abs((other.submitted_at - report.submitted_at).total_seconds())
+                > window.total_seconds()
+            ):
+                continue
+            distance = reports.haversine_m(latitude, longitude, other_lat, other_lon)
+            if distance > settings.report_duplicate_radius_m:
+                continue
+            count += 1
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_distance, nearest = distance, other.report_id
+        neighbours[report.report_id] = (count, nearest)
+    return neighbours
+
+
+def _report_response(
+    report: models.IncidentReport,
+    latitude: float | None,
+    longitude: float | None,
+    photo_bytes: int | None,
+    neighbour: tuple[int, UUID | None],
+    now: datetime,
+) -> ReportResponse:
+    nearby, nearest = neighbour
+    photo = None
+    if report.photo_mime and photo_bytes is not None:
+        photo = ReportPhotoInfo(
+            mime=report.photo_mime,
+            sha256=report.photo_sha256 or "",
+            bytes=photo_bytes,
+        )
+    return ReportResponse(
+        report_id=report.report_id,
+        reporter_hash=report.reporter_hash,
+        source=report.source,
+        depth_level=report.depth_level,
+        depth_label=reports.depth_label(report.depth_level),
+        status=report.status,
+        latitude=latitude,
+        longitude=longitude,
+        location_plausible=latitude is not None
+        and longitude is not None
+        and reports.location_plausible(latitude, longitude),
+        barangay=report.barangay,
+        narrative=report.narrative,
+        urgency_score=reports.live_urgency(report.urgency_score, report.submitted_at, now),
+        nearby_reports=nearby,
+        possible_duplicate_of=nearest,
+        photo=photo,
+        exif=report.exif,
+        captured_at=report.captured_at,
+        submitted_at=report.submitted_at,
+        duplicate_of=report.duplicate_of,
+        moderated_by=report.moderated_by,
+        moderated_at=report.moderated_at,
+        decision_reason=report.decision_reason,
+        hazard_id=report.hazard_id,
+    )
+
+
+def _report_detail(db: Session, report_id: UUID) -> ReportResponse:
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    row = (
+        db.query(
+            models.IncidentReport,
+            func.ST_Y(models.IncidentReport.geometry),
+            func.ST_X(models.IncidentReport.geometry),
+            func.octet_length(models.IncidentReport.photo_data),
+        )
+        .options(defer(models.IncidentReport.photo_data))
+        .filter(models.IncidentReport.report_id == report_id)
+        .one()
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return _report_response(
+        row[0], row[1], row[2], row[3], _neighbour_map([row], now)[report_id], now
+    )
+
+
+def _parse_captured_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422, detail="captured_at must be an ISO 8601 timestamp"
+        ) from error
+    # Stored columns are timezone-naive, matching every other timestamp here.
+    return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+
+
+@app.post(
+    "/api/v1/reports",
+    response_model=ReportResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("reports", settings.rate_limit_reports_per_min))],
+)
+def submit_report(
+    depth_level: Annotated[str, Form(description="ANKLE, KNEE or IMPASSABLE")],
+    latitude: Annotated[float, Form(ge=-90, le=90)],
+    longitude: Annotated[float, Form(ge=-180, le=180)],
+    narrative: Annotated[str | None, Form(max_length=1000)] = None,
+    barangay: Annotated[str | None, Form(max_length=120)] = None,
+    captured_at: Annotated[str | None, Form(description="Device capture time, ISO 8601")] = None,
+    source: Annotated[str | None, Form(description="PHOTO, SENSOR, CCTV or CALL")] = None,
+    photo: Annotated[UploadFile | None, File()] = None,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit a field report from the driver app (FSD-FR-065 to 067).
+
+    Any authenticated account may report: a driver is the witness, and the
+    moderation desk decides. The reporter is stored as a salted hash, never as a
+    user id, so the queue can de-duplicate without holding an identity (BR-011).
+    """
+    if depth_level not in reports.DEPTH_LEVELS:
+        raise HTTPException(
+            status_code=422, detail=f"depth_level must be one of {list(reports.DEPTH_LEVELS)}"
+        )
+
+    if source is not None and source not in reports.SOURCES:
+        raise HTTPException(
+            status_code=422, detail=f"source must be one of {list(reports.SOURCES)}"
+        )
+
+    photo_bytes: bytes | None = None
+    photo_mime: str | None = None
+    exif: dict[str, Any] | None = None
+    if photo is not None and photo.filename:
+        photo_mime = (photo.content_type or "").lower()
+        if not photo_mime.startswith("image/"):
+            raise HTTPException(status_code=415, detail="photo must be an image")
+        # Read one byte past the ceiling so the ceiling is what rejects it: a
+        # size check against the declared Content-Length would trust the client.
+        photo_bytes = photo.file.read(settings.report_photo_max_bytes + 1)
+        if len(photo_bytes) > settings.report_photo_max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"photo must be {settings.report_photo_max_bytes} bytes or smaller",
+            )
+        exif = reports.read_exif(photo_bytes) or None
+
+    source = source or ("PHOTO" if photo_bytes is not None else "CALL")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    point = _point(latitude, longitude)
+    window_start = now - timedelta(minutes=settings.report_duplicate_window_minutes)
+
+    # Neighbours corroborate the report and flag a possible duplicate; they are
+    # never dropped silently (FSD-FR-081).
+    nearby_ids = [
+        row[0]
+        for row in db.query(models.IncidentReport.report_id)
+        .filter(
+            models.IncidentReport.status == reports.WAITING,
+            models.IncidentReport.submitted_at >= window_start,
+            func.ST_DistanceSphere(models.IncidentReport.geometry, point)
+            <= settings.report_duplicate_radius_m,
+        )
+        .order_by(func.ST_DistanceSphere(models.IncidentReport.geometry, point))
+        .all()
+    ]
+
+    submitted = _parse_captured_at(captured_at)
+    report = models.IncidentReport(
+        report_id=uuid4(),
+        reporter_hash=reports.reporter_hash(_user.user_id, settings.report_hash_salt),
+        source=source,
+        geometry=point,
+        barangay=barangay,
+        narrative=narrative,
+        depth_level=depth_level,
+        photo_data=photo_bytes,
+        photo_mime=photo_mime,
+        photo_sha256=None if photo_bytes is None else reports.photo_digest(photo_bytes),
+        exif=exif,
+        captured_at=submitted,
+        submitted_at=now,
+        urgency_score=reports.base_urgency(depth_level, source, len(nearby_ids)),
+        status=reports.WAITING,
+    )
+
+    # A device-provided capture time wins; EXIF is the fallback, and it arrives as
+    # a camera string rather than an ISO timestamp.
+    if submitted is None and exif and exif.get("captured_at"):
+        report.captured_at = _exif_timestamp(str(exif["captured_at"]))
+
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    return _report_response(
+        report,
+        latitude,
+        longitude,
+        len(photo_bytes) if photo_bytes is not None else None,
+        (len(nearby_ids), nearby_ids[0] if nearby_ids else None),
+        now,
+    )
+
+
+def _exif_timestamp(value: str) -> datetime | None:
+    """Parse the camera's ``YYYY:MM:DD HH:MM:SS`` into a naive datetime."""
+    try:
+        return datetime.strptime(value.strip(), "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+@app.get("/api/v1/reports", response_model=list[ReportResponse])
+def list_reports(
+    status: Annotated[
+        str, Query(description="PENDING, VERIFIED, REJECTED or DUPLICATE")
+    ] = reports.WAITING,
+    limit: Annotated[int, Query(ge=1, le=200, description="Rows to return")] = 50,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    The moderation queue (FSD-FR-077), ordered by live urgency.
+
+    ``urgency_score`` in the response is the stored submission-time score decayed
+    by the report's age, which is what puts a fresh report above one that has
+    been waiting for an hour.
+    """
+    if status not in reports.STATUSES:
+        raise HTTPException(
+            status_code=422, detail=f"status must be one of {list(reports.STATUSES)}"
+        )
+
+    rows = _report_rows(
+        db,
+        db.query(
+            models.IncidentReport,
+            func.ST_Y(models.IncidentReport.geometry),
+            func.ST_X(models.IncidentReport.geometry),
+            func.octet_length(models.IncidentReport.photo_data),
+        ).filter(models.IncidentReport.status == status),
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    neighbours = _neighbour_map(rows, now)
+    results = [
+        _report_response(row[0], row[1], row[2], row[3], neighbours[row[0].report_id], now)
+        for row in rows
+    ]
+    results.sort(key=lambda item: (item.urgency_score, item.submitted_at or now), reverse=True)
+    return results[:limit]
+
+
+@app.get("/api/v1/reports/{report_id}", response_model=ReportResponse)
+def get_report(
+    report_id: UUID,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """One report with its evidence metadata, for the moderation detail view (FSD-FR-078)."""
+    return _report_detail(db, report_id)
+
+
+@app.get("/api/v1/reports/{report_id}/photo")
+def get_report_photo(
+    report_id: UUID,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Stream the evidence image. Evidence is never cached by an intermediary."""
+    row = (
+        db.query(models.IncidentReport.photo_data, models.IncidentReport.photo_mime)
+        .filter(models.IncidentReport.report_id == report_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+    data, mime = row
+    if not data:
+        raise HTTPException(status_code=404, detail="Report has no photo")
+    return Response(
+        content=data,
+        media_type=mime or "application/octet-stream",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@app.post("/api/v1/reports/{report_id}/approve", response_model=ReportResponse)
+def approve_report(
+    report_id: UUID,
+    approval: ReportApproveRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Verify a report and publish the hazard it evidences, in one action (FSD-FR-080).
+
+    The report is one coordinate; the hazard is an area, so the marker gets a
+    small polygon around the reported point and the depth description is mapped
+    onto the hazard vocabulary. Publishing means ``active`` and ``published_at``
+    are set immediately, so the driver map sees it on its next refresh.
+    """
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.status != reports.WAITING:
+        raise HTTPException(status_code=409, detail="Report has already been moderated")
+
+    point = (
+        db.query(
+            func.ST_Y(models.IncidentReport.geometry),
+            func.ST_X(models.IncidentReport.geometry),
+        )
+        .filter(models.IncidentReport.report_id == report_id)
+        .one()
+    )
+    latitude, longitude = point
+
+    obstruction_level, avg_depth_cm = reports.hazard_for(report.depth_level)
+    max_id = db.query(func.max(models.HazardZone.hazard_id)).scalar() or 0
+    now = datetime.now(UTC).replace(tzinfo=None)
+    hazard = models.HazardZone(
+        hazard_id=int(max_id) + 1,
+        name=f"Reported {reports.depth_label(report.depth_level).lower()}"
+        + (f" — {report.barangay}" if report.barangay else ""),
+        obstruction_level=obstruction_level,
+        avg_depth_cm=avg_depth_cm,
+        notes=approval.notes or report.narrative,
+        published_at=now,
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    if latitude is not None and longitude is not None:
+        hazard.geometry = func.ST_GeomFromText(reports.hazard_polygon(latitude, longitude), 4326)
+
+    db.add(hazard)
+    db.flush()
+
+    report.status = reports.VERIFIED
+    report.hazard_id = hazard.hazard_id
+    report.moderated_by = _user.user_id
+    report.moderated_at = now
+    report.decision_reason = approval.notes
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.REPORT_APPROVE,
+        payload={
+            "report_id": str(report.report_id),
+            "hazard_id": hazard.hazard_id,
+            "depth_level": report.depth_level,
+            "obstruction_level": obstruction_level,
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return _report_detail(db, report_id)
+
+
+@app.post("/api/v1/reports/{report_id}/reject", response_model=ReportResponse)
+def reject_report(
+    report_id: UUID,
+    rejection: ReportRejectRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Reject a report, or mark it as a duplicate of another, with a reason (FSD-FR-081).
+
+    ``duplicate_of`` is the only difference between the two outcomes: both keep
+    the evidence and the reason, because a duplicate is still a data point about
+    how many people saw the same flood.
+    """
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if report.status != reports.WAITING:
+        raise HTTPException(status_code=409, detail="Report has already been moderated")
+
+    if rejection.duplicate_of is not None:
+        if rejection.duplicate_of == report_id:
+            raise HTTPException(status_code=422, detail="A report cannot duplicate itself")
+        original = (
+            db.query(models.IncidentReport.report_id)
+            .filter(models.IncidentReport.report_id == rejection.duplicate_of)
+            .first()
+        )
+        if not original:
+            raise HTTPException(status_code=404, detail="Duplicate target not found")
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    report.status = reports.DUPLICATE if rejection.duplicate_of else reports.REJECTED
+    report.duplicate_of = rejection.duplicate_of
+    report.decision_reason = rejection.reason
+    report.moderated_by = _user.user_id
+    report.moderated_at = now
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.REPORT_REJECT,
+        payload={
+            "report_id": str(report.report_id),
+            "status": report.status,
+            "reason": rejection.reason,
+            "duplicate_of": None if rejection.duplicate_of is None else str(rejection.duplicate_of),
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return _report_detail(db, report_id)
+
+
+@app.get("/api/v1/hazards/active", response_model=list[HazardResponse])
+def list_active_hazards(
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Active hazards for the driver map's hazard layer (FSD-FR-059).
+
+    Same rows as ``GET /hazards?active=true``; the named route exists because the
+    driver app is specified against it and a client should not have to know that
+    a filter parameter is the way to ask.
+    """
+    return (
+        db.query(models.HazardZone)
+        .filter(models.HazardZone.active.is_(True))
+        .order_by(models.HazardZone.created_at.desc())
+        .all()
+    )
