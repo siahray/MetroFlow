@@ -383,3 +383,51 @@ def test_rate_limit_counter_round_trips_against_a_real_database():
                 text("DELETE FROM rate_limit_counters WHERE bucket = :bucket"), {"bucket": bucket}
             )
             db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Audit trail (FSD-FR-093, TC-044)
+# ---------------------------------------------------------------------------
+
+
+def latest_audit(client, **params):
+    response = client.get("/api/v1/audit", params={"limit": 200, **params})
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_each_privileged_action_writes_one_attributable_audit_row(client):
+    """TC-044: one row per action, naming the actor, with the payload."""
+    hazard = client.post(
+        "/api/v1/hazards",
+        json={"name": "Audit probe", "obstruction_level": "CAUTION", "avg_depth_cm": 20},
+    ).json()
+    client.post(f"/api/v1/hazards/{hazard['hazard_id']}/publish")
+
+    created = latest_audit(client, action_type="HAZARD_CREATE")[0]
+    published = latest_audit(client, action_type="HAZARD_PUBLISH")[0]
+
+    assert created["user_id"] is not None
+    assert created["payload"]["hazard_id"] == hazard["hazard_id"]
+    assert len(created["hash_signature"]) == 64
+
+    assert published["payload"]["hazard_id"] == hazard["hazard_id"]
+    # The chain is ordered: the publish was recorded after the create.
+    assert published["log_id"] > created["log_id"]
+
+
+def test_simulation_is_audited_with_its_inputs(client):
+    client.post("/api/v1/simulation/rain", params={"rainfall_mm_hr": 40, "clearance_cm": 30})
+
+    entry = latest_audit(client, action_type="SIMULATION_RAIN")[0]
+    assert entry["payload"]["rainfall_mm_hr"] == 40.0
+    assert entry["payload"]["affected_edges"] == EDGE_COUNT
+
+
+def test_audit_chain_verifies(client):
+    result = client.get("/api/v1/audit/verify")
+    assert result.status_code == 200
+
+    body = result.json()
+    assert body["valid"] is True, f"chain broken at log {body['broken_at']}"
+    assert body["checked"] >= 1

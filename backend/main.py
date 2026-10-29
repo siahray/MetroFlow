@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+import audit
 import models
 import network_seed
 from auth_utils import get_current_user, require_roles
@@ -22,6 +23,8 @@ from rate_limit import rate_limit
 from routing import classify_passability, td_a_star_search
 from schemas import (
     AssignRequest,
+    AuditResponse,
+    AuditVerifyResponse,
     ConfirmRequest,
     EdgeFeature,
     EdgeFeatureCollection,
@@ -381,6 +384,17 @@ def trigger_rainfall_simulation(
         state.avg_speed_kmh = max(10.0, edge.max_speed_kmh - (water_depth * 0.8))
         affected_edges += 1
 
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SIMULATION_RAIN,
+        payload={
+            "rainfall_mm_hr": rainfall_mm_hr,
+            "clearance_cm": clearance_cm,
+            "runoff_mm": round(runoff_mm, 4),
+            "affected_edges": affected_edges,
+        },
+    )
     db.commit()
 
     network = _build_network_state(db, clearance_cm)
@@ -717,6 +731,19 @@ def create_hazard(
         active=True,
     )
     db.add(new_hazard)
+    db.flush()
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.HAZARD_CREATE,
+        payload={
+            "hazard_id": new_hazard.hazard_id,
+            "name": new_hazard.name,
+            "obstruction_level": new_hazard.obstruction_level,
+            "avg_depth_cm": new_hazard.avg_depth_cm,
+            "edge_id": new_hazard.edge_id,
+        },
+    )
     db.commit()
     db.refresh(new_hazard)
     return new_hazard
@@ -734,18 +761,16 @@ def update_hazard(
     db_hazard = db.query(models.HazardZone).filter(models.HazardZone.hazard_id == hazard_id).first()
     if not db_hazard:
         raise HTTPException(status_code=404, detail="Hazard not found")
-    if hazard.name is not None:
-        db_hazard.name = hazard.name
-    if hazard.obstruction_level is not None:
-        db_hazard.obstruction_level = hazard.obstruction_level
-    if hazard.avg_depth_cm is not None:
-        db_hazard.avg_depth_cm = hazard.avg_depth_cm
-    if hazard.edge_id is not None:
-        db_hazard.edge_id = hazard.edge_id
-    if hazard.active is not None:
-        db_hazard.active = hazard.active
-    if hazard.notes is not None:
-        db_hazard.notes = hazard.notes
+    changes = hazard.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in changes.items():
+        setattr(db_hazard, field, value)
+    if changes:
+        audit.record(
+            db,
+            user=_user,
+            action_type=audit.HAZARD_UPDATE,
+            payload={"hazard_id": hazard_id, "changed": changes},
+        )
     db.commit()
     db.refresh(db_hazard)
     return db_hazard
@@ -764,6 +789,16 @@ def publish_hazard(
         raise HTTPException(status_code=404, detail="Hazard not found")
     db_hazard.published_at = datetime.now(UTC).replace(tzinfo=None)
     db_hazard.active = True
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.HAZARD_PUBLISH,
+        payload={
+            "hazard_id": db_hazard.hazard_id,
+            "obstruction_level": db_hazard.obstruction_level,
+            "edge_id": db_hazard.edge_id,
+        },
+    )
     db.commit()
     db.refresh(db_hazard)
     return db_hazard
@@ -788,6 +823,16 @@ def assign_sos(
         raise HTTPException(status_code=404, detail="Vehicle not found")
     db_sos.vehicle_id = assign_req.vehicle_id
     db_sos.status = "assigned"
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SOS_ASSIGN,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "vehicle_id": assign_req.vehicle_id,
+            "call_sign": db_vehicle.call_sign,
+        },
+    )
     db.commit()
     db.refresh(db_sos)
     return db_sos
@@ -811,6 +856,16 @@ def confirm_dispatch(
         else:
             db_sos.note = confirm_req.note
     db_sos.status = "confirmed"
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.DISPATCH_CONFIRM,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "vehicle_id": db_sos.vehicle_id,
+            "note": confirm_req.note,
+        },
+    )
     db.commit()
     db.refresh(db_sos)
     return db_sos
@@ -873,6 +928,19 @@ def create_vehicle(
         current_location_lon=vehicle.current_location_lon,
     )
     db.add(new_vehicle)
+    db.flush()
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.VEHICLE_CREATE,
+        payload={
+            "vehicle_id": new_vehicle.vehicle_id,
+            "call_sign": new_vehicle.call_sign,
+            "vehicle_type": new_vehicle.vehicle_type,
+            "clearance_cm": new_vehicle.clearance_cm,
+            "status": new_vehicle.status,
+        },
+    )
     db.commit()
     db.refresh(new_vehicle)
     return new_vehicle
@@ -890,8 +958,76 @@ def update_vehicle(
     db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
     if not db_vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    for field, value in vehicle.model_dump(exclude_unset=True).items():
+    changes = vehicle.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in changes.items():
         setattr(db_vehicle, field, value)
+    if changes:
+        audit.record(
+            db,
+            user=_user,
+            action_type=audit.VEHICLE_UPDATE,
+            payload={"vehicle_id": vehicle_id, "changed": changes},
+        )
     db.commit()
     db.refresh(db_vehicle)
     return db_vehicle
+
+
+# ---------------------------------------------------------------------------
+# Audit trail (FSD-FR-093, TSD LIM-008)
+# ---------------------------------------------------------------------------
+
+
+def _audit_response(entry: models.AuditLog) -> AuditResponse:
+    """Return the stored payload as an object instead of the JSON string."""
+    try:
+        payload = json.loads(entry.payload)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        payload = {"unparsable": entry.payload}
+    return AuditResponse(
+        log_id=entry.log_id,
+        user_id=entry.user_id,
+        action_type=entry.action_type,
+        payload=payload,
+        hash_signature=entry.hash_signature,
+        created_at=entry.created_at,
+    )
+
+
+@app.get("/api/v1/audit", response_model=list[AuditResponse])
+def list_audit(
+    action_type: str | None = None,
+    user_id: int | None = None,
+    limit: Annotated[int, Query(ge=1, le=200, description="Newest entries to return")] = 50,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Newest first, one row per privileged action.
+
+    This is the report behind FSD-FR-049: filter by ``action_type`` and
+    ``user_id`` to reconstruct who did what during an event.
+    """
+    query = db.query(models.AuditLog)
+    if action_type:
+        query = query.filter(models.AuditLog.action_type == action_type)
+    if user_id is not None:
+        query = query.filter(models.AuditLog.user_id == user_id)
+    entries = query.order_by(models.AuditLog.log_id.desc()).limit(limit).all()
+    return [_audit_response(entry) for entry in entries]
+
+
+@app.get("/api/v1/audit/verify", response_model=AuditVerifyResponse)
+def verify_audit(
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Recompute the hash chain over the whole table.
+
+    ``valid`` is only true when every row still matches its digest and the digest
+    before it. A ``broken_at`` log id means that record, or one before it, was
+    altered outside this API.
+    """
+    entries = db.query(models.AuditLog).order_by(models.AuditLog.log_id.asc()).all()
+    return audit.verify_chain(entries)

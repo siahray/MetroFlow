@@ -35,6 +35,8 @@ PORTAL_ONLY_ROUTES = [
     ("POST", "/api/v1/hazards/{hazard_id}/publish"),
     ("POST", "/api/v1/vehicles"),
     ("PATCH", "/api/v1/vehicles/{vehicle_id}"),
+    ("GET", "/api/v1/audit"),
+    ("GET", "/api/v1/audit/verify"),
 ]
 
 

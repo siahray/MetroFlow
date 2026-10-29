@@ -383,6 +383,8 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/hazards/stream`          | GET    | BR-013 / FSD-FR-086 (SSE)  |
 | `/api/v1/vehicles`                | GET    | BR-016 / FSD-FR-075, 076   |
 | `/api/v1/vehicles/{id}/status`    | PATCH  | BR-016 / FSD-FR-076        |
+| `/api/v1/audit`                   | GET    | BR-008 / FSD-FR-047 to 049 |
+| `/api/v1/audit/verify`            | GET    | BR-008 / FSD-FR-047        |
 | `/api/v1/vehicles/{id}/telemetry` | POST   | BR-013 / FSD-FR-072        |
 | `/api/v1/vehicles/stream`         | GET    | BR-016 / FSD-FR-086 (SSE)  |
 | `/api/v1/sos`                     | POST   | BR-015 / FSD-FR-073        |
@@ -978,7 +980,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | CR-001 allowlist                                                                                             |
 | LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
 | LIM-007 | No map in the baseline portal                      | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-008 | Baseline audit log is schema-only                  | No immutable trail of decisions                  | CR-001 write path with hash chaining                                                                         |
+| LIM-008 | Baseline audit log is schema-only                  | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright planned for Web and Mobile CI; not present yet                                                    |
 | LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
 | LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
@@ -1041,6 +1043,20 @@ and never resets `live_edge_states` — which is what made it safe to run agains
 the hosted database while hazards and dispatch records already referenced the
 graph. `tests/test_network_seed.py` covers those properties.
 
+LIM-008 is closed: `backend/audit.py` is the write path the schema always
+implied. Every privileged route — hazard create, update and publish, SOS
+assignment, dispatch confirmation, vehicle create and update, and the rainfall
+simulation — appends exactly one `audit_logs` row naming the actor, the action
+and the payload it acted on, inside the same transaction as the change it
+describes. Each row carries a SHA-256 digest over its own fields *and* the digest
+of the row before it, so editing or deleting an entry breaks every later link;
+`GET /api/v1/audit/verify` recomputes the chain and names the first broken row.
+The guarantee is tamper-evidence, not tamper-proofness: an attacker with write
+access to the database and this code can recompute the chain. Shipping the
+digests to an append-only store is the next step if the trail ever has to
+withstand that. `GET /api/v1/audit` is the read side FSD-FR-049 asks for, ordered
+newest first and filterable by action and actor.
+
 ## 8. Repository and Commands
 
 ```text
@@ -1051,6 +1067,7 @@ MetroFlow/
 │   ├── hydrology.py         SCS-CN and ponding
 │   ├── routing.py           passability and TD-A*
 │   ├── geometry.py          PostGIS backfill
+│   ├── audit.py             hash-chained audit write path
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
 │   ├── auth_utils.py        session token issue/verify and role lookup
