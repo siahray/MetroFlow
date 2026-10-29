@@ -230,3 +230,26 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AuditResponse(BaseModel):
+    """One attributable privileged action (FSD-FR-093)."""
+
+    log_id: int
+    user_id: int | None = None
+    action_type: str
+    # The stored JSON string, returned as an object so a client does not have to
+    # parse a field the API produced.
+    payload: dict[str, Any]
+    hash_signature: str
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class AuditVerifyResponse(BaseModel):
+    """Result of recomputing the audit hash chain."""
+
+    valid: bool
+    checked: int
+    broken_at: int | None = None

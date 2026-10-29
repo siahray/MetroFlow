@@ -343,9 +343,9 @@ statement; the FSD identifiers above remain stable as items move.
 | Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS panel polls the API; remaining entries are mock data |
 | Incident detail          | FSD-FR-032 to 038 | Partial     | Renders live SOS; evidence files not linked         |
 | Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
-| Audit and administration | FSD-FR-047 to 049 | Planned     | Entity exists; no write path                        |
+| Audit and administration | FSD-FR-047 to 049 | Partial     | Hash-chained write path, `/audit` read API and `/audit/verify`; user management and export absent |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
-| Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me` and route-level enforcement; audit writes planned |
+| Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me`, route-level enforcement and one attributable audit row per privileged action |
 | Driver navigation        | FSD-FR-054 to 064 | Partial     | Expo app with map and a routing screen; turn-by-turn list and reroute absent |
 | Field reporting          | FSD-FR-065 to 067 | Planned     | Camera, depth and EXIF capture not implemented      |
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |

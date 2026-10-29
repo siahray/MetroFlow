@@ -709,7 +709,39 @@ is the step the portal performs before dispatch. Depth is in centimetres.
 
 Clearance is in centimetres and speed in km/h, matching §2 and the driver UI.
 
-### 9.5 Not yet implemented
+### 9.5 Audit trail
+
+| Method | Path                    | Body / query                                        | Response   | Reference               |
+| ------ | ----------------------- | --------------------------------------------------- | ---------- | ----------------------- |
+| `GET`  | `/api/v1/audit`         | `action_type?`, `user_id?`, `limit?` (1–200, default 50) | `audit[]` | BR-008 / FSD-FR-047–049 |
+| `GET`  | `/api/v1/audit/verify`  | —                                                   | `valid`, `checked`, `broken_at` | BR-008 / FSD-FR-047 |
+
+One row is written by every privileged action: hazard create, update and publish,
+SOS assignment, dispatch confirmation, vehicle create and update, and the rainfall
+simulation. A row is written in the same transaction as the change it describes,
+so a change cannot commit without its record.
+
+```json
+{
+  "log_id": 41,
+  "user_id": 1,
+  "action_type": "HAZARD_PUBLISH",
+  "payload": { "hazard_id": 7, "obstruction_level": "CAUTION", "edge_id": 12 },
+  "hash_signature": "9f2c…",
+  "created_at": "2026-10-29T06:32:25.127535"
+}
+```
+
+`hash_signature` is the SHA-256 of a canonical JSON document covering the actor,
+the action, the payload, the timestamp and the previous row's digest. Verification
+walks the table in `log_id` order and returns the first row that no longer matches,
+which is the row an edit or a deletion disturbed. It reports `valid: false` with
+`checked` set to the number of links that still verified.
+
+Actor identity is a `user_id`; join it against `/api/v1/auth/me` or the users
+table for a name. `payload` is returned as an object, not as the stored string.
+
+### 9.6 Not yet implemented
 
 The following remain specified but absent, and must not be assumed by a client:
 
@@ -720,7 +752,7 @@ The following remain specified but absent, and must not be assumed by a client:
 - rescue route preview (`/dispatch/{id}/route`);
 - hazard withdrawal (`DELETE /api/v1/hazards/{id}`).
 
-### 9.6 Error additions in this slice
+### 9.7 Error additions in this slice
 
 | Status | Condition                                   |
 | ------ | ------------------------------------------- |
