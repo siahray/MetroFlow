@@ -228,7 +228,7 @@ provider fallback. Existing identifiers are unchanged.
 | Hazard event stream   | BR-013  | FSD-FR-059, FSD-FR-086 | SSE feed of published, updated and withdrawn hazards    |
 | Report upload API     | BR-014  | FSD-FR-065 to 067      | Multipart report with photo, depth and GPS metadata     |
 | Device camera and GPS | BR-014  | FSD-FR-066, FSD-FR-067 | Camera and geolocation modules in the native app        |
-| Map tile source       | BR-013  | FSD-FR-056, FSD-FR-075 | Mapbox raster via MapLibre (planned); OSM fallback; graph offline |
+| Map tile source       | BR-013  | FSD-FR-056, FSD-FR-075 | Keyless Carto Positron style via MapLibre (ADR-022); the style URL keeps a Mapbox or OSM raster an easy swap; graph offline |
 | Sensor gateway        | BR-017  | FSD-FR-090             | River and rain gauge readings with identity             |
 | Redis pub/sub         | BR-018  | FSD-FR-086             | Fan-out for hazard, fleet and SOS events                |
 
@@ -280,7 +280,7 @@ provider fallback. Existing identifiers are unchanged.
 | TC-042 | BR-017  | FSD-FR-090, FSD-FR-091             | A threshold breach marks only roads inside the impact radius as advisory    |
 | TC-043 | BR-009  | FSD-FR-092                         | A driver-role session cannot approve, publish or dispatch                   |
 | TC-044 | BR-008  | FSD-FR-093                         | Every privileged action writes exactly one attributable audit record        |
-| TC-045 | BR-013  | FSD-FR-056, FSD-FR-075             | Without a Mapbox token the map renders OSM tiles and stays usable           |
+| TC-045 | BR-013  | FSD-FR-056, FSD-FR-075             | With no provider token configured the map still renders basemap tiles and the network, and stays usable |
 | TC-046 | BR-002  | FSD-FR-006, FSD-FR-007             | When OpenWeather is unavailable, rainfall is entered manually and labelled  |
 
 ## Acceptance Criteria
@@ -336,7 +336,7 @@ statement; the FSD identifiers above remain stable as items move.
 
 | Module                   | FSD IDs           | Status      | Note                                                |
 | ------------------------ | ----------------- | ----------- | --------------------------------------------------- |
-| Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested                                     |
+| Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested; 34-node / 61-edge curated pilot graph (LIM-014 closed) |
 | Rainfall simulation      | FSD-FR-006 to 010 | Implemented | Contract-tested; overrides respected                |
 | Routing                  | FSD-FR-011 to 017 | Implemented | Unit and contract tests                             |
 | Portal access            | FSD-FR-018 to 023 | Implemented | Real sign-in against `/auth/login`; the token and profile are kept for the session, every request sends the token, and the shell returns to `/login` without one or when the API answers `401` |
@@ -350,7 +350,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Field reporting          | FSD-FR-065 to 067 | Planned     | Camera, depth and EXIF capture not implemented      |
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Partial     | SOS create and list work; telemetry pings absent    |
-| Live operational map     | FSD-FR-075, 076   | Partial     | Fleet and hazards load from the API; map layers are static |
+| Live operational map     | FSD-FR-075, 076   | Partial     | MapLibre renders the live network, statuses, popups and an A* route; hazard/closure/fleet/SOS overlays and unit labels still absent |
 | Moderation and evidence  | FSD-FR-077 to 081 | Planned     | No report intake or evidence desk                   |
 | Hazard authoring         | FSD-FR-082 to 086 | Partial     | Create, update and publish via the API; SSE stream absent |
 | Distress and dispatch    | FSD-FR-087 to 089 | Partial     | Incident list, assignment and confirmation; rescue route absent |

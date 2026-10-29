@@ -4,7 +4,7 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v1.2 (CR-001, approved 27 October 2026) · **Code baseline:** `feat/scope-resolution-slice` · 27 October 2026
+**Document baseline:** v1.2 (CR-001, approved 27 October 2026) · **Code baseline:** `main` · 29 October 2026
 
 CR-001 extends the scope to the Expo driver app, live hazard publication, fleet
 dispatch and sensor ingestion. The change request is **approved** and partly

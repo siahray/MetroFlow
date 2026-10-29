@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import models
+import network_seed
 from auth_utils import get_current_user, require_roles
 from config import settings
 from database import get_db
@@ -67,67 +68,20 @@ require_admin = require_roles(*ADMIN_ROLES)
 
 
 def seed_database(db: Session) -> None:
-    """Seed the Taguig / Pasig corridor demo graph on first boot."""
+    """Seed the Pasig / Taguig corridor network on first boot (TSD LIM-014).
+
+    The graph itself lives in ``network_seed`` so the same data seeds a fresh
+    database and can be re-applied to an existing one with
+    ``python network_seed.py``.
+    """
     if db.query(models.RoadNode).count() > 0:
         return
 
-    nodes = [
-        models.RoadNode(
-            node_id=1,
-            name="C5 - Market Market",
-            latitude=14.5491,
-            longitude=121.0553,
-            elevation_m=8.5,
-        ),
-        models.RoadNode(
-            node_id=2,
-            name="C5 - Kalayaan Ave",
-            latitude=14.5583,
-            longitude=121.0581,
-            elevation_m=4.2,
-        ),  # Low elevation
-        models.RoadNode(
-            node_id=3,
-            name="C5 - Bagong Ilog",
-            latitude=14.5672,
-            longitude=121.0631,
-            elevation_m=3.5,
-        ),  # Low elevation
-        models.RoadNode(
-            node_id=4,
-            name="Pasig Blvd - Shaw",
-            latitude=14.5731,
-            longitude=121.0685,
-            elevation_m=9.0,
-        ),
-    ]
-    db.add_all(nodes)
-    db.commit()
-
-    edges = [
-        models.RoadEdge(
-            edge_id=1, start_node_id=1, end_node_id=2, distance_meters=1100.0, max_speed_kmh=60.0
-        ),
-        models.RoadEdge(
-            edge_id=2, start_node_id=2, end_node_id=3, distance_meters=1000.0, max_speed_kmh=50.0
-        ),
-        models.RoadEdge(
-            edge_id=3, start_node_id=3, end_node_id=4, distance_meters=850.0, max_speed_kmh=50.0
-        ),
-        models.RoadEdge(
-            edge_id=4, start_node_id=1, end_node_id=4, distance_meters=2800.0, max_speed_kmh=40.0
-        ),  # Alternative route
-    ]
-    db.add_all(edges)
-    db.commit()
-
-    for edge in edges:
-        db.add(
-            models.LiveEdgeState(
-                edge_id=edge.edge_id, water_depth_cm=0.0, avg_speed_kmh=edge.max_speed_kmh
-            )
-        )
-    db.commit()
+    counts = network_seed.apply(db)
+    print(
+        f"[startup] seeded road network: {counts['nodes_created']} nodes, "
+        f"{counts['edges_created']} edges"
+    )
 
 
 def seed_dispatcher_account(db: Session) -> None:
