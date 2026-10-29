@@ -19,10 +19,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from network_seed import build_network
 
 pytestmark = pytest.mark.integration
 
 ALLOWED_STATUSES = {"PASSABLE", "LIGHT_FLOOD", "SUBMERGED"}
+
+# The contract is "every seeded node and edge", not a literal count: the graph
+# grew from the four-node demonstration spine to the curated corridor lattice
+# (TSD LIM-014) and will keep changing. Read the expected size from the seed so
+# this test fails on a broken response, not on a reseed.
+SEED_NODES, SEED_EDGES = build_network()
+NODE_COUNT = len(SEED_NODES)
+EDGE_COUNT = len(SEED_EDGES)
 
 # Metro Manila bounding box. Used to prove coordinates are [lon, lat]: a swap
 # would put longitude at ~14 and latitude at ~121 and fail these bounds.
@@ -148,8 +157,9 @@ def test_network_state_returns_renderable_geojson(client):
     assert body["clearance_cm"] == 30.0
     assert body["edges"]["type"] == "FeatureCollection"
     assert body["nodes"]["type"] == "FeatureCollection"
-    assert len(body["edges"]["features"]) == 4
-    assert len(body["nodes"]["features"]) == 4
+    assert len(body["edges"]["features"]) == EDGE_COUNT
+    assert len(body["nodes"]["features"]) == NODE_COUNT
+    assert EDGE_COUNT > 4, "the pilot graph should be more than the demo spine"
 
     for feature in body["edges"]["features"]:
         assert feature["type"] == "Feature"
@@ -202,7 +212,7 @@ def test_heavy_rain_submerges_every_edge_for_a_sedan(client):
     assert response.status_code == 200
 
     body = response.json()
-    assert body["affected_edges"] == 4
+    assert body["affected_edges"] == EDGE_COUNT
     assert body["runoff_mm"] > 0
     assert {feature["properties"]["status"] for feature in body["edges"]["features"]} == {
         "SUBMERGED"
