@@ -1,7 +1,9 @@
+import uuid
 from datetime import UTC, datetime
 
 from geoalchemy2 import Geometry
 from sqlalchemy import (
+    UUID,
     BigInteger,
     Boolean,
     Column,
@@ -9,10 +11,12 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -182,3 +186,66 @@ class RateLimitCounter(Base):
     bucket = Column(String(200), primary_key=True)
     window_start = Column(BigInteger, primary_key=True, index=True)
     request_count = Column(Integer, nullable=False)
+
+
+class IncidentReport(Base):
+    """A field report waiting for moderation, and the decision made on it.
+
+    Shape follows TSD "Database Design - incident_reports". Two deliberate
+    divergences, both recorded in the TSD note:
+
+    * the reporter is a salted hash, never a user id, so the moderation desk can
+      de-duplicate without holding an identity (BR-011);
+    * the photo is stored in the row (``photo_data``) rather than as an object
+      key, because this deployment has no object store and a serverless
+      filesystem is ephemeral. The size is capped before the write.
+    """
+
+    __tablename__ = "incident_reports"
+    report_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reporter_hash = Column(
+        String(64),
+        nullable=False,
+        index=True,
+        comment="Salted hash of the reporter; no raw identity",
+    )
+    source = Column(
+        String(20), nullable=False, default="PHOTO", comment="PHOTO, SENSOR, CCTV or CALL"
+    )
+    geometry = Column(Geometry(geometry_type="POINT", srid=4326), nullable=True)
+    barangay = Column(String(120), nullable=True)
+    narrative = Column(Text, nullable=True)
+    depth_level = Column(
+        String(20), nullable=False, index=True, comment="ANKLE, KNEE or IMPASSABLE"
+    )
+    photo_data = Column(LargeBinary, nullable=True, comment="Evidence image bytes, capped on write")
+    photo_mime = Column(String(60), nullable=True)
+    photo_sha256 = Column(String(64), nullable=True, comment="Integrity hash of photo_data")
+    exif = Column(JSONB, nullable=True)
+    captured_at = Column(DateTime, nullable=True, comment="Device capture time")
+    submitted_at = Column(DateTime, default=_utcnow, nullable=False, index=True)
+    urgency_score = Column(
+        Float,
+        nullable=False,
+        default=0.0,
+        comment="Submission-time urgency without recency; the API applies decay on read",
+    )
+    status = Column(
+        String(20),
+        nullable=False,
+        default="PENDING",
+        index=True,
+        comment="PENDING, VERIFIED, REJECTED or DUPLICATE",
+    )
+    duplicate_of = Column(
+        UUID(as_uuid=True), ForeignKey("incident_reports.report_id"), nullable=True
+    )
+    moderated_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    moderated_at = Column(DateTime, nullable=True)
+    decision_reason = Column(Text, nullable=True, comment="Required for reject and duplicate")
+    hazard_id = Column(
+        Integer,
+        ForeignKey("hazard_zones.hazard_id"),
+        nullable=True,
+        comment="Verified hazard created by approval",
+    )

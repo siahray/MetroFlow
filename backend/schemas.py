@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -253,3 +254,57 @@ class AuditVerifyResponse(BaseModel):
     valid: bool
     checked: int
     broken_at: int | None = None
+
+
+class ReportPhotoInfo(BaseModel):
+    """Evidence metadata. The bytes are served by the photo endpoint, not here."""
+
+    mime: str
+    sha256: str
+    bytes: int
+
+
+class ReportResponse(BaseModel):
+    """A field report as the moderation desk sees it (FSD-FR-077, 078)."""
+
+    report_id: UUID
+    reporter_hash: str
+    source: str
+    depth_level: str
+    depth_label: str
+    status: str
+    latitude: float | None = None
+    longitude: float | None = None
+    location_plausible: bool = True
+    barangay: str | None = None
+    narrative: str | None = None
+    # The stored base score decayed by age, which is what the queue orders on.
+    urgency_score: float
+    # Derived on read: how many recent neighbours corroborate this report, and
+    # the nearest one if it looks like the same event (FSD-FR-081).
+    nearby_reports: int = 0
+    possible_duplicate_of: UUID | None = None
+    photo: ReportPhotoInfo | None = None
+    exif: dict[str, Any] | None = None
+    captured_at: datetime | None = None
+    submitted_at: datetime | None = None
+    duplicate_of: UUID | None = None
+    moderated_by: int | None = None
+    moderated_at: datetime | None = None
+    decision_reason: str | None = None
+    hazard_id: int | None = None
+
+
+class ReportRejectRequest(BaseModel):
+    """A rejection always says why (FSD-FR-081)."""
+
+    reason: str = Field(min_length=3, max_length=500)
+    # Supplying the report this one duplicates records DUPLICATE instead of
+    # REJECTED; both keep the evidence and the reason.
+    duplicate_of: UUID | None = None
+
+
+class ReportApproveRequest(BaseModel):
+    """Optional operator note carried into the hazard's notes."""
+
+    notes: str | None = Field(default=None, max_length=500)

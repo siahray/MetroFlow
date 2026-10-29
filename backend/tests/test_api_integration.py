@@ -16,6 +16,7 @@ test_routing.py / test_hydrology.py cover the algorithms; neither would catch a
 """
 
 import pytest
+from evidence import build_jpeg
 from fastapi.testclient import TestClient
 
 from main import app
@@ -431,3 +432,265 @@ def test_audit_chain_verifies(client):
     body = result.json()
     assert body["valid"] is True, f"chain broken at log {body['broken_at']}"
     assert body["checked"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Field reports and moderation (FSD-FR-065 to 067, 077 to 081)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def created_records():
+    """Delete the reports and hazards a test created, leaving the audit chain alone.
+
+    Audit rows are append-only by design, so they stay: deleting one would break
+    every later link in the chain the next test verifies.
+    """
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    report_ids: list[str] = []
+    hazard_ids: list[int] = []
+    yield report_ids, hazard_ids
+
+    with SessionLocal() as db:
+        if report_ids:
+            db.execute(
+                text(
+                    "UPDATE incident_reports SET duplicate_of = NULL WHERE report_id::text = ANY(:ids)"
+                ),
+                {"ids": report_ids},
+            )
+            db.execute(
+                text("DELETE FROM incident_reports WHERE report_id::text = ANY(:ids)"),
+                {"ids": report_ids},
+            )
+        if hazard_ids:
+            db.execute(
+                text("DELETE FROM hazard_zones WHERE hazard_id = ANY(:ids)"),
+                {"ids": hazard_ids},
+            )
+        db.commit()
+
+
+def submit_report(
+    client, created_records, *, depth="KNEE", latitude=14.5764, longitude=121.0851, **extra
+):
+    """Post a report with photo evidence and return the response body."""
+    report_ids, _ = created_records
+    data = {
+        "depth_level": depth,
+        "latitude": str(latitude),
+        "longitude": str(longitude),
+        **{key: str(value) for key, value in extra.items()},
+    }
+    response = client.post(
+        "/api/v1/reports",
+        data=data,
+        files={"photo": ("evidence.jpg", build_jpeg(), "image/jpeg")},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    report_ids.append(body["report_id"])
+    return body
+
+
+def test_report_submission_enters_the_queue_with_evidence_metadata(client, created_records):
+    photo = build_jpeg()
+    response = client.post(
+        "/api/v1/reports",
+        data={
+            "depth_level": "KNEE",
+            "latitude": "14.5764",
+            "longitude": "121.0851",
+            "barangay": "San Antonio",
+            "narrative": "Knee-deep outside the barangay hall",
+        },
+        files={"photo": ("evidence.jpg", photo, "image/jpeg")},
+    )
+    assert response.status_code == 201, response.text
+    created_records[0].append(response.json()["report_id"])
+    body = response.json()
+
+    assert body["status"] == "PENDING"
+    assert body["source"] == "PHOTO"
+    assert body["depth_label"] == "Knee-Deep"
+    assert body["barangay"] == "San Antonio"
+    assert body["urgency_score"] > 0
+    assert body["location_plausible"] is True
+    assert len(body["reporter_hash"]) == 64
+    assert body["photo"]["bytes"] == len(photo)
+    assert body["photo"]["mime"] == "image/jpeg"
+    assert body["photo"]["sha256"] == __import__("hashlib").sha256(photo).hexdigest()
+    # The capture time comes from the camera's EXIF when the client sends none.
+    assert body["captured_at"].startswith("2026-10-29T13:00:00")
+    assert body["exif"]["camera_make"] == "TestCam"
+
+
+def test_the_queue_is_ordered_by_live_urgency(client, created_records):
+    ankle = submit_report(client, created_records, depth="ANKLE")
+    impassable = submit_report(
+        client, created_records, depth="IMPASSABLE", latitude=14.58, longitude=121.09
+    )
+
+    response = client.get("/api/v1/reports", params={"limit": 200})
+    assert response.status_code == 200
+    ordered = [row["report_id"] for row in response.json()]
+
+    assert ordered.index(impassable["report_id"]) < ordered.index(ankle["report_id"])
+
+
+def test_evidence_photo_round_trips(client, created_records):
+    photo = build_jpeg()
+    report = submit_report(client, created_records)
+    original = client.post(
+        "/api/v1/reports",
+        data={"depth_level": "KNEE", "latitude": "14.5764", "longitude": "121.0851"},
+        files={"photo": ("evidence.jpg", photo, "image/jpeg")},
+    )
+    created_records[0].append(original.json()["report_id"])
+
+    response = client.get(f"/api/v1/reports/{original.json()['report_id']}/photo")
+    assert response.status_code == 200
+    assert response.content == photo
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert report["photo"] is not None
+
+
+def test_nearby_reports_are_flagged_as_possible_duplicates_but_kept(client, created_records):
+    first = submit_report(client, created_records)
+    second = submit_report(client, created_records, narrative="Same flood, reported again")
+
+    assert second["status"] == "PENDING"
+    assert second["nearby_reports"] >= 1
+    assert second["possible_duplicate_of"] == first["report_id"]
+
+
+def test_approving_a_report_creates_and_publishes_a_hazard(client, created_records):
+    report = submit_report(client, created_records, depth="KNEE", barangay="San Antonio")
+
+    response = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    created_records[1].append(body["hazard_id"])
+
+    assert body["status"] == "VERIFIED"
+    assert body["hazard_id"] is not None
+    assert body["moderated_by"] is not None
+    assert body["moderated_at"] is not None
+
+    active = client.get("/api/v1/hazards/active")
+    assert active.status_code == 200
+    hazard = next(row for row in active.json() if row["hazard_id"] == body["hazard_id"])
+    assert hazard["obstruction_level"] == "LEVEL_2"
+    assert hazard["avg_depth_cm"] == 50
+    assert hazard["active"] is True
+    assert hazard["published_at"] is not None
+
+    # A verified report leaves the pending queue.
+    queue = client.get("/api/v1/reports", params={"status": "PENDING", "limit": 200}).json()
+    assert body["report_id"] not in [row["report_id"] for row in queue]
+
+    audit_entry = client.get("/api/v1/audit", params={"action_type": "REPORT_APPROVE"}).json()[0]
+    assert audit_entry["payload"]["report_id"] == report["report_id"]
+    assert audit_entry["payload"]["hazard_id"] == body["hazard_id"]
+
+
+def test_rejection_requires_a_reason(client, created_records):
+    report = submit_report(client, created_records)
+
+    assert client.post(f"/api/v1/reports/{report['report_id']}/reject", json={}).status_code == 422
+    assert (
+        client.post(
+            f"/api/v1/reports/{report['report_id']}/reject", json={"reason": "no"}
+        ).status_code
+        == 422
+    )
+
+
+def test_reject_and_mark_duplicate_keep_the_evidence_and_the_reason(client, created_records):
+    first = submit_report(client, created_records)
+    second = submit_report(client, created_records)
+
+    rejected = client.post(
+        f"/api/v1/reports/{first['report_id']}/reject",
+        json={"reason": "Photo shows a dry road"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "REJECTED"
+    assert rejected.json()["decision_reason"] == "Photo shows a dry road"
+
+    duplicate = client.post(
+        f"/api/v1/reports/{second['report_id']}/reject",
+        json={"reason": "Same flood as the earlier report", "duplicate_of": first["report_id"]},
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["status"] == "DUPLICATE"
+    assert duplicate.json()["duplicate_of"] == first["report_id"]
+
+    # Both decisions are audited with their reason.
+    entries = client.get(
+        "/api/v1/audit", params={"action_type": "REPORT_REJECT", "limit": 200}
+    ).json()
+    payloads = [entry["payload"] for entry in entries]
+    assert any(row["status"] == "REJECTED" for row in payloads)
+    assert any(row["status"] == "DUPLICATE" for row in payloads)
+
+
+def test_a_decided_report_cannot_be_moderated_again(client, created_records):
+    report = submit_report(client, created_records)
+    client.post(f"/api/v1/reports/{report['report_id']}/reject", json={"reason": "Not a road"})
+
+    again = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
+    assert again.status_code == 409
+
+
+def test_unknown_reports_are_not_found(client):
+    missing = "00000000-0000-0000-0000-000000000000"
+    assert client.get(f"/api/v1/reports/{missing}").status_code == 404
+    assert client.get(f"/api/v1/reports/{missing}/photo").status_code == 404
+    assert client.post(f"/api/v1/reports/{missing}/approve", json={}).status_code == 404
+    assert (
+        client.post(f"/api/v1/reports/{missing}/reject", json={"reason": "gone"}).status_code == 404
+    )
+
+
+def test_non_image_evidence_is_rejected(client):
+    response = client.post(
+        "/api/v1/reports",
+        data={"depth_level": "ANKLE", "latitude": "14.5764", "longitude": "121.0851"},
+        files={"photo": ("evidence.txt", b"not an image", "text/plain")},
+    )
+    assert response.status_code == 415
+
+
+def test_evidence_over_the_ceiling_is_rejected(client):
+    from config import settings
+
+    oversized = b"\xff\xd8" + b"0" * settings.report_photo_max_bytes
+    response = client.post(
+        "/api/v1/reports",
+        data={"depth_level": "ANKLE", "latitude": "14.5764", "longitude": "121.0851"},
+        files={"photo": ("evidence.jpg", oversized, "image/jpeg")},
+    )
+    assert response.status_code == 413
+
+
+def test_unknown_depth_or_source_is_rejected(client):
+    too_deep = client.post(
+        "/api/v1/reports",
+        data={"depth_level": "WAIST", "latitude": "14.5764", "longitude": "121.0851"},
+    )
+    unknown_source = client.post(
+        "/api/v1/reports",
+        data={
+            "depth_level": "ANKLE",
+            "latitude": "14.5764",
+            "longitude": "121.0851",
+            "source": "TELEPATHY",
+        },
+    )
+    assert too_deep.status_code == 422
+    assert unknown_source.status_code == 422

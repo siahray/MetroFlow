@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     rate_limit_register_per_min: int = 10
     rate_limit_sos_per_min: int = 20
     rate_limit_simulation_per_min: int = 12
+    rate_limit_reports_per_min: int = 12
+
+    # --- Field reports ---------------------------------------------------------
+    # A report's reporter is stored as a salted hash, never as a user id
+    # (BR-011). The salt is configuration so a deployment can choose its own;
+    # rotating it breaks de-duplication history but no other behaviour.
+    report_hash_salt: str = "metroflow-report-salt"
+    # Evidence images are held in the report row, so the ceiling is what keeps
+    # a single row small enough for the database and the function response.
+    report_photo_max_bytes: int = 5 * 1024 * 1024
+    # A pending report inside this radius and window is a corroborating
+    # neighbour (raises urgency) and a possible duplicate (flagged, not dropped).
+    report_duplicate_radius_m: int = 150
+    report_duplicate_window_minutes: int = 15
 
     @property
     def is_production(self) -> bool:
