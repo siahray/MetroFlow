@@ -694,3 +694,12 @@ def test_unknown_depth_or_source_is_rejected(client):
     )
     assert too_deep.status_code == 422
     assert unknown_source.status_code == 422
+
+
+def test_a_lying_content_type_does_not_get_an_image_through(client):
+    response = client.post(
+        "/api/v1/reports",
+        data={"depth_level": "ANKLE", "latitude": "14.5764", "longitude": "121.0851"},
+        files={"photo": ("evidence.jpg", b"GIF89a-not-really", "image/jpeg")},
+    )
+    assert response.status_code == 415

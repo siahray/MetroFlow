@@ -101,6 +101,27 @@ def photo_digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# Evidence is accepted in the three formats a phone camera or screenshot
+# produces. The type is decided from the bytes, never from the uploaded header:
+# SEC-006 treats a lying Content-Type as an attack, and the portal needs a type
+# it can trust when it renders the image. WebP is a RIFF container, so it needs
+# its own check rather than a prefix in this table.
+PHOTO_SIGNATURES = (
+    ("image/jpeg", b"\xff\xd8\xff"),
+    ("image/png", b"\x89PNG\r\n\x1a\n"),
+)
+
+
+def sniff_image_mime(data: bytes) -> str | None:
+    """Return the image type the bytes actually are, or ``None``."""
+    if data.startswith(b"RIFF"):
+        return "image/webp" if data[8:12] == b"WEBP" else None
+    for mime, signature in PHOTO_SIGNATURES:
+        if data.startswith(signature):
+            return mime
+    return None
+
+
 def depth_label(depth_level: str) -> str:
     return DEPTH_LABELS.get(depth_level, depth_level)
 

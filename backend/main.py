@@ -1221,9 +1221,6 @@ def submit_report(
     photo_mime: str | None = None
     exif: dict[str, Any] | None = None
     if photo is not None and photo.filename:
-        photo_mime = (photo.content_type or "").lower()
-        if not photo_mime.startswith("image/"):
-            raise HTTPException(status_code=415, detail="photo must be an image")
         # Read one byte past the ceiling so the ceiling is what rejects it: a
         # size check against the declared Content-Length would trust the client.
         photo_bytes = photo.file.read(settings.report_photo_max_bytes + 1)
@@ -1232,6 +1229,10 @@ def submit_report(
                 status_code=413,
                 detail=f"photo must be {settings.report_photo_max_bytes} bytes or smaller",
             )
+        # The declared Content-Type is a claim; the bytes decide (SEC-006).
+        photo_mime = reports.sniff_image_mime(photo_bytes)
+        if photo_mime is None:
+            raise HTTPException(status_code=415, detail="photo must be a JPEG, PNG or WebP image")
         exif = reports.read_exif(photo_bytes) or None
 
     source = source or ("PHOTO" if photo_bytes is not None else "CALL")

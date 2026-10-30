@@ -149,3 +149,13 @@ def test_exif_timestamp_parses_the_camera_format():
 
     assert _exif_timestamp("2026:10:29 13:00:00") == datetime(2026, 10, 29, 13, 0, 0)
     assert _exif_timestamp("not a date") is None
+
+
+def test_photo_type_is_decided_from_the_bytes_not_the_upload_header():
+    assert reports.sniff_image_mime(build_jpeg()) == "image/jpeg"
+    assert reports.sniff_image_mime(b"\x89PNG\r\n\x1a\n" + b"0" * 10) == "image/png"
+    assert reports.sniff_image_mime(b"RIFF\x00\x00\x00\x00WEBPVP8 ") == "image/webp"
+    # A client can claim any type; these bytes are not an image the API accepts.
+    assert reports.sniff_image_mime(b"GIF89a" + b"0" * 10) is None
+    assert reports.sniff_image_mime(b"RIFF\x00\x00\x00\x00WAVEfmt ") is None
+    assert reports.sniff_image_mime(b"") is None
