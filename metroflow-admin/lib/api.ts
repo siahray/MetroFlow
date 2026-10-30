@@ -86,3 +86,25 @@ export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T>
   }
   return res.json() as Promise<T>;
 }
+
+/**
+ * Fetch a binary response with the operator's token attached.
+ *
+ * Evidence images live behind an authenticated route, so an `<img src>` pointing
+ * at the API would arrive unsigned and be refused. The caller turns the blob into
+ * an object URL and revokes it when the report changes.
+ */
+export async function fetchBlob(path: string): Promise<Blob> {
+  const token = getSessionToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers, cache: "no-store" });
+  if (res.status === 401) {
+    clearSessionUser();
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, await readErrorMessage(res), parseRetryAfter(res));
+  }
+  return res.blob();
+}

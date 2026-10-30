@@ -1,13 +1,28 @@
 import Link from "next/link";
-import { CheckSquare, LogOut, Map, Radar, Shield, Truck, Waves } from "lucide-react";
+import {
+  CheckSquare,
+  ClipboardCheck,
+  LogOut,
+  Map,
+  Radar,
+  Shield,
+  Truck,
+  Waves,
+} from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import type { SessionUser } from "@/lib/session";
 
-export type NavItem = "triage" | "radar" | "hazards" | "fleet";
+export type NavItem = "triage" | "moderation" | "radar" | "hazards" | "fleet";
 
 export const NAV_ITEMS = [
   { id: "triage" as NavItem, label: "Triage & Verification", href: "/triage", icon: CheckSquare },
+  {
+    id: "moderation" as NavItem,
+    label: "Moderation & Evidence",
+    href: "/moderation",
+    icon: ClipboardCheck,
+  },
   { id: "radar" as NavItem, label: "Dispatch Radar", href: "/radar", icon: Radar },
   { id: "hazards" as NavItem, label: "Live Map & Hazards", href: "/hazards", icon: Map },
   { id: "fleet" as NavItem, label: "Rescue Units & Fleet", href: "/fleet", icon: Truck },
@@ -16,6 +31,7 @@ export const NAV_ITEMS = [
 type SidebarProps = {
   activeItem?: string;
   queueCount: number;
+  reportCount?: number;
   user?: SessionUser | null;
   fleetCount?: number;
   onSignOut: () => void;
@@ -25,6 +41,7 @@ type SidebarProps = {
 export function Sidebar({
   activeItem = "triage",
   queueCount,
+  reportCount = 0,
   user,
   fleetCount,
   onSignOut,
@@ -115,6 +132,15 @@ export function Sidebar({
                 {item.id === "triage" ? (
                   <span className="ml-auto rounded bg-sky-400/30 px-1.5 py-0.5 font-mono text-[10px] text-white">
                     {queueCount}
+                  </span>
+                ) : item.id === "moderation" ? (
+                  <span
+                    className={cn(
+                      "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px]",
+                      reportCount > 0 ? "bg-amber-400/20 text-amber-300" : "text-slate-500",
+                    )}
+                  >
+                    {reportCount}
                   </span>
                 ) : item.id === "radar" && queueCount > 0 ? (
                   <span className="ml-auto h-2 w-2 rounded-full bg-rose-500 animate-pulse" />

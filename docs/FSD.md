@@ -340,7 +340,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Rainfall simulation      | FSD-FR-006 to 010 | Implemented | Contract-tested; overrides respected                |
 | Routing                  | FSD-FR-011 to 017 | Implemented | Unit and contract tests                             |
 | Portal access            | FSD-FR-018 to 023 | Implemented | Real sign-in against `/auth/login`; the token and profile are kept for the session, every request sends the token, and the shell returns to `/login` without one or when the API answers `401` |
-| Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS panel polls the API; remaining entries are mock data |
+| Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS feed with filters and search; field reports are queued separately on `/moderation` |
 | Incident detail          | FSD-FR-032 to 038 | Partial     | Renders live SOS; evidence files not linked         |
 | Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
 | Audit and administration | FSD-FR-047 to 049 | Partial     | Hash-chained write path, `/audit` read API and `/audit/verify`; user management and export absent |
@@ -351,7 +351,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Partial     | SOS create and list work; telemetry pings absent    |
 | Live operational map     | FSD-FR-075, 076   | Partial     | MapLibre renders the live network, statuses, popups and an A* route; hazard/closure/fleet/SOS overlays and unit labels still absent |
-| Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Queue, evidence metadata, approve (creates and publishes a hazard) and reject/duplicate are in the API and audited; the portal moderation screen is the remaining client work |
+| Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; CCTV/gauge cross-reference (FR-079) absent |
 | Hazard authoring         | FSD-FR-082 to 086 | Partial     | Create, update and publish via the API; SSE stream absent |
 | Distress and dispatch    | FSD-FR-087 to 089 | Partial     | Incident list, assignment and confirmation; rescue route absent |
 | Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |

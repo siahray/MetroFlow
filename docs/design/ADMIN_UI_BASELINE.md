@@ -286,7 +286,7 @@ baseline; the supplied UI places it at the end of the card.
 | `/triage`          | Queue                      | None             | FSD-FR-024–031          | Reuse prototype    |
 | `/triage/[id]`     | Report verification detail | Full             | FSD-FR-032–046, 077–081 | UI 2               |
 | `/map`             | Live map and hazard editor | Partial          | FSD-FR-075–089          | UI 1               |
-| `/moderation`      | Evidence and moderation    | Partial          | FSD-FR-077–081          | UI 2 overlaps      |
+| `/moderation`      | Evidence and moderation    | Implemented      | FSD-FR-077–081          | Queue, evidence viewer, approve, reject/duplicate; CCTV cross-reference absent |
 | `/fleet`           | Rescue units and fleet     | None             | FSD-FR-076              | New; list          |
 | `/fleet/[id]`      | Rescue unit tracking       | Full layout      | FSD-FR-076, 086–089     | UI 4               |
 | `/dispatch`        | Distress and dispatch      | Unit detail link | FSD-FR-087–089          | New; queue pending |
@@ -1088,11 +1088,11 @@ UI 4 adds these issues:
 | FSD-FR-049     | Export records                  | None                                                          | Conditional screen                                   |
 | FSD-FR-075     | Live map layers                 | Partial: editor SVG; UI 2/3 static images; UI 4 simulated map | Replace all with MapLibre and real layers            |
 | FSD-FR-076     | Fleet status                    | Partial: UI 4 unit detail; no fleet list                      | Add fleet list and active task; keep UI 4 detail     |
-| FSD-FR-077     | Moderation queue                | Partial: detail screen only                                   | Add queue and selection flow                         |
-| FSD-FR-078     | Evidence, EXIF, plausibility    | Partial: photo, EXIF and metadata                             | Add claimed-vs-EXIF location check                   |
+| FSD-FR-077     | Moderation queue                | Implemented: queue and selection flow on `/moderation`        | Keep; add decided-report history when audit view lands |
+| FSD-FR-078     | Evidence, EXIF, plausibility    | Partial: evidence viewer, EXIF, camera GPS and claimed-point plausibility on `/moderation` | Add claimed-vs-EXIF distance check |
 | FSD-FR-079     | CCTV and gauge cross-reference  | Partial: UI 2 chip; UI 3 CCTV image                           | Add nearest rain gauge, demo labels and release rule |
-| FSD-FR-080     | Approve and publish             | Partial: UI 2 button; UI 3 published view                     | Add hazard payload, publish step and confirmation    |
-| FSD-FR-081     | Reject or duplicate with reason | Partial: reject button only                                   | Add required reason and duplicate action             |
+| FSD-FR-080     | Approve and publish             | Implemented: approve publishes a hazard behind a confirmation step | Keep; show the resulting hazard on the map |
+| FSD-FR-081     | Reject or duplicate with reason | Implemented: required reason and duplicate target             | Keep |
 | FSD-FR-082     | Draw flood polygon              | Partial: toolbar and static polygon                           | Real polygon draw, edit and validation               |
 | FSD-FR-083     | Draw closure line               | Partial: static dashed line                                   | Real line draw snapped to road edges                 |
 | FSD-FR-084     | Obstruction level               | Partial: three wrong options                                  | Use `CAUTION`, `LEVEL_2`, `LEVEL_3`, `IMPASSABLE`    |

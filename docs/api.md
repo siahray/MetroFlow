@@ -739,6 +739,13 @@ upload is refused by the API with a useful message rather than by the platform.
 EXIF is read when present: camera make and model, capture time and GPS, with
 `gps_in_pilot_area` flagging a photo taken outside Metro Manila.
 
+`GET /api/v1/reports/{id}/photo` is the only way to read evidence bytes. It needs
+the same bearer token as every other management route and answers
+`Cache-Control: private, no-store`, so an `<img src>` pointed at it arrives
+unsigned and is refused — a client fetches it with its token and renders the
+response as a blob. The `report` body carries only the metadata (`mime`,
+`sha256`, `bytes`), never the bytes themselves.
+
 ```json
 {
   "report_id": "6a1d0f38-3d19-4b5e-9d6a-0f0d9c2f7a41",
@@ -817,7 +824,7 @@ which is the row an edit or a deletion disturbed. It reports `valid: false` with
 Actor identity is a `user_id`; join it against `/api/v1/auth/me` or the users
 table for a name. `payload` is returned as an object, not as the stored string.
 
-### 9.6 Not yet implemented
+### 9.7 Not yet implemented
 
 The following remain specified but absent, and must not be assumed by a client:
 

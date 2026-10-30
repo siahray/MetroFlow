@@ -34,6 +34,9 @@ Thumbs.db
 .vscode/
 *.swp
 
+# --- Agent browser artefacts ------------------------------------------------
+.playwright-mcp/
+
 # --- Documentation build tooling --------------------------------------------
 .docx-venv/
 ~$*.docx
