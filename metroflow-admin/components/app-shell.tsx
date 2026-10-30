@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Sidebar, type NavItem } from "./sidebar";
+import { listReports } from "@/lib/reports";
 import { listSOS } from "@/lib/sos-live";
 import { listVehicles } from "@/lib/dispatch";
 import { clearSessionUser, getSessionUser, subscribeToSession } from "@/lib/session";
@@ -22,6 +23,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
   const user = useSyncExternalStore(subscribeToSession, getSessionUser, () => null);
   const [queueCount, setQueueCount] = useState(0);
   const [fleetCount, setFleetCount] = useState(0);
+  const [reportCount, setReportCount] = useState(0);
 
   useEffect(() => {
     if (!user) router.replace("/login");
@@ -30,12 +32,14 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [sos, vehicles] = await Promise.all([
+        const [sos, vehicles, reports] = await Promise.all([
           listSOS().catch(() => []),
           listVehicles().catch(() => []),
+          listReports().catch(() => []),
         ]);
         setQueueCount(sos.length);
         setFleetCount(vehicles.length);
+        setReportCount(reports.length);
       } catch {
         // keep fallback
       }
@@ -70,6 +74,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
       <Sidebar
         activeItem={activeItem}
         queueCount={queueCount}
+        reportCount={reportCount}
         user={user}
         fleetCount={fleetCount}
         onSignOut={handleSignOut}
