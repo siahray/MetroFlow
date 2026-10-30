@@ -347,11 +347,11 @@ statement; the FSD identifiers above remain stable as items move.
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
 | Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me`, route-level enforcement and one attributable audit row per privileged action |
 | Driver navigation        | FSD-FR-054 to 064 | Partial     | Expo app with map and a routing screen; turn-by-turn list and reroute absent |
-| Field reporting          | FSD-FR-065 to 067 | Planned     | Camera, depth and EXIF capture not implemented      |
+| Field reporting          | FSD-FR-065 to 067 | Partial     | API accepts a multipart report with depth, location, evidence and EXIF; the driver camera/depth screen is the remaining client work |
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Partial     | SOS create and list work; telemetry pings absent    |
 | Live operational map     | FSD-FR-075, 076   | Partial     | MapLibre renders the live network, statuses, popups and an A* route; hazard/closure/fleet/SOS overlays and unit labels still absent |
-| Moderation and evidence  | FSD-FR-077 to 081 | Planned     | No report intake or evidence desk                   |
+| Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Queue, evidence metadata, approve (creates and publishes a hazard) and reject/duplicate are in the API and audited; the portal moderation screen is the remaining client work |
 | Hazard authoring         | FSD-FR-082 to 086 | Partial     | Create, update and publish via the API; SSE stream absent |
 | Distress and dispatch    | FSD-FR-087 to 089 | Partial     | Incident list, assignment and confirmation; rescue route absent |
 | Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |

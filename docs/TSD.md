@@ -215,30 +215,38 @@ Index: primary key plus GiST on `geom`.
 
 ## Database Design - incident_reports
 
+Implemented as `incident_reports` by migration `af7712baa2b3` (ADR-023 records
+the two divergences from the table below: the reporter is a salted hash and the
+photograph is stored in the row because this deployment has no object store).
+
 | Column            | Type                  | Description                                              |
 | ----------------- | --------------------- | -------------------------------------------------------- |
 | `report_id`       | uuid                  | Primary key                                              |
-| `reporter_hash`   | varchar(64)           | Salted hash of the device or user id; never raw identity |
+| `reporter_hash`   | varchar(64)           | Salted hash of the reporting account; never raw identity |
 | `source`          | varchar(20)           | `PHOTO`, `CCTV`, `SENSOR` or `CALL`                      |
-| `geom`            | geometry(Point, 4326) | Reported location                                        |
+| `geometry`        | geometry(Point, 4326) | Reported location                                        |
 | `barangay`        | varchar(120)          | Reporting area                                           |
 | `narrative`       | text                  | Optional description                                     |
 | `depth_level`     | varchar(20)           | `ANKLE`, `KNEE` or `IMPASSABLE`                          |
-| `photo_path`      | varchar(255)          | Evidence object key                                      |
+| `photo_data`      | bytea                 | Evidence bytes, capped at 4 MB before the write          |
+| `photo_mime`      | varchar(60)           | Type sniffed from the bytes, not the upload header       |
 | `photo_sha256`    | varchar(64)           | Integrity hash of the stored image                       |
-| `exif`            | json                  | Extracted metadata after the image itself is stripped    |
-| `captured_at`     | timestamptz           | Device capture time                                      |
-| `submitted_at`    | timestamptz           | Server receipt time                                      |
-| `urgency_score`   | double                | Computed priority; see §2.8                              |
+| `exif`            | jsonb                 | Camera make, model, capture time and GPS, when present   |
+| `captured_at`     | timestamp             | Device capture time, falling back to EXIF                |
+| `submitted_at`    | timestamp             | Server receipt time                                      |
+| `urgency_score`   | double                | Submission-time priority without recency; see §2.8       |
 | `status`          | varchar(20)           | `PENDING`, `VERIFIED`, `REJECTED` or `DUPLICATE`         |
 | `duplicate_of`    | uuid                  | FK → `incident_reports.report_id`, nullable              |
 | `moderated_by`    | integer               | FK → `users.user_id`, nullable                           |
-| `moderated_at`    | timestamptz           | Decision time                                            |
+| `moderated_at`    | timestamp             | Decision time                                            |
 | `decision_reason` | text                  | Required for reject and duplicate                        |
-| `hazard_id`       | uuid                  | FK → `hazard_zones.hazard_id`, nullable                  |
+| `hazard_id`       | integer               | FK → `hazard_zones.hazard_id`, nullable                  |
 
-Indexes: GiST on `geom`; btree on `(status, urgency_score desc)`; btree on
-`(submitted_at)` for retention and reporting.
+Indexes: GiST on `geometry` (created by GeoAlchemy2 for the column); btree on
+`reporter_hash`, `depth_level`, `status` and `submitted_at`. The queue cannot be
+ordered in SQL because recency decay is applied when the row is read, so the
+moderation list sorts in the API over the pending set rather than claiming an
+index it does not use.
 
 ## Database Design - hazard_zones
 
@@ -374,6 +382,7 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/reports`                 | POST   | BR-014 / FSD-FR-065 to 067 |
 | `/api/v1/reports`                 | GET    | BR-014 / FSD-FR-077        |
 | `/api/v1/reports/{id}`            | GET    | BR-014 / FSD-FR-078, 079   |
+| `/api/v1/reports/{id}/photo`      | GET    | BR-014 / FSD-FR-078        |
 | `/api/v1/reports/{id}/approve`    | POST   | BR-014 / FSD-FR-080        |
 | `/api/v1/reports/{id}/reject`     | POST   | BR-014 / FSD-FR-081        |
 | `/api/v1/hazards/active`          | GET    | BR-013 / FSD-FR-059        |
@@ -667,6 +676,11 @@ urgency    = severity × source × corrobor × recency
 Weights are configuration, validated with dispatchers at M7 `[TBC]`. A report
 inside 150 m and 15 minutes of an existing pending report is flagged as a
 possible duplicate, not discarded.
+
+The row stores urgency *without* the recency term and the API applies the decay
+when it reads the queue, which is what makes an hour-old report sink below a
+fresh one. Storing the decayed value would freeze a report at its intake rank and
+nothing newer could ever outrank it.
 
 ### 2.9 Sensor impact
 
@@ -968,13 +982,14 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (CR-001, 27 Oct 2026)               |
 | ADR-021 | Session tokens are issued by the API (PyJWT + bcrypt)     | Supabase Auth (ADR-016), shared passcode | No Supabase Auth project is provisioned, both clients already call `/auth/login`, and bcrypt keeps dispatcher and driver accounts in the one table the API authorises against. Revisit when managed identity exists | Accepted 27 Oct 2026; supersedes ADR-016 |
 | ADR-022 | Portal basemap is the keyless Carto Positron style        | Mapbox raster (ADR-019), OSM raster  | One public style URL needs no token, so a clone runs the map without onboarding an account; the desaturated basemap keeps the network status colours the only saturated layer, and the style URL stays a constant if a licensed provider is adopted later | Accepted 29 Oct 2026; refines ADR-019 |
+| ADR-023 | Report evidence lives in the report row                   | Local evidence volume behind a storage interface (ADR-017), Supabase Storage | The hosted API runs on Vercel, where the filesystem is ephemeral and no object store is provisioned, so an object key would point at nothing after a cold start. Bytes are capped at 4 MB, type-sniffed, hashed in the row and served only through an authenticated endpoint; moving to ADR-017's volume means changing one intake branch and one read endpoint | Accepted 30 Oct 2026; diverges from ADR-017 for the hosted pilot |
 
 ## 7. Known Limitations
 
 | ID      | Limitation                                         | Impact                                           | Planned resolution                                                                                           |
 | ------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | LIM-001 | Baseline had no route-level authorisation         | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-002 | Baseline incident data is mocked                   | Triage is demonstrated, not operational          | Persisted report API in CR-001                                                                               |
+| LIM-002 | Baseline incident data is mocked                   | Closed 30 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | CR-001 adds optional OpenWeather and labelled simulated gauges; real gauge feeds need agreements             |
 | LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
 | LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | CR-001 allowlist                                                                                             |
@@ -1043,6 +1058,15 @@ and never resets `live_edge_states` — which is what made it safe to run agains
 the hosted database while hazards and dispatch records already referenced the
 graph. `tests/test_network_seed.py` covers those properties.
 
+LIM-002 is closed: `POST /api/v1/reports` persists a field report with its
+evidence, `GET /api/v1/reports` returns the moderation queue ordered by live
+urgency, and approve/reject decisions are stored on the report and written to the
+audit trail. The portal triage screen still builds its list from the SOS feed and
+mock incident metadata; replacing it with these rows is the next client slice.
+Two divergences from the schema above are recorded in ADR-023: the
+reporter is a salted hash rather than a user id, and the photograph is stored in
+the row rather than on a volume.
+
 LIM-008 is closed: `backend/audit.py` is the write path the schema always
 implied. Every privileged route — hazard create, update and publish, SOS
 assignment, dispatch confirmation, vehicle create and update, and the rainfall
@@ -1068,6 +1092,7 @@ MetroFlow/
 │   ├── routing.py           passability and TD-A*
 │   ├── geometry.py          PostGIS backfill
 │   ├── audit.py             hash-chained audit write path
+│   ├── reports.py           report urgency, EXIF and hazard mapping
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
 │   ├── auth_utils.py        session token issue/verify and role lookup

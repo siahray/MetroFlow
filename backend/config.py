@@ -76,8 +76,11 @@ class Settings(BaseSettings):
     # rotating it breaks de-duplication history but no other behaviour.
     report_hash_salt: str = "metroflow-report-salt"
     # Evidence images are held in the report row, so the ceiling is what keeps
-    # a single row small enough for the database and the function response.
-    report_photo_max_bytes: int = 5 * 1024 * 1024
+    # a single row small enough for the database and the function response. It
+    # sits under Vercel's ~4.5 MB request-body limit: a 4 MB photo plus the
+    # multipart envelope still fits, so the API rejects an oversized upload with
+    # its own 413 instead of the platform rejecting the whole request first.
+    report_photo_max_bytes: int = 4 * 1024 * 1024
     # A pending report inside this radius and window is a corroborating
     # neighbour (raises urgency) and a possible duplicate (flagged, not dropped).
     report_duplicate_radius_m: int = 150

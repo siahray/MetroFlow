@@ -19,7 +19,7 @@ routes. Responses are JSON; geometry is GeoJSON.
 Sections 2–8 document the core API. Section 9 documents the endpoints added by
 [CR-001](CR-001.md), which is approved and implemented in this branch for auth,
 SOS, hazards, vehicles and dispatch; the remaining CR-001 endpoints are listed
-as absent in §9.5. The generated `/openapi.json` is always authoritative for
+as absent in §9.7. The generated `/openapi.json` is always authoritative for
 what is running.
 
 | Method | Path                       | Purpose                                                  |
@@ -145,6 +145,7 @@ a serverless instance may be replaced between two requests. Limits are set in
 | `POST /api/v1/auth/send-verification` | `send-verification` | 10/min | `METROFLOW_RATE_LIMIT_REGISTER_PER_MIN` |
 | `POST /api/v1/auth/verify`         | `verify`           | 10/min  | `METROFLOW_RATE_LIMIT_REGISTER_PER_MIN` |
 | `POST /api/v1/sos`                 | `sos`              | 20/min  | `METROFLOW_RATE_LIMIT_SOS_PER_MIN` |
+| `POST /api/v1/reports`             | `reports`          | 12/min  | `METROFLOW_RATE_LIMIT_REPORTS_PER_MIN` |
 | `POST /api/v1/simulation/rain`     | `simulation`       | 12/min  | `METROFLOW_RATE_LIMIT_SIMULATION_PER_MIN` |
 
 A refused request returns `429` with `Retry-After` in seconds; the waiting time
@@ -695,9 +696,12 @@ than replacing it, so the original distress text survives.
 | `PATCH` | `/api/v1/hazards/{hazard_id}`     | any of the above fields, plus `active`                      | `hazard` | BR-016 / FSD-FR-084–085 |
 | `POST`  | `/api/v1/hazards/{hazard_id}/publish` | —                                                       | `hazard` | BR-016 / FSD-FR-085     |
 | `GET`   | `/api/v1/hazards`                 | —                                                           | `hazard[]` | BR-013 / FSD-FR-059   |
+| `GET`   | `/api/v1/hazards/active`          | —                                                           | `hazard[]` | BR-013 / FSD-FR-059   |
 
 A hazard is created active but unpublished; `publish` stamps `published_at` and
 is the step the portal performs before dispatch. Depth is in centimetres.
+`GET /api/v1/hazards/active` is the driver map's hazard layer; it returns the same
+rows as `GET /api/v1/hazards?active=true`.
 
 ### 9.4 Fleet
 
@@ -709,7 +713,78 @@ is the step the portal performs before dispatch. Depth is in centimetres.
 
 Clearance is in centimetres and speed in km/h, matching §2 and the driver UI.
 
-### 9.5 Audit trail
+### 9.5 Field reports and moderation
+
+| Method | Path                                 | Body / query                                                  | Response   | Reference               |
+| ------ | ------------------------------------ | ------------------------------------------------------------- | ---------- | ----------------------- |
+| `POST` | `/api/v1/reports`                    | multipart: `depth_level`, `latitude`, `longitude`, `narrative?`, `barangay?`, `captured_at?`, `source?`, `photo?` | `report` `201` | BR-014 / FSD-FR-065–067 |
+| `GET`  | `/api/v1/reports`                    | `status?` (default `PENDING`), `limit?` (1–200, default 50)   | `report[]` | BR-014 / FSD-FR-077     |
+| `GET`  | `/api/v1/reports/{id}`               | —                                                             | `report`   | BR-014 / FSD-FR-078–079 |
+| `GET`  | `/api/v1/reports/{id}/photo`         | —                                                             | image      | BR-014 / FSD-FR-078     |
+| `POST` | `/api/v1/reports/{id}/approve`       | `notes?`                                                      | `report`   | BR-014 / FSD-FR-080     |
+| `POST` | `/api/v1/reports/{id}/reject`        | `reason`, `duplicate_of?`                                     | `report`   | BR-014 / FSD-FR-081     |
+
+Submission is multipart because the evidence is a file; send the fields as form
+parts and `photo` as the file part. Any authenticated account may report — a
+driver is the witness — while the queue and the decisions are portal roles only.
+The reporter is stored as a salted hash of the account, never as an id (BR-011),
+so the desk can see that two reports came from one device without learning whose.
+
+`depth_level` is `ANKLE`, `KNEE` or `IMPASSABLE`, and `source` is `PHOTO`,
+`SENSOR`, `CCTV` or `CALL` (default `PHOTO` with evidence, otherwise `CALL`).
+Photos must be JPEG, PNG or WebP, decided from the bytes rather than the declared
+`Content-Type`, and are capped at 4 MB (`413` above it, `415` for anything else).
+The ceiling sits below the hosting platform's request-body limit, so an oversized
+upload is refused by the API with a useful message rather than by the platform.
+EXIF is read when present: camera make and model, capture time and GPS, with
+`gps_in_pilot_area` flagging a photo taken outside Metro Manila.
+
+```json
+{
+  "report_id": "6a1d0f38-3d19-4b5e-9d6a-0f0d9c2f7a41",
+  "reporter_hash": "b0e1…",
+  "source": "PHOTO",
+  "depth_level": "KNEE",
+  "depth_label": "Knee-Deep",
+  "status": "PENDING",
+  "latitude": 14.5764,
+  "longitude": 121.0851,
+  "location_plausible": true,
+  "barangay": "San Antonio",
+  "narrative": "Knee-deep outside the barangay hall",
+  "urgency_score": 2.61,
+  "nearby_reports": 1,
+  "possible_duplicate_of": null,
+  "photo": { "mime": "image/jpeg", "sha256": "9f2c…", "bytes": 184320 },
+  "exif": { "camera_make": "Apple", "captured_at": "2026:10:29 13:00:00", "gps_latitude": 14.5764, "gps_longitude": 121.0851, "gps_in_pilot_area": true },
+  "captured_at": "2026-10-29T13:00:00",
+  "submitted_at": "2026-10-29T13:04:12",
+  "duplicate_of": null,
+  "moderated_by": null,
+  "moderated_at": null,
+  "decision_reason": null,
+  "hazard_id": null
+}
+```
+
+`urgency_score` is the stored submission-time score multiplied by the recency
+decay for the report's age (TSD §2.8), so the queue sorts by what still matters
+rather than by intake order. `nearby_reports` counts pending reports inside 150 m
+and 15 minutes; `possible_duplicate_of` names the nearest of them. Both are hints
+for the decision, never a reason to drop a report.
+
+Approval (`FSD-FR-080`) verifies the report and creates **and publishes** a hazard
+in one action: `depth_level` maps to `CAUTION`/`20 cm`, `LEVEL_2`/`50 cm` or
+`IMPASSABLE`/`80 cm`, the reported point becomes a 30 m polygon, and the new
+`hazard_id` is returned on the report. The hazard is immediately active, so it
+appears in `/api/v1/hazards/active` on the driver's next refresh.
+
+Rejection (`FSD-FR-081`) requires a `reason` of at least three characters.
+Supplying `duplicate_of` records `status = "DUPLICATE"` instead of `"REJECTED"`;
+both keep the evidence and the reason. A report that has already been decided
+returns `409`, so a decision cannot be silently overwritten.
+
+### 9.6 Audit trail
 
 | Method | Path                    | Body / query                                        | Response   | Reference               |
 | ------ | ----------------------- | --------------------------------------------------- | ---------- | ----------------------- |
@@ -717,9 +792,10 @@ Clearance is in centimetres and speed in km/h, matching §2 and the driver UI.
 | `GET`  | `/api/v1/audit/verify`  | —                                                   | `valid`, `checked`, `broken_at` | BR-008 / FSD-FR-047 |
 
 One row is written by every privileged action: hazard create, update and publish,
-SOS assignment, dispatch confirmation, vehicle create and update, and the rainfall
-simulation. A row is written in the same transaction as the change it describes,
-so a change cannot commit without its record.
+report approval and rejection, SOS assignment, dispatch confirmation, vehicle
+create and update, and the rainfall simulation. A row is written in the same
+transaction as the change it describes, so a change cannot commit without its
+record.
 
 ```json
 {
@@ -745,20 +821,21 @@ table for a name. `payload` is returned as an object, not as the stored string.
 
 The following remain specified but absent, and must not be assumed by a client:
 
-- field report intake and moderation (`/api/v1/reports*`, `/api/v1/reports/{id}/approve`);
 - server-sent event streams (`/hazards/stream`, `/vehicles/stream`);
 - sensor ingestion and thresholds (`/api/v1/sensors*`);
 - vehicle telemetry batches (`/vehicles/{id}/telemetry`);
 - rescue route preview (`/dispatch/{id}/route`);
 - hazard withdrawal (`DELETE /api/v1/hazards/{id}`).
 
-### 9.7 Error additions in this slice
+### 9.8 Error additions in this slice
 
 | Status | Condition                                   |
 | ------ | ------------------------------------------- |
 | `401`  | Missing, expired or invalid session token   |
 | `403`  | Registration asked for an administrative role |
-| `404`  | SOS, vehicle or hazard id not found         |
-| `409`  | Email already registered                    |
-| `422`  | Validation failure on a body field          |
-| `429`  | Login, registration, SOS or simulation quota exhausted (§1.6) |
+| `404`  | SOS, vehicle, hazard or report id not found |
+| `409`  | Email already registered, or the report has already been moderated |
+| `413`  | Report photo larger than 4 MB               |
+| `415`  | Report photo is not a JPEG, PNG or WebP     |
+| `422`  | Validation failure on a body field, including an unknown depth level or a missing rejection reason |
+| `429`  | Login, registration, SOS, report or simulation quota exhausted (§1.6) |
