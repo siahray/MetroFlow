@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     SmallInteger,
@@ -249,3 +250,24 @@ class IncidentReport(Base):
         nullable=True,
         comment="Verified hazard created by approval",
     )
+
+
+class EventLog(Base):
+    """Append-only change feed behind the SSE relays (FSD-FR-086, BR-018).
+
+    A row is appended in the same transaction as the change it announces, so a
+    committed hazard or vehicle always has a matching event and a rolled-back one
+    never does. The relays tail the table by ``event_id``; that is what replaces
+    Redis pub/sub in this deployment (ADR-024), because no Redis is provisioned
+    and the hosted database sits behind a transaction pooler that cannot carry
+    Postgres LISTEN/NOTIFY.
+    """
+
+    __tablename__ = "event_log"
+    event_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    channel = Column(String(30), nullable=False, comment="hazard, vehicle or sos")
+    event_type = Column(String(60), nullable=False, comment="e.g. hazard.published")
+    payload = Column(JSONB, nullable=False, comment="The changed row as the API returns it")
+    created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)
+
+    __table_args__ = (Index("ix_event_log_channel_event_id", "channel", "event_id"),)

@@ -35,3 +35,20 @@ def test_report_photo_ceiling_stays_under_the_platform_request_limit():
     # it, so a larger ceiling would trade the API's 413 for an opaque platform
     # error. Keep the default under it; an explicit override is a deployment call.
     assert Settings().report_photo_max_bytes <= 4 * 1024 * 1024
+
+
+def test_stream_lifetime_leaves_room_inside_the_function_budget():
+    # The relay stops itself rather than being killed mid-frame: a stream that
+    # outlives the function gets no retry frame and the client cannot tell a
+    # deployment timeout from a network failure.
+    import json
+    import pathlib
+
+    settings = Settings()
+    budget = json.loads((pathlib.Path(__file__).resolve().parents[1] / "vercel.json").read_text())[
+        "functions"
+    ]["main.py"]["maxDuration"]
+
+    assert 0 < settings.event_stream_lifetime_seconds < budget
+    assert settings.event_stream_poll_ms <= 1000
+    assert settings.event_stream_heartbeat_seconds < settings.event_stream_lifetime_seconds

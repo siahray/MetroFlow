@@ -20,7 +20,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { NetworkMap } from "./network-map";
 import { cn } from "@/lib/cn";
-import { createHazard, listHazards, publishHazard, type HazardZone } from "@/lib/hazards";
+import { hazardsFromEvent, subscribeToHazards } from "@/lib/hazard-stream";
+import { createHazard, publishHazard, type HazardZone } from "@/lib/hazards";
 import type { NetworkSummary } from "@/lib/network";
 
 type FloodClosureEditorProps = {
@@ -64,18 +65,32 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
     setNetworkSummary(summary);
   }, []);
 
+  // Live hazard layer (FSD-FR-086). A poll left the editor up to 15 s stale, and
+  // every dispatcher polled on its own timer; the stream pushes each change once
+  // and the snapshot covers whatever happened while this tab was disconnected.
   useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await listHazards();
-        setHazards(data);
-      } catch {
-        // ignore
+    const controller = new AbortController();
+    const hazardsById = new Map<number, HazardZone>();
+
+    void subscribeToHazards((event) => {
+      const incoming = hazardsFromEvent(event);
+      if (incoming === null) return;
+      if (event.type === "snapshot") hazardsById.clear();
+
+      for (const hazard of incoming) {
+        // The snapshot only carries active hazards, so a later update saying
+        // "withdrawn" has to remove the row rather than leave a stale polygon.
+        if (event.type !== "snapshot" && hazard.active === false) {
+          hazardsById.delete(hazard.hazard_id);
+        } else {
+          hazardsById.set(hazard.hazard_id, hazard);
+        }
       }
-    };
-    load();
-    const interval = setInterval(load, 15000);
-    return () => clearInterval(interval);
+
+      setHazards(Array.from(hazardsById.values()).sort((a, b) => b.hazard_id - a.hazard_id));
+    }, controller.signal);
+
+    return () => controller.abort();
   }, []);
 
   async function handlePublish() {
