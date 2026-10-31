@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -7,18 +8,19 @@ from uuid import UUID, uuid4
 import bcrypt
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 import audit
+import events
 import models
 import network_seed
 import reports
 from auth_utils import get_current_user, require_roles
 from config import settings
-from database import get_db
+from database import SessionLocal, get_db
 from geometry import backfill_geometry
 from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
 from rate_limit import prune as prune_rate_limits
@@ -714,6 +716,12 @@ def create_sos(
         status="pending",
     )
     db.add(new_sos)
+    # Events are emitted inside the transaction that changes the row: the relay
+    # can then never show an SOS that rolled back (ADR-024).
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_CREATED, payload=events.sos_payload(new_sos)
+    )
     db.commit()
     db.refresh(new_sos)
     return new_sos
@@ -751,6 +759,12 @@ def create_hazard(
             "edge_id": new_hazard.edge_id,
         },
     )
+    events.emit(
+        db,
+        channel=events.HAZARD,
+        event_type=events.HAZARD_CREATED,
+        payload=events.hazard_payload(new_hazard),
+    )
     db.commit()
     db.refresh(new_hazard)
     return new_hazard
@@ -777,6 +791,14 @@ def update_hazard(
             user=_user,
             action_type=audit.HAZARD_UPDATE,
             payload={"hazard_id": hazard_id, "changed": changes},
+        )
+        # Flush first so the payload carries the new updated_at, not the old one.
+        db.flush()
+        events.emit(
+            db,
+            channel=events.HAZARD,
+            event_type=events.HAZARD_UPDATED,
+            payload=events.hazard_payload(db_hazard),
         )
     db.commit()
     db.refresh(db_hazard)
@@ -805,6 +827,15 @@ def publish_hazard(
             "obstruction_level": db_hazard.obstruction_level,
             "edge_id": db_hazard.edge_id,
         },
+    )
+    # Publication is the event drivers care about: it is what puts the hazard on
+    # their map, so it is its own event type rather than a generic update.
+    db.flush()
+    events.emit(
+        db,
+        channel=events.HAZARD,
+        event_type=events.HAZARD_PUBLISHED,
+        payload=events.hazard_payload(db_hazard),
     )
     db.commit()
     db.refresh(db_hazard)
@@ -840,6 +871,10 @@ def assign_sos(
             "call_sign": db_vehicle.call_sign,
         },
     )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
     db.commit()
     db.refresh(db_sos)
     return db_sos
@@ -872,6 +907,10 @@ def confirm_dispatch(
             "vehicle_id": db_sos.vehicle_id,
             "note": confirm_req.note,
         },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
     )
     db.commit()
     db.refresh(db_sos)
@@ -948,6 +987,12 @@ def create_vehicle(
             "status": new_vehicle.status,
         },
     )
+    events.emit(
+        db,
+        channel=events.VEHICLE,
+        event_type=events.VEHICLE_CREATED,
+        payload=events.vehicle_payload(new_vehicle),
+    )
     db.commit()
     db.refresh(new_vehicle)
     return new_vehicle
@@ -975,9 +1020,132 @@ def update_vehicle(
             action_type=audit.VEHICLE_UPDATE,
             payload={"vehicle_id": vehicle_id, "changed": changes},
         )
+        db.flush()
+        events.emit(
+            db,
+            channel=events.VEHICLE,
+            event_type=events.VEHICLE_UPDATED,
+            payload=events.vehicle_payload(db_vehicle),
+        )
     db.commit()
     db.refresh(db_vehicle)
     return db_vehicle
+
+
+# ---------------------------------------------------------------------------
+# Event streams (FSD-FR-086, ADR-024)
+# ---------------------------------------------------------------------------
+
+
+def _snapshot_hazards(db: Session) -> dict[str, Any]:
+    """Active hazards, matching ``GET /api/v1/hazards/active``."""
+    rows = (
+        db.query(models.HazardZone)
+        .filter(models.HazardZone.active.is_(True))
+        .order_by(models.HazardZone.hazard_id)
+        .all()
+    )
+    return {"hazards": [events.hazard_payload(row) for row in rows]}
+
+
+def _snapshot_vehicles(db: Session) -> dict[str, Any]:
+    rows = db.query(models.Vehicle).order_by(models.Vehicle.vehicle_id).all()
+    return {"vehicles": [events.vehicle_payload(row) for row in rows]}
+
+
+def _snapshot_sos(db: Session) -> dict[str, Any]:
+    rows = (
+        db.query(models.SOSRequest).order_by(models.SOSRequest.created_at.desc()).limit(100).all()
+    )
+    return {"sos": [events.sos_payload(row) for row in rows]}
+
+
+def _event_stream(
+    request: Request,
+    *,
+    channel: str,
+    snapshot: Callable[[Session], dict[str, Any]],
+    after: int | None,
+):
+    """Start an SSE relay, or refuse the subscription if the log is unreadable.
+
+    The snapshot and the cursor are read before the response opens so a failure
+    is a plain ``503`` (E015) the client can fall back from, rather than a stream
+    that dies on its first frame.
+    """
+    try:
+        cursor = events.parse_cursor(
+            after=after, last_event_id=request.headers.get("last-event-id")
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    db = SessionLocal()
+    try:
+        latest = events.latest_id(db, channel)
+        body = None if cursor is not None else snapshot(db)
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Event stream unavailable") from exc
+    finally:
+        db.close()
+
+    return StreamingResponse(
+        events.stream(
+            SessionLocal,
+            channel=channel,
+            cursor=latest if cursor is None else cursor,
+            snapshot=body,
+            snapshot_id=latest,
+        ),
+        media_type="text/event-stream",
+        headers={
+            # The stream is per-subscriber and per-instant: never cached, never
+            # buffered by a proxy in front of the app.
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/v1/hazards/stream")
+def stream_hazards(
+    request: Request,
+    after: Annotated[int | None, Query(ge=0, description="Resume after this event id")] = None,
+    _user: models.User = Depends(require_user),
+):
+    """
+    Hazard changes as server-sent events (FSD-FR-085, 086).
+
+    Any authenticated account may subscribe: a driver needs the hazard layer
+    more than the portal does. The first frame is a snapshot of the active
+    hazards; afterwards each frame is a created, updated or published row.
+    """
+    return _event_stream(request, channel=events.HAZARD, snapshot=_snapshot_hazards, after=after)
+
+
+@app.get("/api/v1/vehicles/stream")
+def stream_vehicles(
+    request: Request,
+    after: Annotated[int | None, Query(ge=0, description="Resume after this event id")] = None,
+    _user: models.User = Depends(require_admin),
+):
+    """
+    Fleet changes as server-sent events (FSD-FR-086).
+
+    Restricted to portal roles (SEC-007): a unit's live position is operational
+    data, and a driver has no reason to see the whole fleet.
+    """
+    return _event_stream(request, channel=events.VEHICLE, snapshot=_snapshot_vehicles, after=after)
+
+
+@app.get("/api/v1/sos/stream")
+def stream_sos(
+    request: Request,
+    after: Annotated[int | None, Query(ge=0, description="Resume after this event id")] = None,
+    _user: models.User = Depends(require_admin),
+):
+    """SOS creation, assignment and confirmation as server-sent events (FSD-FR-086)."""
+    return _event_stream(request, channel=events.SOS, snapshot=_snapshot_sos, after=after)
 
 
 # ---------------------------------------------------------------------------
@@ -1445,6 +1613,14 @@ def approve_report(
             "depth_level": report.depth_level,
             "obstruction_level": obstruction_level,
         },
+    )
+    # Approval publishes the hazard, so drivers have to hear about it the same
+    # way they hear about one published from the map editor.
+    events.emit(
+        db,
+        channel=events.HAZARD,
+        event_type=events.HAZARD_PUBLISHED,
+        payload=events.hazard_payload(hazard),
     )
     db.commit()
     db.refresh(report)

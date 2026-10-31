@@ -27,6 +27,8 @@ PUBLIC_API_PATHS = {
 # authenticated, but only a portal role may call these.
 PORTAL_ONLY_ROUTES = [
     ("GET", "/api/v1/sos"),
+    ("GET", "/api/v1/sos/stream"),
+    ("GET", "/api/v1/vehicles/stream"),
     ("POST", "/api/v1/simulation/rain"),
     ("POST", "/api/v1/sos/{sos_id}/assign"),
     ("POST", "/api/v1/dispatch/{sos_id}/confirm"),
@@ -88,6 +90,14 @@ def test_portal_routes_require_a_portal_role(method: str, path: str):
     calls = _dependency_calls(route)
     assert get_current_user in calls
     assert require_admin in calls
+
+
+def test_hazard_stream_is_open_to_any_authenticated_user():
+    """SEC-007 withholds the fleet, not the hazard layer: the driver map needs it."""
+    route = next(route for route in _api_routes() if route.path == "/api/v1/hazards/stream")
+    calls = _dependency_calls(route)
+    assert get_current_user in calls
+    assert require_admin not in calls
 
 
 @pytest.mark.parametrize("role", ["LGU_DISPATCHER", "SUPER_ADMIN"])

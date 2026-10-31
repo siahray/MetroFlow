@@ -86,6 +86,23 @@ class Settings(BaseSettings):
     report_duplicate_radius_m: int = 150
     report_duplicate_window_minutes: int = 15
 
+    # --- Event streams (FSD-FR-086) --------------------------------------------
+    # The relays read the event log on a short timer rather than through a broker
+    # (ADR-024). At 100 ms a published hazard reaches a connected client within
+    # the NFR-019 budget on the server side, and the query is an index probe on
+    # (channel, event_id), so ten reads a second per client costs little.
+    event_stream_poll_ms: int = 100
+    # A serverless function cannot hold a socket open forever, so a stream ends
+    # on its own and the client reconnects with Last-Event-ID. Forty-five seconds
+    # sits inside the sixty-second function limit with room for startup.
+    event_stream_lifetime_seconds: int = 45
+    # A comment frame this often keeps proxies from treating an idle stream as
+    # dead, without waking the client's parser.
+    event_stream_heartbeat_seconds: int = 10
+    # One tail query never returns more than this; a lagging client catches up in
+    # batches on the next pass instead of buffering the whole backlog in memory.
+    event_stream_batch: int = 200
+
     @property
     def is_production(self) -> bool:
         """True only for ``FASTAPI_ENV=production``, case and padding aside."""

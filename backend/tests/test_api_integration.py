@@ -15,10 +15,14 @@ test_routing.py / test_hydrology.py cover the algorithms; neither would catch a
 [lat, lon] swap or a broken FeatureCollection.
 """
 
+import json
+from contextlib import contextmanager
+
 import pytest
 from evidence import build_jpeg
 from fastapi.testclient import TestClient
 
+from config import settings
 from main import app
 from network_seed import build_network
 
@@ -703,3 +707,242 @@ def test_a_lying_content_type_does_not_get_an_image_through(client):
         files={"photo": ("evidence.jpg", b"GIF89a-not-really", "image/jpeg")},
     )
     assert response.status_code == 415
+
+
+# ---------------------------------------------------------------------------
+# Event streams (FSD-FR-086, ADR-024)
+# ---------------------------------------------------------------------------
+#
+# Two things are worth pinning against a real database: the snapshot and the
+# tail read the same committed rows, and a mutation's event is visible to a
+# subscriber that starts after it. The framing and cursor rules are unit-tested
+# without a database; these tests prove the wiring.
+
+
+def _sse_frames(lines):
+    """Parse SSE field lines into the events they describe, dropping comments."""
+    event_id = None
+    event_type = None
+    data: list[str] = []
+
+    for raw in lines:
+        line = raw.rstrip("\r")
+        if not line:
+            if data:
+                yield {
+                    "id": event_id,
+                    "event": event_type,
+                    "data": json.loads("\n".join(data)),
+                }
+            event_id = event_type = None
+            data = []
+            continue
+        if line.startswith(":"):
+            # Keep-alive comment; the client only needs the socket open.
+            continue
+        field, _, value = line.partition(":")
+        value = value.removeprefix(" ")
+        if field == "id":
+            event_id = int(value)
+        elif field == "event":
+            event_type = value
+        elif field == "data":
+            data.append(value)
+
+
+@contextmanager
+def sse(client, monkeypatch, path, *, lifetime=1.0, params=None, headers=None):
+    """Open a stream that ends by itself shortly after the test reads what it needs.
+
+    The real relay lives 45 s, which is far too long to wait in a test and would
+    leave the ASGI transport reading an idle socket.
+    """
+    monkeypatch.setattr(settings, "event_stream_lifetime_seconds", lifetime)
+    with client.stream("GET", path, params=params, headers=headers) as response:
+        yield response, _sse_frames(response.iter_lines())
+
+
+def open_stream(client, monkeypatch, path, **kwargs):
+    """Return the response headers and the first real event of a fresh stream."""
+    with sse(client, monkeypatch, path, **kwargs) as (response, frames):
+        return response, next(frames)
+
+
+def latest_event_id(client, monkeypatch, path="/api/v1/hazards/stream"):
+    """The cursor a fresh subscription would start from (the snapshot's id)."""
+    _, snapshot = open_stream(client, monkeypatch, path)
+    assert snapshot["event"] == "snapshot"
+    return snapshot["id"]
+
+
+def test_streams_require_a_token(client):
+    token = client.headers.pop("Authorization")
+    try:
+        hazard = client.get("/api/v1/hazards/stream")
+        fleet = client.get("/api/v1/vehicles/stream")
+        sos = client.get("/api/v1/sos/stream")
+    finally:
+        client.headers["Authorization"] = token
+
+    assert [hazard.status_code, fleet.status_code, sos.status_code] == [401, 401, 401]
+
+
+def test_hazard_stream_sets_the_event_stream_contract_headers(client, monkeypatch):
+    response, _ = open_stream(client, monkeypatch, "/api/v1/hazards/stream")
+
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-store"
+    # Without this some proxies buffer the whole response and the stream only
+    # arrives once it closes, which defeats the point.
+    assert response.headers["x-accel-buffering"] == "no"
+
+
+def test_hazard_stream_opens_with_a_snapshot_of_the_active_hazards(client, monkeypatch):
+    expected = client.get("/api/v1/hazards", params={"active": True}).json()
+
+    _, snapshot = open_stream(client, monkeypatch, "/api/v1/hazards/stream")
+
+    assert snapshot["event"] == "snapshot"
+    assert sorted(row["hazard_id"] for row in snapshot["data"]["hazards"]) == sorted(
+        row["hazard_id"] for row in expected
+    )
+
+
+def test_a_created_hazard_reaches_a_subscriber_that_resumes_after_its_cursor(client, monkeypatch):
+    cursor = latest_event_id(client, monkeypatch)
+    hazard = client.post(
+        "/api/v1/hazards",
+        json={"name": "Stream probe", "obstruction_level": "CAUTION", "avg_depth_cm": 25},
+    ).json()
+    try:
+        with sse(
+            client,
+            monkeypatch,
+            "/api/v1/hazards/stream",
+            params={"after": cursor},
+            lifetime=1.5,
+        ) as (_, frames):
+            created = next(
+                frame
+                for frame in frames
+                if frame["event"] == "hazard.created"
+                and frame["data"]["hazard_id"] == hazard["hazard_id"]
+            )
+
+        # The event is committed with the row: no window where the subscriber
+        # sees the change but the REST read does not, or the other way round.
+        assert created["id"] > cursor
+        assert created["data"]["name"] == "Stream probe"
+        assert created["data"]["obstruction_level"] == "CAUTION"
+    finally:
+        from sqlalchemy import text
+
+        from database import SessionLocal
+
+        with SessionLocal() as db:
+            if hazard.get("hazard_id") is not None:
+                db.execute(
+                    text("DELETE FROM hazard_zones WHERE hazard_id = :id"),
+                    {"id": hazard["hazard_id"]},
+                )
+                db.commit()
+
+
+def test_last_event_id_header_resumes_where_the_sse_spec_says(client, monkeypatch):
+    cursor = latest_event_id(client, monkeypatch)
+    hazard = client.post(
+        "/api/v1/hazards",
+        json={"name": "Resume probe", "obstruction_level": "CAUTION"},
+    ).json()
+    try:
+        with sse(
+            client,
+            monkeypatch,
+            "/api/v1/hazards/stream",
+            params={"after": cursor},
+            lifetime=1.5,
+        ) as (_, frames):
+            created = next(
+                frame
+                for frame in frames
+                if frame["event"] == "hazard.created"
+                and frame["data"]["hazard_id"] == hazard["hazard_id"]
+            )
+
+        # Now replay as a reconnecting EventSource would: header only, no query.
+        with sse(
+            client,
+            monkeypatch,
+            "/api/v1/hazards/stream",
+            headers={"Last-Event-ID": str(created["id"])},
+            lifetime=0.4,
+        ) as (_, frames):
+            later = list(frames)
+
+        assert all(frame["id"] > created["id"] for frame in later)
+        assert all(frame["event"] != "snapshot" for frame in later)
+    finally:
+        from sqlalchemy import text
+
+        from database import SessionLocal
+
+        with SessionLocal() as db:
+            if hazard.get("hazard_id") is not None:
+                db.execute(
+                    text("DELETE FROM hazard_zones WHERE hazard_id = :id"),
+                    {"id": hazard["hazard_id"]},
+                )
+                db.commit()
+
+
+def test_a_malformed_last_event_id_is_refused_rather_than_replayed_from_zero(client):
+    response = client.get(
+        "/api/v1/hazards/stream",
+        headers={"Last-Event-ID": "not-a-number"},
+    )
+
+    assert response.status_code == 400
+    assert "integer" in response.json()["detail"]
+
+
+def test_the_fleet_and_sos_streams_are_closed_to_drivers(client, monkeypatch):
+    from uuid import uuid4
+
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    email = f"stream-driver-{uuid4()}@example.test"
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Stream Driver", "email": email, "password": "stream-probe-pass"},
+    )
+    assert registered.status_code == 201, registered.text
+
+    try:
+        login = client.post(
+            "/api/v1/auth/login", json={"email": email, "password": "stream-probe-pass"}
+        )
+        driver = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        fleet = client.get("/api/v1/vehicles/stream", headers=driver)
+        sos = client.get("/api/v1/sos/stream", headers=driver)
+
+        assert fleet.status_code == 403
+        assert sos.status_code == 403
+
+        # A driver does subscribe to hazards: it is the layer the driver map
+        # renders, and SEC-007 only withholds the fleet.
+        with sse(
+            client,
+            monkeypatch,
+            "/api/v1/hazards/stream",
+            headers=driver,
+            lifetime=0.4,
+        ) as (response, frames):
+            assert response.status_code == 200
+            assert next(frames)["event"] == "snapshot"
+    finally:
+        with SessionLocal() as db:
+            db.execute(text("DELETE FROM users WHERE email = :email"), {"email": email})
+            db.commit()
