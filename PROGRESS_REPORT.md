@@ -109,13 +109,14 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 
 ## 4. Driver Mobile App (Expo / React Native)
 
-- **Expo Router tab layout** — Map, Report, SOS and Profile tabs
+- **Expo Router tab layout** — Map, Report, SOS and Profile tabs, plus active Navigation screen
+- **Driver Navigation (`route.tsx`)** — Destination search with road node selection, clearance-aware route queries, turn-by-turn instructions with road names and manoeuvres, GPS advance, 200m proximity alerts, and SSE hazard stream rerouting (FSD-FR-054 to 064)
+- **Field Reporting (`report.tsx`)** — Native camera/photo picker with EXIF metadata retention, high-accuracy GPS fix with last-known position fallback, depth selection (Ankle/Knee/Waist), duplicate warning alerts, and offline-safe draft preservation with retry (FSD-FR-065 to 067)
 - **Email/password auth** with a registration path for driver accounts; registration signs in automatically and the token is held for the app session
 - **Guest mode** still browses the app, but sending an SOS or a report asks the driver to sign in
 - **Profile:** displays clearance in cm
-- **SOS/Report:** submits to the backend
-- **Offline Maps:** visual placeholder only (no SQLite/download)
-- **No emergency phone/911 references**
+- **SOS:** submits to the backend `/api/v1/sos`
+- **Offline Maps:** visual placeholder only (no SQLite/download per pilot scope)
 - **`AuthProvider`** mounted in the root layout
 
 ---

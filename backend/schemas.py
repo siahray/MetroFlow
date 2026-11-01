@@ -242,6 +242,29 @@ class HazardResponse(BaseModel):
         return geometry_to_geojson(value)
 
 
+class TelemetryPing(BaseModel):
+    """One position / speed batch from the driver app (FSD-FR-072, VAL-020)."""
+
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    speed_kmh: float | None = Field(
+        None,
+        ge=0,
+        le=300,
+        description="Speed in km/h at the moment of capture.",
+    )
+    heading: float | None = Field(
+        None,
+        ge=0,
+        lt=360,
+        description="Bearing in degrees clockwise from true north.",
+    )
+    recorded_at: datetime | None = Field(
+        None,
+        description="Device-side capture time; the server substitutes UTC now when absent.",
+    )
+
+
 class VehicleCreate(BaseModel):
     call_sign: str
     vehicle_type: str

@@ -1044,3 +1044,193 @@ def test_caution_hazard_stays_drivable_but_is_reported(client, created_records):
     reported = next(hazard for hazard in body["hazards"] if hazard["hazard_id"] == hazard_id)
     assert reported["blocking"] is False
     assert reported["obstruction_level"] == "CAUTION"
+
+
+# ---------------------------------------------------------------------------
+# Vehicle telemetry ingest (FSD-FR-072, VAL-020, TTC-022)
+# ---------------------------------------------------------------------------
+
+
+def _make_driver_headers(client) -> tuple[dict, str]:
+    """Register a fresh EMERGENCY_DRIVER account and return its auth headers + email."""
+    from uuid import uuid4
+
+    email = f"telemetry-driver-{uuid4()}@example.test"
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Telemetry Driver", "email": email, "password": "telem-pass-123"},
+    )
+    assert registered.status_code == 201, registered.text
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "telem-pass-123"})
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}, email
+
+
+def _cleanup_email(email: str) -> None:
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    with SessionLocal() as db:
+        db.execute(text("DELETE FROM users WHERE email = :email"), {"email": email})
+        db.commit()
+
+
+def _create_test_vehicle(client) -> int:
+    """Create a vehicle via admin and return its vehicle_id."""
+    resp = client.post(
+        "/api/v1/vehicles",
+        json={
+            "call_sign": "TEST-TELEMETRY",
+            "vehicle_type": "flood_truck",
+            "clearance_cm": 35,
+            "status": "available",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["vehicle_id"]
+
+
+def _delete_test_vehicle(client, vehicle_id: int) -> None:
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    with SessionLocal() as db:
+        db.execute(text("DELETE FROM vehicles WHERE vehicle_id = :vid"), {"vid": vehicle_id})
+        db.commit()
+
+
+def test_telemetry_updates_vehicle_location(client):
+    """A valid ping updates lat/lon/speed on the vehicle row (FSD-FR-072)."""
+    driver_headers, email = _make_driver_headers(client)
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        resp = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            json={
+                "latitude": 14.5995,
+                "longitude": 120.9842,
+                "speed_kmh": 30.0,
+                "heading": 90.0,
+            },
+            headers=driver_headers,
+        )
+        assert resp.status_code == 204, resp.text
+
+        vehicles = client.get("/api/v1/vehicles")
+        assert vehicles.status_code == 200, vehicles.text
+        row = next(v for v in vehicles.json() if v["vehicle_id"] == vehicle_id)
+        assert abs(row["current_location_lat"] - 14.5995) < 1e-6
+        assert abs(row["current_location_lon"] - 120.9842) < 1e-6
+        assert abs(row["speed_kmh"] - 30.0) < 1e-3
+    finally:
+        _delete_test_vehicle(client, vehicle_id)
+        _cleanup_email(email)
+
+
+def test_telemetry_throttles_second_batch_within_window(client):
+    """A second ping inside the throttle window is rejected with 429 (VAL-020, TTC-022).
+
+    We seed ``updated_at`` to ``now`` via the PATCH endpoint so the next
+    POST /telemetry lands inside the 5-second window without needing to
+    freeze time.
+    """
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    driver_headers, email = _make_driver_headers(client)
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        # Force updated_at to the current moment so any immediate follow-up
+        # telemetry ping is inside the throttle window.
+        with SessionLocal() as db:
+            db.execute(
+                text(
+                    "UPDATE vehicles SET updated_at = NOW() AT TIME ZONE 'UTC'"
+                    " WHERE vehicle_id = :vid"
+                ),
+                {"vid": vehicle_id},
+            )
+            db.commit()
+
+        resp = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            json={"latitude": 14.6000, "longitude": 120.9850},
+            headers=driver_headers,
+        )
+        assert resp.status_code == 429, resp.text
+        assert "Retry-After" in resp.headers
+        assert int(resp.headers["Retry-After"]) >= 1
+    finally:
+        _delete_test_vehicle(client, vehicle_id)
+        _cleanup_email(email)
+
+
+def test_telemetry_allows_batch_after_throttle_window(client):
+    """A second ping after the throttle window passes is accepted (TTC-022).
+
+    We back-date ``updated_at`` by 6 s so the telemetry check sees elapsed > 5 s.
+    """
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    driver_headers, email = _make_driver_headers(client)
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        # Back-date updated_at by 6 s so the throttle window has expired.
+        with SessionLocal() as db:
+            db.execute(
+                text(
+                    "UPDATE vehicles"
+                    " SET updated_at = (NOW() AT TIME ZONE 'UTC') - interval '6 seconds'"
+                    " WHERE vehicle_id = :vid"
+                ),
+                {"vid": vehicle_id},
+            )
+            db.commit()
+
+        resp = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            json={"latitude": 14.6000, "longitude": 120.9850, "speed_kmh": 20.0},
+            headers=driver_headers,
+        )
+        assert resp.status_code == 204, resp.text
+
+        vehicles = client.get("/api/v1/vehicles")
+        row = next(v for v in vehicles.json() if v["vehicle_id"] == vehicle_id)
+        assert abs(row["current_location_lat"] - 14.6000) < 1e-6
+    finally:
+        _delete_test_vehicle(client, vehicle_id)
+        _cleanup_email(email)
+
+
+def test_telemetry_rejects_out_of_range_coordinates(client):
+    """Coordinates outside [-90,90] / [-180,180] are rejected with 422."""
+    driver_headers, email = _make_driver_headers(client)
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        bad = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            json={"latitude": 999.0, "longitude": 120.9842},
+            headers=driver_headers,
+        )
+        assert bad.status_code == 422, bad.text
+    finally:
+        _delete_test_vehicle(client, vehicle_id)
+        _cleanup_email(email)
+
+
+def test_telemetry_requires_authentication(client):
+    """Unauthenticated requests to the telemetry endpoint are rejected with 401."""
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        resp = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            json={"latitude": 14.5995, "longitude": 120.9842},
+        )
+        assert resp.status_code == 401, resp.text
+    finally:
+        _delete_test_vehicle(client, vehicle_id)

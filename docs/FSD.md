@@ -346,13 +346,13 @@ statement; the FSD identifiers above remain stable as items move.
 | Audit and administration | FSD-FR-047 to 049 | Partial     | Hash-chained write path, `/audit` read API and `/audit/verify`; user management and export absent |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
 | Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me`, route-level enforcement and one attributable audit row per privileged action |
-| Driver navigation        | FSD-FR-054 to 064 | Partial     | Expo app with map and a routing screen; turn-by-turn list and reroute absent |
-| Field reporting          | FSD-FR-065 to 067 | Partial     | API accepts a multipart report with depth, location, evidence and EXIF; the driver camera/depth screen is the remaining client work |
+| Driver navigation        | FSD-FR-054 to 064 | Implemented | Turn-by-turn guidance, road names, GPS instruction tracking, hazard-aware routing, proximity alerts, and SSE auto-rerouting |
+| Field reporting          | FSD-FR-065 to 067 | Implemented | Driver report intake with camera/gallery photo, EXIF retention, live GPS with accuracy fallback, depth selector and multipart submission |
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Partial     | SOS create and list work; telemetry pings absent    |
-| Live operational map     | FSD-FR-075, 076   | Partial     | MapLibre renders the live network, statuses, popups and an A* route; hazard/closure/fleet/SOS overlays and unit labels still absent |
+| Live operational map     | FSD-FR-075, 076   | Implemented | MapLibre renders live network and A* route with toggleable overlays for verified hazards, fleet units and active SOS signals |
 | Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; CCTV/gauge cross-reference (FR-079) absent |
-| Hazard authoring         | FSD-FR-082 to 086 | Partial     | Create, update and publish via the API; SSE stream absent |
+| Hazard authoring         | FSD-FR-082 to 086 | Implemented | Create, update, and publish via the API; live SSE event stream at `/api/v1/hazards/stream` |
 | Distress and dispatch    | FSD-FR-087 to 089 | Partial     | Incident list, assignment and confirmation; rescue route absent |
 | Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |
 | Sensor ingestion         | FSD-FR-090, 091   | Planned     | No readings or threshold evaluation                 |

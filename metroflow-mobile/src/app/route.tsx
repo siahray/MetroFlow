@@ -1,156 +1,999 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
+  ActivityIndicator,
   SafeAreaView,
+  ScrollView,
   StatusBar,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, MapPin, Navigation, Clock, Route, ShieldCheck, AlertTriangle, Car } from 'lucide-react-native';
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import * as Location from "expo-location";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  MapPin,
+  Navigation,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  X,
+} from "lucide-react-native";
 
-const RECENT = ['Market Market, Taguig', 'Shaw Boulevard, Mandaluyong', 'Bagong Ilog, Pasig'];
+import {
+  ApiError,
+  getNetworkState,
+  getRoute,
+  type HazardInfo,
+  type NetworkState,
+  type NodeFeature,
+  type RoutePlan,
+} from "../api";
+import { useAuth } from "../auth";
+import { RouteMap } from "../navigation/RouteMap";
+import { subscribeToHazards } from "../navigation/hazard-stream";
+import {
+  distanceToPolygonMeters,
+  formatDistance,
+  formatDuration,
+  instructionIndexForProgress,
+  nearestNode,
+  polygonRing,
+  progressAlongRoute,
+  remainingOnStep,
+  routeCoordinates,
+  toLatLng,
+  type LatLng,
+} from "../navigation/geo";
 
-const FLOOD_SAFE_ROUTE = {
-  name: 'Flood-Safe Bypass Route',
-  dist: '5.2 km',
-  time: '~14 min',
-  note: 'Avoids all verified hazard zones',
-  safe: true,
-};
+const DRIVER_CLEARANCE_CM = 28;
 
-const DIRECT_ROUTE = {
-  name: 'Direct Route (Current Road)',
-  dist: '4.1 km',
-  time: '~22 min (+delay)',
-  note: 'Water level 22 cm detected at underpass',
-  safe: false,
-};
+type Banner = {
+  title: string;
+  body: string;
+  tone: "warning" | "danger" | "success";
+} | null;
+
+const BANNER_COLORS = {
+  warning: { background: "#fffbeb", border: "#f59e0b", text: "#92400e" },
+  danger: { background: "#fef2f2", border: "#dc2626", text: "#991b1b" },
+  success: { background: "#f0fdf4", border: "#16a34a", text: "#166534" },
+} as const;
+
+function hazardAdvice(level: string): { label: string; action: string } {
+  switch (level.toUpperCase()) {
+    case "IMPASSABLE":
+      return { label: "Road impassable", action: "Do not enter. Use another route." };
+    case "LEVEL_3":
+      return { label: "Waist-deep flooding", action: "Turn around and reroute." };
+    case "LEVEL_2":
+      return { label: "Knee-deep flooding", action: "Find another route." };
+    default:
+      return { label: "Ankle-deep flooding", action: "Proceed slowly with caution." };
+  }
+}
+
+function samePath(a: RoutePlan, b: RoutePlan) {
+  return a.optimal_path_nodes.join(",") === b.optimal_path_nodes.join(",");
+}
 
 export default function RouteScreen() {
   const router = useRouter();
-  const [destination, setDestination] = useState('');
-  const [selected, setSelected] = useState<'safe' | 'direct'>('safe');
+  const { user } = useAuth();
+  const { destination: destinationParam } = useLocalSearchParams<{ destination?: string }>();
+
+  const [network, setNetwork] = useState<NetworkState | null>(null);
+  const [position, setPosition] = useState<LatLng | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [destinationQuery, setDestinationQuery] = useState("");
+  const [selected, setSelected] = useState<NodeFeature | null>(null);
+  const [route, setRoute] = useState<RoutePlan | null>(null);
+  const [hazards, setHazards] = useState<HazardInfo[]>([]);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<Banner>(null);
+  const [planning, setPlanning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState(false);
+  const [unsafeRoute, setUnsafeRoute] = useState(false);
+  const [arrived, setArrived] = useState(false);
+
+  const routeRef = useRef<RoutePlan | null>(null);
+  const positionRef = useRef<LatLng | null>(null);
+  const networkRef = useRef<NetworkState | null>(null);
+  const unsafeRef = useRef(false);
+  const plannedFor = useRef<number | null>(null);
+  const initialDestinationHandled = useRef(false);
+  const hazardsInitialised = useRef(false);
+  const arrivedRef = useRef(false);
+  const alertedHazards = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+  useEffect(() => {
+    networkRef.current = network;
+  }, [network]);
+  useEffect(() => {
+    unsafeRef.current = unsafeRoute;
+  }, [unsafeRoute]);
+
+  // --- Location ------------------------------------------------------------
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    let subscription: Location.LocationSubscription | null = null;
+
+    (async () => {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== "granted") {
+          if (!cancelled) setLocationError("Location permission is required for navigation.");
+          return;
+        }
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (cancelled) return;
+        setPosition({ latitude: current.coords.latitude, longitude: current.coords.longitude });
+        setLocationError(null);
+
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 3000,
+            distanceInterval: 10,
+          },
+          (update) => {
+            setPosition({
+              latitude: update.coords.latitude,
+              longitude: update.coords.longitude,
+            });
+          },
+        );
+      } catch {
+        if (!cancelled) setLocationError("Could not read your location. Check GPS and retry.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, [user]);
+
+  // --- Road network --------------------------------------------------------
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    getNetworkState(DRIVER_CLEARANCE_CM)
+      .then((state) => {
+        if (!cancelled) setNetwork(state);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "Could not load the road network.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // --- Live verified hazards (FSD-FR-059) ---------------------------------
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToHazards({
+      onSnapshot: (snapshot) => {
+        setHazards(snapshot);
+        setStreamError(null);
+      },
+      onHazard: (event, hazard) => {
+        setHazards((previous) => {
+          if (event === "hazard.deleted" || hazard.active === false) {
+            return previous.filter((row) => row.hazard_id !== hazard.hazard_id);
+          }
+          const without = previous.filter((row) => row.hazard_id !== hazard.hazard_id);
+          return [...without, hazard];
+        });
+      },
+      onError: (cause) => setStreamError(cause.message),
+    });
+  }, [user]);
+
+  // --- Destination from the home screen ------------------------------------
+  useEffect(() => {
+    if (!network || !destinationParam || initialDestinationHandled.current) return;
+    initialDestinationHandled.current = true;
+    const needle = destinationParam.toLowerCase();
+    const match = network.nodes.features.find((node) =>
+      (node.properties.name ?? "").toLowerCase().includes(needle),
+    );
+    // Opening the screen from a saved destination seeds the search box once.
+    setDestinationQuery(match?.properties.name ?? destinationParam);
+    if (match) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelected(match);
+    }
+  }, [network, destinationParam]);
+
+  // --- Planning ------------------------------------------------------------
+  const planRoute = useCallback(
+    async (target: NodeFeature, unsafe = false) => {
+      if (!network || !position) return;
+      const origin = nearestNode(network.nodes.features, position);
+      if (!origin) {
+        setError("Your location is outside the mapped road network.");
+        return;
+      }
+
+      plannedFor.current = target.id;
+      setPlanning(true);
+      setError(null);
+      setRefusal(false);
+      try {
+        const plan = await getRoute({
+          start_node: origin.properties.node_id,
+          target_node: target.properties.node_id,
+          clearance_cm: DRIVER_CLEARANCE_CM,
+          ignore_hazards: unsafe,
+        });
+        setRoute(plan);
+        setSelected(target);
+        setDestinationQuery(target.properties.name ?? "");
+        setUnsafeRoute(unsafe);
+        setArrived(false);
+        arrivedRef.current = false;
+        setBanner(null);
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 404) {
+          setRoute(null);
+          setRefusal(true);
+        } else {
+          setError(cause instanceof Error ? cause.message : "Could not plan a route.");
+        }
+      } finally {
+        setPlanning(false);
+      }
+    },
+    [network, position],
+  );
+
+  useEffect(() => {
+    if (!selected || !network || !position) return;
+    if (plannedFor.current === selected.id) return;
+    plannedFor.current = selected.id;
+    void planRoute(selected);
+  }, [selected, network, position, planRoute]);
+
+  // --- Auto reroute (FSD-FR-060, FSD-FR-061) -------------------------------
+  useEffect(() => {
+    if (!hazardsInitialised.current) {
+      hazardsInitialised.current = true;
+      return;
+    }
+    const current = routeRef.current;
+    if (!current || arrivedRef.current) return;
+
+    // Reroute from where the driver actually is, so a hazard behind them does
+    // not send them back. Reading position through a ref keeps a GPS tick from
+    // re-requesting a route; only a hazard change triggers this.
+    const here = positionRef.current;
+    const origin =
+      here && networkRef.current
+        ? nearestNode(networkRef.current.nodes.features, here)
+        : null;
+    const startNode = origin?.properties.node_id ?? current.start_node;
+
+    const timer = setTimeout(async () => {
+      try {
+        const next = await getRoute({
+          start_node: startNode,
+          target_node: current.target_node,
+          clearance_cm: current.vehicle_clearance_cm,
+          ignore_hazards: unsafeRef.current,
+        });
+        if (samePath(current, next)) {
+          // Same road, but the hazard list on the returned plan is newer.
+          setRoute(next);
+          return;
+        }
+        setRoute(next);
+        setArrived(false);
+        arrivedRef.current = false;
+        setRefusal(false);
+        setBanner({
+          title: "Route updated",
+          body: "Road conditions changed. A safer way to your destination is now shown.",
+          tone: "warning",
+        });
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 404) {
+          setRoute(null);
+          setRefusal(true);
+          setBanner({
+            title: "No safe route",
+            body: "Every verified route is now blocked. Retry or view the unsafe alternative.",
+            tone: "danger",
+          });
+        }
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [hazards]);
+
+  // --- Manual refresh and alternatives (FSD-FR-062) ------------------------
+  const refreshRoute = useCallback(async () => {
+    const current = routeRef.current;
+    if (!current) return;
+    const here = positionRef.current;
+    const nodes = networkRef.current?.nodes.features ?? [];
+    const origin = here ? nearestNode(nodes, here) : null;
+
+    setRefreshing(true);
+    try {
+      const next = await getRoute({
+        start_node: origin?.properties.node_id ?? current.start_node,
+        target_node: current.target_node,
+        clearance_cm: current.vehicle_clearance_cm,
+        ignore_hazards: unsafeRef.current,
+      });
+      const changed = !samePath(current, next);
+      setRoute(next);
+      setRefusal(false);
+      if (changed) {
+        setArrived(false);
+        arrivedRef.current = false;
+        setBanner({
+          title: "Route updated",
+          body: "A fresher route is available with the current road conditions.",
+          tone: "warning",
+        });
+      } else {
+        setBanner({
+          title: "Route refreshed",
+          body: "No change — you are still on the best flood-safe route.",
+          tone: "success",
+        });
+      }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) {
+        setRoute(null);
+        setRefusal(true);
+        setBanner({
+          title: "No safe route",
+          body: "Every verified route is now blocked. Retry or view the unsafe alternative.",
+          tone: "danger",
+        });
+      } else {
+        setError(cause instanceof Error ? cause.message : "Could not refresh the route.");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // --- Proximity alerts (FSD-FR-063, FSD-FR-064) ---------------------------
+  useEffect(() => {
+    if (!position) return;
+    for (const hazard of hazards) {
+      const ring = polygonRing(hazard.geometry);
+      if (ring.length === 0) continue;
+      const distance = distanceToPolygonMeters(position, ring);
+      const radius = hazard.warning_radius_m || 200;
+
+      if (distance <= radius && !alertedHazards.current.has(hazard.hazard_id)) {
+        alertedHazards.current.add(hazard.hazard_id);
+        const advice = hazardAdvice(hazard.obstruction_level);
+        setBanner({
+          title: `Hazard ahead — ${hazard.name}`,
+          body: `${advice.label} • ${formatDistance(distance)} away. ${advice.action}`,
+          tone: hazard.obstruction_level.toUpperCase() === "CAUTION" ? "warning" : "danger",
+        });
+      } else if (distance > radius * 1.5) {
+        alertedHazards.current.delete(hazard.hazard_id);
+      }
+    }
+  }, [position, hazards]);
+
+  // --- Instruction and arrival advances (FSD-FR-058) ----------------------
+  const progress = useMemo(
+    () => (route && position ? progressAlongRoute(routeCoordinates(route), position) : null),
+    [route, position],
+  );
+
+  const currentStep = useMemo(
+    () =>
+      route && progress
+        ? instructionIndexForProgress(route.instructions, progress.progressM)
+        : 0,
+    [route, progress],
+  );
+
+  useEffect(() => {
+    if (!route || !progress) return;
+    const atDestination =
+      progress.distanceToRouteM <= 60 &&
+      progress.progressM >= Math.max(progress.totalM - 20, 0);
+    if (atDestination && !arrivedRef.current) {
+      arrivedRef.current = true;
+      // Arrival is announced once, as an announcement rather than derived
+      // state; the ref above is what makes it once-only.
+      setArrived(true);
+      setBanner({
+        title: "You have arrived",
+        body: route.destination_name ?? selected?.properties.name ?? "Destination reached.",
+        tone: "success",
+      });
+    }
+  }, [route, progress, selected]);
+
+  const matches = useMemo(() => {
+    const needle = destinationQuery.trim().toLowerCase();
+    if (!needle || !network || route) return [];
+    return network.nodes.features
+      .filter((node) => (node.properties.name ?? "").toLowerCase().includes(needle))
+      .slice(0, 8);
+  }, [destinationQuery, network, route]);
+
+  const instruction = route?.instructions[currentStep];
+  const remaining = progress ? Math.max(progress.totalM - progress.progressM, 0) : null;
+  const stepRemaining =
+    route && progress
+      ? remainingOnStep(route.instructions, currentStep, progress.progressM)
+      : null;
+
+  const mapHazards = hazards.length > 0 ? hazards : (route?.hazards ?? []);
+  const destinationCoordinate = selected
+    ? toLatLng(selected.geometry.coordinates)
+    : route
+      ? toLatLng(route.geometry.coordinates[route.geometry.coordinates.length - 1])
+      : null;
+
+  function resetRoute() {
+    setRoute(null);
+    setSelected(null);
+    setDestinationQuery("");
+    setRefusal(false);
+    setUnsafeRoute(false);
+    setArrived(false);
+    setBanner(null);
+    setError(null);
+    arrivedRef.current = false;
+    plannedFor.current = null;
+    alertedHazards.current.clear();
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={18} color="#1e293b" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Navigation</Text>
+        </View>
+        <View style={styles.signedOutCard}>
+          <ShieldAlert size={28} color="#2563eb" />
+          <Text style={styles.signedOutTitle}>Sign in to navigate</Text>
+          <Text style={styles.signedOutBody}>
+            Flood-safe routes and live hazard alerts are attached to your driver account.
+          </Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace("/")}>
+            <Text style={styles.primaryButtonText}>Sign in</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView style={styles.screen}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderColor: '#f1f5f9' }}>
-        <TouchableOpacity onPress={() => router.back()} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={18} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>Flood-Safe Route Planner</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Navigation</Text>
+          <Text style={styles.headerSubtitle}>
+            {DRIVER_CLEARANCE_CM} cm clearance • live hazards
+          </Text>
+        </View>
+        {streamError ? <AlertTriangle size={16} color="#dc2626" /> : null}
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <View style={styles.mapArea}>
+        <RouteMap
+          route={route}
+          position={position}
+          destination={destinationCoordinate}
+          destinationName={selected?.properties.name ?? route?.destination_name ?? null}
+          hazards={mapHazards}
+        />
 
-        {/* Origin / Destination input */}
-        <View style={{ backgroundColor: '#f8fafc', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', gap: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#10b981' }} />
-            <TextInput
-              editable={false}
-              value="Current Location (GPS)"
-              style={{ flex: 1, fontSize: 13, color: '#475569' }}
-            />
+        {banner ? (
+          <View
+            style={[
+              styles.banner,
+              {
+                backgroundColor: BANNER_COLORS[banner.tone].background,
+                borderColor: BANNER_COLORS[banner.tone].border,
+              },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitle, { color: BANNER_COLORS[banner.tone].text }]}>
+                {banner.title}
+              </Text>
+              <Text style={[styles.bannerBody, { color: BANNER_COLORS[banner.tone].text }]}>
+                {banner.body}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setBanner(null)} hitSlop={8}>
+              <X size={16} color={BANNER_COLORS[banner.tone].text} />
+            </TouchableOpacity>
           </View>
-          <View style={{ width: 1, height: 20, backgroundColor: '#cbd5e1', marginLeft: 5 }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <MapPin size={16} color="#2563eb" />
-            <TextInput
-              value={destination}
-              onChangeText={setDestination}
-              placeholder="Search destination or drop pin"
-              style={{ flex: 1, fontSize: 13, color: '#0f172a' }}
-              placeholderTextColor="#94a3b8"
-            />
-          </View>
-        </View>
+        ) : null}
 
-        {/* Recent */}
-        <View>
-          <Text style={{ fontSize: 10, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 }}>Recent</Text>
-          <View style={{ gap: 6 }}>
-            {RECENT.map((loc) => (
-              <TouchableOpacity
-                key={loc}
-                onPress={() => setDestination(loc)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}
-              >
-                <Clock size={15} color="#94a3b8" />
-                <Text style={{ fontSize: 13, color: '#475569' }}>{loc}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Route options */}
-        <View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>
-              Hydrologic Route Suggestions
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-              <Car size={12} color="#475569" />
-              <Text style={{ fontSize: 10, color: '#475569', fontWeight: '600' }}>28 cm Clearance</Text>
+        {route && instruction ? (
+          <View style={styles.instructionCard}>
+            <View style={styles.instructionIcon}>
+              <Navigation size={20} color="#ffffff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.instructionText}>{instruction.text}</Text>
+              <Text style={styles.instructionMeta}>
+                {instruction.manoeuvre === "ARRIVE"
+                  ? "Destination ahead"
+                  : stepRemaining !== null
+                    ? `in ${formatDistance(stepRemaining)}`
+                    : ""}
+                {instruction.road_name ? ` • ${instruction.road_name}` : ""}
+              </Text>
             </View>
           </View>
-          <View style={{ gap: 10 }}>
-            {/* Flood-safe */}
-            <TouchableOpacity
-              onPress={() => setSelected('safe')}
-              style={{ backgroundColor: selected === 'safe' ? '#eff6ff' : '#f8fafc', borderWidth: selected === 'safe' ? 2 : 1, borderColor: selected === 'safe' ? '#2563eb' : '#e2e8f0', borderRadius: 16, padding: 16 }}
-            >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e3a8a' }}>{FLOOD_SAFE_ROUTE.name}</Text>
-                  <Text style={{ fontSize: 11, color: '#2563eb', marginTop: 2 }}>{FLOOD_SAFE_ROUTE.time} • {FLOOD_SAFE_ROUTE.dist}</Text>
-                </View>
-                <View style={{ backgroundColor: '#2563eb', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#fff' }}>RECOMMENDED</Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', padding: 8, borderRadius: 8 }}>
-                <ShieldCheck size={14} color="#16a34a" />
-                <Text style={{ fontSize: 11, fontWeight: '600', color: '#15803d' }}>{FLOOD_SAFE_ROUTE.note}</Text>
-              </View>
-            </TouchableOpacity>
+        ) : null}
 
-            {/* Direct / hazard */}
+        {route ? (
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={() => void refreshRoute()}
+            disabled={refreshing}
+            accessibilityLabel="Refresh route and alternatives"
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color="#2563eb" />
+            ) : (
+              <RefreshCw size={17} color="#2563eb" />
+            )}
+          </TouchableOpacity>
+        ) : null}
+
+        {!position && !locationError ? (
+          <View style={styles.mapNotice}>
+            <ActivityIndicator color="#2563eb" />
+            <Text style={styles.mapNoticeText}>Finding your position…</Text>
+          </View>
+        ) : null}
+
+        {locationError ? (
+          <View style={styles.mapNotice}>
+            <AlertTriangle size={18} color="#dc2626" />
+            <Text style={[styles.mapNoticeText, { color: "#991b1b" }]}>{locationError}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {route ? (
+        <View style={styles.routePanel}>
+          <View style={styles.routeSummary}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.routeDestination} numberOfLines={1}>
+                {route.destination_name ?? selected?.properties.name}
+              </Text>
+              <Text style={styles.routeMeta}>
+                {[
+                  remaining !== null ? `${formatDistance(remaining)} remaining` : null,
+                  formatDuration(route.estimated_travel_time_minutes),
+                ]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </Text>
+            </View>
+            {route.hazards.length > 0 ? (
+              <View style={styles.hazardChip}>
+                <AlertTriangle size={12} color="#b45309" />
+                <Text style={styles.hazardChipText}>
+                  {route.hazards.length} hazard{route.hazards.length === 1 ? "" : "s"}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.safeChip}>
+                <CheckCircle2 size={12} color="#15803d" />
+                <Text style={styles.safeChipText}>Hazard-free</Text>
+              </View>
+            )}
+          </View>
+
+          {unsafeRoute ? (
+            <View style={styles.unsafeNotice}>
+              <AlertTriangle size={14} color="#b91c1c" />
+              <Text style={styles.unsafeNoticeText}>
+                Unsafe alternative — this route crosses a verified hazard.
+              </Text>
+            </View>
+          ) : null}
+
+          {arrived ? (
+            <View style={styles.arrivedRow}>
+              <CheckCircle2 size={18} color="#16a34a" />
+              <Text style={styles.arrivedText}>Arrived at your destination</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.panelButtons}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={resetRoute}>
+              <Search size={15} color="#1e293b" />
+              <Text style={styles.secondaryButtonText}>New destination</Text>
+            </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => setSelected('direct')}
-              style={{ backgroundColor: '#f8fafc', borderWidth: selected === 'direct' ? 2 : 1, borderColor: selected === 'direct' ? '#ef4444' : '#e2e8f0', borderRadius: 16, padding: 16, opacity: 0.85 }}
+              style={styles.endButton}
+              onPress={() => {
+                resetRoute();
+                router.back();
+              }}
             >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e293b' }}>{DIRECT_ROUTE.name}</Text>
-                  <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{DIRECT_ROUTE.time} • {DIRECT_ROUTE.dist}</Text>
-                </View>
-                <View style={{ backgroundColor: '#fef2f2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: '#fecaca' }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#dc2626' }}>HAZARD</Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={14} color="#dc2626" />
-                <Text style={{ fontSize: 11, color: '#dc2626' }}>{DIRECT_ROUTE.note}</Text>
-              </View>
+              <Text style={styles.endButtonText}>End</Text>
             </TouchableOpacity>
           </View>
         </View>
+      ) : (
+        <View style={styles.searchPanel}>
+          <View style={styles.searchBox}>
+            <MapPin size={16} color="#2563eb" />
+            <TextInput
+              value={destinationQuery}
+              onChangeText={(value) => {
+                setDestinationQuery(value);
+                setSelected(null);
+                plannedFor.current = null;
+              }}
+              placeholder="Search a road or intersection"
+              placeholderTextColor="#94a3b8"
+              style={styles.searchInput}
+              autoCorrect={false}
+            />
+            {destinationQuery ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setDestinationQuery("");
+                  setSelected(null);
+                }}
+                hitSlop={8}
+              >
+                <X size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
-        {/* Start navigation */}
-        <TouchableOpacity
-          style={{ backgroundColor: '#0f172a', paddingVertical: 16, borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 }}
-          onPress={() => router.replace('/(tabs)/home')}
-        >
-          <Navigation size={18} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Start Navigation</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {planning ? (
+            <View style={styles.planningRow}>
+              <ActivityIndicator color="#2563eb" />
+              <Text style={styles.planningText}>Planning a flood-safe route…</Text>
+            </View>
+          ) : null}
+
+          {error ? (
+            <View style={styles.errorRow}>
+              <Text style={styles.errorText}>{error}</Text>
+              {selected ? (
+                <TouchableOpacity onPress={() => void planRoute(selected)} hitSlop={8}>
+                  <Text style={styles.errorRetry}>Retry</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+
+          {refusal && selected ? (
+            <View style={styles.refusalCard}>
+              <Text style={styles.refusalTitle}>No safe route</Text>
+              <Text style={styles.refusalBody}>
+                Every verified route to {selected.properties.name ?? "this destination"} is blocked
+                for your {DRIVER_CLEARANCE_CM} cm clearance.
+              </Text>
+              <View style={styles.panelButtons}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => void planRoute(selected)}
+                >
+                  <Text style={styles.secondaryButtonText}>Retry</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dangerButton}
+                  onPress={() => void planRoute(selected, true)}
+                >
+                  <Text style={styles.dangerButtonText}>Show unsafe route</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {matches.length > 0 ? (
+            <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
+              {matches.map((node) => (
+                <TouchableOpacity
+                  key={node.id}
+                  style={styles.resultRow}
+                  onPress={() => {
+                    setSelected(node);
+                    setDestinationQuery(node.properties.name ?? "");
+                    setError(null);
+                  }}
+                >
+                  <View style={styles.resultIcon}>
+                    <MapPin size={14} color="#2563eb" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resultName}>{node.properties.name}</Text>
+                    <Text style={styles.resultMeta}>Road node {node.properties.node_id}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : destinationQuery && !planning && !refusal ? (
+            <Text style={styles.emptyText}>No seeded road node matches that search.</Text>
+          ) : (
+            <Text style={styles.hintText}>
+              Search the seeded corridor by arterial or intersection, for example “C5” or “Shaw”.
+            </Text>
+          )}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#ffffff" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  headerTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
+  headerSubtitle: { fontSize: 10, color: "#64748b", marginTop: 1 },
+  mapArea: { flex: 1, position: "relative" },
+  banner: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    right: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  bannerTitle: { fontSize: 12, fontWeight: "800" },
+  bannerBody: { fontSize: 11, marginTop: 2, lineHeight: 15 },
+  instructionCard: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: "rgba(15,23,42,0.94)",
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  instructionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  instructionText: { fontSize: 14, fontWeight: "800", color: "#ffffff" },
+  instructionMeta: { fontSize: 11, color: "#cbd5e1", marginTop: 2 },
+  mapNotice: {
+    position: "absolute",
+    top: "45%",
+    left: 24,
+    right: 24,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 14,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  mapNoticeText: { fontSize: 12, color: "#334155", textAlign: "center" },
+  refreshButton: {
+    position: "absolute",
+    right: 12,
+    bottom: 88,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  routePanel: {
+    borderTopWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    gap: 10,
+    backgroundColor: "#ffffff",
+  },
+  routeSummary: { flexDirection: "row", alignItems: "center", gap: 10 },
+  routeDestination: { fontSize: 14, fontWeight: "800", color: "#0f172a" },
+  routeMeta: { fontSize: 11, color: "#64748b", marginTop: 2 },
+  hazardChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  hazardChipText: { fontSize: 10, fontWeight: "700", color: "#b45309" },
+  safeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  safeChipText: { fontSize: 10, fontWeight: "700", color: "#15803d" },
+  unsafeNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fef2f2",
+    borderRadius: 10,
+    padding: 8,
+  },
+  unsafeNoticeText: { flex: 1, fontSize: 10, color: "#b91c1c" },
+  arrivedRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  arrivedText: { fontSize: 12, fontWeight: "700", color: "#15803d" },
+  panelButtons: { flexDirection: "row", gap: 10, marginTop: 4 },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
+  },
+  secondaryButtonText: { fontSize: 12, fontWeight: "700", color: "#1e293b" },
+  endButton: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  endButtonText: { fontSize: 12, fontWeight: "800", color: "#ffffff" },
+  searchPanel: { borderTopWidth: 1, borderColor: "#e2e8f0", padding: 16, gap: 10 },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchInput: { flex: 1, fontSize: 13, color: "#0f172a" },
+  planningRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  planningText: { fontSize: 11, color: "#475569" },
+  errorText: { flex: 1, fontSize: 11, color: "#b91c1c" },
+  errorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  errorRetry: { fontSize: 11, fontWeight: "800", color: "#b91c1c" },
+  refusalCard: {
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: 14,
+    padding: 12,
+    gap: 6,
+  },
+  refusalTitle: { fontSize: 13, fontWeight: "800", color: "#991b1b" },
+  refusalBody: { fontSize: 11, color: "#7f1d1d", lineHeight: 15 },
+  dangerButton: {
+    flex: 1.4,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#b91c1c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dangerButtonText: { fontSize: 12, fontWeight: "700", color: "#ffffff" },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  resultIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultName: { fontSize: 12, fontWeight: "700", color: "#1e293b" },
+  resultMeta: { fontSize: 10, color: "#94a3b8", marginTop: 1 },
+  emptyText: { fontSize: 11, color: "#64748b" },
+  hintText: { fontSize: 11, color: "#64748b", lineHeight: 16 },
+  signedOutCard: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    gap: 10,
+  },
+  signedOutTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
+  signedOutBody: { fontSize: 12, color: "#475569", textAlign: "center", lineHeight: 17 },
+  primaryButton: {
+    marginTop: 6,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#0f172a",
+  },
+  primaryButtonText: { fontSize: 13, fontWeight: "800", color: "#ffffff" },
+});

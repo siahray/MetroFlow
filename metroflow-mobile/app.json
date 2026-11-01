@@ -28,6 +28,20 @@
         {
           "root": "./src/app"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MetroFlow uses your location to plan flood-safe routes and warn you about nearby hazards."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MetroFlow attaches a photo you choose to a flood report so the moderation desk can verify the water level.",
+          "cameraPermission": "MetroFlow uses the camera to photograph flood water levels for field reports.",
+          "microphonePermission": false
+        }
       ]
     ]
   }

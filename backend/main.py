@@ -56,6 +56,7 @@ from schemas import (
     SimulationResponse,
     SOSCreate,
     SOSResponse,
+    TelemetryPing,
     TokenResponse,
     UserResponse,
     VehicleCreate,
@@ -1138,6 +1139,55 @@ def update_vehicle(
     db.commit()
     db.refresh(db_vehicle)
     return db_vehicle
+
+
+@app.post("/api/v1/vehicles/{vehicle_id}/telemetry", status_code=204)
+def post_telemetry(
+    vehicle_id: int,
+    ping: TelemetryPing,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Ingest one position/speed batch from the driver app (FSD-FR-072, VAL-020).
+
+    Rejected with 429 if the same vehicle submitted a ping within
+    ``settings.telemetry_min_seconds``.  On acceptance the vehicle row is
+    updated in-place and a ``VEHICLE_UPDATED`` SSE event is emitted so the
+    portal fleet overlay refreshes live (FSD-FR-074, FSD-FR-075).
+    """
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
+    if not db_vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    now = datetime.utcnow()
+    if db_vehicle.updated_at is not None:
+        elapsed = (now - db_vehicle.updated_at).total_seconds()
+        if elapsed < settings.telemetry_min_seconds:
+            remaining = int(settings.telemetry_min_seconds - elapsed) + 1
+            raise HTTPException(
+                status_code=429,
+                detail=f"Telemetry rate limit. Retry in {remaining}s.",
+                headers={"Retry-After": str(remaining)},
+            )
+
+    db_vehicle.current_location_lat = ping.latitude
+    db_vehicle.current_location_lon = ping.longitude
+    if ping.speed_kmh is not None:
+        db_vehicle.speed_kmh = ping.speed_kmh
+    # heading is not persisted on the Vehicle model (pilot scope); it is
+    # forwarded in the SSE payload for live display only.
+    db_vehicle.updated_at = now
+    db.flush()
+    events.emit(
+        db,
+        channel=events.VEHICLE,
+        event_type=events.VEHICLE_UPDATED,
+        payload={
+            **events.vehicle_payload(db_vehicle),
+            "heading": ping.heading,
+        },
+    )
+    db.commit()
 
 
 # ---------------------------------------------------------------------------

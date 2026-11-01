@@ -7,6 +7,16 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
+/** The current session token, for transports that cannot use `request`. */
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+/** Absolute URL for a path, used by the streaming client. */
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 export class ApiError extends Error {
   status: number;
   retryAfterSeconds: number | null;
@@ -143,4 +153,209 @@ export function listMySOS(): Promise<SOSRequest[]> {
 
 export function listVehicles(): Promise<unknown[]> {
   return request<unknown[]>("/api/v1/vehicles");
+}
+
+// ---------------------------------------------------------------------------
+// Road network, routes and hazards (FSD-FR-054 to 064)
+// ---------------------------------------------------------------------------
+
+export type GeoJsonPoint = {
+  type: "Point";
+  coordinates: [number, number]; // [longitude, latitude]
+};
+
+export type GeoJsonPolygon = {
+  type: "Polygon";
+  coordinates: [number, number][][];
+};
+
+export type NodeFeature = {
+  id: number;
+  geometry: GeoJsonPoint;
+  properties: { node_id: number; name: string | null; elevation_m: number };
+};
+
+export type EdgeFeature = {
+  id: number;
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  properties: {
+    edge_id: number;
+    start_node_id: number;
+    end_node_id: number;
+    start_name: string | null;
+    end_name: string | null;
+    road_name: string | null;
+    distance_m: number;
+    max_speed_kmh: number;
+    avg_speed_kmh: number;
+    water_depth_cm: number;
+    status: "PASSABLE" | "LIGHT_FLOOD" | "SUBMERGED";
+    is_override: boolean;
+  };
+};
+
+export type NetworkState = {
+  clearance_cm: number;
+  generated_at: string;
+  edges: { type: "FeatureCollection"; features: EdgeFeature[] };
+  nodes: { type: "FeatureCollection"; features: NodeFeature[] };
+};
+
+export type HazardInfo = {
+  hazard_id: number;
+  name: string;
+  obstruction_level: string;
+  avg_depth_cm: number | null;
+  edge_id: number | null;
+  notes: string | null;
+  geometry: GeoJsonPolygon | null;
+  warning_radius_m: number;
+  published_at: string | null;
+  active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type RouteInstruction = {
+  manoeuvre:
+    | "DEPART"
+    | "ARRIVE"
+    | "STRAIGHT"
+    | "TURN_LEFT"
+    | "TURN_RIGHT"
+    | "SLIGHT_LEFT"
+    | "SLIGHT_RIGHT"
+    | "U_TURN";
+  road_name: string | null;
+  distance_m: number;
+  start_node_id: number;
+  end_node_id: number;
+  text: string;
+};
+
+export type RouteHazard = {
+  hazard_id: number;
+  name: string;
+  obstruction_level: string;
+  avg_depth_cm: number | null;
+  edge_id: number | null;
+  blocking: boolean;
+  geometry: GeoJsonPolygon | null;
+  warning_radius_m: number;
+};
+
+export type RouteSegment = {
+  edge_id: number;
+  start_node_id: number;
+  end_node_id: number;
+  road_name: string | null;
+  distance_m: number;
+  water_depth_cm: number;
+  status: "PASSABLE" | "LIGHT_FLOOD" | "SUBMERGED";
+};
+
+export type RoutePlan = {
+  start_node: number;
+  target_node: number;
+  destination_name: string | null;
+  vehicle_clearance_cm: number;
+  optimal_path_nodes: number[];
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  segments: RouteSegment[];
+  instructions: RouteInstruction[];
+  hazards: RouteHazard[];
+  total_distance_m: number;
+  estimated_travel_time_minutes: number;
+};
+
+export function getNetworkState(clearanceCm: number): Promise<NetworkState> {
+  return request<NetworkState>(
+    `/api/v1/network/state?clearance_cm=${encodeURIComponent(clearanceCm)}`,
+  );
+}
+
+export function getRoute(params: {
+  start_node: number;
+  target_node: number;
+  clearance_cm: number;
+  ignore_hazards?: boolean;
+}): Promise<RoutePlan> {
+  const query = new URLSearchParams({
+    start_node: String(params.start_node),
+    target_node: String(params.target_node),
+    clearance_cm: String(params.clearance_cm),
+  });
+  if (params.ignore_hazards) query.set("ignore_hazards", "true");
+  return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`);
+}
+
+export function listActiveHazards(): Promise<HazardInfo[]> {
+  return request<HazardInfo[]>("/api/v1/hazards/active");
+}
+
+// ---------------------------------------------------------------------------
+// Field reports (FSD-FR-065 to 067)
+// ---------------------------------------------------------------------------
+
+/** The depth bands the moderation desk accepts (BR-014). */
+export type ReportDepth = "ANKLE" | "KNEE" | "IMPASSABLE";
+
+/** A photo the picker handed back, in the shape React Native uploads it. */
+export type ReportPhoto = {
+  uri: string;
+  name: string;
+  type: string;
+};
+
+export type ReportCreated = {
+  report_id: string;
+  status: string;
+  depth_level: string;
+  depth_label: string;
+  possible_duplicate_of: string | null;
+  captured_at: string | null;
+  submitted_at: string | null;
+};
+
+/**
+ * Submit a field report as multipart form data (FSD-FR-065 to 067).
+ *
+ * `captured_at` is the moment the driver recorded the water level, not the
+ * moment the queue happened to accept the upload. The photo is streamed as a
+ * file part, so the request must not set `Content-Type`: fetch has to generate
+ * the multipart boundary itself.
+ */
+export async function submitReport(input: {
+  depthLevel: ReportDepth;
+  latitude: number;
+  longitude: number;
+  narrative?: string | null;
+  barangay?: string | null;
+  capturedAt?: string | null;
+  photo?: ReportPhoto | null;
+}): Promise<ReportCreated> {
+  const form = new FormData();
+  form.append("depth_level", input.depthLevel);
+  form.append("latitude", String(input.latitude));
+  form.append("longitude", String(input.longitude));
+  if (input.narrative?.trim()) form.append("narrative", input.narrative.trim());
+  if (input.barangay?.trim()) form.append("barangay", input.barangay.trim());
+  if (input.capturedAt) form.append("captured_at", input.capturedAt);
+  if (input.photo) {
+    // React Native's FormData accepts this descriptor as a file part.
+    form.append("photo", input.photo as unknown as Blob);
+  }
+
+  const headers = new Headers();
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/reports`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  if (!res.ok) {
+    throw await readError(res);
+  }
+  return (await res.json()) as ReportCreated;
 }

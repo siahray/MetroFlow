@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     # corridor's 50 km/h limit, and the TSD lists the value as configurable.
     warning_radius_m: int = 200
 
+    # --- Vehicle telemetry (FSD-FR-072) ---------------------------------------
+    # Minimum interval in seconds between telemetry updates for a vehicle.
+    # Batches arriving faster than this are rejected with 429 (VAL-020, TTC-022).
+    telemetry_min_seconds: int = 5
+
     # --- Event streams (FSD-FR-086) --------------------------------------------
     # The relays read the event log on a short timer rather than through a broker
     # (ADR-024). At 100 ms a published hazard reaches a connected client within
