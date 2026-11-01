@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     report_duplicate_radius_m: int = 150
     report_duplicate_window_minutes: int = 15
 
+    # --- Driver navigation (FSD-FR-063) ----------------------------------------
+    # How close a driver has to be to a verified hazard before the app raises a
+    # proximity alert. 200 m is about the braking plus decision distance at the
+    # corridor's 50 km/h limit, and the TSD lists the value as configurable.
+    warning_radius_m: int = 200
+
     # --- Event streams (FSD-FR-086) --------------------------------------------
     # The relays read the event log on a short timer rather than through a broker
     # (ADR-024). At 100 ms a published hazard reaches a connected client within

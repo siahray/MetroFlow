@@ -15,10 +15,23 @@ import random
 import pytest
 
 from routing import (
+    ARRIVE,
+    DEPART,
     LIGHT_FLOOD,
     PASSABLE,
+    SLIGHT_LEFT,
+    SLIGHT_RIGHT,
+    STRAIGHT,
     SUBMERGED,
+    TURN_LEFT,
+    TURN_RIGHT,
+    U_TURN,
+    bearing_degrees,
+    build_instructions,
     classify_passability,
+    classify_turn,
+    compass_point,
+    hazard_blocks,
     td_a_star_search,
 )
 
@@ -214,3 +227,124 @@ def test_classify_passability_boundaries(depth, clearance, expected):
 def test_same_edge_is_passable_for_truck_and_submerged_for_sedan():
     assert classify_passability(45.0, 20.0) == SUBMERGED
     assert classify_passability(45.0, 60.0) == LIGHT_FLOOD
+
+
+# ---------------------------------------------------------------------------
+# Hazard blocking (TSD 2.6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "level,blocking",
+    [
+        ("CAUTION", False),
+        ("caution", False),
+        ("LEVEL_2", True),  # knee-deep: an approved KNEE report
+        ("LEVEL_3", True),
+        ("IMPASSABLE", True),
+        ("impassable", True),
+        (None, False),
+        ("", False),
+    ],
+)
+def test_hazard_blocking_levels(level, blocking):
+    # The router and the route-hazard report share this definition, so CAUTION
+    # must stay drivable and everything above it must not.
+    assert hazard_blocks(level) is blocking
+
+
+# ---------------------------------------------------------------------------
+# Turn-by-turn instructions (FSD-FR-057)
+# ---------------------------------------------------------------------------
+
+
+def test_bearing_is_clockwise_from_north():
+    north = bearing_degrees((14.5, 121.0), (14.6, 121.0))
+    east = bearing_degrees((14.5, 121.0), (14.5, 121.1))
+    south = bearing_degrees((14.6, 121.0), (14.5, 121.0))
+
+    assert north == pytest.approx(0.0, abs=0.5)
+    assert east == pytest.approx(90.0, abs=0.5)
+    assert south == pytest.approx(180.0, abs=0.5)
+
+
+def test_compass_points_wrap():
+    assert compass_point(0.0) == "north"
+    assert compass_point(359.0) == "north"
+    assert compass_point(90.0) == "east"
+    assert compass_point(225.0) == "south-west"
+
+
+@pytest.mark.parametrize(
+    "previous,next_,manoeuvre",
+    [
+        (0.0, 0.0, STRAIGHT),
+        (0.0, 15.0, STRAIGHT),  # a bend, not a turn
+        (0.0, 30.0, SLIGHT_RIGHT),
+        (0.0, 330.0, SLIGHT_LEFT),
+        (0.0, 90.0, TURN_RIGHT),
+        (90.0, 0.0, TURN_LEFT),
+        (0.0, 180.0, U_TURN),
+        (350.0, 10.0, STRAIGHT),  # cross the north seam without a false turn
+    ],
+)
+def test_classify_turn(previous, next_, manoeuvre):
+    assert classify_turn(previous, next_) == manoeuvre
+
+
+def _instructions(path, hops, coordinates, names=None):
+    return build_instructions(path, hops, coordinates, names or {})
+
+
+def test_instructions_start_with_depart_and_end_with_arrive():
+    # Straight north along a named road, then east onto another.
+    coordinates = {1: (14.50, 121.00), 2: (14.51, 121.00), 3: (14.51, 121.01)}
+    hops = [(1, 2, 1100.0, "C5"), (2, 3, 1000.0, "Kalayaan Ave")]
+
+    steps = _instructions([1, 2, 3], hops, coordinates)
+
+    assert [step.manoeuvre for step in steps] == [DEPART, TURN_RIGHT, ARRIVE]
+    assert steps[0].text == "Head north on C5"
+    assert steps[1].text == "Turn right onto Kalayaan Ave"
+    assert steps[2].text == "Arrive at your destination"
+    assert steps[0].distance_m == pytest.approx(1100.0)
+    assert steps[2].distance_m == 0.0
+
+
+def test_straight_hops_merge_into_one_step():
+    # Two hops on the same heading are one instruction with the summed length.
+    coordinates = {1: (14.50, 121.00), 2: (14.51, 121.00), 3: (14.52, 121.00)}
+    hops = [(1, 2, 500.0, "C5"), (2, 3, 700.0, "C5")]
+
+    steps = _instructions([1, 2, 3], hops, coordinates, {3: "Bagong Ilog"})
+
+    assert [step.manoeuvre for step in steps] == [DEPART, ARRIVE]
+    assert steps[0].distance_m == pytest.approx(1200.0)
+    assert steps[0].end_node_id == 3
+    assert steps[1].text == "Arrive at Bagong Ilog"
+
+
+def test_uturn_hop_gets_its_own_step():
+    coordinates = {1: (14.50, 121.00), 2: (14.51, 121.00), 3: (14.50, 121.00)}
+    hops = [(1, 2, 400.0, "C5"), (2, 3, 400.0, "C5")]
+
+    steps = _instructions([1, 2, 3], hops, coordinates)
+
+    assert [step.manoeuvre for step in steps] == [DEPART, U_TURN, ARRIVE]
+    assert steps[1].text == "Make a U-turn onto C5"
+
+
+def test_missing_destination_coordinate_still_produces_a_drivable_route():
+    hops = [(1, 2, 400.0, "C5")]
+
+    steps = _instructions([1, 2], hops, {})
+
+    assert [step.manoeuvre for step in steps] == [DEPART, ARRIVE]
+
+
+def test_zero_length_path_is_an_arrival():
+    steps = _instructions([7], [], {7: (14.5, 121.0)}, {7: "Shaw"})
+
+    assert len(steps) == 1
+    assert steps[0].manoeuvre == ARRIVE
+    assert steps[0].text == "Arrive at Shaw"

@@ -62,6 +62,7 @@ class SeedEdge:
     distance_m: float
     max_speed_kmh: float
     lanes: int = 2
+    road_name: str | None = None
 
 
 # The original demo spine. These four nodes are the contract with the existing
@@ -74,10 +75,12 @@ ORIGINAL_NODES: tuple[SeedNode, ...] = (
 )
 
 ORIGINAL_EDGES: tuple[SeedEdge, ...] = (
-    SeedEdge(1, 1, 2, 1100.0, 60.0),
-    SeedEdge(2, 2, 3, 1000.0, 50.0),
-    SeedEdge(3, 3, 4, 850.0, 50.0),
-    SeedEdge(4, 1, 4, 2800.0, 40.0),  # the long way round, kept as a bypass
+    SeedEdge(1, 1, 2, 1100.0, 60.0, road_name="C5"),
+    SeedEdge(2, 2, 3, 1000.0, 50.0, road_name="C5"),
+    SeedEdge(3, 3, 4, 850.0, 50.0, road_name="C5"),
+    # The long way round, kept as a bypass. It is the only spine edge that is
+    # not C5, and it is what the reroute tests use when C5 floods.
+    SeedEdge(4, 1, 4, 2800.0, 40.0, road_name="Pasig Blvd"),
 )
 
 # East-west arterials: (name, latitude, max speed km/h).
@@ -152,7 +155,7 @@ def build_network() -> tuple[list[SeedNode], list[SeedEdge]]:
             nodes.append(node)
 
     edge_id = LATTICE_EDGE_BASE
-    for row_index, (_, _, row_speed) in enumerate(ROWS):
+    for row_index, (row_name, _, row_speed) in enumerate(ROWS):
         for col_index in range(len(COLS) - 1):
             west = lattice[(row_index, col_index)]
             east = lattice[(row_index, col_index + 1)]
@@ -165,11 +168,12 @@ def build_network() -> tuple[list[SeedNode], list[SeedEdge]]:
                         west.latitude, west.longitude, east.latitude, east.longitude
                     ),
                     max_speed_kmh=row_speed,
+                    road_name=row_name,
                 )
             )
             edge_id += 1
 
-    for col_index, (_, _, col_speed) in enumerate(COLS):
+    for col_index, (col_name, _, col_speed) in enumerate(COLS):
         for row_index in range(len(ROWS) - 1):
             south = lattice[(row_index, col_index)]
             north = lattice[(row_index + 1, col_index)]
@@ -182,6 +186,7 @@ def build_network() -> tuple[list[SeedNode], list[SeedEdge]]:
                         south.latitude, south.longitude, north.latitude, north.longitude
                     ),
                     max_speed_kmh=col_speed,
+                    road_name=col_name,
                 )
             )
             edge_id += 1
@@ -209,6 +214,10 @@ def build_network() -> tuple[list[SeedNode], list[SeedEdge]]:
                         candidate.longitude,
                     ),
                     max_speed_kmh=30.0,
+                    # A connector leaves the spine onto a cross street; the
+                    # driver hears the road they are on, so name it for the
+                    # spine node's arterial ("C5 - Kalayaan Ave" → "C5").
+                    road_name=spine.name.split(" - ")[0].strip() or None,
                 )
             )
             edge_id += 1
@@ -235,6 +244,10 @@ def validate(nodes: list[SeedNode], edges: list[SeedEdge]) -> None:
             raise ValueError(f"edge {edge.edge_id} is a self-loop")
         if edge.distance_m <= 0:
             raise ValueError(f"edge {edge.edge_id} has a non-positive length")
+        if not edge.road_name:
+            # Instructions are spoken with a road name (FSD-FR-057); an unnamed
+            # edge would produce "Turn left onto the road".
+            raise ValueError(f"edge {edge.edge_id} has no road_name")
         pair = (
             min(edge.start_node_id, edge.end_node_id),
             max(edge.start_node_id, edge.end_node_id),
@@ -310,6 +323,7 @@ def apply(db, dry_run: bool = False) -> dict[str, int]:
                     distance_meters=seed.distance_m,
                     max_speed_kmh=seed.max_speed_kmh,
                     lanes=seed.lanes,
+                    road_name=seed.road_name,
                 )
             )
             counts["edges_created"] += 1
@@ -318,11 +332,13 @@ def apply(db, dry_run: bool = False) -> dict[str, int]:
             or existing.end_node_id != seed.end_node_id
             or existing.distance_meters != seed.distance_m
             or existing.max_speed_kmh != seed.max_speed_kmh
+            or existing.road_name != seed.road_name
         ):
             existing.start_node_id = seed.start_node_id
             existing.end_node_id = seed.end_node_id
             existing.distance_meters = seed.distance_m
             existing.max_speed_kmh = seed.max_speed_kmh
+            existing.road_name = seed.road_name
             counts["edges_updated"] += 1
 
     db.flush()

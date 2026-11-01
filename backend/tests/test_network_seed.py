@@ -246,3 +246,26 @@ def test_dry_run_rolls_back() -> None:
     assert counts["nodes_created"] > 0
     assert db.rolled_back is True
     assert db.committed is False
+
+
+def test_every_edge_carries_the_road_name_used_in_instructions() -> None:
+    """FSD-FR-057 speaks a road name, so the seed has to supply one."""
+    _, edges = network_seed.build_network()
+    by_id = {edge.edge_id: edge for edge in edges}
+
+    assert all(edge.road_name for edge in edges)
+    assert by_id[1].road_name == "C5"
+    assert by_id[4].road_name == "Pasig Blvd"
+    # A lattice edge is named for the arterial it runs along.
+    assert by_id[network_seed.LATTICE_EDGE_BASE].road_name == network_seed.ROWS[0][0]
+
+
+def test_apply_backfills_a_missing_road_name() -> None:
+    db = FakeSession()
+    network_seed.apply(db)
+    db.edges[4].road_name = None
+
+    counts = network_seed.apply(db)
+
+    assert counts["edges_updated"] == 1
+    assert db.edges[4].road_name == "Pasig Blvd"

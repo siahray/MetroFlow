@@ -1,6 +1,7 @@
 import json
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID, uuid4
@@ -25,7 +26,7 @@ from geometry import backfill_geometry
 from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
 from rate_limit import prune as prune_rate_limits
 from rate_limit import rate_limit
-from routing import classify_passability, td_a_star_search
+from routing import build_instructions, classify_passability, hazard_blocks, td_a_star_search
 from schemas import (
     AssignRequest,
     AuditResponse,
@@ -47,6 +48,8 @@ from schemas import (
     ReportPhotoInfo,
     ReportRejectRequest,
     ReportResponse,
+    RouteHazard,
+    RouteInstruction,
     RouteResponse,
     RouteSegment,
     SendVerifyRequest,
@@ -59,6 +62,7 @@ from schemas import (
     VehicleResponse,
     VehicleUpdate,
     VerifyRequest,
+    geometry_to_geojson,
 )
 
 # ---------------------------------------------------------------------------
@@ -229,6 +233,42 @@ def _load_edge_geometry(db: Session) -> dict[int, Any]:
     return geometry
 
 
+def _load_hazard_coverage(
+    db: Session,
+) -> tuple[list[models.HazardZone], dict[int, set[int]]]:
+    """Active hazards and the road edges each one covers (TSD §2.6).
+
+    A hazard covers an edge when its polygon intersects the edge geometry, or
+    when a closure hazard points at the edge directly. Both sources are unioned
+    so a closure drawn without geometry still reroutes traffic. The router and
+    the route-hazard report read this one mapping, which is what keeps their
+    idea of "blocks" identical.
+    """
+    hazards = db.query(models.HazardZone).filter(models.HazardZone.active.is_(True)).all()
+    covered: dict[int, set[int]] = {hazard.hazard_id: set() for hazard in hazards}
+    if not hazards:
+        return hazards, covered
+
+    rows = (
+        db.query(models.HazardZone.hazard_id, models.RoadEdge.edge_id)
+        .select_from(models.HazardZone)
+        .join(
+            models.RoadEdge,
+            func.ST_Intersects(models.RoadEdge.geom, models.HazardZone.geometry),
+        )
+        .filter(models.HazardZone.active.is_(True))
+        .all()
+    )
+    for hazard_id, edge_id in rows:
+        covered.setdefault(hazard_id, set()).add(edge_id)
+
+    for hazard in hazards:
+        if hazard.edge_id is not None:
+            covered[hazard.hazard_id].add(hazard.edge_id)
+
+    return hazards, covered
+
+
 def _straight_line(start: models.RoadNode, end: models.RoadNode) -> list[list[float]]:
     """Fallback geometry in GeoJSON order: [longitude, latitude]."""
     return [
@@ -278,6 +318,7 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
                     end_node_id=edge.end_node_id,
                     start_name=start.name,
                     end_name=end.name,
+                    road_name=edge.road_name,
                     distance_m=edge.distance_meters,
                     max_speed_kmh=edge.max_speed_kmh,
                     avg_speed_kmh=float(state.avg_speed_kmh) if state else edge.max_speed_kmh,
@@ -423,18 +464,37 @@ def get_optimal_route(
     clearance_cm: Annotated[
         float, Query(gt=0, le=200, description="Vehicle clearance in cm")
     ] = settings.default_clearance_cm,
+    ignore_hazards: Annotated[
+        bool,
+        Query(
+            description=(
+                "Plan through verified hazards anyway. Only for the explicitly "
+                "unsafe alternative offered when no safe route exists."
+            )
+        ),
+    ] = False,
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     """
     Run the Time-Dependent A* search and return the route as a GeoJSON
-    LineString plus the per-edge segments it traverses.
+    LineString plus per-edge segments, turn-by-turn instructions and the
+    verified hazards that touch the route.
 
-    Returns 404 when no route is passable for the given clearance.
+    Active hazards whose obstruction level blocks the vehicle are excluded
+    from the graph unless ``ignore_hazards`` is set (TSD §2.6). Returns 404
+    when no route is passable for the given clearance.
     """
     nodes, edges, states = _load_graph(db)
     _require_node(nodes, start_node, "start_node")
     _require_node(nodes, target_node, "target_node")
+
+    hazards, hazard_edges = _load_hazard_coverage(db)
+    blocked_edges: set[int] = set()
+    if not ignore_hazards:
+        for hazard in hazards:
+            if hazard_blocks(hazard.obstruction_level):
+                blocked_edges |= hazard_edges.get(hazard.hazard_id, set())
 
     graph_nodes: dict[int, tuple[float, float]] = {
         node_id: (node.latitude, node.longitude) for node_id, node in nodes.items()
@@ -446,6 +506,9 @@ def get_optimal_route(
     pair_index: dict[tuple[int, int], models.RoadEdge] = {}
 
     for edge in edges:
+        if edge.edge_id in blocked_edges:
+            continue
+
         state = states.get(edge.edge_id)
         water_cm = float(state.water_depth_cm) if state else 0.0
         pair = (
@@ -480,6 +543,8 @@ def get_optimal_route(
 
     coordinates: list[list[float]] = []
     segments: list[RouteSegment] = []
+    hops: list[tuple[int, int, float, str | None]] = []
+    traversed_edges: set[int] = set()
 
     if len(path) == 1:
         # Origin equals destination: emit a degenerate but valid LineString.
@@ -489,6 +554,8 @@ def get_optimal_route(
     else:
         for origin_id, destination_id in zip(path, path[1:], strict=False):
             edge = pair_index.get((min(origin_id, destination_id), max(origin_id, destination_id)))
+            hop_distance = 0.0
+            hop_road_name: str | None = None
 
             if edge is None:
                 hop_coordinates = _straight_line(nodes[origin_id], nodes[destination_id])
@@ -502,6 +569,10 @@ def get_optimal_route(
                 if edge.start_node_id != origin_id:
                     hop_coordinates = list(reversed(hop_coordinates))
 
+                hop_distance = float(edge.distance_meters)
+                hop_road_name = edge.road_name
+                traversed_edges.add(edge.edge_id)
+
                 state = states.get(edge.edge_id)
                 water_cm = float(state.water_depth_cm) if state else 0.0
                 segments.append(
@@ -509,10 +580,14 @@ def get_optimal_route(
                         edge_id=edge.edge_id,
                         start_node_id=origin_id,
                         end_node_id=destination_id,
+                        road_name=edge.road_name,
+                        distance_m=round(hop_distance, 2),
                         water_depth_cm=round(water_cm, 2),
                         status=classify_passability(water_cm, clearance_cm),
                     )
                 )
+
+            hops.append((origin_id, destination_id, hop_distance, hop_road_name))
 
             if not coordinates:
                 coordinates = list(hop_coordinates)
@@ -521,13 +596,46 @@ def get_optimal_route(
             else:
                 coordinates.extend(hop_coordinates)
 
+    instructions = [
+        RouteInstruction(**asdict(step))
+        for step in build_instructions(
+            path,
+            hops,
+            graph_nodes,
+            {node_id: node.name for node_id, node in nodes.items()},
+        )
+    ]
+
+    # Every active hazard touching a traversed edge is reported, blocking or
+    # not: a CAUTION crossing is exactly what the proximity alert is for
+    # (FSD-FR-063), and an unsafe alternative must still disclose what it
+    # crosses.
+    route_hazards = [
+        RouteHazard(
+            hazard_id=hazard.hazard_id,
+            name=hazard.name,
+            obstruction_level=hazard.obstruction_level,
+            avg_depth_cm=hazard.avg_depth_cm,
+            edge_id=hazard.edge_id,
+            blocking=hazard_blocks(hazard.obstruction_level),
+            geometry=geometry_to_geojson(hazard.geometry),
+            warning_radius_m=settings.warning_radius_m,
+        )
+        for hazard in sorted(hazards, key=lambda row: row.hazard_id)
+        if hazard_edges.get(hazard.hazard_id, set()) & traversed_edges
+    ]
+
     return RouteResponse(
         start_node=start_node,
         target_node=target_node,
+        destination_name=nodes[target_node].name,
         vehicle_clearance_cm=clearance_cm,
         optimal_path_nodes=path,
         geometry={"type": "LineString", "coordinates": coordinates},
         segments=segments,
+        instructions=instructions,
+        hazards=route_hazards,
+        total_distance_m=round(sum(hop[2] for hop in hops), 2),
         estimated_travel_time_minutes=round(travel_time_s / 60.0, 2),
     )
 

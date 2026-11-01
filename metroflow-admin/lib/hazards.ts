@@ -7,6 +7,8 @@ export type HazardZone = {
   avg_depth_cm: number | null;
   edge_id: number | null;
   notes: string | null;
+  geometry?: { type: "Polygon"; coordinates: number[][][] } | null;
+  warning_radius_m?: number;
   published_at: string | null;
   active: boolean;
   created_at: string | null;
@@ -39,7 +41,9 @@ export async function publishHazard(hazardId: number): Promise<HazardZone> {
 
 export async function updateHazard(
   hazardId: number,
-  data: Partial<Pick<HazardZone, "name" | "obstruction_level" | "avg_depth_cm" | "notes" | "active">>,
+  data: Partial<
+    Pick<HazardZone, "name" | "obstruction_level" | "avg_depth_cm" | "notes" | "active">
+  >,
 ): Promise<HazardZone> {
   return fetchJSON<HazardZone>(`/api/v1/hazards/${hazardId}`, {
     method: "PATCH",
