@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { CloudRain, Route as RouteIcon, Waves } from "lucide-react";
+import { CloudRain, Route as RouteIcon, ShieldAlert, Truck, Waves } from "lucide-react";
 import type {
   GeoJSONSource,
   Map as MapLibreMap,
@@ -13,6 +13,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import type { SOSRequest, Vehicle } from "@/lib/dispatch";
+import { hazardsFromEvent, subscribeToHazards } from "@/lib/hazard-stream";
+import type { HazardZone } from "@/lib/hazards";
 import {
   fetchNetworkState,
   fetchRoute,
@@ -26,6 +29,8 @@ import {
   type NetworkSummary,
   type RouteResult,
 } from "@/lib/network";
+import { listSOS } from "@/lib/sos-live";
+import { listVehiclesLive } from "@/lib/vehicles-live";
 
 /**
  * Keyless basemap. Carto's Positron style is free to use with attribution and
@@ -42,6 +47,122 @@ const NETWORK_LAYER_IDS = [
 ] as const;
 
 const EMPTY_COLLECTION = { type: "FeatureCollection" as const, features: [] };
+
+/**
+ * Live overlays (FSD-FR-075, FSD-FR-076). Each toggle owns the layers listed
+ * here so a layer can never be left visible without its data source.
+ */
+const OVERLAY_LAYERS = {
+  hazards: ["map-hazard-fill", "map-hazard-outline", "map-hazard-edges", "map-hazard-labels"],
+  fleet: ["map-fleet-points", "map-fleet-labels"],
+  sos: ["map-sos-points", "map-sos-labels"],
+} as const;
+
+type OverlayKey = keyof typeof OVERLAY_LAYERS;
+
+const OVERLAY_LABELS: Record<OverlayKey, string> = {
+  hazards: "Verified hazards",
+  fleet: "Fleet units",
+  sos: "SOS signals",
+};
+
+/** Same colour language the driver app uses for obstruction levels. */
+function hazardColor(level: string): string {
+  switch (level.toUpperCase()) {
+    case "IMPASSABLE":
+      return "#7f1d1d";
+    case "LEVEL_3":
+      return "#b91c1c";
+    case "LEVEL_2":
+      return "#dc2626";
+    default:
+      return "#f59e0b";
+  }
+}
+
+type HazardFeature = {
+  type: "Feature";
+  geometry:
+    | { type: "Polygon"; coordinates: number[][][] }
+    | { type: "LineString"; coordinates: [number, number][] };
+  properties: { name: string; level: string; color: string };
+};
+
+function hazardCollection(hazards: HazardZone[], edges: NetworkState | null) {
+  const edgeLines = new Map<number, [number, number][]>();
+  for (const edge of edges?.edges.features ?? []) {
+    edgeLines.set(edge.properties.edge_id, edge.geometry.coordinates);
+  }
+
+  const features: HazardFeature[] = [];
+  for (const hazard of hazards) {
+    if (hazard.active === false) continue;
+    const properties = {
+      name: hazard.name,
+      level: hazard.obstruction_level,
+      color: hazardColor(hazard.obstruction_level),
+    };
+    if (hazard.geometry?.coordinates?.length) {
+      features.push({
+        type: "Feature",
+        geometry: hazard.geometry as { type: "Polygon"; coordinates: number[][][] },
+        properties,
+      });
+      continue;
+    }
+    // A hazard authored by edge id has no polygon; highlighting the edge it
+    // closes is what keeps the map honest about where the closure is.
+    const line = hazard.edge_id === null ? undefined : edgeLines.get(hazard.edge_id);
+    if (!line) continue;
+    features.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: line },
+      properties,
+    });
+  }
+
+  return { type: "FeatureCollection" as const, features };
+}
+
+function fleetCollection(vehicles: Vehicle[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: vehicles.flatMap((vehicle) => {
+      const { current_location_lon: lon, current_location_lat: lat } = vehicle;
+      if (lon === null || lat === null) return [];
+      return [
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [lon, lat] },
+          properties: {
+            label: vehicle.call_sign,
+            status: vehicle.status,
+            speed: vehicle.speed_kmh === null ? "—" : `${Math.round(vehicle.speed_kmh)} km/h`,
+          },
+        },
+      ];
+    }),
+  };
+}
+
+function sosCollection(requests: SOSRequest[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: requests
+      .filter((request) => request.status.toUpperCase() !== "RESOLVED")
+      .map((request) => ({
+        type: "Feature" as const,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [request.longitude, request.latitude],
+        },
+        properties: {
+          label: `SOS #${request.sos_id}`,
+          note: request.note ?? "",
+        },
+      })),
+  };
+}
 
 const STATUS_FILTER: Record<
   "PASSABLE" | "LIGHT_FLOOD" | "SUBMERGED",
@@ -114,6 +235,14 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
   const [rainfallMmHr, setRainfallMmHr] = useState(0);
   const [startNodeId, setStartNodeId] = useState<number | null>(null);
   const [targetNodeId, setTargetNodeId] = useState<number | null>(null);
+  const [hazards, setHazards] = useState<HazardZone[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [sosRequests, setSosRequests] = useState<SOSRequest[]>([]);
+  const [overlays, setOverlays] = useState<Record<OverlayKey, boolean>>({
+    hazards: true,
+    fleet: true,
+    sos: true,
+  });
 
   // --- Map lifecycle -------------------------------------------------------
   // MapLibre touches `window`, so it is imported inside the effect and the
@@ -151,6 +280,9 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
         map.addSource("network-nodes", { type: "geojson", data: EMPTY_COLLECTION });
         map.addSource("network-route", { type: "geojson", data: EMPTY_COLLECTION });
         map.addSource("network-route-ends", { type: "geojson", data: EMPTY_COLLECTION });
+        map.addSource("map-hazards", { type: "geojson", data: EMPTY_COLLECTION });
+        map.addSource("map-fleet", { type: "geojson", data: EMPTY_COLLECTION });
+        map.addSource("map-sos", { type: "geojson", data: EMPTY_COLLECTION });
 
         map.addLayer({
           id: "network-edges-casing",
@@ -218,6 +350,57 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
         });
 
         map.addLayer({
+          id: "map-hazard-fill",
+          type: "fill",
+          source: "map-hazards",
+          filter: ["==", ["geometry-type"], "Polygon"],
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": 0.28,
+          },
+        });
+        map.addLayer({
+          id: "map-hazard-outline",
+          type: "line",
+          source: "map-hazards",
+          filter: ["==", ["geometry-type"], "Polygon"],
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 1.6,
+            "line-opacity": 0.9,
+          },
+        });
+        map.addLayer({
+          id: "map-hazard-edges",
+          type: "line",
+          source: "map-hazards",
+          filter: ["==", ["geometry-type"], "LineString"],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 7,
+            "line-opacity": 0.85,
+          },
+        });
+        map.addLayer({
+          id: "map-hazard-labels",
+          type: "symbol",
+          source: "map-hazards",
+          minzoom: 13,
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 10,
+            "text-anchor": "center",
+            "text-max-width": 9,
+          },
+          paint: {
+            "text-color": "#7f1d1d",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.8,
+          },
+        });
+
+        map.addLayer({
           id: "network-nodes",
           type: "circle",
           source: "network-nodes",
@@ -243,6 +426,66 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
           },
           paint: {
             "text-color": "#0f172a",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.6,
+          },
+        });
+
+        map.addLayer({
+          id: "map-fleet-points",
+          type: "circle",
+          source: "map-fleet",
+          paint: {
+            "circle-radius": 6,
+            "circle-color": "#2563eb",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+        map.addLayer({
+          id: "map-fleet-labels",
+          type: "symbol",
+          source: "map-fleet",
+          minzoom: 12,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 10,
+            "text-offset": [0, 1.3],
+            "text-anchor": "top",
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#1e3a8a",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.6,
+          },
+        });
+
+        map.addLayer({
+          id: "map-sos-points",
+          type: "circle",
+          source: "map-sos",
+          paint: {
+            "circle-radius": 8,
+            "circle-color": "#dc2626",
+            "circle-stroke-width": 2.5,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+        map.addLayer({
+          id: "map-sos-labels",
+          type: "symbol",
+          source: "map-sos",
+          minzoom: 12,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 10,
+            "text-offset": [0, 1.4],
+            "text-anchor": "top",
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#991b1b",
             "text-halo-color": "#ffffff",
             "text-halo-width": 1.6,
           },
@@ -389,6 +632,78 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
     }
   }, [showGraph, ready]);
 
+  // --- Live overlays (FSD-FR-075, FSD-FR-076) ------------------------------
+  // Hazards arrive on the verified feed; the fleet and SOS lists are polled
+  // because their streams carry the same rows the REST endpoints already
+  // return and the map only needs a few seconds of freshness.
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+
+    void subscribeToHazards((event) => {
+      const batch = hazardsFromEvent(event);
+      if (!batch) return;
+      setHazards((current) => {
+        if (event.type === "snapshot") return batch;
+        if (batch.length === 0) return current;
+        const incoming = batch[0];
+        return [...current.filter((row) => row.hazard_id !== incoming.hazard_id), incoming];
+      });
+    }, controller.signal);
+
+    return () => controller.abort();
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+
+    const load = async () => {
+      const [fleet, signals] = await Promise.all([
+        listVehiclesLive().catch(() => [] as Vehicle[]),
+        listSOS()
+          .then((rows) => rows.filter((row) => row.status.toUpperCase() !== "RESOLVED"))
+          .catch(() => [] as SOSRequest[]),
+      ]);
+      if (cancelled) return;
+      setVehicles(fleet);
+      setSosRequests(signals);
+    };
+
+    void load();
+    const timer = window.setInterval(load, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const hazardSource = map.getSource("map-hazards") as GeoJSONSource | undefined;
+    const fleetSource = map.getSource("map-fleet") as GeoJSONSource | undefined;
+    const sosSource = map.getSource("map-sos") as GeoJSONSource | undefined;
+    hazardSource?.setData(hazardCollection(hazards, network));
+    fleetSource?.setData(fleetCollection(vehicles));
+    sosSource?.setData(sosCollection(sosRequests));
+  }, [hazards, vehicles, sosRequests, network, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const [key, layerIds] of Object.entries(OVERLAY_LAYERS) as [
+      OverlayKey,
+      readonly string[],
+    ][]) {
+      for (const layerId of layerIds) {
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, "visibility", overlays[key] ? "visible" : "none");
+        }
+      }
+    }
+  }, [overlays, ready]);
+
   const nodeOptions = useMemo(() => {
     const features = network?.nodes.features ?? [];
     return [...features].sort((a, b) => a.properties.node_id - b.properties.node_id);
@@ -480,6 +795,39 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
           {error}
         </div>
       ) : null}
+
+      {/* Live overlay toggles (FSD-FR-075, FSD-FR-076) */}
+      <div className="absolute top-4 left-4 z-30 w-[186px] space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/95 p-2.5 text-slate-100 shadow-xl backdrop-blur">
+        <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+          Live overlays
+        </span>
+        {(
+          [
+            ["hazards", ShieldAlert, hazards.length],
+            ["fleet", Truck, vehicles.length],
+            ["sos", Waves, sosRequests.length],
+          ] as [OverlayKey, typeof ShieldAlert, number][]
+        ).map(([key, Icon, count]) => (
+          <label
+            key={key}
+            className="flex cursor-pointer items-center justify-between gap-2 text-[11px] font-semibold text-slate-300"
+          >
+            <span className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={overlays[key]}
+                onChange={(event) =>
+                  setOverlays((current) => ({ ...current, [key]: event.target.checked }))
+                }
+                className="accent-sky-500"
+              />
+              <Icon className="h-3.5 w-3.5 text-slate-400" />
+              {OVERLAY_LABELS[key]}
+            </span>
+            <span className="font-mono text-[10px] text-slate-400">{count}</span>
+          </label>
+        ))}
+      </div>
 
       {/* Simulation + routing controls */}
       <div className="absolute right-4 bottom-24 z-30 w-[272px] space-y-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
