@@ -79,6 +79,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | `/api/v1/auth/verify` | POST | Verify code |
 | `/api/v1/sos` | POST | Create SOS request |
 | `/api/v1/sos` | GET | List SOS requests |
+| `/api/v1/sos/{id}` | GET | Get single SOS request status (FSD-FR-074) |
 | `/api/v1/hazards` | POST | Create hazard zone (cm) |
 | `/api/v1/hazards` | GET | List hazard zones |
 | `/api/v1/hazards/{id}` | PATCH | Update hazard zone |
@@ -87,6 +88,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | `/api/v1/dispatch/{id}/confirm` | POST | Confirm dispatch (dispatch step 3) |
 | `/api/v1/vehicles` | GET/POST | List/create vehicles |
 | `/api/v1/vehicles/{id}` | PATCH | Update vehicle |
+| `/api/v1/vehicles/{id}/telemetry` | POST | Telemetry ping with 5s throttle (FSD-FR-072, VAL-020) |
 | `/api/v1/network/state` | GET | Road graph with live depths |
 | `/api/v1/simulation/rain` | POST | Apply a rainfall event |
 | `/api/v1/routing/navigate` | GET | Clearance-aware route |
@@ -115,7 +117,8 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 - **Email/password auth** with a registration path for driver accounts; registration signs in automatically and the token is held for the app session
 - **Guest mode** still browses the app, but sending an SOS or a report asks the driver to sign in
 - **Profile:** displays clearance in cm
-- **SOS:** submits to the backend `/api/v1/sos`
+- **Telemetry:** sends throttled (>= 5s) position, speed and heading updates during active navigation (`route.tsx`) to `/api/v1/vehicles/{id}/telemetry` (FSD-FR-072)
+- **SOS:** submits to the backend `/api/v1/sos` with real GPS fix (<60s freshness required, VAL-021) and displays post-submission status tracking and refresh (FSD-FR-073 to 074)
 - **Offline Maps:** visual placeholder only (no SQLite/download per pilot scope)
 - **`AuthProvider`** mounted in the root layout
 
