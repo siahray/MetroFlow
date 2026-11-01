@@ -21,13 +21,29 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
 import { RESCUE_UNITS, toUnitStatus, type RescueUnit } from "@/lib/rescue";
-import { assignSOS, confirmDispatch, listVehicles } from "@/lib/dispatch";
-import { getReportPhoto } from "@/lib/reports";
+import {
+  addSOSNote,
+  assignSOS,
+  confirmDispatch,
+  escalateSOS,
+  fetchIncidentLog,
+  holdSOS,
+  listVehicles,
+  rejectSOS,
+  undoDispatch,
+} from "@/lib/dispatch";
+import {
+  addReportNote,
+  escalateReport,
+  getReportPhoto,
+  holdReport,
+  rejectReport,
+} from "@/lib/reports";
 
 type IncidentDetailProps = {
   incident: Incident;
@@ -37,12 +53,25 @@ type IncidentDetailProps = {
   onDispatchConfirmed?: (unitCallSign: string, incidentId: string) => void;
 };
 
-const BASE_ACTIONS = [
+type ActionKind = "reject" | "hold" | "escalate";
+
+const BASE_ACTIONS: {
+  type: ActionKind;
+  label: string;
+  className: string;
+}[] = [
   {
+    type: "reject",
     label: "Reject / False Alarm",
     className: "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
   },
   {
+    type: "escalate",
+    label: "Escalate to BFP / Coast Guard",
+    className: "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100",
+  },
+  {
+    type: "hold",
     label: "Hold for Sensor Update",
     className: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
   },
@@ -63,6 +92,26 @@ export function IncidentDetail({
   const [vehicles, setVehicles] = useState<RescueUnit[]>(RESCUE_UNITS);
   const [selectedUnit, setSelectedUnit] = useState<RescueUnit | null>(null);
 
+  // FSD-FR-036 / FSD-FR-043: Persisted operations log
+  const [liveLogs, setLiveLogs] = useState<LogEntry[]>(logs);
+
+  // FSD-FR-044: Action reason modal state
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [activeAction, setActiveAction] = useState<ActionKind | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [actionAgency, setActionAgency] = useState("BFP");
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+
+  // FSD-FR-045: Undo window state
+  const [undoSeconds, setUndoSeconds] = useState<number | null>(null);
+
+  // FSD-FR-046: State constraints
+  const isDispatched =
+    incident.tags.includes("Vehicle Assigned") ||
+    incident.tags.includes("Dispatched") ||
+    undoSeconds !== null;
+  const isRejected = incident.tags.includes("Rejected");
+
   // FSD-FR-034 / FSD-FR-038: Authenticated photo evidence loader
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState(false);
@@ -70,6 +119,36 @@ export function IncidentDetail({
 
   const reportId = incident.reportId;
   const photoLoading = Boolean(reportId && !photoUrl && !photoError);
+
+  // Load persistent operations log on incident change
+  useEffect(() => {
+    let cancelled = false;
+    fetchIncidentLog(incident).then((fetched) => {
+      if (!cancelled && fetched && fetched.length > 0) {
+        setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [incident]);
+
+  // Merge server-persisted logs with any optimistic logs
+  const displayLogs = useMemo(() => {
+    const seen = new Set(liveLogs.map((l) => `${l.time}-${l.text}`));
+    const fresh = logs.filter((l) => !seen.has(`${l.time}-${l.text}`));
+    return fresh.length > 0 ? [...liveLogs, ...fresh] : liveLogs;
+  }, [liveLogs, logs]);
+
+  // Undo countdown timer (FSD-FR-045)
+  const isUndoActive = undoSeconds !== null;
+  useEffect(() => {
+    if (!isUndoActive) return;
+    const timer = setInterval(() => {
+      setUndoSeconds((prev) => (prev !== null && prev > 1 ? prev - 1 : null));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isUndoActive]);
 
   useEffect(() => {
     if (!reportId) return;
@@ -126,15 +205,97 @@ export function IncidentDetail({
     if (node) {
       node.scrollTop = node.scrollHeight;
     }
-  }, [logs]);
+  }, [displayLogs]);
 
-  function handleAddNote(event: FormEvent<HTMLFormElement>) {
+  async function handleAddNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = note.trim();
     if (!text) return;
     onAddNote(text);
     setNote("");
     setNoteOpen(false);
+
+    try {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      if ((incident.incidentType === "sos" || !incident.reportId) && !isNaN(sosId)) {
+        await addSOSNote(sosId, text);
+      } else if (incident.reportId) {
+        await addReportNote(incident.reportId, text);
+      }
+      const fetched = await fetchIncidentLog(incident);
+      if (fetched.length > 0) {
+        setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+      }
+    } catch {
+      // Best effort log persistence
+    }
+  }
+
+  function handleOpenActionModal(action: ActionKind) {
+    setActiveAction(action);
+    setActionReason("");
+    setActionModalOpen(true);
+  }
+
+  async function handleConfirmActionModal() {
+    if (actionReason.trim().length < 3) return;
+    setActionSubmitting(true);
+    try {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      const isSos = incident.incidentType === "sos" || (!incident.reportId && !isNaN(sosId));
+
+      if (activeAction === "reject") {
+        if (isSos && !isNaN(sosId)) {
+          await rejectSOS(sosId, actionReason.trim());
+        } else if (incident.reportId) {
+          await rejectReport(incident.reportId, actionReason.trim());
+        }
+        onAction(`Rejected as False Alarm: ${actionReason.trim()}`);
+      } else if (activeAction === "hold") {
+        if (isSos && !isNaN(sosId)) {
+          await holdSOS(sosId, actionReason.trim());
+        } else if (incident.reportId) {
+          await holdReport(incident.reportId, actionReason.trim());
+        }
+        onAction(`Held for Sensor Update: ${actionReason.trim()}`);
+      } else if (activeAction === "escalate") {
+        if (isSos && !isNaN(sosId)) {
+          await escalateSOS(sosId, actionReason.trim(), actionAgency);
+        } else if (incident.reportId) {
+          await escalateReport(incident.reportId, actionReason.trim(), actionAgency);
+        }
+        onAction(`Escalated to ${actionAgency}: ${actionReason.trim()}`);
+      }
+
+      const fetched = await fetchIncidentLog(incident);
+      if (fetched.length > 0) {
+        setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Action failed";
+      onAction(`Action error: ${msg}`);
+    } finally {
+      setActionSubmitting(false);
+      setActionModalOpen(false);
+      setActionReason("");
+    }
+  }
+
+  async function handleUndoDispatch() {
+    const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+    if (!isNaN(sosId)) {
+      try {
+        await undoDispatch(sosId);
+        setUndoSeconds(null);
+        onAction(`Dispatch of unit to #${incident.id} was undone.`);
+        const fetched = await fetchIncidentLog(incident);
+        if (fetched.length > 0) {
+          setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+        }
+      } catch {
+        onAction("Could not undo dispatch.");
+      }
+    }
   }
 
   async function handleConfirmDispatch() {
@@ -146,12 +307,9 @@ export function IncidentDetail({
           try {
             await assignSOS(sosId, vehicleId);
           } catch {
-            // The assignment is best-effort; confirmation below still records
-            // the dispatcher's decision in the log.
+            // The assignment is best-effort
           }
         } else {
-          // A unit from the static fallback list has no backend id, so there is
-          // nothing to assign. Surface it instead of assigning an arbitrary row.
           onAction(
             `Could not assign ${selectedUnit?.callSign ?? "unit"}: unit is not in the fleet API`,
           );
@@ -161,6 +319,8 @@ export function IncidentDetail({
         } catch {
           // ignore
         }
+        // FSD-FR-045: Activate 5-second undo window
+        setUndoSeconds(5);
       }
     } catch {
       // ignore
@@ -170,6 +330,14 @@ export function IncidentDetail({
       onAction(`Dispatched ${selectedUnit.callSign} (${selectedUnit.type}) to #${incident.id}`);
       if (onDispatchConfirmed) {
         onDispatchConfirmed(selectedUnit.callSign, incident.id);
+      }
+      try {
+        const fetched = await fetchIncidentLog(incident);
+        if (fetched.length > 0) {
+          setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+        }
+      } catch {
+        // ignore
       }
     }
   }
@@ -568,7 +736,7 @@ export function IncidentDetail({
           </div>
         )}
 
-        {/* Operations Log */}
+        {/* Operations Log (FSD-FR-036, FSD-FR-043) */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1 text-[11px] font-bold tracking-wider text-slate-700 uppercase">
@@ -586,13 +754,13 @@ export function IncidentDetail({
 
           <div
             ref={logRef}
-            className="max-h-24 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px]"
+            className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px]"
           >
-            {logs.length === 0 ? (
+            {displayLogs.length === 0 ? (
               <p className="text-slate-400">No entries yet for this incident.</p>
             ) : null}
 
-            {logs.map((entry, index) => (
+            {displayLogs.map((entry, index) => (
               <div
                 key={`${entry.time}-${index}`}
                 className={cn(
@@ -626,15 +794,35 @@ export function IncidentDetail({
         </div>
       </div>
 
-      {/* Action Buttons */}
+      {/* FSD-FR-045: Active Undo Window Banner */}
+      {undoSeconds !== null && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-sm animate-pulse">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-amber-600" />
+            <span>
+              Rescue unit dispatched. Undo window: <strong>{undoSeconds}s</strong> remaining
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleUndoDispatch}
+            className="rounded-lg bg-amber-800 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-900 transition-colors"
+          >
+            Undo Dispatch
+          </button>
+        </div>
+      )}
+
+      {/* Action Buttons (FSD-FR-039 to 046) */}
       <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-4 md:grid-cols-4">
         {BASE_ACTIONS.map((action) => (
           <button
-            key={action.label}
+            key={action.type}
             type="button"
-            onClick={() => onAction(action.label)}
+            disabled={isDispatched || isRejected}
+            onClick={() => handleOpenActionModal(action.type)}
             className={cn(
-              "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+              "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
               action.className,
             )}
           >
@@ -642,19 +830,116 @@ export function IncidentDetail({
           </button>
         ))}
 
-        {/* Multi-step modal trigger per UI/UX Audit & FSD requirements */}
-        <button
-          type="button"
-          onClick={() => {
-            setModalStep(1);
-            setDispatchModalOpen(true);
-          }}
-          className="flex items-center justify-center gap-1.5 rounded-lg border border-transparent bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-colors"
-        >
-          <CheckCircle className="h-3.5 w-3.5" />
-          <span>Approve & Dispatch</span>
-        </button>
+        {/* Multi-step dispatch modal trigger with state constraints (FSD-FR-046) */}
+        {isDispatched ? (
+          <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Unit Dispatched</span>
+          </div>
+        ) : isRejected ? (
+          <div className="flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">
+            <X className="h-3.5 w-3.5 text-rose-600" />
+            <span>Incident Rejected</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setModalStep(1);
+              setDispatchModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-transparent bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-colors"
+          >
+            <CheckCircle className="h-3.5 w-3.5" />
+            <span>Approve &amp; Dispatch</span>
+          </button>
+        )}
       </div>
+
+      {/* FSD-FR-044: MANDATORY ACTION REASON MODAL */}
+      {actionModalOpen && activeAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                {activeAction === "reject"
+                  ? "Reject Incident (False Alarm)"
+                  : activeAction === "hold"
+                    ? "Hold Pending Sensor Telemetry"
+                    : "Escalate to Emergency Services"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActionModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {activeAction === "escalate" && (
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Target Escalation Agency
+                </label>
+                <select
+                  value={actionAgency}
+                  onChange={(e) => setActionAgency(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="BFP">BFP — Bureau of Fire Protection</option>
+                  <option value="Coast Guard">Philippine Coast Guard</option>
+                  <option value="PNP Maritime">PNP Maritime Group</option>
+                  <option value="NDRRMC">NDRRMC Regional Command</option>
+                </select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-700">
+                Mandatory Operational Reason (FSD-FR-044)
+              </label>
+              <textarea
+                autoFocus
+                rows={3}
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                placeholder="Provide justification or sensor cross-check finding..."
+                className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-400">
+                Minimum 3 characters. This action is permanently recorded in the tamper-evident
+                audit trail.
+              </span>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setActionModalOpen(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionReason.trim().length < 3 || actionSubmitting}
+                onClick={handleConfirmActionModal}
+                className={cn(
+                  "rounded-lg px-4 py-1.5 text-xs font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                  activeAction === "reject"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : activeAction === "hold"
+                      ? "bg-amber-600 hover:bg-amber-700"
+                      : "bg-purple-600 hover:bg-purple-700",
+                )}
+              >
+                {actionSubmitting ? "Submitting..." : "Confirm Action"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3-STEP DISPATCH MODAL */}
       {dispatchModalOpen ? (

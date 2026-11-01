@@ -12,7 +12,7 @@ import { type LogEntry, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listReports } from "@/lib/reports";
-import { listVehicles } from "@/lib/dispatch";
+import { fetchIncidentLog, listVehicles } from "@/lib/dispatch";
 
 function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -61,6 +61,22 @@ function RadarContent() {
   const selected = incidents.find((i) => i.id === selectedId) || incidents[0] || null;
   const activeId = selected?.id ?? "";
   const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
+
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    fetchIncidentLog(selected).then((items) => {
+      if (!cancelled && items && items.length > 0) {
+        setLogs((prev) => ({
+          ...prev,
+          [selected.id]: items.map((i) => ({ time: i.time, text: i.text, kind: i.kind })),
+        }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
     setLogs((current) => ({

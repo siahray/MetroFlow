@@ -80,12 +80,18 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | `/api/v1/sos` | POST | Create SOS request |
 | `/api/v1/sos` | GET | List SOS requests |
 | `/api/v1/sos/{id}` | GET | Get single SOS request status (FSD-FR-074) |
+| `/api/v1/sos/{id}/reject` | POST | Reject SOS as false alarm with required reason (FSD-FR-039, 044) |
+| `/api/v1/sos/{id}/hold` | POST | Hold SOS pending sensor update with reason (FSD-FR-041, 044) |
+| `/api/v1/sos/{id}/escalate` | POST | Escalate SOS to BFP / Coast Guard (FSD-FR-040, 044) |
+| `/api/v1/sos/{id}/notes` | POST | Append operational note to SOS log (FSD-FR-037, 043) |
+| `/api/v1/sos/{id}/log` | GET | Chronological persistent operations log (FSD-FR-036, 043) |
+| `/api/v1/dispatch/{id}/undo` | POST | Revert dispatch within 5s undo window (FSD-FR-045) |
 | `/api/v1/hazards` | POST | Create hazard zone (cm) |
 | `/api/v1/hazards` | GET | List hazard zones |
 | `/api/v1/hazards/{id}` | PATCH | Update hazard zone |
 | `/api/v1/hazards/{id}/publish` | POST | Publish hazard (dispatch step 1) |
-| `/api/v1/sos/{id}/assign` | POST | Assign vehicle (dispatch step 2) |
-| `/api/v1/dispatch/{id}/confirm` | POST | Confirm dispatch (dispatch step 3) |
+| `/api/v1/sos/{id}/assign` | POST | Assign vehicle (dispatch step 2, FSD-FR-046) |
+| `/api/v1/dispatch/{id}/confirm` | POST | Confirm dispatch (dispatch step 3, FSD-FR-046) |
 | `/api/v1/vehicles` | GET/POST | List/create vehicles |
 | `/api/v1/vehicles/{id}` | PATCH | Update vehicle |
 | `/api/v1/vehicles/{id}/telemetry` | POST | Telemetry ping with 5s throttle (FSD-FR-072, VAL-020) |

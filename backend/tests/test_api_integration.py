@@ -1232,3 +1232,132 @@ def test_get_sos_request_by_id(client):
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["sos_id"] == sos_id
     assert fetched.json()["status"] == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Dispatch Action Persistence & Log (FSD-FR-039 to 046)
+# ---------------------------------------------------------------------------
+
+
+def test_sos_reject_requires_reason_and_persists_audit(client):
+    """FSD-FR-039, FSD-FR-044: reject requires reason (min 3 chars) and audits."""
+    sos_resp = client.post(
+        "/api/v1/sos",
+        json={"latitude": 14.6040, "longitude": 120.9830, "note": "Reject test"},
+    )
+    assert sos_resp.status_code == 200
+    sos_id = sos_resp.json()["sos_id"]
+
+    # Reject without reason or short reason fails with 422
+    bad_resp = client.post(f"/api/v1/sos/{sos_id}/reject", json={"reason": "no"})
+    assert bad_resp.status_code == 422
+
+    # Reject with valid reason
+    good_resp = client.post(
+        f"/api/v1/sos/{sos_id}/reject",
+        json={"reason": "Citizen confirmed resolved locally via callback"},
+    )
+    assert good_resp.status_code == 200
+    assert good_resp.json()["status"] == "rejected"
+
+    # Audited
+    audit_row = latest_audit(client, action_type="SOS_REJECT")[0]
+    assert audit_row["payload"]["sos_id"] == sos_id
+    assert "Citizen confirmed resolved" in audit_row["payload"]["reason"]
+
+
+def test_sos_hold_and_escalate_and_notes(client):
+    """FSD-FR-040, FSD-FR-041, FSD-FR-043: hold, escalate and add notes."""
+    sos_resp = client.post(
+        "/api/v1/sos",
+        json={"latitude": 14.6050, "longitude": 120.9840, "note": "Multi-action test"},
+    )
+    assert sos_resp.status_code == 200
+    sos_id = sos_resp.json()["sos_id"]
+
+    # Hold
+    hold_resp = client.post(
+        f"/api/v1/sos/{sos_id}/hold",
+        json={"reason": "Waiting for sensor buoy telemetry update"},
+    )
+    assert hold_resp.status_code == 200
+    assert hold_resp.json()["status"] == "holding"
+
+    # Note
+    note_resp = client.post(
+        f"/api/v1/sos/{sos_id}/notes",
+        json={"note": "CCTV Sector Delta verified water level stable"},
+    )
+    assert note_resp.status_code == 200
+
+    # Escalate
+    esc_resp = client.post(
+        f"/api/v1/sos/{sos_id}/escalate",
+        json={
+            "agency": "Coast Guard",
+            "reason": "Water depth exceeds high-water rescue vehicle clearance",
+        },
+    )
+    assert esc_resp.status_code == 200
+    assert esc_resp.json()["status"] == "escalated"
+
+    # Log endpoint returns all actions in chronological order
+    log_resp = client.get(f"/api/v1/sos/{sos_id}/log")
+    assert log_resp.status_code == 200
+    logs = log_resp.json()
+    assert len(logs) >= 4  # creation + hold + note + escalate
+    assert logs[0]["kind"] == "muted"
+    assert any("Waiting for sensor buoy" in item["text"] for item in logs)
+    assert any("CCTV Sector Delta" in item["text"] for item in logs)
+    assert any("Coast Guard" in item["text"] for item in logs)
+
+
+def test_dispatch_flow_and_undo_and_constraint(client):
+    """FSD-FR-042, FSD-FR-045, FSD-FR-046: assign, confirm, undo, and state constraints."""
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        sos_resp = client.post(
+            "/api/v1/sos",
+            json={"latitude": 14.6060, "longitude": 120.9850, "note": "Dispatch test"},
+        )
+        assert sos_resp.status_code == 200
+        sos_id = sos_resp.json()["sos_id"]
+
+        # Step 1: Assign vehicle
+        assign_resp = client.post(f"/api/v1/sos/{sos_id}/assign", json={"vehicle_id": vehicle_id})
+        assert assign_resp.status_code == 200
+        assert assign_resp.json()["status"] == "assigned"
+        assert assign_resp.json()["vehicle_id"] == vehicle_id
+
+        # Step 2: Confirm dispatch
+        confirm_resp = client.post(
+            f"/api/v1/dispatch/{sos_id}/confirm",
+            json={"note": "Dispatched unit RU-01 via flood-safe corridor"},
+        )
+        assert confirm_resp.status_code == 200
+        assert confirm_resp.json()["status"] == "confirmed"
+
+        # FSD-FR-046: Dispatched incident cannot be re-dispatched or re-assigned
+        reassign_resp = client.post(f"/api/v1/sos/{sos_id}/assign", json={"vehicle_id": vehicle_id})
+        assert reassign_resp.status_code == 409
+
+        reconfirm_resp = client.post(
+            f"/api/v1/dispatch/{sos_id}/confirm",
+            json={"note": "Duplicate dispatch attempt"},
+        )
+        assert reconfirm_resp.status_code == 409
+
+        # Cannot reject an already-dispatched incident
+        reject_dispatched = client.post(
+            f"/api/v1/sos/{sos_id}/reject",
+            json={"reason": "Should fail because already dispatched"},
+        )
+        assert reject_dispatched.status_code == 409
+
+        # FSD-FR-045: Undo window reverts status back to pending
+        undo_resp = client.post(f"/api/v1/dispatch/{sos_id}/undo")
+        assert undo_resp.status_code == 200
+        assert undo_resp.json()["status"] == "pending"
+        assert undo_resp.json()["vehicle_id"] is None
+    finally:
+        _delete_test_vehicle(client, vehicle_id)

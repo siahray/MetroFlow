@@ -109,6 +109,31 @@ export async function rejectReport(
   });
 }
 
+export async function holdReport(reportId: string, reason: string): Promise<FieldReport> {
+  return fetchJSON<FieldReport>(`/api/v1/reports/${reportId}/hold`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason.trim() }),
+  });
+}
+
+export async function escalateReport(
+  reportId: string,
+  reason: string,
+  agency = "BFP",
+): Promise<FieldReport> {
+  return fetchJSON<FieldReport>(`/api/v1/reports/${reportId}/escalate`, {
+    method: "POST",
+    body: JSON.stringify({ reason: reason.trim(), agency }),
+  });
+}
+
+export async function addReportNote(reportId: string, note: string): Promise<FieldReport> {
+  return fetchJSON<FieldReport>(`/api/v1/reports/${reportId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ note: note.trim() }),
+  });
+}
+
 /**
  * Parse an API timestamp as the UTC instant it is.
  *

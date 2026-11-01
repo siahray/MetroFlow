@@ -11,7 +11,7 @@ import { useToast } from "@/components/toast-provider";
 import { type LogEntry, type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
-import { listVehicles, type Vehicle } from "@/lib/dispatch";
+import { fetchIncidentLog, listVehicles, type Vehicle } from "@/lib/dispatch";
 import { listHazards, type HazardZone } from "@/lib/hazards";
 import { listReports } from "@/lib/reports";
 
@@ -99,6 +99,22 @@ export default function TriagePage() {
   const activeId = selected?.id ?? "";
   const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
   const pendingCount = allIncidents.length - dismissed.size;
+
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    fetchIncidentLog(selected).then((items) => {
+      if (!cancelled && items && items.length > 0) {
+        setLogs((prev) => ({
+          ...prev,
+          [selected.id]: items.map((i) => ({ time: i.time, text: i.text, kind: i.kind })),
+        }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
     setLogs((current) => ({

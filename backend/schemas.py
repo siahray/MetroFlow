@@ -420,3 +420,58 @@ class ReportApproveRequest(BaseModel):
     """Optional operator note carried into the hazard's notes."""
 
     notes: str | None = Field(default=None, max_length=500)
+
+
+# ---------------------------------------------------------------------------
+# Dispatch & Incident Action Schemas (FSD-FR-039 to 046)
+# ---------------------------------------------------------------------------
+
+
+class SOSActionRequest(BaseModel):
+    """Mandatory reason for rejecting or holding an incident (FSD-FR-044)."""
+
+    reason: str = Field(min_length=3, max_length=500, description="Mandatory reason for action")
+
+
+class SOSEscalateRequest(BaseModel):
+    """Escalate an incident to external services (FSD-FR-040)."""
+
+    agency: str = Field(default="BFP", max_length=50)
+    reason: str = Field(min_length=3, max_length=500, description="Mandatory reason for escalation")
+
+
+class SOSNoteRequest(BaseModel):
+    """Internal operational triage note (FSD-FR-037)."""
+
+    note: str = Field(min_length=1, max_length=500)
+
+
+class ReportHoldRequest(BaseModel):
+    """Mandatory reason for holding a field report (FSD-FR-044)."""
+
+    reason: str = Field(min_length=3, max_length=500, description="Mandatory reason for hold")
+
+
+class ReportEscalateRequest(BaseModel):
+    """Escalate a field report to external services (FSD-FR-040)."""
+
+    agency: str = Field(default="BFP", max_length=50)
+    reason: str = Field(min_length=3, max_length=500, description="Mandatory reason for escalation")
+
+
+class ReportNoteRequest(BaseModel):
+    """Internal operational note for a field report (FSD-FR-037)."""
+
+    note: str = Field(min_length=1, max_length=500)
+
+
+class IncidentLogItem(BaseModel):
+    """One attributable operations log entry (FSD-FR-036, FSD-FR-043)."""
+
+    log_id: int
+    time: str
+    created_at: datetime
+    action_type: str
+    actor_name: str
+    text: str
+    kind: Literal["muted", "action", "note"]
