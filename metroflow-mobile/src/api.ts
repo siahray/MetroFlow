@@ -7,6 +7,16 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
+/** The current session token, for transports that cannot use `request`. */
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+/** Absolute URL for a path, used by the streaming client. */
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`;
+}
+
 export class ApiError extends Error {
   status: number;
   retryAfterSeconds: number | null;
@@ -143,6 +153,144 @@ export function listMySOS(): Promise<SOSRequest[]> {
 
 export function listVehicles(): Promise<unknown[]> {
   return request<unknown[]>("/api/v1/vehicles");
+}
+
+// ---------------------------------------------------------------------------
+// Road network, routes and hazards (FSD-FR-054 to 064)
+// ---------------------------------------------------------------------------
+
+export type GeoJsonPoint = {
+  type: "Point";
+  coordinates: [number, number]; // [longitude, latitude]
+};
+
+export type GeoJsonPolygon = {
+  type: "Polygon";
+  coordinates: [number, number][][];
+};
+
+export type NodeFeature = {
+  id: number;
+  geometry: GeoJsonPoint;
+  properties: { node_id: number; name: string | null; elevation_m: number };
+};
+
+export type EdgeFeature = {
+  id: number;
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  properties: {
+    edge_id: number;
+    start_node_id: number;
+    end_node_id: number;
+    start_name: string | null;
+    end_name: string | null;
+    road_name: string | null;
+    distance_m: number;
+    max_speed_kmh: number;
+    avg_speed_kmh: number;
+    water_depth_cm: number;
+    status: "PASSABLE" | "LIGHT_FLOOD" | "SUBMERGED";
+    is_override: boolean;
+  };
+};
+
+export type NetworkState = {
+  clearance_cm: number;
+  generated_at: string;
+  edges: { type: "FeatureCollection"; features: EdgeFeature[] };
+  nodes: { type: "FeatureCollection"; features: NodeFeature[] };
+};
+
+export type HazardInfo = {
+  hazard_id: number;
+  name: string;
+  obstruction_level: string;
+  avg_depth_cm: number | null;
+  edge_id: number | null;
+  notes: string | null;
+  geometry: GeoJsonPolygon | null;
+  warning_radius_m: number;
+  published_at: string | null;
+  active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type RouteInstruction = {
+  manoeuvre:
+    | "DEPART"
+    | "ARRIVE"
+    | "STRAIGHT"
+    | "TURN_LEFT"
+    | "TURN_RIGHT"
+    | "SLIGHT_LEFT"
+    | "SLIGHT_RIGHT"
+    | "U_TURN";
+  road_name: string | null;
+  distance_m: number;
+  start_node_id: number;
+  end_node_id: number;
+  text: string;
+};
+
+export type RouteHazard = {
+  hazard_id: number;
+  name: string;
+  obstruction_level: string;
+  avg_depth_cm: number | null;
+  edge_id: number | null;
+  blocking: boolean;
+  geometry: GeoJsonPolygon | null;
+  warning_radius_m: number;
+};
+
+export type RouteSegment = {
+  edge_id: number;
+  start_node_id: number;
+  end_node_id: number;
+  road_name: string | null;
+  distance_m: number;
+  water_depth_cm: number;
+  status: "PASSABLE" | "LIGHT_FLOOD" | "SUBMERGED";
+};
+
+export type RoutePlan = {
+  start_node: number;
+  target_node: number;
+  destination_name: string | null;
+  vehicle_clearance_cm: number;
+  optimal_path_nodes: number[];
+  geometry: { type: "LineString"; coordinates: [number, number][] };
+  segments: RouteSegment[];
+  instructions: RouteInstruction[];
+  hazards: RouteHazard[];
+  total_distance_m: number;
+  estimated_travel_time_minutes: number;
+};
+
+export function getNetworkState(clearanceCm: number): Promise<NetworkState> {
+  return request<NetworkState>(
+    `/api/v1/network/state?clearance_cm=${encodeURIComponent(clearanceCm)}`,
+  );
+}
+
+export function getRoute(params: {
+  start_node: number;
+  target_node: number;
+  clearance_cm: number;
+  ignore_hazards?: boolean;
+}): Promise<RoutePlan> {
+  const query = new URLSearchParams({
+    start_node: String(params.start_node),
+    target_node: String(params.target_node),
+    clearance_cm: String(params.clearance_cm),
+  });
+  if (params.ignore_hazards) query.set("ignore_hazards", "true");
+  return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`);
+}
+
+export function listActiveHazards(): Promise<HazardInfo[]> {
+  return request<HazardInfo[]>("/api/v1/hazards/active");
 }
 
 // ---------------------------------------------------------------------------
