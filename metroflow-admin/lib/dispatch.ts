@@ -21,6 +21,16 @@ export type Vehicle = {
   speed_kmh: number | null;
 };
 
+export type IncidentLogItem = {
+  log_id: number;
+  time: string;
+  created_at: string;
+  action_type: string;
+  actor_name: string;
+  text: string;
+  kind: "muted" | "action" | "note";
+};
+
 export async function listVehicles(): Promise<Vehicle[]> {
   return fetchJSON<Vehicle[]>("/api/v1/vehicles");
 }
@@ -37,4 +47,74 @@ export async function confirmDispatch(sosId: number, note?: string): Promise<SOS
     method: "POST",
     body: JSON.stringify({ note: note || "" }),
   });
+}
+
+export async function undoDispatch(sosId: number): Promise<SOSRequest> {
+  return fetchJSON<SOSRequest>(`/api/v1/dispatch/${sosId}/undo`, {
+    method: "POST",
+  });
+}
+
+export async function rejectSOS(sosId: number, reason: string): Promise<SOSRequest> {
+  return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function holdSOS(sosId: number, reason: string): Promise<SOSRequest> {
+  return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/hold`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function escalateSOS(
+  sosId: number,
+  reason: string,
+  agency = "BFP",
+): Promise<SOSRequest> {
+  return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/escalate`, {
+    method: "POST",
+    body: JSON.stringify({ reason, agency }),
+  });
+}
+
+export async function addSOSNote(sosId: number, note: string): Promise<SOSRequest> {
+  return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function getSOSLog(sosId: number): Promise<IncidentLogItem[]> {
+  return fetchJSON<IncidentLogItem[]>(`/api/v1/sos/${sosId}/log`);
+}
+
+export async function getReportLog(reportId: string): Promise<IncidentLogItem[]> {
+  return fetchJSON<IncidentLogItem[]>(`/api/v1/reports/${reportId}/log`);
+}
+
+export async function fetchIncidentLog(incident: {
+  id: string;
+  reportId?: string;
+  incidentType?: "sos" | "report";
+}): Promise<IncidentLogItem[]> {
+  try {
+    if (
+      incident.incidentType === "sos" ||
+      incident.id.startsWith("FR-") ||
+      incident.id.startsWith("SOS-")
+    ) {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      if (!isNaN(sosId)) {
+        return await getSOSLog(sosId);
+      }
+    } else if (incident.reportId) {
+      return await getReportLog(incident.reportId);
+    }
+  } catch {
+    // Fall back to empty array
+  }
+  return [];
 }

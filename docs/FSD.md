@@ -341,15 +341,15 @@ statement; the FSD identifiers above remain stable as items move.
 | Routing                  | FSD-FR-011 to 017 | Implemented | Unit and contract tests                             |
 | Portal access            | FSD-FR-018 to 023 | Implemented | Real sign-in against `/auth/login`; the token and profile are kept for the session, every request sends the token, and the shell returns to `/login` without one or when the API answers `401` |
 | Incident queue           | FSD-FR-024 to 031 | Partial     | Live SOS feed with filters and search; field reports are queued separately on `/moderation` |
-| Incident detail          | FSD-FR-032 to 038 | Partial     | Renders live SOS; evidence files not linked         |
-| Dispatch actions         | FSD-FR-039 to 046 | Partial     | Assign and confirm persist through the API; the action log is in-memory |
+| Incident detail          | FSD-FR-032 to 038 | Implemented | Docket, witness narrative, authenticated evidence photo viewer with EXIF and submersion range, location with nearest unit ETA and rising-water indicator, and original file lightbox |
+| Dispatch actions         | FSD-FR-039 to 046 | Implemented | Reject (false alarm), hold, escalate to BFP/Coast Guard, approve/dispatch, 5-second undo window, state constraints, and persistent attributable operations log persisted via API and audit trail |
 | Audit and administration | FSD-FR-047 to 049 | Partial     | Hash-chained write path, `/audit` read API and `/audit/verify`; user management and export absent |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
 | Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me`, route-level enforcement and one attributable audit row per privileged action |
 | Driver navigation        | FSD-FR-054 to 064 | Implemented | Turn-by-turn guidance, road names, GPS instruction tracking, hazard-aware routing, proximity alerts, and SSE auto-rerouting |
 | Field reporting          | FSD-FR-065 to 067 | Implemented | Driver report intake with camera/gallery photo, EXIF retention, live GPS with accuracy fallback, depth selector and multipart submission |
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
-| Telemetry and SOS        | FSD-FR-072 to 074 | Partial     | SOS create and list work; telemetry pings absent    |
+| Telemetry and SOS        | FSD-FR-072 to 074 | Implemented | POST /vehicles/{id}/telemetry (5 s throttle); SOS uses real GPS (VAL-021); status display on SOS screen (FSD-FR-074) |
 | Live operational map     | FSD-FR-075, 076   | Implemented | MapLibre renders live network and A* route with toggleable overlays for verified hazards, fleet units and active SOS signals |
 | Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; CCTV/gauge cross-reference (FR-079) absent |
 | Hazard authoring         | FSD-FR-082 to 086 | Implemented | Create, update, and publish via the API; live SSE event stream at `/api/v1/hazards/stream` |

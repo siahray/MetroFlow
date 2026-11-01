@@ -38,6 +38,7 @@ from schemas import (
     HazardCreate,
     HazardResponse,
     HazardUpdate,
+    IncidentLogItem,
     LoginRequest,
     NetworkStateResponse,
     NodeFeature,
@@ -45,6 +46,9 @@ from schemas import (
     NodeProperties,
     RegisterRequest,
     ReportApproveRequest,
+    ReportEscalateRequest,
+    ReportHoldRequest,
+    ReportNoteRequest,
     ReportPhotoInfo,
     ReportRejectRequest,
     ReportResponse,
@@ -54,7 +58,10 @@ from schemas import (
     RouteSegment,
     SendVerifyRequest,
     SimulationResponse,
+    SOSActionRequest,
     SOSCreate,
+    SOSEscalateRequest,
+    SOSNoteRequest,
     SOSResponse,
     TelemetryPing,
     TokenResponse,
@@ -102,13 +109,20 @@ def seed_database(db: Session) -> None:
 
 
 def seed_dispatcher_account(db: Session) -> None:
-    """
-    Provision the bootstrap LGU dispatcher when no users exist.
+    """Provision or ensure the bootstrap LGU dispatcher account exists with SUPER_ADMIN privileges.
 
-    Registration only ever creates driver accounts, so without this the portal
-    has no account it can sign in with on a fresh database.
+    Registration only ever creates driver accounts, so the LGU dispatcher
+    has to come from configuration. If the account already exists, ensure it
+    holds the SUPER_ADMIN role so configured administrators can access
+    privileged portal and simulation functions.
     """
-    if db.query(models.User).count() > 0:
+    admin_email = settings.admin_email.strip().lower()
+    existing = db.query(models.User).filter(models.User.email == admin_email).first()
+    if existing:
+        if existing.role != "SUPER_ADMIN":
+            existing.role = "SUPER_ADMIN"
+            db.commit()
+            print(f"[startup] promoted dispatcher account {admin_email} to SUPER_ADMIN")
         return
 
     password_hash = bcrypt.hashpw(settings.admin_password.encode("utf-8"), bcrypt.gensalt()).decode(
@@ -117,13 +131,13 @@ def seed_dispatcher_account(db: Session) -> None:
     db.add(
         models.User(
             name="LGU Dispatcher",
-            email=settings.admin_email.strip().lower(),
+            email=admin_email,
             password_hash=password_hash,
             role="SUPER_ADMIN",
         )
     )
     db.commit()
-    print(f"[startup] provisioned dispatcher account {settings.admin_email}")
+    print(f"[startup] provisioned dispatcher account {admin_email}")
 
 
 @asynccontextmanager
@@ -963,6 +977,11 @@ def assign_sos(
     db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
     if not db_sos:
         raise HTTPException(status_code=404, detail="SOS not found")
+    if db_sos.status in ("confirmed", "dispatched", "rejected"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Incident cannot be assigned in its current state ({db_sos.status})",
+        )
     db_vehicle = (
         db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == assign_req.vehicle_id).first()
     )
@@ -978,6 +997,7 @@ def assign_sos(
             "sos_id": db_sos.sos_id,
             "vehicle_id": assign_req.vehicle_id,
             "call_sign": db_vehicle.call_sign,
+            "actor": _user.name or _user.email,
         },
     )
     db.flush()
@@ -1001,6 +1021,11 @@ def confirm_dispatch(
     db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
     if not db_sos:
         raise HTTPException(status_code=404, detail="SOS not found")
+    if db_sos.status in ("confirmed", "dispatched"):
+        raise HTTPException(
+            status_code=409,
+            detail="Incident has already been dispatched",
+        )
     if confirm_req.note:
         if db_sos.note:
             db_sos.note = f"{db_sos.note}; {confirm_req.note}"
@@ -1015,6 +1040,7 @@ def confirm_dispatch(
             "sos_id": db_sos.sos_id,
             "vehicle_id": db_sos.vehicle_id,
             "note": confirm_req.note,
+            "actor": _user.name or _user.email,
         },
     )
     db.flush()
@@ -1024,6 +1050,288 @@ def confirm_dispatch(
     db.commit()
     db.refresh(db_sos)
     return db_sos
+
+
+@app.post("/api/v1/dispatch/{sos_id}/undo", response_model=SOSResponse)
+def undo_dispatch(
+    sos_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Revert a recent dispatch action within the undo window (FSD-FR-045)."""
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if db_sos.status != "confirmed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot undo dispatch for incident in state '{db_sos.status}'",
+        )
+    prev_vehicle = db_sos.vehicle_id
+    db_sos.status = "pending"
+    db_sos.vehicle_id = None
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.DISPATCH_UNDO,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "previous_vehicle_id": prev_vehicle,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.post("/api/v1/sos/{sos_id}/reject", response_model=SOSResponse)
+def reject_sos(
+    sos_id: int,
+    req: SOSActionRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Reject an SOS incident as a false alarm with a required reason (FSD-FR-039, FSD-FR-044)."""
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if db_sos.status in ("confirmed", "dispatched"):
+        raise HTTPException(status_code=409, detail="Cannot reject an already dispatched incident")
+    db_sos.status = "rejected"
+    if db_sos.note:
+        db_sos.note = f"{db_sos.note}; [REJECTED: {req.reason}]"
+    else:
+        db_sos.note = f"[REJECTED: {req.reason}]"
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SOS_REJECT,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "reason": req.reason,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.post("/api/v1/sos/{sos_id}/hold", response_model=SOSResponse)
+def hold_sos(
+    sos_id: int,
+    req: SOSActionRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Hold an SOS incident pending sensor update with a required reason (FSD-FR-041, FSD-FR-044)."""
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if db_sos.status in ("confirmed", "dispatched"):
+        raise HTTPException(status_code=409, detail="Cannot hold an already dispatched incident")
+    db_sos.status = "holding"
+    if db_sos.note:
+        db_sos.note = f"{db_sos.note}; [HELD: {req.reason}]"
+    else:
+        db_sos.note = f"[HELD: {req.reason}]"
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SOS_HOLD,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "reason": req.reason,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.post("/api/v1/sos/{sos_id}/escalate", response_model=SOSResponse)
+def escalate_sos(
+    sos_id: int,
+    req: SOSEscalateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Escalate an incident to BFP or Coast Guard with a required reason (FSD-FR-040, FSD-FR-044)."""
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    db_sos.status = "escalated"
+    if db_sos.note:
+        db_sos.note = f"{db_sos.note}; [ESCALATED TO {req.agency}: {req.reason}]"
+    else:
+        db_sos.note = f"[ESCALATED TO {req.agency}: {req.reason}]"
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SOS_ESCALATE,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "agency": req.agency,
+            "reason": req.reason,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.post("/api/v1/sos/{sos_id}/notes", response_model=SOSResponse)
+def add_sos_note(
+    sos_id: int,
+    req: SOSNoteRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Append an operational note to the SOS dispatch log (FSD-FR-037, FSD-FR-043)."""
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if db_sos.note:
+        db_sos.note = f"{db_sos.note}; {req.note}"
+    else:
+        db_sos.note = req.note
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SOS_NOTE,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "note": req.note,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
+@app.get("/api/v1/sos/{sos_id}/log", response_model=list[IncidentLogItem])
+def get_sos_log(
+    sos_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Chronological operations log for an SOS incident (FSD-FR-036, FSD-FR-043)."""
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+
+    items: list[IncidentLogItem] = []
+    if db_sos.created_at:
+        items.append(
+            IncidentLogItem(
+                log_id=0,
+                time=db_sos.created_at.strftime("%I:%M %p"),
+                created_at=db_sos.created_at,
+                action_type="SOS_CREATED",
+                actor_name="Citizen Beacon",
+                text=f"Distress signal transmitted at ({db_sos.latitude:.4f}, {db_sos.longitude:.4f})",
+                kind="muted",
+            )
+        )
+
+    # Query audit logs matching sos_id
+    rows = (
+        db.query(models.AuditLog, models.User.name, models.User.email)
+        .outerjoin(models.User, models.AuditLog.user_id == models.User.user_id)
+        .filter(models.AuditLog.payload.like(f'%"sos_id":{sos_id}%'))
+        .order_by(models.AuditLog.log_id.asc())
+        .all()
+    )
+
+    for log_row, user_name, user_email in rows:
+        actor = user_name or user_email or "Dispatch Officer"
+        try:
+            payload = json.loads(log_row.payload)
+        except Exception:
+            continue
+        if payload.get("sos_id") != sos_id:
+            continue
+
+        time_str = log_row.created_at.strftime("%I:%M %p") if log_row.created_at else ""
+        act = log_row.action_type
+        if act == audit.SOS_NOTE:
+            kind = "note"
+            text = f"{payload.get('note')} (by {actor})"
+        elif act == audit.SOS_ASSIGN:
+            kind = "action"
+            text = f"Assigned rescue unit {payload.get('call_sign', 'unit')} by {actor}"
+        elif act == audit.DISPATCH_CONFIRM:
+            kind = "action"
+            text = f"Dispatched unit #{payload.get('vehicle_id')} by {actor}" + (
+                f": {payload.get('note')}" if payload.get("note") else ""
+            )
+        elif act == audit.DISPATCH_UNDO:
+            kind = "action"
+            text = f"Dispatch reversed by {actor}"
+        elif act == audit.SOS_REJECT:
+            kind = "action"
+            text = f"Rejected (False Alarm) by {actor}: {payload.get('reason')}"
+        elif act == audit.SOS_HOLD:
+            kind = "action"
+            text = f"Held for sensor update by {actor}: {payload.get('reason')}"
+        elif act == audit.SOS_ESCALATE:
+            kind = "action"
+            text = (
+                f"Escalated to {payload.get('agency', 'BFP')} by {actor}: {payload.get('reason')}"
+            )
+        else:
+            kind = "action"
+            text = f"Action {act} recorded by {actor}"
+
+        items.append(
+            IncidentLogItem(
+                log_id=log_row.log_id,
+                time=time_str,
+                created_at=log_row.created_at,
+                action_type=act,
+                actor_name=actor,
+                text=text,
+                kind=kind,
+            )
+        )
+
+    return items
 
 
 @app.get("/api/v1/vehicles", response_model=list[VehicleResponse])
@@ -1159,8 +1467,8 @@ def post_telemetry(
     if not db_vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    now = datetime.utcnow()
-    if db_vehicle.updated_at is not None:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if db_vehicle.current_location_lat is not None and db_vehicle.updated_at is not None:
         elapsed = (now - db_vehicle.updated_at).total_seconds()
         if elapsed < settings.telemetry_min_seconds:
             remaining = int(settings.telemetry_min_seconds - elapsed) + 1
@@ -1304,6 +1612,26 @@ def stream_sos(
 ):
     """SOS creation, assignment and confirmation as server-sent events (FSD-FR-086)."""
     return _event_stream(request, channel=events.SOS, snapshot=_snapshot_sos, after=after)
+
+
+@app.get("/api/v1/sos/{sos_id}", response_model=SOSResponse)
+def get_sos(
+    sos_id: int,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+) -> models.SOSRequest:
+    """Return a single SOS request by id (FSD-FR-074).
+
+    Available to any authenticated user so the driver app can poll the
+    dispatch status of its own submission without needing dispatcher rights.
+    Placed after `/stream` so the static subpath is not shadowed.
+    """
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS request not found")
+    return db_sos
 
 
 # ---------------------------------------------------------------------------
@@ -1839,6 +2167,180 @@ def reject_report(
     db.commit()
     db.refresh(report)
     return _report_detail(db, report_id)
+
+
+@app.post("/api/v1/reports/{report_id}/hold", response_model=ReportResponse)
+def hold_report(
+    report_id: UUID,
+    hold_req: ReportHoldRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Hold a field report pending sensor update with a required reason (FSD-FR-041, FSD-FR-044)."""
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report.decision_reason = hold_req.reason
+    report.moderated_by = _user.user_id
+    report.moderated_at = datetime.now(UTC).replace(tzinfo=None)
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.REPORT_HOLD,
+        payload={
+            "report_id": str(report.report_id),
+            "reason": hold_req.reason,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return _report_detail(db, report_id)
+
+
+@app.post("/api/v1/reports/{report_id}/escalate", response_model=ReportResponse)
+def escalate_report(
+    report_id: UUID,
+    esc_req: ReportEscalateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Escalate a field report to external services with a required reason (FSD-FR-040, FSD-FR-044)."""
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report.decision_reason = f"Escalated to {esc_req.agency}: {esc_req.reason}"
+    report.moderated_by = _user.user_id
+    report.moderated_at = datetime.now(UTC).replace(tzinfo=None)
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.REPORT_ESCALATE,
+        payload={
+            "report_id": str(report.report_id),
+            "agency": esc_req.agency,
+            "reason": esc_req.reason,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return _report_detail(db, report_id)
+
+
+@app.post("/api/v1/reports/{report_id}/notes", response_model=ReportResponse)
+def add_report_note(
+    report_id: UUID,
+    note_req: ReportNoteRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Add an internal operational note to a field report (FSD-FR-037, FSD-FR-043)."""
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.REPORT_NOTE,
+        payload={
+            "report_id": str(report.report_id),
+            "note": note_req.note,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return _report_detail(db, report_id)
+
+
+@app.get("/api/v1/reports/{report_id}/log", response_model=list[IncidentLogItem])
+def get_report_log(
+    report_id: UUID,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Chronological operations log for a field report (FSD-FR-036, FSD-FR-043)."""
+    import models
+
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    items: list[IncidentLogItem] = []
+    if report.submitted_at:
+        items.append(
+            IncidentLogItem(
+                log_id=0,
+                time=report.submitted_at.strftime("%I:%M %p"),
+                created_at=report.submitted_at,
+                action_type="REPORT_SUBMITTED",
+                actor_name="Citizen Reporter",
+                text=f"Citizen report filed with {report.depth_level} flood depth",
+                kind="muted",
+            )
+        )
+
+    rows = (
+        db.query(models.AuditLog, models.User.name, models.User.email)
+        .outerjoin(models.User, models.AuditLog.user_id == models.User.user_id)
+        .filter(models.AuditLog.payload.like(f'%"report_id":"{report_id}"%'))
+        .order_by(models.AuditLog.log_id.asc())
+        .all()
+    )
+
+    for log_row, user_name, user_email in rows:
+        actor = user_name or user_email or "Dispatch Officer"
+        try:
+            payload = json.loads(log_row.payload)
+        except Exception:
+            continue
+        if str(payload.get("report_id")) != str(report_id):
+            continue
+
+        time_str = log_row.created_at.strftime("%I:%M %p") if log_row.created_at else ""
+        act = log_row.action_type
+
+        if act == audit.REPORT_NOTE:
+            kind = "note"
+            text = f"{payload.get('note')} (by {actor})"
+        elif act == audit.REPORT_APPROVE:
+            kind = "action"
+            text = f"Approved and published hazard #{payload.get('hazard_id')} by {actor}"
+        elif act == audit.REPORT_REJECT:
+            kind = "action"
+            text = f"Report rejected by {actor}: {payload.get('reason')}"
+        elif act == audit.REPORT_HOLD:
+            kind = "action"
+            text = f"Report held for sensor update by {actor}: {payload.get('reason')}"
+        elif act == audit.REPORT_ESCALATE:
+            kind = "action"
+            text = f"Report escalated to {payload.get('agency', 'BFP')} by {actor}: {payload.get('reason')}"
+        else:
+            kind = "action"
+            text = f"Action {act} recorded by {actor}"
+
+        items.append(
+            IncidentLogItem(
+                log_id=log_row.log_id,
+                time=time_str,
+                created_at=log_row.created_at,
+                action_type=act,
+                actor_name=actor,
+                text=text,
+                kind=kind,
+            )
+        )
+
+    return items
 
 
 @app.get("/api/v1/hazards/active", response_model=list[HazardResponse])

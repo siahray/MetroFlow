@@ -32,6 +32,7 @@ import {
   type NetworkState,
   type NodeFeature,
   type RoutePlan,
+  postTelemetry,
 } from "../api";
 import { useAuth } from "../auth";
 import { RouteMap } from "../navigation/RouteMap";
@@ -111,6 +112,18 @@ export default function RouteScreen() {
   const hazardsInitialised = useRef(false);
   const arrivedRef = useRef(false);
   const alertedHazards = useRef<Set<number>>(new Set());
+  // Telemetry: track the wall-clock time of the last successful ping so we
+  // respect the server-side 5-second throttle without duplicating its logic
+  // (FSD-FR-072, VAL-020).  Vehicle identity is not yet stored in the JWT
+  // (pilot gap); the sender is wired but skipped until vehicleId is available.
+  const lastTelemetrySentMs = useRef<number>(0);
+  // NOTE: vehicle_id is not yet surfaced in the auth token (pilot scope).
+  // Set TELEMETRY_VEHICLE_ID via EXPO_PUBLIC_TELEMETRY_VEHICLE_ID to enable
+  // live telemetry from a specific vehicle (FSD-FR-072).
+  const TELEMETRY_VEHICLE_ID: number | null = process.env
+    .EXPO_PUBLIC_TELEMETRY_VEHICLE_ID
+    ? Number(process.env.EXPO_PUBLIC_TELEMETRY_VEHICLE_ID)
+    : null;
 
   useEffect(() => {
     routeRef.current = route;
@@ -152,10 +165,34 @@ export default function RouteScreen() {
             distanceInterval: 10,
           },
           (update) => {
+            if (cancelled) return;
             setPosition({
               latitude: update.coords.latitude,
               longitude: update.coords.longitude,
             });
+
+            // --- Telemetry sender (FSD-FR-072) --------------------------------
+            // Fire-and-forget: only while actively navigating and only when a
+            // vehicle id is configured (pilot constraint).
+            if (TELEMETRY_VEHICLE_ID !== null && routeRef.current !== null) {
+              const nowMs = Date.now();
+              if (nowMs - lastTelemetrySentMs.current >= 5000) {
+                lastTelemetrySentMs.current = nowMs;
+                postTelemetry(TELEMETRY_VEHICLE_ID, {
+                  latitude: update.coords.latitude,
+                  longitude: update.coords.longitude,
+                  speed_kmh:
+                    update.coords.speed != null
+                      ? update.coords.speed * 3.6
+                      : null,
+                  heading: update.coords.heading ?? null,
+                  recorded_at: new Date(update.timestamp).toISOString(),
+                }).catch(() => {
+                  // Silent failure: telemetry is best-effort; navigation
+                  // continues unaffected even if the ping is throttled or lost.
+                });
+              }
+            }
           },
         );
       } catch {

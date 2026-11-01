@@ -16,10 +16,15 @@ import {
   Send,
   Shield,
   User,
+  Waves,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
+import { cn } from "@/lib/cn";
+import { addSOSNote, escalateSOS, rejectSOS } from "@/lib/dispatch";
+import { addReportNote, escalateReport, rejectReport } from "@/lib/reports";
 
 type DispatchRadarProps = {
   incident: Incident;
@@ -43,6 +48,16 @@ export function DispatchRadar({
   const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [activeAction, setActiveAction] = useState<"reject" | "escalate" | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [actionAgency, setActionAgency] = useState("BFP");
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+
+  const isDispatched =
+    incident.tags.includes("Vehicle Assigned") || incident.tags.includes("Dispatched");
+  const isRejected = incident.tags.includes("Rejected");
+
   const rawPhone = "+63 917 555 0192";
   const displayedPhone = phoneRevealed ? rawPhone : maskPhoneNumber(rawPhone);
 
@@ -58,11 +73,61 @@ export function DispatchRadar({
     });
   }
 
-  function handleSaveNote() {
+  async function handleSaveNote() {
     if (!noteText.trim()) return;
-    onAddNote(noteText.trim());
+    const text = noteText.trim();
+    onAddNote(text);
     setNoteText("");
     setNoteOpen(false);
+
+    try {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      if ((incident.incidentType === "sos" || !incident.reportId) && !isNaN(sosId)) {
+        await addSOSNote(sosId, text);
+      } else if (incident.reportId) {
+        await addReportNote(incident.reportId, text);
+      }
+    } catch {
+      // Best-effort
+    }
+  }
+
+  function handleOpenActionModal(action: "reject" | "escalate") {
+    setActiveAction(action);
+    setActionReason("");
+    setActionModalOpen(true);
+  }
+
+  async function handleConfirmActionModal() {
+    if (actionReason.trim().length < 3) return;
+    setActionSubmitting(true);
+    try {
+      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+      const isSos = incident.incidentType === "sos" || (!incident.reportId && !isNaN(sosId));
+
+      if (activeAction === "reject") {
+        if (isSos && !isNaN(sosId)) {
+          await rejectSOS(sosId, actionReason.trim());
+        } else if (incident.reportId) {
+          await rejectReport(incident.reportId, actionReason.trim());
+        }
+        onAction(`Rejected as False Alarm: ${actionReason.trim()}`);
+      } else if (activeAction === "escalate") {
+        if (isSos && !isNaN(sosId)) {
+          await escalateSOS(sosId, actionReason.trim(), actionAgency);
+        } else if (incident.reportId) {
+          await escalateReport(incident.reportId, actionReason.trim(), actionAgency);
+        }
+        onAction(`Escalated to ${actionAgency}: ${actionReason.trim()}`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Action failed";
+      onAction(`Action error: ${msg}`);
+    } finally {
+      setActionSubmitting(false);
+      setActionModalOpen(false);
+      setActionReason("");
+    }
   }
 
   return (
@@ -241,12 +306,23 @@ export function DispatchRadar({
                 Attached Telemetry &amp; Evidence
               </h3>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
-                  <Camera className="mr-1.5 h-3 w-3" /> Photo Attached
-                </span>
+                {incident.photo || incident.reportId ? (
+                  <span className="inline-flex items-center rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
+                    <Camera className="mr-1.5 h-3 w-3" /> Photo Attached
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                    <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> Distress Beacon
+                  </span>
+                )}
                 <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
                   <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Road Node Match)
                 </span>
+                {incident.submersionRange && (
+                  <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                    <Waves className="mr-1.5 h-3 w-3 text-amber-600" /> {incident.submersionRange}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -264,28 +340,34 @@ export function DispatchRadar({
               </div>
             </div>
 
-            {/* Recommended Rescue Resource */}
+            {/* Recommended Rescue Resource (FSD-FR-035) */}
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-900">
-                  Recommended: Assign nearest vehicle
+                  {incident.nearestUnit
+                    ? `Recommended: ${incident.nearestUnit.callSign}`
+                    : "Recommended: Assign nearest vehicle"}
                 </span>
-                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                  AVAILABLE
+                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
+                  {incident.nearestUnit?.status ?? "AVAILABLE"}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-slate-600">
                 <div>
-                  <span className="block text-[9px] text-slate-400">SPEED</span>
-                  <strong>28 km/h</strong>
+                  <span className="block text-[9px] text-slate-400">DISTANCE</span>
+                  <strong>
+                    {incident.nearestUnit ? `${incident.nearestUnit.distanceKm} km` : "1.2 km"}
+                  </strong>
                 </div>
                 <div>
-                  <span className="block text-[9px] text-slate-400">CLEARANCE</span>
-                  <strong>35 cm</strong>
+                  <span className="block text-[9px] text-slate-400">DEPTH</span>
+                  <strong>{incident.waterDepthCm ? `${incident.waterDepthCm} cm` : "35 cm"}</strong>
                 </div>
                 <div>
                   <span className="block text-[9px] text-slate-400">CORRIDOR ETA</span>
-                  <strong className="text-sky-700">12 mins</strong>
+                  <strong className="text-sky-700">
+                    {incident.nearestUnit ? `~${incident.nearestUnit.etaMinutes} mins` : "12 mins"}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -336,38 +418,129 @@ export function DispatchRadar({
               </button>
               <button
                 type="button"
-                onClick={() => onAction("Escalated to PNP / BFP Rescue Command")}
-                className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                disabled={isDispatched || isRejected}
+                onClick={() => handleOpenActionModal("escalate")}
+                className="flex-1 rounded-lg border border-purple-200 bg-purple-50 py-2 text-xs font-medium text-purple-700 hover:bg-purple-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Escalate to PNP / BFP
+                Escalate (BFP)
               </button>
             </div>
 
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => onAction(`Report #${incident.id} flagged as False Alarm`)}
-                className="flex-1 rounded-lg border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                disabled={isDispatched || isRejected}
+                onClick={() => handleOpenActionModal("reject")}
+                className="flex-1 rounded-lg border border-rose-200 bg-white py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Reject Report
+                Reject / False Alarm
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenDispatchModal) {
-                    onOpenDispatchModal();
-                  } else {
-                    onAction(`Dispatched unit to #${incident.id}`);
-                  }
-                }}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition-colors"
-              >
-                <Send className="h-3.5 w-3.5" /> Approve &amp; Dispatch
-              </button>
+              {isDispatched ? (
+                <div className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 py-2 text-xs font-bold text-emerald-800">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> Dispatched
+                </div>
+              ) : isRejected ? (
+                <div className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 py-2 text-xs font-bold text-rose-800">
+                  <X className="h-3.5 w-3.5 text-rose-600" /> Rejected
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenDispatchModal) {
+                      onOpenDispatchModal();
+                    } else {
+                      onAction(`Dispatched unit to #${incident.id}`);
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 transition-colors"
+                >
+                  <Send className="h-3.5 w-3.5" /> Approve &amp; Dispatch
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Mandatory Reason Modal for Radar */}
+      {actionModalOpen && activeAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                {activeAction === "reject"
+                  ? "Reject Incident (False Alarm)"
+                  : "Escalate to Emergency Command"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActionModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {activeAction === "escalate" && (
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Target Escalation Agency
+                </label>
+                <select
+                  value={actionAgency}
+                  onChange={(e) => setActionAgency(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="BFP">BFP — Bureau of Fire Protection</option>
+                  <option value="Coast Guard">Philippine Coast Guard</option>
+                  <option value="PNP Maritime">PNP Maritime Group</option>
+                </select>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-700">
+                Mandatory Operational Reason (FSD-FR-044)
+              </label>
+              <textarea
+                autoFocus
+                rows={3}
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                placeholder="State reason or verified ground condition..."
+                className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
+              />
+              <span className="text-[10px] text-slate-400">
+                Minimum 3 characters. Persisted to the immutable audit trail.
+              </span>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setActionModalOpen(false)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionReason.trim().length < 3 || actionSubmitting}
+                onClick={handleConfirmActionModal}
+                className={cn(
+                  "rounded-lg px-4 py-1.5 text-xs font-bold text-white transition-colors disabled:opacity-40",
+                  activeAction === "reject"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-purple-600 hover:bg-purple-700",
+                )}
+              >
+                {actionSubmitting ? "Submitting..." : "Confirm Action"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
