@@ -63,8 +63,18 @@ const CAPTURE_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
   allowsEditing: false,
   quality: 0.6,
-  exif: false,
+  exif: true,
 };
+
+function parseExifDate(raw?: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const match = raw.trim().match(/^(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d, hh, mm, ss] = match;
+  const iso = `${y}-${m}-${d}T${hh}:${mm}:${ss}Z`;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
 
 function formatCoordinate(value: number, positive: string, negative: string) {
   return `${Math.abs(value).toFixed(5)}° ${value >= 0 ? positive : negative}`;
@@ -77,7 +87,7 @@ function formatClock(iso: string) {
 
 function describeError(error: unknown): string {
   if (!(error instanceof ApiError)) {
-    return 'Could not reach the dispatch server. Check your connection and try again.';
+    return 'Could not reach the dispatch server. You may be offline; your report draft is saved. Tap Retry to resubmit.';
   }
   switch (error.status) {
     case 401:
@@ -128,6 +138,18 @@ export default function ReportScreen() {
       setLocationState('ready');
       setLocationError(null);
     } catch {
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown?.coords) {
+          setPosition(lastKnown.coords);
+          setFixAt(new Date(lastKnown.timestamp).toISOString());
+          setLocationState('ready');
+          setLocationError(null);
+          return;
+        }
+      } catch {
+        // High accuracy and last-known both failed
+      }
       setLocationState('error');
       setLocationError('Could not read your GPS position. Check that location is on and retry.');
     }
@@ -193,11 +215,16 @@ export default function ReportScreen() {
         return;
       }
 
+      const exifTime =
+        parseExifDate(asset.exif?.DateTimeOriginal) ??
+        parseExifDate(asset.exif?.DateTimeDigitized) ??
+        parseExifDate(asset.exif?.DateTime);
+
       setPhoto({
         uri: asset.uri,
         name: asset.fileName ?? `report-${Date.now()}.jpg`,
         type: asset.mimeType ?? 'image/jpeg',
-        capturedAt,
+        capturedAt: exifTime ?? capturedAt,
       });
     } catch {
       setMsgTone('error');
@@ -618,9 +645,20 @@ export default function ReportScreen() {
         ) : null}
 
         {msg ? (
-          <Text style={{ fontSize: 12, textAlign: 'center', fontWeight: '600', color: msgTone === 'error' ? '#dc2626' : '#16a34a', lineHeight: 18 }}>
-            {msg}
-          </Text>
+          <View style={{ gap: 8 }}>
+            <Text style={{ fontSize: 12, textAlign: 'center', fontWeight: '600', color: msgTone === 'error' ? '#dc2626' : '#16a34a', lineHeight: 18 }}>
+              {msg}
+            </Text>
+            {msgTone === 'error' && canSubmit ? (
+              <TouchableOpacity
+                onPress={() => void handleSubmit()}
+                style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              >
+                <RefreshCw size={12} color="#dc2626" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#dc2626' }}>Retry Submission</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
 
         {/* Submit Button */}

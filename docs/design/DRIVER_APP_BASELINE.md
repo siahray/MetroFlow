@@ -847,20 +847,20 @@ Production work remains blocked until the unchecked items are closed.
 | FSD-FR-021 | Supabase Auth and invalid-credential handling   | Not implemented      |
 | FSD-FR-022 | Session maintenance and sign-out                | Not implemented      |
 | FSD-FR-023 | Role restrictions                               | Not implemented      |
-| FSD-FR-054 | Destination entry                               | Prototype — static destination; no search |
-| FSD-FR-055 | Route request                                   | Prototype — CTA only; no request      |
-| FSD-FR-056 | Active route and route summary                  | Prototype — visual summary only       |
-| FSD-FR-057 | Turn-by-turn instructions                       | Not supplied                          |
-| FSD-FR-058 | GPS instruction advance and arrival             | Not supplied                          |
-| FSD-FR-059 | Verified hazard event stream                    | Static alert UI only                  |
-| FSD-FR-060 | Hazard intersection detection                   | Not implemented                       |
-| FSD-FR-061 | Automatic reroute                               | Not implemented                       |
-| FSD-FR-062 | Manual refresh and alternatives                 | Static alternatives only              |
-| FSD-FR-063 | Proximity alert                                 | Static hazard banner only             |
-| FSD-FR-064 | Hazard alert detail                             | Entry only — detail pending           |
-| FSD-FR-065 | Flood report depth selector                     | Prototype — local selector; no submit |
-| FSD-FR-066 | Camera or file attachment                       | Prototype — Add Photo opens pending   |
-| FSD-FR-067 | GPS, EXIF and timestamps                        | Not implemented — static location     |
+| FSD-FR-054 | Destination entry                               | Implemented — live search and target node selection |
+| FSD-FR-055 | Route request                                   | Implemented — queries /routing/navigate with clearance |
+| FSD-FR-056 | Active route and route summary                  | Implemented — interactive map polyline, distance and ETA |
+| FSD-FR-057 | Turn-by-turn instructions                       | Implemented — road names, manoeuvres, and bearing text |
+| FSD-FR-058 | GPS instruction advance and arrival             | Implemented — progress tracking and step advancement |
+| FSD-FR-059 | Verified hazard event stream                    | Implemented — SSE subscription via hazard-stream client |
+| FSD-FR-060 | Hazard intersection detection                   | Implemented — geodesic distance to hazard polygons |
+| FSD-FR-061 | Automatic reroute                               | Implemented — auto-rerouting on hazard publication |
+| FSD-FR-062 | Manual refresh and alternatives                 | Implemented — re-query and unsafe alternative option |
+| FSD-FR-063 | Proximity alert                                 | Implemented — 200m proximity banner and hazard card |
+| FSD-FR-064 | Hazard alert detail                             | Implemented — obstruction level and clearance warning |
+| FSD-FR-065 | Flood report depth selector                     | Implemented — ANKLE, KNEE, IMPASSABLE mapped to API |
+| FSD-FR-066 | Camera or file attachment                       | Implemented — expo-image-picker with 4MB size check |
+| FSD-FR-067 | GPS, EXIF and timestamps                        | Implemented — expo-location fix, EXIF retention, offline safe |
 | FSD-FR-068 | Offline pending report state                    | Not implemented                       |
 | FSD-FR-069 | Offline queue synchronisation                   | Not implemented                       |
 | FSD-FR-070 | Local cache of graph, hazards and route         | Not implemented                       |
