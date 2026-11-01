@@ -64,6 +64,11 @@ class RoadEdge(Base):
     distance_meters = Column(Float, nullable=False)
     max_speed_kmh = Column(Float, default=50.0)
     lanes = Column(Integer, default=2)
+    road_name = Column(
+        String(120),
+        nullable=True,
+        comment="Arterial the edge runs along, used for spoken instructions",
+    )
     geom = Column(Geometry(geometry_type="LINESTRING", srid=4326))
 
     state = relationship("LiveEdgeState", back_populates="edge", uselist=False)

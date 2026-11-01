@@ -1,5 +1,6 @@
 import heapq
 import math
+from dataclasses import dataclass
 
 from config import settings
 
@@ -33,6 +34,187 @@ def classify_passability(
     if water_depth_cm >= caution:
         return LIGHT_FLOOD
     return PASSABLE
+
+
+# --- Hazard blocking -------------------------------------------------------
+# FSD §BRULE-008: only a verified hazard affects routing. The TSD (§2.6) names
+# LEVEL_3 and IMPASSABLE as excluding an edge and CAUTION as passable-but-alerted,
+# leaving LEVEL_2 between the two. A knee-deep crossing (the level an approved
+# KNEE report raises) is not a lane a rescue vehicle should be routed through,
+# so every level above CAUTION blocks. Keeping this in one function means the
+# router and the route-hazard report cannot disagree about what "blocks" means.
+
+BLOCKING_OBSTRUCTION_LEVELS = frozenset({"LEVEL_2", "LEVEL_3", "IMPASSABLE"})
+
+
+def hazard_blocks(obstruction_level: str | None) -> bool:
+    """Whether a verified hazard of this level closes the roads it covers."""
+    return (obstruction_level or "").upper() in BLOCKING_OBSTRUCTION_LEVELS
+
+
+# --- Turn-by-turn instructions (FSD-FR-057) --------------------------------
+
+# A heading change under this many degrees is the same road bending, not a turn.
+STRAIGHT_THRESHOLD_DEG = 20.0
+# Between straight and a full turn: "bear left/right" rather than "turn".
+SLIGHT_TURN_THRESHOLD_DEG = 45.0
+# Beyond this it is a reversal, not a turn onto a cross street.
+U_TURN_THRESHOLD_DEG = 135.0
+
+DEPART = "DEPART"
+ARRIVE = "ARRIVE"
+STRAIGHT = "STRAIGHT"
+TURN_LEFT = "TURN_LEFT"
+TURN_RIGHT = "TURN_RIGHT"
+SLIGHT_LEFT = "SLIGHT_LEFT"
+SLIGHT_RIGHT = "SLIGHT_RIGHT"
+U_TURN = "U_TURN"
+
+_COMPASS = (
+    "north",
+    "north-east",
+    "east",
+    "south-east",
+    "south",
+    "south-west",
+    "west",
+    "north-west",
+)
+
+
+@dataclass(frozen=True)
+class RouteStep:
+    """One spoken instruction and the distance the driver travels on it."""
+
+    manoeuvre: str
+    road_name: str | None
+    distance_m: float
+    start_node_id: int
+    end_node_id: int
+    text: str
+
+
+def bearing_degrees(start: tuple[float, float], end: tuple[float, float]) -> float:
+    """Initial great-circle bearing from ``start`` to ``end``, clockwise from north."""
+    lat1, lon1 = math.radians(start[0]), math.radians(start[1])
+    lat2, lon2 = math.radians(end[0]), math.radians(end[1])
+    delta_lon = lon2 - lon1
+    x = math.sin(delta_lon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(delta_lon)
+    return (math.degrees(math.atan2(x, y)) + 360.0) % 360.0
+
+
+def compass_point(bearing: float) -> str:
+    """The eight-point compass name for a bearing."""
+    return _COMPASS[int((bearing % 360.0) / 45.0 + 0.5) % 8]
+
+
+def classify_turn(previous_bearing: float, next_bearing: float) -> str:
+    """Turn manoeuvre for a heading change, signed clockwise (positive = right)."""
+    delta = (next_bearing - previous_bearing + 540.0) % 360.0 - 180.0
+    magnitude = abs(delta)
+    if magnitude <= STRAIGHT_THRESHOLD_DEG:
+        return STRAIGHT
+    if magnitude >= U_TURN_THRESHOLD_DEG:
+        return U_TURN
+    right = delta > 0
+    if magnitude <= SLIGHT_TURN_THRESHOLD_DEG:
+        return SLIGHT_RIGHT if right else SLIGHT_LEFT
+    return TURN_RIGHT if right else TURN_LEFT
+
+
+def _instruction_text(
+    manoeuvre: str,
+    road_name: str | None,
+    start_bearing: float,
+    destination_name: str | None,
+) -> str:
+    road = road_name or "the road"
+    if manoeuvre == DEPART:
+        return f"Head {compass_point(start_bearing)} on {road}"
+    if manoeuvre == TURN_LEFT:
+        return f"Turn left onto {road}"
+    if manoeuvre == TURN_RIGHT:
+        return f"Turn right onto {road}"
+    if manoeuvre == SLIGHT_LEFT:
+        return f"Bear left onto {road}"
+    if manoeuvre == SLIGHT_RIGHT:
+        return f"Bear right onto {road}"
+    if manoeuvre == U_TURN:
+        return f"Make a U-turn onto {road}"
+    return f"Arrive at {destination_name or 'your destination'}"
+
+
+def build_instructions(
+    path: list[int],
+    hops: list[tuple[int, int, float, str | None]],
+    node_coordinates: dict[int, tuple[float, float]],
+    node_names: dict[int, str | None],
+) -> list[RouteStep]:
+    """Turn-by-turn steps for a path (FSD-FR-057).
+
+    ``hops`` is one entry per traversed edge in travel order:
+    ``(start_node, end_node, distance_m, road_name)``. A heading change below
+    ``STRAIGHT_THRESHOLD_DEG`` does not start a new step, so a bendy arterial
+    does not produce a turn every block; steps therefore carry the distance
+    that remains on them, which is what the banner counts down.
+    """
+    if not path:
+        return []
+
+    if not hops:
+        name = node_names.get(path[0])
+        return [
+            RouteStep(
+                manoeuvre=ARRIVE,
+                road_name=None,
+                distance_m=0.0,
+                start_node_id=path[0],
+                end_node_id=path[0],
+                text=_instruction_text(ARRIVE, None, 0.0, name),
+            )
+        ]
+
+    bearings = [
+        bearing_degrees(node_coordinates[start], node_coordinates[end])
+        for start, end, _, _ in hops
+        if start in node_coordinates and end in node_coordinates
+    ]
+    # A path with a missing coordinate cannot be judged turn by turn, but it can
+    # still be driven; fall back to a single departure plus arrival.
+    if len(bearings) != len(hops):
+        bearings = [0.0] * len(hops)
+
+    # (path index where the step begins, manoeuvre, road of the hop that leaves it)
+    boundaries: list[tuple[int, str, str | None]] = [(0, DEPART, hops[0][3])]
+    for index in range(1, len(path) - 1):
+        manoeuvre = classify_turn(bearings[index - 1], bearings[index])
+        if manoeuvre != STRAIGHT:
+            boundaries.append((index, manoeuvre, hops[index][3]))
+    boundaries.append((len(path) - 1, ARRIVE, None))
+
+    steps: list[RouteStep] = []
+    for position, (index, manoeuvre, road_name) in enumerate(boundaries):
+        is_arrival = manoeuvre == ARRIVE
+        next_index = boundaries[position + 1][0] if not is_arrival else index
+        distance = 0.0 if is_arrival else round(sum(hop[2] for hop in hops[index:next_index]), 2)
+        steps.append(
+            RouteStep(
+                manoeuvre=manoeuvre,
+                road_name=road_name,
+                distance_m=distance,
+                start_node_id=path[index],
+                end_node_id=path[next_index],
+                text=_instruction_text(
+                    manoeuvre,
+                    road_name,
+                    bearings[index] if index < len(bearings) else 0.0,
+                    node_names.get(path[next_index]),
+                ),
+            )
+        )
+
+    return steps
 
 
 # ---------------------------------------------------------------------------

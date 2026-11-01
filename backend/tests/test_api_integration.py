@@ -946,3 +946,101 @@ def test_the_fleet_and_sos_streams_are_closed_to_drivers(client, monkeypatch):
         with SessionLocal() as db:
             db.execute(text("DELETE FROM users WHERE email = :email"), {"email": email})
             db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Turn-by-turn navigation and live hazard avoidance (FSD-FR-054 to 064)
+# ---------------------------------------------------------------------------
+
+
+def test_route_reports_instructions_road_names_and_total_distance(client):
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["destination_name"] == "Pasig Blvd - Shaw"
+    assert body["total_distance_m"] > 0
+    assert sum(segment["distance_m"] for segment in body["segments"]) == pytest.approx(
+        body["total_distance_m"]
+    )
+    assert all(segment["road_name"] for segment in body["segments"])
+    assert body["hazards"] == []
+
+    instructions = body["instructions"]
+    assert instructions[0]["manoeuvre"] == "DEPART"
+    assert instructions[-1]["manoeuvre"] == "ARRIVE"
+    assert all(step["text"] for step in instructions)
+    # A straight C5 run is one departure plus the arrival, not a turn per node.
+    assert len(instructions) == 2
+    assert instructions[0]["distance_m"] == pytest.approx(body["total_distance_m"])
+
+
+def test_a_verified_hazard_closes_its_edge_and_shows_on_the_route(client, created_records):
+    # Exactly on the line between nodes 1 and 2, so the 30 m report footprint
+    # intersects edge 1 and the verification must close it.
+    report = submit_report(
+        client, created_records, depth="KNEE", latitude=14.5537, longitude=121.0567
+    )
+    approved = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
+    assert approved.status_code == 200, approved.text
+    hazard_id = approved.json()["hazard_id"]
+    created_records[1].append(hazard_id)
+
+    safe = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert safe.status_code == 200, safe.text
+    body = safe.json()
+    assert 1 not in [segment["edge_id"] for segment in body["segments"]], (
+        "a knee-deep verified hazard must exclude the covered edge"
+    )
+    assert hazard_id not in [hazard["hazard_id"] for hazard in body["hazards"]], (
+        "the safe route no longer touches the hazard it routed around"
+    )
+
+    # The explicitly unsafe alternative is the only way to cross it, and it
+    # still reports the hazard rather than pretending the road is clear.
+    unsafe = client.get(
+        "/api/v1/routing/navigate",
+        params={
+            "start_node": 1,
+            "target_node": 4,
+            "clearance_cm": 60,
+            "ignore_hazards": True,
+        },
+    )
+    assert unsafe.status_code == 200, unsafe.text
+    assert 1 in [segment["edge_id"] for segment in unsafe.json()["segments"]]
+    reported = next(
+        hazard for hazard in unsafe.json()["hazards"] if hazard["hazard_id"] == hazard_id
+    )
+    assert reported["blocking"] is True
+    assert reported["obstruction_level"] == "LEVEL_2"
+    assert reported["geometry"]["type"] == "Polygon"
+    assert reported["warning_radius_m"] == settings.warning_radius_m
+
+
+def test_caution_hazard_stays_drivable_but_is_reported(client, created_records):
+    report = submit_report(
+        client, created_records, depth="ANKLE", latitude=14.5537, longitude=121.0567
+    )
+    approved = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
+    assert approved.status_code == 200, approved.text
+    hazard_id = approved.json()["hazard_id"]
+    created_records[1].append(hazard_id)
+
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert 1 in [segment["edge_id"] for segment in body["segments"]]
+    reported = next(hazard for hazard in body["hazards"] if hazard["hazard_id"] == hazard_id)
+    assert reported["blocking"] is False
+    assert reported["obstruction_level"] == "CAUTION"

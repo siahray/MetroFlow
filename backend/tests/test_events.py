@@ -179,6 +179,8 @@ def test_payloads_match_the_rest_contract():
         "avg_depth_cm": 50,
         "edge_id": None,
         "notes": None,
+        "geometry": None,
+        "warning_radius_m": 200,
         "published_at": None,
         "active": True,
         "created_at": "2026-10-30T12:00:00",
