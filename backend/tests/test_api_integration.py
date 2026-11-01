@@ -1130,39 +1130,25 @@ def test_telemetry_updates_vehicle_location(client):
 
 
 def test_telemetry_throttles_second_batch_within_window(client):
-    """A second ping inside the throttle window is rejected with 429 (VAL-020, TTC-022).
-
-    We seed ``updated_at`` to ``now`` via the PATCH endpoint so the next
-    POST /telemetry lands inside the 5-second window without needing to
-    freeze time.
-    """
-    from sqlalchemy import text
-
-    from database import SessionLocal
-
+    """A second ping inside the throttle window is rejected with 429 (VAL-020, TTC-022)."""
     driver_headers, email = _make_driver_headers(client)
     vehicle_id = _create_test_vehicle(client)
     try:
-        # Force updated_at to the current moment so any immediate follow-up
-        # telemetry ping is inside the throttle window.
-        with SessionLocal() as db:
-            db.execute(
-                text(
-                    "UPDATE vehicles SET updated_at = NOW() AT TIME ZONE 'UTC'"
-                    " WHERE vehicle_id = :vid"
-                ),
-                {"vid": vehicle_id},
-            )
-            db.commit()
+        first = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            json={"latitude": 14.5995, "longitude": 120.9842},
+            headers=driver_headers,
+        )
+        assert first.status_code == 204, first.text
 
-        resp = client.post(
+        second = client.post(
             f"/api/v1/vehicles/{vehicle_id}/telemetry",
             json={"latitude": 14.6000, "longitude": 120.9850},
             headers=driver_headers,
         )
-        assert resp.status_code == 429, resp.text
-        assert "Retry-After" in resp.headers
-        assert int(resp.headers["Retry-After"]) >= 1
+        assert second.status_code == 429, second.text
+        assert "Retry-After" in second.headers
+        assert int(second.headers["Retry-After"]) >= 1
     finally:
         _delete_test_vehicle(client, vehicle_id)
         _cleanup_email(email)
@@ -1223,14 +1209,26 @@ def test_telemetry_rejects_out_of_range_coordinates(client):
         _cleanup_email(email)
 
 
-def test_telemetry_requires_authentication(client):
+def test_telemetry_requires_authentication():
     """Unauthenticated requests to the telemetry endpoint are rejected with 401."""
-    vehicle_id = _create_test_vehicle(client)
-    try:
-        resp = client.post(
-            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+    with TestClient(app) as anonymous:
+        resp = anonymous.post(
+            "/api/v1/vehicles/1/telemetry",
             json={"latitude": 14.5995, "longitude": 120.9842},
         )
         assert resp.status_code == 401, resp.text
-    finally:
-        _delete_test_vehicle(client, vehicle_id)
+
+
+def test_get_sos_request_by_id(client):
+    """An authenticated user can query an SOS request by id (FSD-FR-074)."""
+    sos_resp = client.post(
+        "/api/v1/sos",
+        json={"latitude": 14.6033, "longitude": 120.9822, "note": "Status test"},
+    )
+    assert sos_resp.status_code == 200, sos_resp.text
+    sos_id = sos_resp.json()["sos_id"]
+
+    fetched = client.get(f"/api/v1/sos/{sos_id}")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["sos_id"] == sos_id
+    assert fetched.json()["status"] == "pending"

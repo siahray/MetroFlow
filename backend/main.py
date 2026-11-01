@@ -1057,25 +1057,6 @@ def list_sos(
     return query.order_by(models.SOSRequest.created_at.desc()).all()
 
 
-@app.get("/api/v1/sos/{sos_id}", response_model=SOSResponse)
-def get_sos(
-    sos_id: int,
-    _user: models.User = Depends(require_user),
-    db: Session = Depends(get_db),
-) -> models.SOSRequest:
-    """Return a single SOS request by id (FSD-FR-074).
-
-    Available to any authenticated user so the driver app can poll the
-    dispatch status of its own submission without needing dispatcher rights.
-    """
-    import models
-
-    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
-    if not db_sos:
-        raise HTTPException(status_code=404, detail="SOS request not found")
-    return db_sos
-
-
 @app.get("/api/v1/hazards", response_model=list[HazardResponse])
 def list_hazards(
     active: bool | None = None,
@@ -1186,7 +1167,7 @@ def post_telemetry(
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
     now = datetime.now(UTC).replace(tzinfo=None)
-    if db_vehicle.updated_at is not None:
+    if db_vehicle.current_location_lat is not None and db_vehicle.updated_at is not None:
         elapsed = (now - db_vehicle.updated_at).total_seconds()
         if elapsed < settings.telemetry_min_seconds:
             remaining = int(settings.telemetry_min_seconds - elapsed) + 1
@@ -1330,6 +1311,26 @@ def stream_sos(
 ):
     """SOS creation, assignment and confirmation as server-sent events (FSD-FR-086)."""
     return _event_stream(request, channel=events.SOS, snapshot=_snapshot_sos, after=after)
+
+
+@app.get("/api/v1/sos/{sos_id}", response_model=SOSResponse)
+def get_sos(
+    sos_id: int,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+) -> models.SOSRequest:
+    """Return a single SOS request by id (FSD-FR-074).
+
+    Available to any authenticated user so the driver app can poll the
+    dispatch status of its own submission without needing dispatcher rights.
+    Placed after `/stream` so the static subpath is not shadowed.
+    """
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS request not found")
+    return db_sos
 
 
 # ---------------------------------------------------------------------------
