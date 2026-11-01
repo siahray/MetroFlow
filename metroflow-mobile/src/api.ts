@@ -79,6 +79,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     throw await readError(res);
   }
+  // 204 No Content — return undefined cast to T (caller must not use the value).
+  if (res.status === 204) return undefined as unknown as T;
   return (await res.json()) as T;
 }
 
@@ -151,8 +153,39 @@ export function listMySOS(): Promise<SOSRequest[]> {
   return request<SOSRequest[]>("/api/v1/sos");
 }
 
+export function getSOS(sosId: number): Promise<SOSRequest> {
+  return request<SOSRequest>(`/api/v1/sos/${sosId}`);
+}
+
 export function listVehicles(): Promise<unknown[]> {
   return request<unknown[]>("/api/v1/vehicles");
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle telemetry (FSD-FR-072)
+// ---------------------------------------------------------------------------
+
+/**
+ * Post a position/speed batch from the driver app.
+ *
+ * The server returns 204 No Content on success and 429 when the throttle
+ * window has not yet elapsed (VAL-020).  Callers should fire-and-forget;
+ * failures are logged but never surface to the UI.
+ */
+export function postTelemetry(
+  vehicleId: number,
+  data: {
+    latitude: number;
+    longitude: number;
+    speed_kmh?: number | null;
+    heading?: number | null;
+    recorded_at?: string | null;
+  },
+): Promise<void> {
+  return request<void>(`/api/v1/vehicles/${vehicleId}/telemetry`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // ---------------------------------------------------------------------------

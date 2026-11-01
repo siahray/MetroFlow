@@ -12,6 +12,7 @@ import {
   Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import {
   Waves,
   Bell,
@@ -28,20 +29,65 @@ import {
   ArrowRight,
   Phone,
   ShieldCheck,
+  RefreshCw,
 } from 'lucide-react-native';
-import { ApiError, createSOS } from '../../api';
+import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
-const PLACEHOLDER_COORDS = { latitude: 14.6033, longitude: 120.9822 };
+/** Location staleness limit for SOS submissions (VAL-021). */
+const SOS_LOCATION_MAX_AGE_MS = 60_000;
 
 export default function SOSScreen() {
   const router = useRouter();
   const [situation, setSituation] = useState<SituationType>('pedestrian');
   const [sending, setSending] = useState(false);
+  const [locating, setLocating] = useState(false);
+  /** SOS record returned on success — drives the status panel (FSD-FR-074). */
+  const [dispatchedSOS, setDispatchedSOS] = useState<SOSRequest | null>(null);
+  const [sosStatus, setSosStatus] = useState<string | null>(null);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
 
   async function handleSOS() {
-    if (sending) return;
+    if (sending || locating) return;
+
+    // --- Acquire fresh GPS fix (FSD-FR-073, VAL-021) -------------------------
+    setLocating(true);
+    let coords: { latitude: number; longitude: number };
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          'Location Required',
+          'Allow location access to send a rescue request.'
+        );
+        setLocating(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const ageMs = Date.now() - loc.timestamp;
+      if (ageMs > SOS_LOCATION_MAX_AGE_MS) {
+        Alert.alert(
+          'Location Stale',
+          'Could not get a fresh GPS fix. Move to open sky and retry.'
+        );
+        setLocating(false);
+        return;
+      }
+      coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+    } catch {
+      Alert.alert(
+        'GPS Error',
+        'Cannot read your location. Check that GPS is enabled and try again.'
+      );
+      setLocating(false);
+      return;
+    }
+    setLocating(false);
+
+    // --- Submit SOS ----------------------------------------------------------
     setSending(true);
     try {
       const situationLabel =
@@ -51,17 +97,14 @@ export default function SOSScreen() {
           ? 'Medical Need / Health Crisis'
           : 'Pedestrian / Stranded Citizen';
 
-      await createSOS({
-        latitude: PLACEHOLDER_COORDS.latitude,
-        longitude: PLACEHOLDER_COORDS.longitude,
-        note: `PRIORITY RESCUE REQUEST: ${situationLabel} at Rizal Ave near LRT Station (Metro District Sector 4 • Northbound). Water hazard level: 1.5 ft critical.`,
+      const result = await createSOS({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        note: `PRIORITY RESCUE REQUEST: ${situationLabel}. Water hazard level: critical.`,
       });
 
-      Alert.alert(
-        'Rescue Dispatched',
-        'Your priority distress request has been registered with Metro Emergency Dispatch. Civic response units in Sector 4 are en route.',
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)/home') }]
-      );
+      setDispatchedSOS(result);
+      setSosStatus(result.status);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : null;
       const needsSignIn = apiError?.status === 401;
@@ -75,7 +118,22 @@ export default function SOSScreen() {
           ? `${apiError?.message ?? 'Rate limited.'} For immediate life-saving support, dial 911.`
           : 'Priority signal failed. If this is life-threatening, dial 911 directly.'
       );
+    } finally {
       setSending(false);
+    }
+  }
+
+  async function handleRefreshStatus() {
+    if (!dispatchedSOS || refreshingStatus) return;
+    setRefreshingStatus(true);
+    try {
+      const updated = await getSOS(dispatchedSOS.sos_id);
+      setSosStatus(updated.status);
+      setDispatchedSOS(updated);
+    } catch {
+      // Status refresh failure is non-critical; keep showing last known status.
+    } finally {
+      setRefreshingStatus(false);
     }
   }
 
@@ -299,50 +357,131 @@ export default function SOSScreen() {
           </View>
         </View>
 
-        {/* Action Buttons */}
+        {/* Action Buttons / Dispatch Status (FSD-FR-074) */}
         <View style={{ gap: 10, marginBottom: 14 }}>
-          {/* Primary SOS CTA */}
-          <TouchableOpacity
-            onPress={handleSOS}
-            disabled={sending}
-            style={{ backgroundColor: '#061d38', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 }}
-          >
-            {sending ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <>
-                <Text style={{ fontSize: 15, fontWeight: '900', color: '#ffffff', letterSpacing: 0.8 }}>
-                  SOS
-                </Text>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#ffffff' }}>
-                  Request Rescue
-                </Text>
-                <ArrowRight size={16} color="#ffffff" />
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* Secondary Buttons Row */}
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <TouchableOpacity
-              onPress={handleCall911}
-              style={{ flex: 1, paddingVertical: 14, backgroundColor: '#eff6ff', borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          {dispatchedSOS ? (
+            /* ---- Post-submission status panel ---- */
+            <View
+              style={{
+                backgroundColor: '#f0fdf4',
+                borderRadius: 18,
+                padding: 18,
+                borderWidth: 1,
+                borderColor: '#bbf7d0',
+                gap: 10,
+              }}
             >
-              <Phone size={14} color="#ef4444" />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1d4ed8' }}>
-                Call 911 Directly
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <CheckCircle2 size={20} color="#16a34a" />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#166534' }}>
+                  Rescue Request Sent
+                </Text>
+              </View>
+              <Text style={{ fontSize: 13, color: '#15803d' }}>
+                SOS #{dispatchedSOS.sos_id} •{' '}
+                Status:{' '}
+                <Text style={{ fontWeight: '800', textTransform: 'capitalize' }}>
+                  {sosStatus ?? dispatchedSOS.status}
+                </Text>
               </Text>
-            </TouchableOpacity>
+              <Text style={{ fontSize: 12, color: '#64748b' }}>
+                Coords: {dispatchedSOS.latitude.toFixed(5)}, {dispatchedSOS.longitude.toFixed(5)}
+              </Text>
 
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{ flex: 1, paddingVertical: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
+              {/* Refresh status */}
+              <TouchableOpacity
+                onPress={handleRefreshStatus}
+                disabled={refreshingStatus}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  paddingVertical: 10,
+                  backgroundColor: '#ffffff',
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: '#d1fae5',
+                }}
+              >
+                {refreshingStatus ? (
+                  <ActivityIndicator size="small" color="#16a34a" />
+                ) : (
+                  <RefreshCw size={14} color="#16a34a" />
+                )}
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#16a34a' }}>
+                  Check Status
+                </Text>
+              </TouchableOpacity>
+
+              {/* Return home */}
+              <TouchableOpacity
+                onPress={() => router.replace('/(tabs)/home')}
+                style={{
+                  paddingVertical: 12,
+                  backgroundColor: '#061d38',
+                  borderRadius: 12,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff' }}>
+                  Return to Home
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {/* Primary SOS CTA */}
+              <TouchableOpacity
+                onPress={handleSOS}
+                disabled={sending || locating}
+                style={{ backgroundColor: '#061d38', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 }}
+              >
+                {locating ? (
+                  <>
+                    <ActivityIndicator color="#ffffff" />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#ffffff' }}>
+                      Getting Location…
+                    </Text>
+                  </>
+                ) : sending ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 15, fontWeight: '900', color: '#ffffff', letterSpacing: 0.8 }}>
+                      SOS
+                    </Text>
+                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#ffffff' }}>
+                      Request Rescue
+                    </Text>
+                    <ArrowRight size={16} color="#ffffff" />
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Secondary Buttons Row */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  onPress={handleCall911}
+                  style={{ flex: 1, paddingVertical: 14, backgroundColor: '#eff6ff', borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <Phone size={14} color="#ef4444" />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1d4ed8' }}>
+                    Call 911 Directly
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  style={{ flex: 1, paddingVertical: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Monitored Response Footer */}

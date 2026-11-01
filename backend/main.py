@@ -1050,6 +1050,25 @@ def list_sos(
     return query.order_by(models.SOSRequest.created_at.desc()).all()
 
 
+@app.get("/api/v1/sos/{sos_id}", response_model=SOSResponse)
+def get_sos(
+    sos_id: int,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+) -> models.SOSRequest:
+    """Return a single SOS request by id (FSD-FR-074).
+
+    Available to any authenticated user so the driver app can poll the
+    dispatch status of its own submission without needing dispatcher rights.
+    """
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS request not found")
+    return db_sos
+
+
 @app.get("/api/v1/hazards", response_model=list[HazardResponse])
 def list_hazards(
     active: bool | None = None,
