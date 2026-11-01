@@ -102,13 +102,20 @@ def seed_database(db: Session) -> None:
 
 
 def seed_dispatcher_account(db: Session) -> None:
-    """
-    Provision the bootstrap LGU dispatcher when no users exist.
+    """Provision or ensure the bootstrap LGU dispatcher account exists with SUPER_ADMIN privileges.
 
-    Registration only ever creates driver accounts, so without this the portal
-    has no account it can sign in with on a fresh database.
+    Registration only ever creates driver accounts, so the LGU dispatcher
+    has to come from configuration. If the account already exists, ensure it
+    holds the SUPER_ADMIN role so configured administrators can access
+    privileged portal and simulation functions.
     """
-    if db.query(models.User).count() > 0:
+    admin_email = settings.admin_email.strip().lower()
+    existing = db.query(models.User).filter(models.User.email == admin_email).first()
+    if existing:
+        if existing.role != "SUPER_ADMIN":
+            existing.role = "SUPER_ADMIN"
+            db.commit()
+            print(f"[startup] promoted dispatcher account {admin_email} to SUPER_ADMIN")
         return
 
     password_hash = bcrypt.hashpw(settings.admin_password.encode("utf-8"), bcrypt.gensalt()).decode(
@@ -117,13 +124,13 @@ def seed_dispatcher_account(db: Session) -> None:
     db.add(
         models.User(
             name="LGU Dispatcher",
-            email=settings.admin_email.strip().lower(),
+            email=admin_email,
             password_hash=password_hash,
             role="SUPER_ADMIN",
         )
     )
     db.commit()
-    print(f"[startup] provisioned dispatcher account {settings.admin_email}")
+    print(f"[startup] provisioned dispatcher account {admin_email}")
 
 
 @asynccontextmanager
@@ -1178,7 +1185,7 @@ def post_telemetry(
     if not db_vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC).replace(tzinfo=None)
     if db_vehicle.updated_at is not None:
         elapsed = (now - db_vehicle.updated_at).total_seconds()
         if elapsed < settings.telemetry_min_seconds:
