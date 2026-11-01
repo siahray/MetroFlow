@@ -92,7 +92,7 @@ export default function IndexScreen() {
                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#1e293b' }}>Real-Time Hydrologic Rerouting</Text>
               </View>
               <Text style={{ fontSize: 10, color: '#64748b', marginTop: 6, lineHeight: 15 }}>
-                Calculates safe corridors based on your vehicle's ground clearance. Flood data is live-synced from the MDRRMC emergency network.
+                Calculates safe corridors based on your vehicle&apos;s ground clearance. Flood data is live-synced from the MDRRMC emergency network.
               </Text>
             </View>
           </View>

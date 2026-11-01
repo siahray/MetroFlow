@@ -144,3 +144,70 @@ export function listMySOS(): Promise<SOSRequest[]> {
 export function listVehicles(): Promise<unknown[]> {
   return request<unknown[]>("/api/v1/vehicles");
 }
+
+// ---------------------------------------------------------------------------
+// Field reports (FSD-FR-065 to 067)
+// ---------------------------------------------------------------------------
+
+/** The depth bands the moderation desk accepts (BR-014). */
+export type ReportDepth = "ANKLE" | "KNEE" | "IMPASSABLE";
+
+/** A photo the picker handed back, in the shape React Native uploads it. */
+export type ReportPhoto = {
+  uri: string;
+  name: string;
+  type: string;
+};
+
+export type ReportCreated = {
+  report_id: string;
+  status: string;
+  depth_level: string;
+  depth_label: string;
+  possible_duplicate_of: string | null;
+  captured_at: string | null;
+  submitted_at: string | null;
+};
+
+/**
+ * Submit a field report as multipart form data (FSD-FR-065 to 067).
+ *
+ * `captured_at` is the moment the driver recorded the water level, not the
+ * moment the queue happened to accept the upload. The photo is streamed as a
+ * file part, so the request must not set `Content-Type`: fetch has to generate
+ * the multipart boundary itself.
+ */
+export async function submitReport(input: {
+  depthLevel: ReportDepth;
+  latitude: number;
+  longitude: number;
+  narrative?: string | null;
+  barangay?: string | null;
+  capturedAt?: string | null;
+  photo?: ReportPhoto | null;
+}): Promise<ReportCreated> {
+  const form = new FormData();
+  form.append("depth_level", input.depthLevel);
+  form.append("latitude", String(input.latitude));
+  form.append("longitude", String(input.longitude));
+  if (input.narrative?.trim()) form.append("narrative", input.narrative.trim());
+  if (input.barangay?.trim()) form.append("barangay", input.barangay.trim());
+  if (input.capturedAt) form.append("captured_at", input.capturedAt);
+  if (input.photo) {
+    // React Native's FormData accepts this descriptor as a file part.
+    form.append("photo", input.photo as unknown as Blob);
+  }
+
+  const headers = new Headers();
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/reports`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+  if (!res.ok) {
+    throw await readError(res);
+  }
+  return (await res.json()) as ReportCreated;
+}
