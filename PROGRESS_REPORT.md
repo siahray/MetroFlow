@@ -99,8 +99,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 
 - **Separate pages:** `/login` and the operational screens (`/triage`, `/dashboard`, `/radar`, `/fleet`, `/hazards`)
 - **Real sign-in** against the API; the token is kept in `sessionStorage` and sent on every request, and a `401` returns the operator to `/login`
-- **Live data** — SOS requests, vehicles and hazards load from the API
-- **Mixed data** — the SOS live panel is API-backed; the remaining queue entries are still seed/demo records
+- **Live data & evidence** — SOS requests, field reports, vehicles and hazards load live from the API. The incident detail drawer links authentic evidence photos with EXIF metadata, estimated submersion ranges, live nearest-unit ETA ranking, water dynamics indicators, and full-resolution evidence file viewing (FSD-FR-032 to 038)
 - **Dispatch** assigns the selected fleet unit by its backend `vehicle_id` instead of a hardcoded id
 - **PII protection** — phone numbers masked by default
 - **Units:** cm for depths/clearance, km/h for speed

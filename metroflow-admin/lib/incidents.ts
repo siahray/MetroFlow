@@ -20,6 +20,37 @@ export type Incident = {
   barangay: string;
   source: QueueSource;
   tags: string[];
+  incidentType?: "sos" | "report";
+
+  // FSD-FR-034: Photo evidence with capture metadata and estimated submersion range
+  reportId?: string;
+  photo?: {
+    mime: string;
+    bytes: number;
+    sha256?: string;
+  } | null;
+  exif?: {
+    camera_make?: string;
+    camera_model?: string;
+    captured_at?: string;
+    iso?: number;
+    gps_latitude?: number;
+    gps_longitude?: number;
+  } | null;
+  submersionRange?: string;
+
+  // FSD-FR-035: Location and sensor context
+  latitude?: number | null;
+  longitude?: number | null;
+  waterDepthCm?: number | null;
+  waterTrend?: "rising" | "stable" | "receding";
+  nearestUnit?: {
+    callSign: string;
+    type: string;
+    distanceKm: number;
+    etaMinutes: number;
+    status: string;
+  } | null;
 };
 
 export type LogEntry = {

@@ -10,9 +10,10 @@ import { IncidentQueue } from "@/components/incident-queue";
 import { useToast } from "@/components/toast-provider";
 import { type LogEntry, type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
-import { sosToIncident } from "@/lib/sos-to-incidents";
+import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
 import { listHazards, type HazardZone } from "@/lib/hazards";
+import { listReports } from "@/lib/reports";
 
 function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -33,12 +34,21 @@ export default function TriagePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [sosList, vehicleList, hazardList] = await Promise.all([
+        const [sosList, reportList, vehicleList, hazardList] = await Promise.all([
           listSOS().catch(() => []),
+          listReports().catch(() => []),
           listVehicles().catch(() => []),
           listHazards().catch(() => []),
         ]);
-        const incidents = sosList.map((s) => sosToIncident(s));
+        const sosIncidents = sosList.map((s) =>
+          sosToIncident(s, { reports: reportList, vehicles: vehicleList, hazards: hazardList }),
+        );
+        const reportIncidents = reportList.map((r) =>
+          reportToIncident(r, { vehicles: vehicleList, hazards: hazardList }),
+        );
+        const incidents = [...sosIncidents, ...reportIncidents].sort(
+          (a, b) => b.urgency - a.urgency,
+        );
         setLiveIncidents(incidents);
         setVehicles(vehicleList);
         setHazards(hazardList);

@@ -16,6 +16,7 @@ import {
   Send,
   Shield,
   User,
+  Waves,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -241,12 +242,23 @@ export function DispatchRadar({
                 Attached Telemetry &amp; Evidence
               </h3>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
-                  <Camera className="mr-1.5 h-3 w-3" /> Photo Attached
-                </span>
+                {incident.photo || incident.reportId ? (
+                  <span className="inline-flex items-center rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
+                    <Camera className="mr-1.5 h-3 w-3" /> Photo Attached
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                    <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> Distress Beacon
+                  </span>
+                )}
                 <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
                   <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Road Node Match)
                 </span>
+                {incident.submersionRange && (
+                  <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                    <Waves className="mr-1.5 h-3 w-3 text-amber-600" /> {incident.submersionRange}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -264,28 +276,34 @@ export function DispatchRadar({
               </div>
             </div>
 
-            {/* Recommended Rescue Resource */}
+            {/* Recommended Rescue Resource (FSD-FR-035) */}
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-900">
-                  Recommended: Assign nearest vehicle
+                  {incident.nearestUnit
+                    ? `Recommended: ${incident.nearestUnit.callSign}`
+                    : "Recommended: Assign nearest vehicle"}
                 </span>
-                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                  AVAILABLE
+                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
+                  {incident.nearestUnit?.status ?? "AVAILABLE"}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-slate-600">
                 <div>
-                  <span className="block text-[9px] text-slate-400">SPEED</span>
-                  <strong>28 km/h</strong>
+                  <span className="block text-[9px] text-slate-400">DISTANCE</span>
+                  <strong>
+                    {incident.nearestUnit ? `${incident.nearestUnit.distanceKm} km` : "1.2 km"}
+                  </strong>
                 </div>
                 <div>
-                  <span className="block text-[9px] text-slate-400">CLEARANCE</span>
-                  <strong>35 cm</strong>
+                  <span className="block text-[9px] text-slate-400">DEPTH</span>
+                  <strong>{incident.waterDepthCm ? `${incident.waterDepthCm} cm` : "35 cm"}</strong>
                 </div>
                 <div>
                   <span className="block text-[9px] text-slate-400">CORRIDOR ETA</span>
-                  <strong className="text-sky-700">12 mins</strong>
+                  <strong className="text-sky-700">
+                    {incident.nearestUnit ? `~${incident.nearestUnit.etaMinutes} mins` : "12 mins"}
+                  </strong>
                 </div>
               </div>
             </div>

@@ -10,7 +10,9 @@ import { DispatchRadar } from "@/components/dispatch-radar";
 import { useToast } from "@/components/toast-provider";
 import { type LogEntry, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
-import { sosToIncident } from "@/lib/sos-to-incidents";
+import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
+import { listReports } from "@/lib/reports";
+import { listVehicles } from "@/lib/dispatch";
 
 function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -29,8 +31,18 @@ function RadarContent() {
   useEffect(() => {
     const load = async () => {
       try {
-        const sosList = await listSOS();
-        const mapped = sosList.map((s) => sosToIncident(s));
+        const [sosList, reportList, vehicleList] = await Promise.all([
+          listSOS().catch(() => []),
+          listReports().catch(() => []),
+          listVehicles().catch(() => []),
+        ]);
+        const sosIncidents = sosList.map((s) =>
+          sosToIncident(s, { reports: reportList, vehicles: vehicleList }),
+        );
+        const reportIncidents = reportList.map((r) =>
+          reportToIncident(r, { vehicles: vehicleList }),
+        );
+        const mapped = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
         setIncidents(mapped);
         if (requestedId && mapped.some((i) => i.id === requestedId)) {
           setSelectedId(requestedId);
