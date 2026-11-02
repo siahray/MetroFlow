@@ -388,6 +388,67 @@ class UserUpdateRequest(BaseModel):
     # Password update is a separate operation for security
 
 
+class SensorReadingRequest(BaseModel):
+    """Gateway posts a sensor reading (FSD-FR-090)."""
+
+    sensor_id: str = Field(..., description="Sensor identifier")
+    value: float = Field(..., description="Reading value")
+    unit: str = Field(..., description="Unit at capture (m or mm_hr)")
+    recorded_at: datetime = Field(..., description="Sensor timestamp")
+
+
+class SensorReadingResponse(BaseModel):
+    """Acknowledgment of a sensor reading."""
+
+    reading_id: int
+    sensor_id: str
+    value: float
+    unit: str
+    recorded_at: datetime
+    received_at: datetime
+    breach: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SensorResponse(BaseModel):
+    """Sensor registry entry (FSD-FR-091)."""
+
+    sensor_id: str
+    sensor_type: str
+    name: str
+    threshold_value: float
+    threshold_unit: str
+    impact_radius_m: float
+    active: bool
+    simulated: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SensorCreateRequest(BaseModel):
+    """Create a new sensor (FSD-FR-091)."""
+
+    sensor_id: str = Field(..., description="Sensor identifier")
+    sensor_type: str = Field(..., description="RIVER_GAUGE or RAIN_GAUGE")
+    name: str = Field(..., description="Human label")
+    threshold_value: float = Field(..., description="Breach threshold")
+    threshold_unit: str = Field(..., description="m or mm_hr")
+    impact_radius_m: float = Field(..., description="Radius for edge marking")
+    simulated: bool = Field(False, description="True for pilot-generated values")
+
+
+class SensorUpdateRequest(BaseModel):
+    """Update an existing sensor (FSD-FR-091)."""
+
+    name: str | None = None
+    threshold_value: float | None = None
+    threshold_unit: str | None = None
+    impact_radius_m: float | None = None
+    active: bool | None = None
+    simulated: bool | None = None
+
+
 class AuditResponse(BaseModel):
     """One attributable privileged action (FSD-FR-093)."""
 

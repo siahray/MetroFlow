@@ -59,6 +59,11 @@ from schemas import (
     RouteResponse,
     RouteSegment,
     SendVerifyRequest,
+    SensorCreateRequest,
+    SensorReadingRequest,
+    SensorReadingResponse,
+    SensorResponse,
+    SensorUpdateRequest,
     SimulationResponse,
     SOSActionRequest,
     SOSCreate,
@@ -1994,6 +1999,300 @@ def verify_audit(
     """
     entries = db.query(models.AuditLog).order_by(models.AuditLog.log_id.asc()).all()
     return audit.verify_chain(entries)
+
+
+@app.get("/api/v1/audit/export")
+def export_audit_csv(
+    action_type: str | None = None,
+    user_id: int | None = None,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Export audit logs as CSV (FSD-FR-049)."""
+    import csv
+    from io import StringIO
+
+    query = db.query(models.AuditLog)
+    if action_type:
+        query = query.filter(models.AuditLog.action_type == action_type)
+    if user_id is not None:
+        query = query.filter(models.AuditLog.user_id == user_id)
+    entries = query.order_by(models.AuditLog.log_id.asc()).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["log_id", "user_id", "action_type", "payload", "hash_signature", "created_at"])
+
+    for entry in entries:
+        writer.writerow(
+            [
+                entry.log_id,
+                entry.user_id,
+                entry.action_type,
+                entry.payload,
+                entry.hash_signature,
+                entry.created_at.isoformat() if entry.created_at else "",
+            ]
+        )
+
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
+    )
+
+
+@app.get("/api/v1/incidents/export")
+def export_incidents_csv(
+    status: str | None = None,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Export SOS incidents as CSV (FSD-FR-049)."""
+    import csv
+    from io import StringIO
+
+    query = db.query(models.SOSRequest)
+    if status:
+        query = query.filter(models.SOSRequest.status == status.upper())
+    incidents = query.order_by(models.SOSRequest.sos_id.asc()).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "sos_id",
+            "latitude",
+            "longitude",
+            "note",
+            "vehicle_id",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+    )
+
+    for incident in incidents:
+        writer.writerow(
+            [
+                incident.sos_id,
+                incident.latitude,
+                incident.longitude,
+                incident.note or "",
+                incident.vehicle_id or "",
+                incident.status,
+                incident.created_at.isoformat() if incident.created_at else "",
+                incident.updated_at.isoformat() if incident.updated_at else "",
+            ]
+        )
+
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=incidents.csv"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sensor endpoints (FSD-FR-090, FSD-FR-091, BR-017, BRULE-012)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/sensors/readings", response_model=SensorReadingResponse, status_code=201)
+def create_sensor_reading(
+    reading: SensorReadingRequest,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Gateway posts a sensor reading (FSD-FR-090)."""
+    import models
+
+    # Validate sensor exists and is active
+    sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == reading.sensor_id).first()
+    if not sensor:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+    if not sensor.active:
+        raise HTTPException(status_code=409, detail="Sensor is disabled")
+
+    # Validate reading is not in the future
+    if reading.recorded_at > datetime.now(UTC):
+        raise HTTPException(status_code=422, detail="Recorded timestamp cannot be in the future")
+
+    # Check threshold breach (BRULE-012: advisory until dispatcher confirms)
+    is_breach = False
+    if sensor.threshold_unit == reading.unit:
+        is_breach = reading.value >= sensor.threshold_value
+
+    # On breach, mark edges within impact radius as advisory (FSD-FR-091)
+    if is_breach and sensor.geom:
+        try:
+            # Find edges within impact radius using PostGIS ST_DWithin
+            impacted_edges = (
+                db.query(models.RoadEdge.edge_id)
+                .filter(func.ST_DWithin(models.RoadEdge.geom, sensor.geom, sensor.impact_radius_m))
+                .all()
+            )
+            # Store impacted edge IDs for advisory display
+            # This could be stored in a separate advisory_edges table, but for now
+            # we'll include it in the audit payload
+            edge_ids = [e.edge_id for e in impacted_edges]
+        except Exception:
+            # If geometry query fails, still store the reading
+            edge_ids = []
+    else:
+        edge_ids = []
+
+    # Store reading
+    max_id = db.query(func.max(models.SensorReading.reading_id)).scalar() or 0
+    new_reading = models.SensorReading(
+        reading_id=int(max_id) + 1,
+        sensor_id=reading.sensor_id,
+        value=reading.value,
+        unit=reading.unit,
+        recorded_at=reading.recorded_at,
+        received_at=datetime.now(UTC),
+        breach=is_breach,
+    )
+    db.add(new_reading)
+    if is_breach:
+        audit.record(
+            db,
+            user=_user,
+            action_type=audit.SENSOR_BREACH,
+            payload={
+                "sensor_id": reading.sensor_id,
+                "value": reading.value,
+                "threshold": sensor.threshold_value,
+                "impact_radius_m": sensor.impact_radius_m,
+                "impacted_edge_ids": edge_ids,
+                "actor": _user.name or _user.email,
+            },
+        )
+    db.commit()
+    db.refresh(new_reading)
+    return new_reading
+
+
+@app.get("/api/v1/sensors", response_model=list[SensorResponse])
+def list_sensors(
+    active_only: Annotated[bool, Query(description="Filter to active sensors only")] = True,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """List sensor registry (FSD-FR-091)."""
+    import models
+
+    query = db.query(models.Sensor)
+    if active_only:
+        query = query.filter(models.Sensor.active)
+    sensors = query.order_by(models.Sensor.sensor_id).all()
+    return sensors
+
+
+@app.post("/api/v1/sensors", response_model=SensorResponse, status_code=201)
+def create_sensor(
+    sensor: SensorCreateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create a new sensor (FSD-FR-091)."""
+    import models
+
+    # Validate sensor type
+    if sensor.sensor_type not in ("RIVER_GAUGE", "RAIN_GAUGE"):
+        raise HTTPException(status_code=422, detail="sensor_type must be RIVER_GAUGE or RAIN_GAUGE")
+
+    # Check duplicate sensor_id
+    existing = db.query(models.Sensor).filter(models.Sensor.sensor_id == sensor.sensor_id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Sensor ID already exists")
+
+    new_sensor = models.Sensor(
+        sensor_id=sensor.sensor_id,
+        sensor_type=sensor.sensor_type,
+        name=sensor.name,
+        threshold_value=sensor.threshold_value,
+        threshold_unit=sensor.threshold_unit,
+        impact_radius_m=sensor.impact_radius_m,
+        active=True,
+        simulated=sensor.simulated,
+    )
+    db.add(new_sensor)
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SENSOR_CREATE,
+        payload={
+            "sensor_id": sensor.sensor_id,
+            "name": sensor.name,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(new_sensor)
+    return new_sensor
+
+
+@app.patch("/api/v1/sensors/{sensor_id}", response_model=SensorResponse)
+def update_sensor(
+    sensor_id: str,
+    sensor: SensorUpdateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update an existing sensor (FSD-FR-091)."""
+    import models
+
+    db_sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == sensor_id).first()
+    if not db_sensor:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    changes = sensor.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in changes.items():
+        setattr(db_sensor, field, value)
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SENSOR_UPDATE,
+        payload={
+            "sensor_id": sensor_id,
+            "changed": changes,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(db_sensor)
+    return db_sensor
+
+
+@app.delete("/api/v1/sensors/{sensor_id}", status_code=204)
+def delete_sensor(
+    sensor_id: str,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a sensor (FSD-FR-091)."""
+    import models
+
+    db_sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == sensor_id).first()
+    if not db_sensor:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SENSOR_DELETE,
+        payload={
+            "sensor_id": sensor_id,
+            "name": db_sensor.name,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.delete(db_sensor)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
