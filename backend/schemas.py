@@ -388,6 +388,44 @@ class UserUpdateRequest(BaseModel):
     # Password update is a separate operation for security
 
 
+class SensorReadingRequest(BaseModel):
+    """Gateway posts a sensor reading (FSD-FR-090)."""
+
+    sensor_id: str = Field(..., description="Sensor identifier")
+    value: float = Field(..., description="Reading value")
+    unit: str = Field(..., description="Unit at capture (m or mm_hr)")
+    recorded_at: datetime = Field(..., description="Sensor timestamp")
+
+
+class SensorReadingResponse(BaseModel):
+    """Acknowledgment of a sensor reading."""
+
+    reading_id: int
+    sensor_id: str
+    value: float
+    unit: str
+    recorded_at: datetime
+    received_at: datetime
+    breach: bool
+
+    model_config = {"from_attributes": True}
+
+
+class SensorResponse(BaseModel):
+    """Sensor registry entry (FSD-FR-091)."""
+
+    sensor_id: str
+    sensor_type: str
+    name: str
+    threshold_value: float
+    threshold_unit: str
+    impact_radius_m: float
+    active: bool
+    simulated: bool
+
+    model_config = {"from_attributes": True}
+
+
 class AuditResponse(BaseModel):
     """One attributable privileged action (FSD-FR-093)."""
 

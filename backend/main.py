@@ -59,6 +59,9 @@ from schemas import (
     RouteResponse,
     RouteSegment,
     SendVerifyRequest,
+    SensorReadingRequest,
+    SensorReadingResponse,
+    SensorResponse,
     SimulationResponse,
     SOSActionRequest,
     SOSCreate,
@@ -2088,6 +2091,69 @@ def export_incidents_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=incidents.csv"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Sensor endpoints (FSD-FR-090, FSD-FR-091, BR-017, BRULE-012)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/sensors/readings", response_model=SensorReadingResponse, status_code=201)
+def create_sensor_reading(
+    reading: SensorReadingRequest,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Gateway posts a sensor reading (FSD-FR-090)."""
+    import models
+
+    # Validate sensor exists and is active
+    sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == reading.sensor_id).first()
+    if not sensor:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+    if not sensor.active:
+        raise HTTPException(status_code=409, detail="Sensor is disabled")
+
+    # Validate reading is not in the future
+    if reading.recorded_at > datetime.now(UTC):
+        raise HTTPException(status_code=422, detail="Recorded timestamp cannot be in the future")
+
+    # Check threshold breach (BRULE-012: advisory until dispatcher confirms)
+    is_breach = False
+    if sensor.threshold_unit == reading.unit:
+        is_breach = reading.value >= sensor.threshold_value
+
+    # Store reading
+    max_id = db.query(func.max(models.SensorReading.reading_id)).scalar() or 0
+    new_reading = models.SensorReading(
+        reading_id=int(max_id) + 1,
+        sensor_id=reading.sensor_id,
+        value=reading.value,
+        unit=reading.unit,
+        recorded_at=reading.recorded_at,
+        received_at=datetime.now(UTC),
+        breach=is_breach,
+    )
+    db.add(new_reading)
+    db.commit()
+    db.refresh(new_reading)
+    return new_reading
+
+
+@app.get("/api/v1/sensors", response_model=list[SensorResponse])
+def list_sensors(
+    active_only: Annotated[bool, Query(description="Filter to active sensors only")] = True,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """List sensor registry (FSD-FR-091)."""
+    import models
+
+    query = db.query(models.Sensor)
+    if active_only:
+        query = query.filter(models.Sensor.active)
+    sensors = query.order_by(models.Sensor.sensor_id).all()
+    return sensors
 
 
 # ---------------------------------------------------------------------------
