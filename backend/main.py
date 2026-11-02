@@ -67,7 +67,9 @@ from schemas import (
     SOSResponse,
     TelemetryPing,
     TokenResponse,
+    UserCreateRequest,
     UserResponse,
+    UserUpdateRequest,
     VehicleCreate,
     VehicleResponse,
     VehicleUpdate,
@@ -832,6 +834,182 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         "email": user.email,
         "role": user.role,
     }
+
+
+# ---------------------------------------------------------------------------
+# User management endpoints (FSD-FR-048)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/users", response_model=list[UserResponse])
+def list_users(
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """List all users (FSD-FR-048). Admin only."""
+    import models
+
+    users = db.query(models.User).order_by(models.User.user_id).all()
+    return users
+
+
+@app.post("/api/v1/users", response_model=UserResponse, status_code=201)
+def create_user(
+    user_req: UserCreateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create a new user (FSD-FR-048). Admin only, audited."""
+    import models
+
+    # Validate role
+    if user_req.role not in ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid role. Allowed: {', '.join(sorted(ALLOWED_ROLES))}",
+        )
+
+    # Check email uniqueness
+    email = user_req.email.strip().lower()
+    existing = db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+
+    # Create user
+    max_id = db.query(func.max(models.User.user_id)).scalar() or 0
+    new_user = models.User(
+        user_id=int(max_id) + 1,
+        name=user_req.name.strip(),
+        email=email,
+        password_hash=bcrypt.hashpw(user_req.password.encode("utf-8"), bcrypt.gensalt()).decode(
+            "utf-8"
+        ),
+        role=user_req.role,
+    )
+    db.add(new_user)
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.USER_CREATE,
+        payload={
+            "user_id": new_user.user_id,
+            "name": new_user.name,
+            "email": new_user.email,
+            "role": new_user.role,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
+@app.patch("/api/v1/users/{user_id}", response_model=UserResponse)
+def update_user(
+    user_id: int,
+    user_req: UserUpdateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update an existing user (FSD-FR-048). Admin only, audited."""
+    import models
+
+    db_user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent self-escalation or self-deletion
+    if db_user.user_id == _user.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot modify your own account through this endpoint",
+        )
+
+    changes = user_req.model_dump(exclude_unset=True, exclude_none=True)
+
+    # Validate role if provided
+    if "role" in changes and changes["role"] not in ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid role. Allowed: {', '.join(sorted(ALLOWED_ROLES))}",
+        )
+
+    # Check email uniqueness if being changed
+    if "email" in changes:
+        email = changes["email"].strip().lower()
+        existing = (
+            db.query(models.User)
+            .filter(func.lower(models.User.email) == email, models.User.user_id != user_id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        changes["email"] = email
+
+    if "name" in changes:
+        changes["name"] = changes["name"].strip()
+
+    # Apply changes
+    for field, value in changes.items():
+        setattr(db_user, field, value)
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.USER_UPDATE,
+        payload={
+            "user_id": user_id,
+            "changed": changes,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@app.delete("/api/v1/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a user (FSD-FR-048). Admin only, audited."""
+    import models
+
+    db_user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent self-deletion
+    if db_user.user_id == _user.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot delete your own account",
+        )
+
+    # Prevent deleting the last admin
+    admin_count = db.query(models.User).filter(models.User.role.in_(ADMIN_ROLES)).count()
+    if db_user.role in ADMIN_ROLES and admin_count <= 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete the last administrator account",
+        )
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.USER_DELETE,
+        payload={
+            "user_id": user_id,
+            "name": db_user.name,
+            "email": db_user.email,
+            "role": db_user.role,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.delete(db_user)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------

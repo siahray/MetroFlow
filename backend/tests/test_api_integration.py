@@ -1435,3 +1435,100 @@ def test_dispatch_preview_ranks_and_blocks_double_booking(client):
         assert client.post(f"/api/v1/dispatch/{sos2_id}/undo").status_code == 200
     finally:
         _delete_test_vehicle(client, vehicle_id)
+
+
+def test_user_management_crud(client):
+    """FSD-FR-048: Admin can list, create, update, and delete users with audit trail."""
+    # List users
+    users = client.get("/api/v1/users")
+    assert users.status_code == 200
+    initial_count = len(users.json())
+
+    # Create a new user
+    create_resp = client.post(
+        "/api/v1/users",
+        json={
+            "name": "Test Dispatcher",
+            "email": "test.dispatcher@example.com",
+            "password": "SecurePass123",
+            "role": "LGU_DISPATCHER",
+        },
+    )
+    assert create_resp.status_code == 201
+    user_id = create_resp.json()["user_id"]
+    assert create_resp.json()["role"] == "LGU_DISPATCHER"
+
+    # Verify user appears in list
+    users_after = client.get("/api/v1/users")
+    assert users_after.status_code == 200
+    assert len(users_after.json()) == initial_count + 1
+
+    # Update user
+    update_resp = client.patch(
+        f"/api/v1/users/{user_id}",
+        json={"name": "Updated Name", "role": "SUPER_ADMIN"},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["name"] == "Updated Name"
+    assert update_resp.json()["role"] == "SUPER_ADMIN"
+
+    # Cannot update to invalid role
+    bad_role = client.patch(
+        f"/api/v1/users/{user_id}",
+        json={"role": "INVALID_ROLE"},
+    )
+    assert bad_role.status_code == 422
+
+    # Cannot create duplicate email
+    duplicate = client.post(
+        "/api/v1/users",
+        json={
+            "name": "Another User",
+            "email": "test.dispatcher@example.com",
+            "password": "AnotherPass123",
+            "role": "LGU_DISPATCHER",
+        },
+    )
+    assert duplicate.status_code == 409
+
+    # Delete user
+    delete_resp = client.delete(f"/api/v1/users/{user_id}")
+    assert delete_resp.status_code == 204
+
+    # Verify user is gone
+    users_final = client.get("/api/v1/users")
+    assert users_final.status_code == 200
+    assert len(users_final.json()) == initial_count
+
+
+def test_user_management_self_protection(client):
+    """FSD-FR-048: Users cannot modify or delete their own account."""
+    # Get current user info
+    me = client.get("/api/v1/auth/me")
+    assert me.status_code == 200
+    my_id = me.json()["user_id"]
+
+    # Cannot update own account
+    self_update = client.patch(
+        f"/api/v1/users/{my_id}",
+        json={"name": "Hacked Name"},
+    )
+    assert self_update.status_code == 403
+
+    # Cannot delete own account
+    self_delete = client.delete(f"/api/v1/users/{my_id}")
+    assert self_delete.status_code == 403
+
+
+def test_user_management_last_admin_protection(client):
+    """FSD-FR-048: Cannot delete the last administrator account."""
+    # Try to delete the bootstrap admin (which is likely the only admin)
+    users = client.get("/api/v1/users")
+    assert users.status_code == 200
+    admins = [u for u in users.json() if u["role"] in ("SUPER_ADMIN", "LGU_DISPATCHER")]
+
+    if len(admins) == 1:
+        admin_id = admins[0]["user_id"]
+        delete_resp = client.delete(f"/api/v1/users/{admin_id}")
+        assert delete_resp.status_code == 409
+        assert "last administrator" in delete_resp.json()["detail"].lower()
