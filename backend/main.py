@@ -2125,6 +2125,25 @@ def create_sensor_reading(
     if sensor.threshold_unit == reading.unit:
         is_breach = reading.value >= sensor.threshold_value
 
+    # On breach, mark edges within impact radius as advisory (FSD-FR-091)
+    if is_breach and sensor.geom:
+        try:
+            # Find edges within impact radius using PostGIS ST_DWithin
+            impacted_edges = (
+                db.query(models.RoadEdge.edge_id)
+                .filter(func.ST_DWithin(models.RoadEdge.geom, sensor.geom, sensor.impact_radius_m))
+                .all()
+            )
+            # Store impacted edge IDs for advisory display
+            # This could be stored in a separate advisory_edges table, but for now
+            # we'll include it in the audit payload
+            edge_ids = [e.edge_id for e in impacted_edges]
+        except Exception:
+            # If geometry query fails, still store the reading
+            edge_ids = []
+    else:
+        edge_ids = []
+
     # Store reading
     max_id = db.query(func.max(models.SensorReading.reading_id)).scalar() or 0
     new_reading = models.SensorReading(
@@ -2137,6 +2156,20 @@ def create_sensor_reading(
         breach=is_breach,
     )
     db.add(new_reading)
+    if is_breach:
+        audit.record(
+            db,
+            user=_user,
+            action_type=audit.SENSOR_BREACH,
+            payload={
+                "sensor_id": reading.sensor_id,
+                "value": reading.value,
+                "threshold": sensor.threshold_value,
+                "impact_radius_m": sensor.impact_radius_m,
+                "impacted_edge_ids": edge_ids,
+                "actor": _user.name or _user.email,
+            },
+        )
     db.commit()
     db.refresh(new_reading)
     return new_reading

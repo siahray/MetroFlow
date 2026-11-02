@@ -1560,3 +1560,96 @@ def test_export_incidents_csv(client):
     lines = content.split("\n")
     assert len(lines) > 1
     assert "sos_id,latitude,longitude" in lines[0]
+
+
+def test_sensor_reading_rejection(client):
+    """FSD-FR-090: Reject readings from unknown or disabled sensors."""
+    # Unknown sensor
+    resp = client.post(
+        "/api/v1/sensors/readings",
+        json={
+            "sensor_id": "UNKNOWN_SENSOR",
+            "value": 10.5,
+            "unit": "m",
+            "recorded_at": "2026-11-02T10:00:00Z",
+        },
+    )
+    assert resp.status_code == 404
+
+    # Future timestamp
+    resp = client.post(
+        "/api/v1/sensors/readings",
+        json={
+            "sensor_id": "TEST_SENSOR",
+            "value": 10.5,
+            "unit": "m",
+            "recorded_at": "2099-01-01T00:00:00Z",
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_sensor_registry_crud(client):
+    """FSD-FR-091: Admin can list, create, update, and delete sensors."""
+    # Create a sensor
+    create_resp = client.post(
+        "/api/v1/sensors",
+        json={
+            "sensor_id": "TEST_RIVER_01",
+            "sensor_type": "RIVER_GAUGE",
+            "name": "Test River Gauge",
+            "threshold_value": 5.0,
+            "threshold_unit": "m",
+            "impact_radius_m": 1000.0,
+            "simulated": True,
+        },
+    )
+    assert create_resp.status_code == 201
+    assert create_resp.json()["sensor_id"] == "TEST_RIVER_01"
+
+    # List sensors
+    list_resp = client.get("/api/v1/sensors")
+    assert list_resp.status_code == 200
+    sensors = list_resp.json()
+    assert any(s["sensor_id"] == "TEST_RIVER_01" for s in sensors)
+
+    # Update sensor
+    update_resp = client.patch(
+        "/api/v1/sensors/TEST_RIVER_01",
+        json={"name": "Updated Name", "threshold_value": 6.0},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["name"] == "Updated Name"
+    assert update_resp.json()["threshold_value"] == 6.0
+
+    # Invalid sensor type
+    bad_type = client.post(
+        "/api/v1/sensors",
+        json={
+            "sensor_id": "BAD_SENSOR",
+            "sensor_type": "INVALID_TYPE",
+            "name": "Bad Sensor",
+            "threshold_value": 5.0,
+            "threshold_unit": "m",
+            "impact_radius_m": 1000.0,
+        },
+    )
+    assert bad_type.status_code == 422
+
+    # Duplicate sensor_id
+    duplicate = client.post(
+        "/api/v1/sensors",
+        json={
+            "sensor_id": "TEST_RIVER_01",
+            "sensor_type": "RAIN_GAUGE",
+            "name": "Duplicate",
+            "threshold_value": 5.0,
+            "threshold_unit": "mm_hr",
+            "impact_radius_m": 1000.0,
+        },
+    )
+    assert duplicate.status_code == 409
+
+    # Delete sensor
+    delete_resp = client.delete("/api/v1/sensors/TEST_RIVER_01")
+    assert delete_resp.status_code == 204
