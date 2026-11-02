@@ -364,6 +364,30 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserCreateRequest(BaseModel):
+    """Request to create a new user (FSD-FR-048)."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Full name")
+    email: str = Field(..., description="Email address (unique)")
+    password: str = Field(..., min_length=8, description="Password (min 8 characters)")
+    role: str = Field(
+        default="LGU_DISPATCHER",
+        description="Role: SUPER_ADMIN, LGU_DISPATCHER, or EMERGENCY_DRIVER",
+    )
+
+
+class UserUpdateRequest(BaseModel):
+    """Request to update an existing user (FSD-FR-048)."""
+
+    name: str | None = Field(None, min_length=1, max_length=100)
+    email: str | None = None
+    role: str | None = Field(
+        None,
+        description="Role: SUPER_ADMIN, LGU_DISPATCHER, or EMERGENCY_DRIVER",
+    )
+    # Password update is a separate operation for security
+
+
 class AuditResponse(BaseModel):
     """One attributable privileged action (FSD-FR-093)."""
 
