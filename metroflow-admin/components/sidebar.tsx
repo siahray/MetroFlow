@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CheckSquare,
   ClipboardCheck,
+  Download,
   LogOut,
   Map,
   Radar,
@@ -14,7 +15,7 @@ import {
 import { cn } from "@/lib/cn";
 import type { SessionUser } from "@/lib/session";
 
-export type NavItem = "triage" | "moderation" | "radar" | "hazards" | "fleet" | "users";
+export type NavItem = "triage" | "moderation" | "radar" | "hazards" | "fleet" | "users" | "export";
 
 export const NAV_ITEMS = [
   { id: "triage" as NavItem, label: "Triage & Verification", href: "/triage", icon: CheckSquare },
@@ -28,6 +29,7 @@ export const NAV_ITEMS = [
   { id: "hazards" as NavItem, label: "Live Map & Hazards", href: "/hazards", icon: Map },
   { id: "fleet" as NavItem, label: "Rescue Units & Fleet", href: "/fleet", icon: Truck },
   { id: "users" as NavItem, label: "User Management", href: "/users", icon: Users },
+  { id: "export" as NavItem, label: "Data Export", href: "/export", icon: Download },
 ] as const;
 
 type SidebarProps = {
