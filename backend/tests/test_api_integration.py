@@ -1359,5 +1359,79 @@ def test_dispatch_flow_and_undo_and_constraint(client):
         assert undo_resp.status_code == 200
         assert undo_resp.json()["status"] == "pending"
         assert undo_resp.json()["vehicle_id"] is None
+
+        # FSD-BRULE-011: undo returns the unit to the available pool.
+        fleet = client.get("/api/v1/vehicles")
+        row = next(v for v in fleet.json() if v["vehicle_id"] == vehicle_id)
+        assert row["status"] == "AVAILABLE"
+    finally:
+        _delete_test_vehicle(client, vehicle_id)
+
+
+def test_dispatch_preview_ranks_and_blocks_double_booking(client):
+    """FSD-FR-088, FSD-FR-089, BRULE-011: preview ranks units; a busy unit is not assignable."""
+    resp = client.post(
+        "/api/v1/vehicles",
+        json={
+            "call_sign": "TEST-PREVIEW",
+            "vehicle_type": "flood_truck",
+            "clearance_cm": 35,
+            "status": "AVAILABLE",
+            "current_location_lat": 14.5995,
+            "current_location_lon": 120.9842,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    vehicle_id = resp.json()["vehicle_id"]
+    try:
+        sos_id = client.post(
+            "/api/v1/sos",
+            json={"latitude": 14.6060, "longitude": 120.9850, "note": "Preview test"},
+        ).json()["sos_id"]
+
+        preview = client.get(f"/api/v1/dispatch/{sos_id}/preview")
+        assert preview.status_code == 200, preview.text
+        units = preview.json()["units"]
+        row = next(unit for unit in units if unit["vehicle_id"] == vehicle_id)
+        assert row["estimated_travel_time_minutes"] is not None
+        assert row["total_distance_m"] > 0
+
+        # Ranked fastest first; unroutable units keep a place at the end.
+        routed = [
+            unit["estimated_travel_time_minutes"]
+            for unit in units
+            if unit["estimated_travel_time_minutes"] is not None
+        ]
+        assert routed == sorted(routed)
+
+        # BRULE-011: assigning marks the unit DISPATCHED.
+        assert (
+            client.post(f"/api/v1/sos/{sos_id}/assign", json={"vehicle_id": vehicle_id}).status_code
+            == 200
+        )
+        fleet = client.get("/api/v1/vehicles")
+        assert next(v for v in fleet.json() if v["vehicle_id"] == vehicle_id)["status"] == (
+            "DISPATCHED"
+        )
+
+        # BUSY unit cannot take a second incident.
+        sos2_id = client.post(
+            "/api/v1/sos",
+            json={"latitude": 14.6010, "longitude": 120.9900, "note": "Second incident"},
+        ).json()["sos_id"]
+        blocked = client.post(f"/api/v1/sos/{sos2_id}/assign", json={"vehicle_id": vehicle_id})
+        assert blocked.status_code == 409
+
+        # Undo frees the unit, so the second incident can now take it.
+        assert client.post(f"/api/v1/dispatch/{sos_id}/confirm").status_code == 200
+        assert client.post(f"/api/v1/dispatch/{sos_id}/undo").status_code == 200
+        assert (
+            client.post(
+                f"/api/v1/sos/{sos2_id}/assign", json={"vehicle_id": vehicle_id}
+            ).status_code
+            == 200
+        )
+        assert client.post(f"/api/v1/dispatch/{sos2_id}/confirm").status_code == 200
+        assert client.post(f"/api/v1/dispatch/{sos2_id}/undo").status_code == 200
     finally:
         _delete_test_vehicle(client, vehicle_id)
