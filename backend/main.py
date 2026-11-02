@@ -59,9 +59,11 @@ from schemas import (
     RouteResponse,
     RouteSegment,
     SendVerifyRequest,
+    SensorCreateRequest,
     SensorReadingRequest,
     SensorReadingResponse,
     SensorResponse,
+    SensorUpdateRequest,
     SimulationResponse,
     SOSActionRequest,
     SOSCreate,
@@ -2154,6 +2156,110 @@ def list_sensors(
         query = query.filter(models.Sensor.active)
     sensors = query.order_by(models.Sensor.sensor_id).all()
     return sensors
+
+
+@app.post("/api/v1/sensors", response_model=SensorResponse, status_code=201)
+def create_sensor(
+    sensor: SensorCreateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create a new sensor (FSD-FR-091)."""
+    import models
+
+    # Validate sensor type
+    if sensor.sensor_type not in ("RIVER_GAUGE", "RAIN_GAUGE"):
+        raise HTTPException(status_code=422, detail="sensor_type must be RIVER_GAUGE or RAIN_GAUGE")
+
+    # Check duplicate sensor_id
+    existing = db.query(models.Sensor).filter(models.Sensor.sensor_id == sensor.sensor_id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Sensor ID already exists")
+
+    new_sensor = models.Sensor(
+        sensor_id=sensor.sensor_id,
+        sensor_type=sensor.sensor_type,
+        name=sensor.name,
+        threshold_value=sensor.threshold_value,
+        threshold_unit=sensor.threshold_unit,
+        impact_radius_m=sensor.impact_radius_m,
+        active=True,
+        simulated=sensor.simulated,
+    )
+    db.add(new_sensor)
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SENSOR_CREATE,
+        payload={
+            "sensor_id": sensor.sensor_id,
+            "name": sensor.name,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(new_sensor)
+    return new_sensor
+
+
+@app.patch("/api/v1/sensors/{sensor_id}", response_model=SensorResponse)
+def update_sensor(
+    sensor_id: str,
+    sensor: SensorUpdateRequest,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update an existing sensor (FSD-FR-091)."""
+    import models
+
+    db_sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == sensor_id).first()
+    if not db_sensor:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    changes = sensor.model_dump(exclude_unset=True, exclude_none=True)
+    for field, value in changes.items():
+        setattr(db_sensor, field, value)
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SENSOR_UPDATE,
+        payload={
+            "sensor_id": sensor_id,
+            "changed": changes,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.commit()
+    db.refresh(db_sensor)
+    return db_sensor
+
+
+@app.delete("/api/v1/sensors/{sensor_id}", status_code=204)
+def delete_sensor(
+    sensor_id: str,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a sensor (FSD-FR-091)."""
+    import models
+
+    db_sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == sensor_id).first()
+    if not db_sensor:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.SENSOR_DELETE,
+        payload={
+            "sensor_id": sensor_id,
+            "name": db_sensor.name,
+            "actor": _user.name or _user.email,
+        },
+    )
+    db.delete(db_sensor)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------

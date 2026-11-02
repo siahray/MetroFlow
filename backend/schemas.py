@@ -426,6 +426,29 @@ class SensorResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SensorCreateRequest(BaseModel):
+    """Create a new sensor (FSD-FR-091)."""
+
+    sensor_id: str = Field(..., description="Sensor identifier")
+    sensor_type: str = Field(..., description="RIVER_GAUGE or RAIN_GAUGE")
+    name: str = Field(..., description="Human label")
+    threshold_value: float = Field(..., description="Breach threshold")
+    threshold_unit: str = Field(..., description="m or mm_hr")
+    impact_radius_m: float = Field(..., description="Radius for edge marking")
+    simulated: bool = Field(False, description="True for pilot-generated values")
+
+
+class SensorUpdateRequest(BaseModel):
+    """Update an existing sensor (FSD-FR-091)."""
+
+    name: str | None = None
+    threshold_value: float | None = None
+    threshold_unit: str | None = None
+    impact_radius_m: float | None = None
+    active: bool | None = None
+    simulated: bool | None = None
+
+
 class AuditResponse(BaseModel):
     """One attributable privileged action (FSD-FR-093)."""
 
