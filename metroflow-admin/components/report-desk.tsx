@@ -15,7 +15,7 @@ import {
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
-import { ageLabel, clockLabel, shortHash, type FieldReport, getReportPhoto } from "@/lib/reports";
+import { ageLabel, clockLabel, shortHash, type FieldReport, getReportPhoto, getNearestSensorReading, type NearestSensorReading } from "@/lib/reports";
 
 type ReportDeskProps = {
   report: FieldReport;
@@ -43,6 +43,7 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
   const [reason, setReason] = useState("");
   const [duplicateOf, setDuplicateOf] = useState<string>("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const [nearestSensor, setNearestSensor] = useState<NearestSensorReading | null>(null);
 
   // Evidence is behind an authenticated route, so it is fetched as a blob and
   // turned into an object URL that is revoked when the selection changes. The
@@ -68,6 +69,13 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [report.report_id, hasPhoto]);
+
+  // Load nearest sensor reading (FSD-FR-079)
+  useEffect(() => {
+    getNearestSensorReading(report.report_id)
+      .then((sensor) => setNearestSensor(sensor))
+      .catch(() => setNearestSensor(null));
+  }, [report.report_id]);
 
   const exif = report.exif ?? {};
   const exifEntries = Object.entries(exif).filter(([, value]) => value !== null && value !== "");
@@ -234,6 +242,39 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
                 value={<span className="font-mono">{shortHash(report.reporter_hash)}</span>}
               />
             </dl>
+            {nearestSensor && nearestSensor.sensor_id ? (
+              <div className="mt-3 rounded border border-sky-200 bg-sky-50 p-2">
+                <p className="mb-1 text-[10px] font-semibold text-sky-800">Nearest rain gauge</p>
+                <dl className="space-y-0.5">
+                  <StatRow
+                    label="Sensor"
+                    value={nearestSensor.sensor_name || nearestSensor.sensor_id?.slice(0, 8)}
+                  />
+                  <StatRow
+                    label="Distance"
+                    value={nearestSensor.distance_km ? `${nearestSensor.distance_km.toFixed(2)} km` : "unknown"}
+                  />
+                  <StatRow
+                    label="Latest reading"
+                    value={
+                      nearestSensor.latest_value !== null
+                        ? `${nearestSensor.latest_value} ${nearestSensor.latest_unit}`
+                        : "no readings"
+                    }
+                  />
+                  <StatRow
+                    label="Reading time"
+                    value={nearestSensor.latest_recorded_at ? clockLabel(nearestSensor.latest_recorded_at) : "unknown"}
+                  />
+                  {nearestSensor.is_breach ? (
+                    <p className="mt-1 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 p-1.5 text-[10px] font-medium text-amber-800">
+                      <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                      Threshold breach detected
+                    </p>
+                  ) : null}
+                </dl>
+              </div>
+            ) : null}
             {duplicateTarget ? (
               <button
                 type="button"

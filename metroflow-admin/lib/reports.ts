@@ -64,6 +64,18 @@ export type FieldReport = {
   moderated_at: string | null;
   decision_reason: string | null;
   hazard_id: number | null;
+  nearest_sensor?: NearestSensorReading | null;
+};
+
+export type NearestSensorReading = {
+  sensor_id: string | null;
+  sensor_name: string | null;
+  sensor_type: string | null;
+  latest_value: number | null;
+  latest_unit: string | null;
+  latest_recorded_at: string | null;
+  distance_km: number | null;
+  is_breach: boolean;
 };
 
 export async function listReports(status: ReportStatus = "PENDING"): Promise<FieldReport[]> {
@@ -132,6 +144,10 @@ export async function addReportNote(reportId: string, note: string): Promise<Fie
     method: "POST",
     body: JSON.stringify({ note: note.trim() }),
   });
+}
+
+export async function getNearestSensorReading(reportId: string): Promise<NearestSensorReading> {
+  return fetchJSON<NearestSensorReading>(`/api/v1/reports/${reportId}/nearest-sensor`);
 }
 
 /**

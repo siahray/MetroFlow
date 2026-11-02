@@ -42,6 +42,7 @@ from schemas import (
     HazardUpdate,
     IncidentLogItem,
     LoginRequest,
+    NearestSensorReading,
     NetworkStateResponse,
     NodeFeature,
     NodeFeatureCollection,
@@ -2293,6 +2294,80 @@ def delete_sensor(
     )
     db.delete(db_sensor)
     db.commit()
+
+
+@app.get("/api/v1/reports/{report_id}/nearest-sensor", response_model=NearestSensorReading)
+def get_nearest_sensor_reading(
+    report_id: str,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Cross-reference the nearest rain gauge reading for a selected report (FSD-FR-079)."""
+    import models
+
+    # Get the report
+    report = db.query(models.Report).filter(models.Report.report_id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if report.latitude is None or report.longitude is None:
+        return NearestSensorReading()
+
+    # Find nearest RAIN_GAUGE sensor using PostGIS ST_Distance
+    # Create a point from report coordinates
+    report_point = func.ST_SetSRID(func.ST_MakePoint(report.longitude, report.latitude), 4326)
+
+    # Find nearest active RAIN_GAUGE sensor with its latest reading
+    nearest = (
+        db.query(
+            models.Sensor.sensor_id,
+            models.Sensor.name,
+            models.Sensor.sensor_type,
+            models.Sensor.threshold_value,
+            models.Sensor.threshold_unit,
+            func.ST_Distance(models.Sensor.geom, report_point).label("distance"),
+        )
+        .filter(models.Sensor.sensor_type == "RAIN_GAUGE")
+        .filter(models.Sensor.active)
+        .filter(models.Sensor.geom.isnot(None))
+        .order_by(func.ST_Distance(models.Sensor.geom, report_point))
+        .first()
+    )
+
+    if not nearest:
+        return NearestSensorReading()
+
+    # Get the latest reading for this sensor
+    latest_reading = (
+        db.query(models.SensorReading)
+        .filter(models.SensorReading.sensor_id == nearest.sensor_id)
+        .order_by(models.SensorReading.recorded_at.desc())
+        .first()
+    )
+
+    if not latest_reading:
+        return NearestSensorReading(
+            sensor_id=nearest.sensor_id,
+            sensor_name=nearest.name,
+            sensor_type=nearest.sensor_type,
+            distance_km=nearest.distance / 1000.0 if nearest.distance else None,
+        )
+
+    # Check if reading is a breach
+    is_breach = False
+    if nearest.threshold_unit == latest_reading.unit:
+        is_breach = latest_reading.value >= nearest.threshold_value
+
+    return NearestSensorReading(
+        sensor_id=nearest.sensor_id,
+        sensor_name=nearest.name,
+        sensor_type=nearest.sensor_type,
+        latest_value=latest_reading.value,
+        latest_unit=latest_reading.unit,
+        latest_recorded_at=latest_reading.recorded_at,
+        distance_km=nearest.distance / 1000.0 if nearest.distance else None,
+        is_breach=is_breach,
+    )
 
 
 # ---------------------------------------------------------------------------

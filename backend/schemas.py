@@ -426,6 +426,19 @@ class SensorResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class NearestSensorReading(BaseModel):
+    """Nearest sensor reading for a report (FSD-FR-079)."""
+
+    sensor_id: str | None = None
+    sensor_name: str | None = None
+    sensor_type: str | None = None
+    latest_value: float | None = None
+    latest_unit: str | None = None
+    latest_recorded_at: datetime | None = None
+    distance_km: float | None = None
+    is_breach: bool = False
+
+
 class SensorCreateRequest(BaseModel):
     """Create a new sensor (FSD-FR-091)."""
 
