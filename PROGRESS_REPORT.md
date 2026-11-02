@@ -1,8 +1,8 @@
 # MetroFlow - Progress Report
 
-**Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System  
-**Date:** October 28, 2026  
-**Branch:** `main`  
+**Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System
+**Date:** November 2, 2026
+**Branch:** `main`
 **Status:** Deployed — portal on Vercel, API as a Vercel Python function, Supabase hosted
 
 ---
@@ -34,7 +34,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | Component | Status | Details |
 |---|---|---|
 | Core tables | Complete | `road_nodes`, `road_edges`, `live_edge_states`, `users`, `audit_logs` |
-| New tables | Complete | `hazard_zones`, `vehicles`, `sos_requests` |
+| New tables | Complete | `hazard_zones`, `vehicles`, `sos_requests`, `sensors`, `sensor_readings` |
 | PostGIS geometry | Complete | Geospatial support for road network and hazard zones |
 | RLS | Enabled | Row Level Security enabled on all tables |
 | Privileges | Restricted | Restricted to `postgres` and `service_role` roles |
@@ -98,15 +98,25 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | `/api/v1/network/state` | GET | Road graph with live depths |
 | `/api/v1/simulation/rain` | POST | Apply a rainfall event |
 | `/api/v1/routing/navigate` | GET | Clearance-aware route |
+| `/api/v1/dispatch/{id}/preview` | GET | Rescue route preview with optional vehicle_id (FSD-FR-089) |
+| `/api/v1/users` | GET/POST | List/create users (FSD-FR-048) |
+| `/api/v1/users/{id}` | PATCH/DELETE | Update/delete users (FSD-FR-048) |
+| `/api/v1/sensors/readings` | POST | Submit sensor reading with threshold breach detection (FSD-FR-090) |
+| `/api/v1/sensors` | GET/POST | List/create sensors (FSD-FR-091) |
+| `/api/v1/sensors/{id}` | PATCH/DELETE | Update/delete sensors (FSD-FR-091) |
+| `/api/v1/audit/export` | GET | Export audit logs as CSV (FSD-FR-049) |
+| `/api/v1/incidents/export` | GET | Export SOS incidents as CSV (FSD-FR-049) |
 
 ---
 
 ## 3. LGU Web Dashboard (`metroflow-admin/`, Next.js)
 
-- **Separate pages:** `/login` and the operational screens (`/triage`, `/dashboard`, `/radar`, `/fleet`, `/hazards`)
+- **Separate pages:** `/login` and the operational screens (`/triage`, `/dashboard`, `/radar`, `/fleet`, `/hazards`, `/users`, `/export`)
 - **Real sign-in** against the API; the token is kept in `sessionStorage` and sent on every request, and a `401` returns the operator to `/login`
 - **Live data & evidence** — SOS requests, field reports, vehicles and hazards load live from the API. The incident detail drawer links authentic evidence photos with EXIF metadata, estimated submersion ranges, live nearest-unit ETA ranking, water dynamics indicators, and full-resolution evidence file viewing (FSD-FR-032 to 038)
 - **Dispatch** assigns the selected fleet unit by its backend `vehicle_id` instead of a hardcoded id
+- **User Management (FSD-FR-048)** — `/users` page with user list, search, role badges, create/edit modals, delete confirmation
+- **Export (FSD-FR-049)** — `/export` page with CSV export buttons for audit logs and incidents
 - **PII protection** — phone numbers masked by default
 - **Units:** cm for depths/clearance, km/h for speed
 - **Colors:** `slate-900` primary, `emerald-500` success
@@ -129,7 +139,17 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 
 ---
 
-## 5. CI and Deployment
+## 5. Sensor Service (FSD-FR-090, FSD-FR-091)
+
+- **Sensor Registry** — CRUD endpoints for managing river and rain gauges with threshold configuration and impact radius
+- **Sensor Readings** — Gateway submissions with sensor validation, timestamp checks, and threshold breach detection
+- **Impact Radius Edge Marking** — PostGIS ST_DWithin query identifies edges within sensor's impact radius on threshold breach (BRULE-012: advisory until dispatcher confirms)
+- **Audit Trail** — All sensor operations (create, update, delete, breach) are audited
+- **Test Coverage** — Integration tests for sensor reading rejection and CRUD operations
+
+---
+
+## 6. CI and Deployment
 
 | Pipeline | State |
 |---|---|
@@ -143,7 +163,7 @@ The mobile app has no `package-lock.json`; Bun is its package manager (TSD LIM-0
 
 ---
 
-## Scope Constraints
+## 7. Scope Constraints
 
 - **Out of scope:** Public app store releases, Civic Broadcasts, Evacuation Centers, Crew Profiles, Comms Streams, native telephony/SMS, functional SQLite tile caching, real CCTV/rain-gauge
 - **Units:** All depths/clearance in cm, speeds in km/h

@@ -35,7 +35,7 @@ FSD §Implementation Status for the current position.
 | BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — API-issued JWT with role checks (CR-001) |
 | BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI             |
 | BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy                |
-| BR-012 | FSD-FR-049                           | Reporting and export (planned)                        |
+| BR-012 | FSD-FR-049                           | Reporting and export (CSV export for audit logs and incidents)          |
 | BR-013 | FSD-FR-054 to FSD-FR-064             | Driver app, routing extensions, SSE client            |
 | BR-014 | FSD-FR-065 to FSD-FR-081             | Report service, evidence store, moderation            |
 | BR-015 | FSD-FR-073, 074, 087                 | SOS service and distress incidents                    |
@@ -109,7 +109,9 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Event Stream          | BR-018 / FSD-FR-086                  | Redis pub/sub fan-out over SSE with reconnect snapshots                    |
 | Fleet Service         | BR-016 / FSD-FR-075, 076, 088        | Unit registry, status transitions, telemetry, nearest-unit ranking         |
 | Dispatch Service      | BR-016 / FSD-FR-087 to 089           | Distress incidents, assignment, flood-safe rescue route                    |
-| Sensor Service        | BR-017 / FSD-FR-090, 091             | Reading validation, thresholds, impact radius, advisory roads              |
+| Sensor Service        | BR-017 / FSD-FR-090, 091             | Reading validation, thresholds, impact radius, advisory roads (implemented) |
+| User Service          | BR-009 / FSD-FR-048                 | User CRUD with audit trail, role validation, self-protection, last admin protection |
+| Export Service        | BR-012 / FSD-FR-049                 | CSV export for audit logs and incidents with filtering                     |
 | Evidence Store        | BR-014 / FSD-FR-066, 067             | Local volume for the pilot; MIME check, re-encode, EXIF strip              |
 | Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074 | Navigation, alerts, reports, offline cache and SOS                         |
 | LGU Map UI            | BR-016 / FSD-FR-075, 076, 082–089    | MapLibre layers, draw tools, fleet and dispatch panels                     |
@@ -402,8 +404,17 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/dispatch/{id}/route`     | GET    | BR-016 / FSD-FR-089        |
 | `/api/v1/sensors/readings`        | POST   | BR-017 / FSD-FR-090        |
 | `/api/v1/sensors`                 | GET    | BR-017 / FSD-FR-091        |
+| `/api/v1/sensors`                 | POST   | BR-017 / FSD-FR-091        |
+| `/api/v1/sensors/{id}`            | PATCH  | BR-017 / FSD-FR-091        |
+| `/api/v1/sensors/{id}`            | DELETE | BR-017 / FSD-FR-091        |
+| `/api/v1/users`                   | GET    | BR-009 / FSD-FR-048        |
+| `/api/v1/users`                   | POST   | BR-009 / FSD-FR-048        |
+| `/api/v1/users/{id}`              | PATCH  | BR-009 / FSD-FR-048        |
+| `/api/v1/users/{id}`              | DELETE | BR-009 / FSD-FR-048        |
+| `/api/v1/audit/export`            | GET    | BR-012 / FSD-FR-049        |
+| `/api/v1/incidents/export`        | GET    | BR-012 / FSD-FR-049        |
 
-The CR-001 rows are **planned**; they are not present in the baseline. The
+The sensor registry CRUD endpoints and user management endpoints are implemented; the CR-001 plan remains for additional sensor features and offline capabilities. The
 routing endpoint is also extended with coordinate inputs, hazard exclusion and
 turn instructions.
 
@@ -461,7 +472,7 @@ Full request and response contracts, examples and error bodies are in
 | Location minimisation: 50 m rounding, salted hash, 24-hour retention                   | BR-011 / NFR-021             |
 | Immutable audit writes for privileged actions                                          | BR-008 / FSD-FR-093          |
 | Authenticated SSE subscriptions                                                        | BR-013 / FSD-FR-086          |
-| Sensor gateway authentication and range validation                                     | BR-017 / FSD-FR-090          |
+| Sensor gateway authentication and range validation                                     | BR-017 / FSD-FR-090 (implemented)          |
 
 **Open security risks**
 

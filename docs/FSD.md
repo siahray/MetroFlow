@@ -351,11 +351,13 @@ statement; the FSD identifiers above remain stable as items move.
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Implemented | POST /vehicles/{id}/telemetry (5 s throttle); SOS uses real GPS (VAL-021); status display on SOS screen (FSD-FR-074) |
 | Live operational map     | FSD-FR-075, 076   | Implemented | MapLibre renders live network and A* route with toggleable overlays for verified hazards, fleet units and active SOS signals |
-| Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; nearest-gauge cross-reference (FR-079) absent |
+| Moderation and evidence  | FSD-FR-077 to 081 | Implemented | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; nearest-gauge cross-reference (FR-079) absent |
 | Hazard authoring         | FSD-FR-082 to 086 | Implemented | Create, update, and publish via the API; live SSE event stream at `/api/v1/hazards/stream` |
 | Distress and dispatch    | FSD-FR-087 to 089 | Implemented | Incident list, assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
+| User management          | FSD-FR-048         | Implemented | CRUD endpoints for users with audit trail; admin UI with search, role badges, create/edit modals, delete confirmation; security: role validation, email uniqueness, self-protection, last admin protection |
+| Export                   | FSD-FR-049         | Implemented | CSV export for audit logs and incidents; admin UI with one-click export buttons and toast notifications |
+| Sensor ingestion         | FSD-FR-090, 091   | Implemented | POST /api/v1/sensors/readings with threshold breach detection; sensor registry CRUD (GET, POST, PATCH, DELETE); impact radius edge marking using PostGIS ST_DWithin; audit trail for sensor operations |
 | Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |
-| Sensor ingestion         | FSD-FR-090, 091   | Planned     | No readings or threshold evaluation                 |
 
 ## Actors
 
@@ -365,11 +367,11 @@ statement; the FSD identifiers above remain stable as items move.
 | ACT-002 | MDRRMC commander   | Oversees operations across barangays   | Not distinguished from dispatcher      |
 | ACT-003 | Field responder    | Consumes route guidance                | None (planned driver app, CR-001)      |
 | ACT-004 | Citizen reporter   | Submits reports                        | None (planned report API, CR-001)      |
-| ACT-005 | Administrator      | Manages users and configuration        | None (future)                          |
+| ACT-005 | Administrator      | Manages users and configuration        | Portal behind `/login`; `SUPER_ADMIN` token required |
 | ACT-006 | Integration client | Calls the API programmatically         | Bearer token from `/auth/login`; role decides the routes |
 | ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | Expo app; driver account token for `/sos` |
 | ACT-008 | Rescue commander   | Approves dispatch and rescue routes    | None (planned, CR-001)                 |
-| ACT-009 | Sensor gateway     | Posts river and rain gauge readings    | None (planned, CR-001)                 |
+| ACT-009 | Sensor gateway     | Posts river and rain gauge readings    | POST /api/v1/sensors/readings; authenticated user token required |
 
 ## Use Cases
 
