@@ -1532,3 +1532,31 @@ def test_user_management_last_admin_protection(client):
         delete_resp = client.delete(f"/api/v1/users/{admin_id}")
         assert delete_resp.status_code == 409
         assert "last administrator" in delete_resp.json()["detail"].lower()
+
+
+def test_export_audit_csv(client):
+    """FSD-FR-049: Admin can export audit logs as CSV."""
+    resp = client.get("/api/v1/audit/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "attachment" in resp.headers["content-disposition"]
+
+    # Verify CSV has header row
+    content = resp.text
+    lines = content.split("\n")
+    assert len(lines) > 1
+    assert "log_id,user_id,action_type" in lines[0]
+
+
+def test_export_incidents_csv(client):
+    """FSD-FR-049: Admin can export incidents as CSV."""
+    resp = client.get("/api/v1/incidents/export")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "attachment" in resp.headers["content-disposition"]
+
+    # Verify CSV has header row
+    content = resp.text
+    lines = content.split("\n")
+    assert len(lines) > 1
+    assert "sos_id,latitude,longitude" in lines[0]

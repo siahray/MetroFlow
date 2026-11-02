@@ -1996,6 +1996,100 @@ def verify_audit(
     return audit.verify_chain(entries)
 
 
+@app.get("/api/v1/audit/export")
+def export_audit_csv(
+    action_type: str | None = None,
+    user_id: int | None = None,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Export audit logs as CSV (FSD-FR-049)."""
+    import csv
+    from io import StringIO
+
+    query = db.query(models.AuditLog)
+    if action_type:
+        query = query.filter(models.AuditLog.action_type == action_type)
+    if user_id is not None:
+        query = query.filter(models.AuditLog.user_id == user_id)
+    entries = query.order_by(models.AuditLog.log_id.asc()).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["log_id", "user_id", "action_type", "payload", "hash_signature", "created_at"])
+
+    for entry in entries:
+        writer.writerow(
+            [
+                entry.log_id,
+                entry.user_id,
+                entry.action_type,
+                entry.payload,
+                entry.hash_signature,
+                entry.created_at.isoformat() if entry.created_at else "",
+            ]
+        )
+
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
+    )
+
+
+@app.get("/api/v1/incidents/export")
+def export_incidents_csv(
+    status: str | None = None,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Export SOS incidents as CSV (FSD-FR-049)."""
+    import csv
+    from io import StringIO
+
+    query = db.query(models.SOSRequest)
+    if status:
+        query = query.filter(models.SOSRequest.status == status.upper())
+    incidents = query.order_by(models.SOSRequest.sos_id.asc()).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "sos_id",
+            "latitude",
+            "longitude",
+            "note",
+            "vehicle_id",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+    )
+
+    for incident in incidents:
+        writer.writerow(
+            [
+                incident.sos_id,
+                incident.latitude,
+                incident.longitude,
+                incident.note or "",
+                incident.vehicle_id or "",
+                incident.status,
+                incident.created_at.isoformat() if incident.created_at else "",
+                incident.updated_at.isoformat() if incident.updated_at else "",
+            ]
+        )
+
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=incidents.csv"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Field reports and moderation (FSD-FR-065 to 067, 077 to 081)
 # ---------------------------------------------------------------------------
