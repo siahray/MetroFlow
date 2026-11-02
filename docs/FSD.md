@@ -123,7 +123,7 @@ provider fallback. Existing identifiers are unchanged.
 | FSD-FR-076 | BR-016         | Show each rescue unit's call sign, type, status and active task                                               |
 | FSD-FR-077 | BR-014         | Load the moderation queue from the report API ordered by urgency score                                        |
 | FSD-FR-078 | BR-014         | Display photo evidence, EXIF, capture time and a location plausibility check                                  |
-| FSD-FR-079 | BR-014, BR-017 | Cross-reference nearby CCTV demo feeds and rain gauges for a selected report                                  |
+| FSD-FR-079 | BR-014, BR-017 | Cross-reference the nearest rain gauge reading for a selected report                                        |
 | FSD-FR-080 | BR-014, BR-016 | Approve a report, creating and publishing a verified hazard in one action                                     |
 | FSD-FR-081 | BR-014         | Reject or mark a report as duplicate with a required reason                                                   |
 | FSD-FR-082 | BR-016         | Draw a flood polygon on the map with at least three vertices                                                  |
@@ -183,7 +183,7 @@ provider fallback. Existing identifiers are unchanged.
 | BR-016  | FSD-FR-075 | Map — Layer toggles                  | Checkbox group  | Yes       |
 | BR-016  | FSD-FR-076 | Fleet — Unit list and status         | List            | No        |
 | BR-014  | FSD-FR-078 | Evidence — Photo and EXIF            | Static block    | No        |
-| BR-014  | FSD-FR-079 | Evidence — CCTV and gauge cross-ref  | Static block    | No        |
+| BR-014  | FSD-FR-079 | Evidence — nearest gauge cross-ref   | Static block    | No        |
 | BR-016  | FSD-FR-082 | Map — Flood polygon draw tool        | Map interaction | No        |
 | BR-016  | FSD-FR-083 | Map — Closure line draw tool         | Map interaction | No        |
 | BR-016  | FSD-FR-084 | Map — Obstruction level selector     | Select          | Yes       |
@@ -270,7 +270,7 @@ provider fallback. Existing identifiers are unchanged.
 | TC-032 | BR-015  | FSD-FR-073, FSD-FR-074             | SOS without a fresh location is refused; a valid SOS is acknowledged        |
 | TC-033 | BR-016  | FSD-FR-075, FSD-FR-076             | All five map layers render and a unit shows status and active task          |
 | TC-034 | BR-014  | FSD-FR-077                         | The queue is served by the API in descending urgency order                  |
-| TC-035 | BR-014  | FSD-FR-078, FSD-FR-079             | Evidence shows photo, EXIF, nearest gauge and a labelled CCTV reference     |
+| TC-035 | BR-014  | FSD-FR-078, FSD-FR-079             | Evidence shows the reporter's photo, EXIF and the nearest gauge reading     |
 | TC-036 | BR-014  | FSD-FR-080                         | Approving a report creates a published hazard and emits one event           |
 | TC-037 | BR-014  | FSD-FR-081                         | Rejecting without a reason is blocked; a valid rejection is recorded        |
 | TC-038 | BR-016  | FSD-FR-082, FSD-FR-084, FSD-FR-085 | A drawn polygon with an obstruction level can be published and withdrawn    |
@@ -351,9 +351,9 @@ statement; the FSD identifiers above remain stable as items move.
 | Offline operation        | FSD-FR-068 to 071 | Planned     | The offline screen is a labelled visual placeholder |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Implemented | POST /vehicles/{id}/telemetry (5 s throttle); SOS uses real GPS (VAL-021); status display on SOS screen (FSD-FR-074) |
 | Live operational map     | FSD-FR-075, 076   | Implemented | MapLibre renders live network and A* route with toggleable overlays for verified hazards, fleet units and active SOS signals |
-| Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; CCTV/gauge cross-reference (FR-079) absent |
+| Moderation and evidence  | FSD-FR-077 to 081 | Partial     | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; nearest-gauge cross-reference (FR-079) absent |
 | Hazard authoring         | FSD-FR-082 to 086 | Implemented | Create, update, and publish via the API; live SSE event stream at `/api/v1/hazards/stream` |
-| Distress and dispatch    | FSD-FR-087 to 089 | Partial     | Incident list, assignment and confirmation; rescue route absent |
+| Distress and dispatch    | FSD-FR-087 to 089 | Implemented | Incident list, assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
 | Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |
 | Sensor ingestion         | FSD-FR-090, 091   | Planned     | No readings or threshold evaluation                 |
 
@@ -370,7 +370,6 @@ statement; the FSD identifiers above remain stable as items move.
 | ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | Expo app; driver account token for `/sos` |
 | ACT-008 | Rescue commander   | Approves dispatch and rescue routes    | None (planned, CR-001)                 |
 | ACT-009 | Sensor gateway     | Posts river and rain gauge readings    | None (planned, CR-001)                 |
-| ACT-010 | CCTV demo feed     | Labelled reference footage in evidence | None (demo registry, CR-001)           |
 
 ## Use Cases
 
@@ -552,7 +551,7 @@ Requirements: FSD-FR-090, FSD-FR-091.
 ## Out of Scope for This Release
 
 - Public App Store and Play Store releases; pilot distribution uses EAS internal builds.
-- Real CCTV integration; a labelled demo feed registry is used.
+- CCTV. The only camera is the reporter's own phone; evidence is the submitted photo.
 - Production SMS, telephony or carrier delivery for SOS.
 - Offline basemap tiles; offline mode renders the cached road graph.
 - Administrative screens (FSD-FR-048) and exports (FSD-FR-049) remain planned.

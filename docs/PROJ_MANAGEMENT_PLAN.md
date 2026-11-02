@@ -119,7 +119,7 @@ new High or Medium ZAP finding.
 ### Out of scope
 
 - Native iOS or Android store builds.
-- Real CCTV integration; a labelled demo registry is used.
+- CCTV. Evidence is the photo the reporter submits from their own phone.
 - Production SMS, telephony or carrier delivery for SOS.
 - Offline basemap tiles; the cached graph is used offline.
 - Production single sign-on.
@@ -259,7 +259,7 @@ Rules:
 | I-001 | Issue      | No authentication on the baseline API or portal                   | PM               | High   | Open (CR-001) |
 | I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Open (CR-001) |
 | I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround    |
-| I-004 | Issue      | CCTV is a demo registry and gauges may be simulated               | Business Analyst | Medium | Accepted      |
+| I-004 | Issue      | CCTV is out of scope and gauges may be simulated                  | Business Analyst | Low    | Accepted      |
 | I-005 | Issue      | CR-001 increment is planned, not implemented                      | PM               | High   | Open          |
 | D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open          |
 | D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open          |
@@ -460,7 +460,7 @@ Confidence in next:   <high/medium/low + reason>
 - [ ] Hosted database at head, or the limitation documented.
 - [ ] Token enforcement on every privileged route; role violations return 403 and change nothing.
 - [ ] Offline E2E and hazard publish latency tests pass.
-- [ ] Simulated sensors and demo CCTV labelled in the product.
+- [ ] Simulated sensors labelled in the product; no CCTV claim.
 - [ ] Document set approved, including CR-001.
 - [ ] Repository access granted per institutional rule.
 - [ ] Handover session delivered to «Client Representative».
@@ -469,5 +469,5 @@ Confidence in next:   <high/medium/low + reason>
 Post-implementation review, one month after handover or after the first rain
 event: were the benefits realised, did the system hold up, and what was missing?
 The next increment is no longer authentication or intake; candidates are a real
-sensor/CCTV agreement, a native client, or multi-LGU tenancy, decided by the
+sensor agreement, a native client, or multi-LGU tenancy, decided by the
 sponsor under change control.
