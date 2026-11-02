@@ -25,9 +25,13 @@ export default function TriagePage() {
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const [sosList, reportList, vehicleList, hazardList] = await Promise.all([
           listSOS().catch(() => []),
@@ -52,8 +56,10 @@ export default function TriagePage() {
         } else if (incidents.length === 0) {
           setSelectedId("");
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        setError("Failed to load incidents");
+      } finally {
+        setLoading(false);
       }
     };
     load();
@@ -218,6 +224,12 @@ export default function TriagePage() {
           filter={filter}
           query={query}
           dismissed={dismissed}
+          loading={loading}
+          error={error}
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+          }}
           onSelect={handleSelect}
           onDismiss={handleDismiss}
           onFilterChange={setFilter}
