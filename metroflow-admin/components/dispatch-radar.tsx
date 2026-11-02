@@ -21,19 +21,17 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
+import { maskPhoneNumber, type Incident } from "@/lib/incidents";
 import { cn } from "@/lib/cn";
 import { addSOSNote, escalateSOS, rejectSOS } from "@/lib/dispatch";
 import { addReportNote, escalateReport, rejectReport } from "@/lib/reports";
 
 type DispatchRadarProps = {
   incident: Incident;
-  logs: LogEntry[];
   queueCount: number;
   onBack: () => void;
   onAction: (label: string) => void;
   onMessage: (message: string) => void;
-  onAddNote: (text: string) => void;
   onOpenDispatchModal?: () => void;
 };
 
@@ -42,7 +40,6 @@ export function DispatchRadar({
   onBack,
   onAction,
   onMessage,
-  onAddNote,
   onOpenDispatchModal,
 }: DispatchRadarProps) {
   const [phoneRevealed, setPhoneRevealed] = useState(false);
@@ -54,6 +51,8 @@ export function DispatchRadar({
   const [actionAgency, setActionAgency] = useState("BFP");
   const [actionSubmitting, setActionSubmitting] = useState(false);
 
+  // FSD-FR-043: notes and actions persist through the API; this screen has no
+  // log panel of its own, so it does not keep a copy to drift out of date.
   const isDispatched =
     incident.tags.includes("Vehicle Assigned") || incident.tags.includes("Dispatched");
   const isRejected = incident.tags.includes("Rejected");
@@ -76,9 +75,6 @@ export function DispatchRadar({
   async function handleSaveNote() {
     if (!noteText.trim()) return;
     const text = noteText.trim();
-    onAddNote(text);
-    setNoteText("");
-    setNoteOpen(false);
 
     try {
       const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
@@ -86,9 +82,15 @@ export function DispatchRadar({
         await addSOSNote(sosId, text);
       } else if (incident.reportId) {
         await addReportNote(incident.reportId, text);
+      } else {
+        throw new Error("Incident has no identifier");
       }
+      setNoteText("");
+      setNoteOpen(false);
+      onMessage("Internal note saved to incident log");
     } catch {
-      // Best-effort
+      // The toast says "not saved" because the row really is not there.
+      onMessage("Note could not be saved. Check the connection and try again.");
     }
   }
 
