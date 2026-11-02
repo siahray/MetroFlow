@@ -7,13 +7,14 @@ import {
   Radar,
   Shield,
   Truck,
+  Users,
   Waves,
 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import type { SessionUser } from "@/lib/session";
 
-export type NavItem = "triage" | "moderation" | "radar" | "hazards" | "fleet";
+export type NavItem = "triage" | "moderation" | "radar" | "hazards" | "fleet" | "users";
 
 export const NAV_ITEMS = [
   { id: "triage" as NavItem, label: "Triage & Verification", href: "/triage", icon: CheckSquare },
@@ -26,6 +27,7 @@ export const NAV_ITEMS = [
   { id: "radar" as NavItem, label: "Dispatch Radar", href: "/radar", icon: Radar },
   { id: "hazards" as NavItem, label: "Live Map & Hazards", href: "/hazards", icon: Map },
   { id: "fleet" as NavItem, label: "Rescue Units & Fleet", href: "/fleet", icon: Truck },
+  { id: "users" as NavItem, label: "User Management", href: "/users", icon: Users },
 ] as const;
 
 type SidebarProps = {
