@@ -11,7 +11,7 @@ import { fetchBlob, fetchJSON } from "./api";
 
 export type ReportStatus = "PENDING" | "VERIFIED" | "REJECTED" | "DUPLICATE";
 
-export type ReportSource = "PHOTO" | "SENSOR" | "CCTV" | "CALL";
+export type ReportSource = "PHOTO" | "SENSOR" | "CALL";
 
 export type ReportDepth = "ANKLE" | "KNEE" | "IMPASSABLE";
 

@@ -27,6 +27,10 @@ export const RESCUE_UNIT_STATUSES = ["AVAILABLE", "EN_ROUTE", "ON_SCENE", "OFFLI
  */
 export function toUnitStatus(value: string | null | undefined): RescueUnit["status"] {
   const upper = String(value ?? "").toUpperCase();
+  // FSD-BRULE-011: the API marks an assigned unit DISPATCHED; the fleet screen
+  // shows that as en route, and OUT_OF_SERVICE as the offline badge.
+  if (upper === "DISPATCHED") return "EN_ROUTE";
+  if (upper === "OUT_OF_SERVICE") return "OFFLINE";
   return (RESCUE_UNIT_STATUSES as readonly string[]).includes(upper)
     ? (upper as RescueUnit["status"])
     : "AVAILABLE";
