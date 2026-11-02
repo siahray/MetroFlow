@@ -31,6 +31,31 @@ export type IncidentLogItem = {
   kind: "muted" | "action" | "note";
 };
 
+export type DispatchPreviewUnit = {
+  vehicle_id: number;
+  call_sign: string;
+  total_distance_m: number | null;
+  estimated_travel_time_minutes: number | null;
+  destination_name: string | null;
+  hazards: { hazard_id: number; name: string; obstruction_level: string; blocking: boolean }[];
+  detail: string | null;
+};
+
+export type DispatchPreview = {
+  sos_id: number;
+  units: DispatchPreviewUnit[];
+};
+
+export async function previewDispatchRoute(
+  sosId: number,
+  vehicleId?: number,
+): Promise<DispatchPreview> {
+  const url = vehicleId
+    ? `/api/v1/dispatch/${sosId}/preview?vehicle_id=${vehicleId}`
+    : `/api/v1/dispatch/${sosId}/preview`;
+  return fetchJSON<DispatchPreview>(url);
+}
+
 export async function listVehicles(): Promise<Vehicle[]> {
   return fetchJSON<Vehicle[]>("/api/v1/vehicles");
 }
