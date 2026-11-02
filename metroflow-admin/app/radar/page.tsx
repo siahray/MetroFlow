@@ -8,15 +8,11 @@ import { CheckSquare } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { DispatchRadar } from "@/components/dispatch-radar";
 import { useToast } from "@/components/toast-provider";
-import { type LogEntry, type Incident } from "@/lib/incidents";
+import { type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listReports } from "@/lib/reports";
-import { fetchIncidentLog, listVehicles } from "@/lib/dispatch";
-
-function nowLabel() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+import { listVehicles } from "@/lib/dispatch";
 
 function RadarContent() {
   const router = useRouter();
@@ -26,7 +22,6 @@ function RadarContent() {
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -60,51 +55,14 @@ function RadarContent() {
 
   const selected = incidents.find((i) => i.id === selectedId) || incidents[0] || null;
   const activeId = selected?.id ?? "";
-  const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
 
-  useEffect(() => {
-    if (!selected) return;
-    let cancelled = false;
-    fetchIncidentLog(selected).then((items) => {
-      if (!cancelled && items && items.length > 0) {
-        setLogs((prev) => ({
-          ...prev,
-          [selected.id]: items.map((i) => ({ time: i.time, text: i.text, kind: i.kind })),
-        }));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
-
-  const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
-    setLogs((current) => ({
-      ...current,
-      [id]: [...(current[id] ?? []), { time: nowLabel(), text, kind }],
-    }));
-  }, []);
-
+  // FSD-FR-043: actions and notes are persisted by the API and read back per
+  // incident, so this screen only reports the outcome.
   const handleAction = useCallback(
     (label: string) => {
-      if (activeId) {
-        show(`${label} executed for #${activeId}`);
-        appendLog(activeId, `Action: ${label} by Dispatch Officer.`, "action");
-      } else {
-        show(label);
-      }
+      show(activeId ? `${label} for #${activeId}` : label);
     },
-    [appendLog, activeId, show],
-  );
-
-  const handleAddNote = useCallback(
-    (text: string) => {
-      if (activeId) {
-        appendLog(activeId, `Note: ${text}`, "note");
-      }
-      show("Internal note saved to incident log");
-    },
-    [appendLog, activeId, show],
+    [activeId, show],
   );
 
   return (
@@ -133,12 +91,10 @@ function RadarContent() {
 
           <DispatchRadar
             incident={selected}
-            logs={selectedLogs}
             queueCount={incidents.length}
             onBack={() => router.push("/triage")}
             onAction={handleAction}
             onMessage={show}
-            onAddNote={handleAddNote}
             onOpenDispatchModal={() => router.push("/triage")}
           />
         </div>

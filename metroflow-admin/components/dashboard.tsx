@@ -10,7 +10,7 @@ import { IncidentQueue } from "./incident-queue";
 import { RescueTracking } from "./rescue-tracking";
 import { Sidebar } from "./sidebar";
 import { useToast } from "./toast-provider";
-import { type LogEntry, type QueueFilter, type Incident } from "@/lib/incidents";
+import { type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
@@ -25,10 +25,6 @@ const VIEW_TITLES: Record<View, string> = {
   sensors: "Live Map & Hazard Authoring",
   fleet: "Rescue Fleet & Mission Operations",
 };
-
-function nowLabel() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 
 export function Dashboard({
   user,
@@ -46,7 +42,6 @@ export function Dashboard({
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -105,15 +100,7 @@ export function Dashboard({
     ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null)
     : (allIncidents[0] ?? null);
   const activeId = selected?.id ?? "";
-  const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
   const pendingCount = allIncidents.length - dismissed.size;
-
-  const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
-    setLogs((current) => ({
-      ...current,
-      [id]: [...(current[id] ?? []), { time: nowLabel(), text, kind }],
-    }));
-  }, []);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -127,26 +114,13 @@ export function Dashboard({
     [show],
   );
 
+  // FSD-FR-043: the log is persisted per incident and read back by the panels,
+  // so this screen only reports the outcome.
   const handleAction = useCallback(
     (label: string) => {
-      if (activeId) {
-        show(`${label} executed for #${activeId}`);
-        appendLog(activeId, `Action: ${label} by Operator M. Santos.`, "action");
-      } else {
-        show(label);
-      }
+      show(activeId ? `${label} for #${activeId}` : label);
     },
-    [appendLog, activeId, show],
-  );
-
-  const handleAddNote = useCallback(
-    (text: string) => {
-      if (activeId) {
-        appendLog(activeId, `Note: ${text}`, "note");
-      }
-      show("Internal note saved to incident log");
-    },
-    [appendLog, activeId, show],
+    [activeId, show],
   );
 
   const handleNavigate = useCallback(
@@ -269,12 +243,10 @@ export function Dashboard({
             selected ? (
               <DispatchRadar
                 incident={selected}
-                logs={selectedLogs}
                 queueCount={pendingCount}
                 onBack={() => setView("triage")}
                 onAction={handleAction}
                 onMessage={show}
-                onAddNote={handleAddNote}
                 onOpenDispatchModal={() => setView("triage")}
               />
             ) : (
@@ -352,9 +324,7 @@ export function Dashboard({
                 {selected ? (
                   <IncidentDetail
                     incident={selected}
-                    logs={selectedLogs}
                     onAction={handleAction}
-                    onAddNote={handleAddNote}
                     onDispatchConfirmed={handleDispatchConfirmed}
                   />
                 ) : (
