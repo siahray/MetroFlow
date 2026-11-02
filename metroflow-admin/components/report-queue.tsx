@@ -5,14 +5,13 @@ import { Camera, Copy, MapPin, Search, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ageLabel, type FieldReport } from "@/lib/reports";
 
-export type ReportFilter = "all" | "PHOTO" | "CALL" | "SENSOR" | "CCTV";
+export type ReportFilter = "all" | "PHOTO" | "CALL" | "SENSOR";
 
 export const REPORT_FILTERS: { id: ReportFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "PHOTO", label: "Photo" },
   { id: "CALL", label: "Call" },
   { id: "SENSOR", label: "Sensor" },
-  { id: "CCTV", label: "CCTV" },
 ];
 
 type ReportQueueProps = {

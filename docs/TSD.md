@@ -223,7 +223,7 @@ photograph is stored in the row because this deployment has no object store).
 | ----------------- | --------------------- | -------------------------------------------------------- |
 | `report_id`       | uuid                  | Primary key                                              |
 | `reporter_hash`   | varchar(64)           | Salted hash of the reporting account; never raw identity |
-| `source`          | varchar(20)           | `PHOTO`, `CCTV`, `SENSOR` or `CALL`                      |
+| `source`          | varchar(20)           | `PHOTO`, `SENSOR` or `CALL`                              |
 | `geometry`        | geometry(Point, 4326) | Reported location                                        |
 | `barangay`        | varchar(120)          | Reporting area                                           |
 | `narrative`       | text                  | Optional description                                     |
@@ -475,7 +475,7 @@ Full request and response contracts, examples and error bodies are in
 | SEC-006 | Uploaded evidence can exhaust or poison storage   | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution                  |
 | SEC-007 | SSE stream could leak fleet or SOS positions      | Medium   | Authenticate the stream and filter by role                                  |
 | SEC-008 | Driver location can be re-identified              | Medium   | Round, hash the device id, restrict access, purge after 24 hours            |
-| SEC-009 | Demo CCTV may be mistaken for live footage        | Medium   | Label the feed as demo in the API and UI                                    |
+| SEC-009 | Demo CCTV may be mistaken for live footage        | Closed   | CCTV dropped: evidence is the reporter's own photo                          |
 | SEC-010 | A sensor reading can be spoofed                   | Medium   | Gateway credential, sensor allowlist, range and timestamp checks            |
 | SEC-011 | Driver app session theft on a shared device       | Medium   | Short-lived access token in device storage; refresh token cleared on sign-out |
 | SEC-012 | Service-role key leak bypasses every RLS policy   | High     | Server-only storage, no client bundling, rotation on suspicion              |
@@ -1003,7 +1003,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                         | Documented in migration rules                                                                                |
 | LIM-014 | Seeded graph is four nodes                         | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-015 | Driver app is not distributed through public app stores | Users need an EAS or TestFlight build        | Internal distribution for the pilot; public store release is a separate gate                                 |
-| LIM-016 | CCTV is a labelled demo registry                   | Evidence lacks real video corroboration          | Agreement and feed integration post-pilot                                                                    |
+| LIM-016 | Evidence is user-submitted photos only             | No video corroboration of a report               | CCTV is out of scope: the reporter's phone is the only camera                                              |
 | LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic      | Optional tile cache if storage and licensing allow                                                           |
 | LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
 | LIM-019 | Authentication requires API and database reachability | An offline app cannot sign in                | Sign in when online; the token lasts 24 hours; no privileged offline action                                  |

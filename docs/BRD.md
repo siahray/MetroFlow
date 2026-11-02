@@ -236,7 +236,7 @@ BR-018 are the largest open items; CR-001 is the vehicle that closes them.
 ### A.3 Out of scope
 
 - Native iOS or Android store builds.
-- Real CCTV integration; a labelled demo feed registry is used.
+- CCTV. Evidence is the photo the reporter submits from their own phone.
 - Production SMS, telephony or carrier integration for SOS.
 - Offline basemap tiles; offline mode renders the cached road graph.
 - Multi-LGU deployment, billing and tenancy.
@@ -246,10 +246,9 @@ BR-018 are the largest open items; CR-001 is the vehicle that closes them.
 ### A.4 Boundary statement for acceptance
 
 The pilot is accepted on a **demonstration corridor with synthetic rainfall, a
-seeded sensor set, a labelled CCTV demo registry and a real persisted report
-flow**. It is not accepted as a production dispatch system until real sensor and
-CCTV agreements, carrier-grade SOS delivery and multi-LGU isolation are in
-place. Those items are recorded in TSD §7 and are not implied by this release.
+seeded gauge set and a real persisted report flow**. It is not accepted as a
+production dispatch system until real sensor agreements, carrier-grade SOS
+delivery and multi-LGU isolation are in place. Those items are recorded in TSD §7 and are not implied by this release.
 
 ## Appendix B — Business Rules, Assumptions and Constraints
 
@@ -291,7 +290,7 @@ place. Those items are recorded in TSD §7 and are not implied by this release.
 | Constraint | C-004 | Only synthetic or public data may be used                                 |
 | Constraint | C-005 | Credentials are never committed; public keys are restricted by origin     |
 | Constraint | C-006 | The driver client ships as a native Expo app, not a public store release |
-| Constraint | C-007 | No real CCTV feed is available; a labelled demo registry is used          |
+| Constraint | C-007 | Evidence is the reporter's own photo; no CCTV feed is available or used   |
 | Constraint | C-008 | Basemap tiles are online-only; offline mode uses the cached graph         |
 | Constraint | C-009 | The pilot is single-LGU and single-region                                 |
 | Constraint | C-010 | UI follows the client-supplied HTML/CSS template; no bespoke UI design    |

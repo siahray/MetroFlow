@@ -32,6 +32,8 @@ from schemas import (
     AuditResponse,
     AuditVerifyResponse,
     ConfirmRequest,
+    DispatchPreviewResponse,
+    DispatchPreviewUnit,
     EdgeFeature,
     EdgeFeatureCollection,
     EdgeProperties,
@@ -377,6 +379,26 @@ def _require_node(nodes: dict[int, models.RoadNode], node_id: int, label: str) -
             status_code=404,
             detail=f"Unknown {label} {node_id}. Available nodes: {sorted(nodes)}",
         )
+
+
+def _nearest_node(nodes: dict[int, models.RoadNode], latitude: float, longitude: float) -> int:
+    """Snap a coordinate onto the closest road node, which is how a unit joins the graph."""
+    return min(
+        nodes,
+        key=lambda node_id: reports.haversine_m(
+            latitude, longitude, nodes[node_id].latitude, nodes[node_id].longitude
+        ),
+    )
+
+
+def _release_vehicle(db: Session, vehicle_id: int) -> None:
+    """Return a dispatched unit to the available pool (FSD-BRULE-011).
+
+    A unit taken out of service meanwhile stays out of service.
+    """
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
+    if vehicle and (vehicle.status or "").upper() == "DISPATCHED":
+        vehicle.status = "AVAILABLE"
 
 
 # ---------------------------------------------------------------------------
@@ -965,6 +987,94 @@ def publish_hazard(
     return db_hazard
 
 
+@app.get("/api/v1/dispatch/{sos_id}/preview", response_model=DispatchPreviewResponse)
+def preview_dispatch_route(
+    sos_id: int,
+    vehicle_id: Annotated[
+        int | None, Query(description="Optional specific vehicle to preview")
+    ] = None,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Rank available units by flood-safe travel time to an incident (FSD-FR-088, FSD-FR-089).
+
+    If ``vehicle_id`` is provided, only that unit is previewed. Otherwise all
+    available units are ranked.
+
+    Read-only: the assignment is committed by ``/assign`` and ``/confirm``. A unit
+    with no position or no safe route is reported with a reason rather than
+    dropped, so the dispatcher can still assign it without a preview.
+    """
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+
+    # BRULE-011: only an available unit is assignable, so only those are ranked.
+    query = db.query(models.Vehicle).filter(func.upper(models.Vehicle.status) == "AVAILABLE")
+    if vehicle_id is not None:
+        query = query.filter(models.Vehicle.vehicle_id == vehicle_id)
+    available = query.order_by(models.Vehicle.vehicle_id).all()
+
+    if not available:
+        if vehicle_id is not None:
+            raise HTTPException(status_code=404, detail="Vehicle not found or not available")
+        # Return empty list when no units available but vehicle_id not specified
+        return DispatchPreviewResponse(sos_id=db_sos.sos_id, units=[])
+
+    nodes, _, _ = _load_graph(db)
+    if not nodes:
+        raise HTTPException(status_code=503, detail="Road network is not available")
+    target_node = _nearest_node(nodes, db_sos.latitude, db_sos.longitude)
+
+    units: list[DispatchPreviewUnit] = []
+    for vehicle in available:
+        unit = DispatchPreviewUnit(vehicle_id=vehicle.vehicle_id, call_sign=vehicle.call_sign)
+        if vehicle.current_location_lat is None or vehicle.current_location_lon is None:
+            if vehicle_id is not None:
+                # When specific vehicle requested, return 409 for missing position
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{vehicle.call_sign} has no current position. Assignment can proceed without a preview.",
+                )
+            unit.detail = "No current position; assignment can proceed without a preview."
+            units.append(unit)
+            continue
+        try:
+            route = get_optimal_route(
+                start_node=_nearest_node(
+                    nodes, vehicle.current_location_lat, vehicle.current_location_lon
+                ),
+                target_node=target_node,
+                clearance_cm=float(vehicle.clearance_cm or settings.default_clearance_cm),
+                ignore_hazards=False,
+                _user=_user,
+                db=db,
+            )
+        except HTTPException as exc:
+            if vehicle_id is not None:
+                # When specific vehicle requested, return 422 for no safe route
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"No safe route available for {vehicle.call_sign}: {exc.detail}",
+                ) from None
+            unit.detail = str(exc.detail)
+            units.append(unit)
+            continue
+        unit.total_distance_m = route.total_distance_m
+        unit.estimated_travel_time_minutes = route.estimated_travel_time_minutes
+        unit.destination_name = route.destination_name
+        unit.hazards = route.hazards
+        units.append(unit)
+
+    units.sort(
+        key=lambda unit: (
+            unit.estimated_travel_time_minutes is None,
+            unit.estimated_travel_time_minutes or 0.0,
+        )
+    )
+    return DispatchPreviewResponse(sos_id=db_sos.sos_id, units=units)
+
+
 @app.post("/api/v1/sos/{sos_id}/assign", response_model=SOSResponse)
 def assign_sos(
     sos_id: int,
@@ -987,8 +1097,18 @@ def assign_sos(
     )
     if not db_vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
+    # FSD-BRULE-011: only an available unit may be assigned; a second incident
+    # must not double-book one already en route.
+    if (db_vehicle.status or "").upper() != "AVAILABLE":
+        raise HTTPException(
+            status_code=409,
+            detail=f"{db_vehicle.call_sign} is {db_vehicle.status}; only an available unit can be assigned",
+        )
+    if db_sos.vehicle_id and db_sos.vehicle_id != assign_req.vehicle_id:
+        _release_vehicle(db, db_sos.vehicle_id)
     db_sos.vehicle_id = assign_req.vehicle_id
     db_sos.status = "assigned"
+    db_vehicle.status = "DISPATCHED"
     audit.record(
         db,
         user=_user,
@@ -1072,6 +1192,8 @@ def undo_dispatch(
     prev_vehicle = db_sos.vehicle_id
     db_sos.status = "pending"
     db_sos.vehicle_id = None
+    if prev_vehicle:
+        _release_vehicle(db, prev_vehicle)
     audit.record(
         db,
         user=_user,
@@ -1106,6 +1228,8 @@ def reject_sos(
         raise HTTPException(status_code=404, detail="SOS not found")
     if db_sos.status in ("confirmed", "dispatched"):
         raise HTTPException(status_code=409, detail="Cannot reject an already dispatched incident")
+    if db_sos.vehicle_id:
+        _release_vehicle(db, db_sos.vehicle_id)
     db_sos.status = "rejected"
     if db_sos.note:
         db_sos.note = f"{db_sos.note}; [REJECTED: {req.reason}]"

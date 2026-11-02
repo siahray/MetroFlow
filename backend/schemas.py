@@ -307,6 +307,25 @@ class ConfirmRequest(BaseModel):
     note: str | None = None
 
 
+class DispatchPreviewUnit(BaseModel):
+    """One assignable unit ranked by flood-safe travel time (FSD-FR-088, FSD-FR-089)."""
+
+    vehicle_id: int
+    call_sign: str
+    total_distance_m: float | None = None
+    estimated_travel_time_minutes: float | None = None
+    destination_name: str | None = None
+    hazards: list[RouteHazard] = Field(default_factory=list)
+    detail: str | None = Field(default=None, description="Why this unit has no route.")
+
+
+class DispatchPreviewResponse(BaseModel):
+    """Available units for one distress incident, fastest flood-safe route first."""
+
+    sos_id: int
+    units: list[DispatchPreviewUnit]
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str

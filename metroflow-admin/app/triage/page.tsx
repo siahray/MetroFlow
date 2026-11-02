@@ -8,16 +8,12 @@ import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
 import { IncidentQueue } from "@/components/incident-queue";
 import { useToast } from "@/components/toast-provider";
-import { type LogEntry, type QueueFilter, type Incident } from "@/lib/incidents";
+import { type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
-import { fetchIncidentLog, listVehicles, type Vehicle } from "@/lib/dispatch";
+import { listVehicles, type Vehicle } from "@/lib/dispatch";
 import { listHazards, type HazardZone } from "@/lib/hazards";
 import { listReports } from "@/lib/reports";
-
-function nowLabel() {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 
 export default function TriagePage() {
   const router = useRouter();
@@ -29,7 +25,6 @@ export default function TriagePage() {
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
-  const [logs, setLogs] = useState<Record<string, LogEntry[]>>({});
 
   useEffect(() => {
     const load = async () => {
@@ -97,31 +92,7 @@ export default function TriagePage() {
     ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null)
     : (allIncidents[0] ?? null);
   const activeId = selected?.id ?? "";
-  const selectedLogs = selected ? (logs[selected.id] ?? []) : [];
   const pendingCount = allIncidents.length - dismissed.size;
-
-  useEffect(() => {
-    if (!selected) return;
-    let cancelled = false;
-    fetchIncidentLog(selected).then((items) => {
-      if (!cancelled && items && items.length > 0) {
-        setLogs((prev) => ({
-          ...prev,
-          [selected.id]: items.map((i) => ({ time: i.time, text: i.text, kind: i.kind })),
-        }));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
-
-  const appendLog = useCallback((id: string, text: string, kind: LogEntry["kind"]) => {
-    setLogs((current) => ({
-      ...current,
-      [id]: [...(current[id] ?? []), { time: nowLabel(), text, kind }],
-    }));
-  }, []);
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -135,26 +106,13 @@ export default function TriagePage() {
     [show],
   );
 
+  // FSD-FR-043: the log is persisted per incident and read back by the detail
+  // panel, so this screen only reports the outcome.
   const handleAction = useCallback(
     (label: string) => {
-      if (activeId) {
-        show(`${label} executed for #${activeId}`);
-        appendLog(activeId, `Action: ${label} by Dispatch Officer.`, "action");
-      } else {
-        show(label);
-      }
+      show(activeId ? `${label} for #${activeId}` : label);
     },
-    [appendLog, activeId, show],
-  );
-
-  const handleAddNote = useCallback(
-    (text: string) => {
-      if (activeId) {
-        appendLog(activeId, `Note: ${text}`, "note");
-      }
-      show("Internal note saved to incident log");
-    },
-    [appendLog, activeId, show],
+    [activeId, show],
   );
 
   const handleDispatchConfirmed = useCallback(
@@ -269,9 +227,7 @@ export default function TriagePage() {
         {selected ? (
           <IncidentDetail
             incident={selected}
-            logs={selectedLogs}
             onAction={handleAction}
-            onAddNote={handleAddNote}
             onDispatchConfirmed={handleDispatchConfirmed}
           />
         ) : (

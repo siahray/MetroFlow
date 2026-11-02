@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
@@ -34,8 +34,10 @@ import {
   fetchIncidentLog,
   holdSOS,
   listVehicles,
+  previewDispatchRoute,
   rejectSOS,
   undoDispatch,
+  type DispatchPreview,
 } from "@/lib/dispatch";
 import {
   addReportNote,
@@ -47,9 +49,7 @@ import {
 
 type IncidentDetailProps = {
   incident: Incident;
-  logs: LogEntry[];
   onAction: (label: string) => void;
-  onAddNote: (text: string) => void;
   onDispatchConfirmed?: (unitCallSign: string, incidentId: string) => void;
 };
 
@@ -77,13 +77,7 @@ const BASE_ACTIONS: {
   },
 ];
 
-export function IncidentDetail({
-  incident,
-  logs,
-  onAction,
-  onAddNote,
-  onDispatchConfirmed,
-}: IncidentDetailProps) {
+export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: IncidentDetailProps) {
   const logRef = useRef<HTMLDivElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -91,9 +85,12 @@ export function IncidentDetail({
   const [modalStep, setModalStep] = useState<1 | 2 | 3>(1);
   const [vehicles, setVehicles] = useState<RescueUnit[]>(RESCUE_UNITS);
   const [selectedUnit, setSelectedUnit] = useState<RescueUnit | null>(null);
+  // FSD-FR-089: the route is previewed by the API before the dispatch is committed.
+  const [preview, setPreview] = useState<DispatchPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // FSD-FR-036 / FSD-FR-043: Persisted operations log
-  const [liveLogs, setLiveLogs] = useState<LogEntry[]>(logs);
+  const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
 
   // FSD-FR-044: Action reason modal state
   const [actionModalOpen, setActionModalOpen] = useState(false);
@@ -133,12 +130,8 @@ export function IncidentDetail({
     };
   }, [incident]);
 
-  // Merge server-persisted logs with any optimistic logs
-  const displayLogs = useMemo(() => {
-    const seen = new Set(liveLogs.map((l) => `${l.time}-${l.text}`));
-    const fresh = logs.filter((l) => !seen.has(`${l.time}-${l.text}`));
-    return fresh.length > 0 ? [...liveLogs, ...fresh] : liveLogs;
-  }, [liveLogs, logs]);
+  // FSD-FR-036 / FSD-FR-043: the operations log lives in the database; this
+  // screen only reads it back, so there is one source of truth per incident.
 
   // Undo countdown timer (FSD-FR-045)
   const isUndoActive = undoSeconds !== null;
@@ -191,7 +184,7 @@ export function IncidentDetail({
             vehicleId: v.vehicle_id,
           }));
           setVehicles(mapped);
-          setSelectedUnit(mapped[0]);
+          setSelectedUnit(mapped.find((unit) => unit.status === "AVAILABLE") ?? null);
         }
       } catch {
         // The static fallback list stays in place when the fleet API is down.
@@ -205,13 +198,56 @@ export function IncidentDetail({
     if (node) {
       node.scrollTop = node.scrollHeight;
     }
-  }, [displayLogs]);
+  }, [liveLogs]);
+
+  // FSD-FR-088, FSD-FR-089: rank the available units and preview the chosen
+  // route as soon as the workflow opens. A unit without telemetry or a safe
+  // route is reported, not hidden, and never blocks the dispatch.
+  useEffect(() => {
+    if (!dispatchModalOpen) return;
+    const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+    if (isNaN(sosId)) return;
+
+    let cancelled = false;
+    const load = async () => {
+      setPreview(null);
+      setPreviewError(null);
+      try {
+        // If a specific unit is selected, preview only that unit (backlog #12)
+        const vehicleId = selectedUnit?.vehicleId;
+        const result = await previewDispatchRoute(sosId, vehicleId);
+        if (!cancelled) setPreview(result);
+      } catch (error) {
+        if (!cancelled) {
+          setPreview(null);
+          setPreviewError(error instanceof Error ? error.message : "Route preview unavailable");
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatchModalOpen, incident.id, selectedUnit?.vehicleId]);
+
+  const selectedPreview =
+    preview?.units.find((unit) => unit.vehicle_id === selectedUnit?.vehicleId) ?? null;
+
+  // BRULE-011: only available units are selectable. The API ranks them by
+  // flood-safe travel time; units it could not route keep their place after them.
+  const rankedUnits = [...vehicles].sort((a, b) => {
+    const available = (unit: RescueUnit) => unit.status === "AVAILABLE";
+    if (available(a) !== available(b)) return available(a) ? -1 : 1;
+    const eta = (unit: RescueUnit) =>
+      preview?.units.find((row) => row.vehicle_id === unit.vehicleId)
+        ?.estimated_travel_time_minutes ?? Number.POSITIVE_INFINITY;
+    return eta(a) - eta(b);
+  });
 
   async function handleAddNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = note.trim();
     if (!text) return;
-    onAddNote(text);
     setNote("");
     setNoteOpen(false);
 
@@ -299,46 +335,39 @@ export function IncidentDetail({
   }
 
   async function handleConfirmDispatch() {
-    try {
-      const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
-      if (!isNaN(sosId)) {
-        const vehicleId = selectedUnit?.vehicleId;
-        if (vehicleId !== undefined) {
-          try {
-            await assignSOS(sosId, vehicleId);
-          } catch {
-            // The assignment is best-effort
-          }
-        } else {
-          onAction(
-            `Could not assign ${selectedUnit?.callSign ?? "unit"}: unit is not in the fleet API`,
-          );
-        }
-        try {
-          if (selectedUnit) await confirmDispatch(sosId, `Dispatched ${selectedUnit.callSign}`);
-        } catch {
-          // ignore
-        }
-        // FSD-FR-045: Activate 5-second undo window
-        setUndoSeconds(5);
-      }
-    } catch {
-      // ignore
+    const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+    const unit = selectedUnit;
+    if (isNaN(sosId)) return;
+    if (!unit?.vehicleId) {
+      onAction(`Could not assign ${unit?.callSign ?? "unit"}: unit is not in the fleet API`);
+      return;
     }
+
+    // BRULE-011: a refused assignment must stop the flow instead of reporting a
+    // dispatch that never happened.
+    try {
+      await assignSOS(sosId, unit.vehicleId);
+    } catch (error) {
+      onAction(error instanceof Error ? error.message : "Could not assign the selected unit.");
+      return;
+    }
+    try {
+      await confirmDispatch(sosId, `Dispatched ${unit.callSign}`);
+    } catch {
+      onAction("Unit assigned, but the dispatch confirmation failed. Try again.");
+      return;
+    }
+
+    // FSD-FR-045: Activate 5-second undo window
+    setUndoSeconds(5);
     setDispatchModalOpen(false);
-    if (selectedUnit) {
-      onAction(`Dispatched ${selectedUnit.callSign} (${selectedUnit.type}) to #${incident.id}`);
-      if (onDispatchConfirmed) {
-        onDispatchConfirmed(selectedUnit.callSign, incident.id);
-      }
-      try {
-        const fetched = await fetchIncidentLog(incident);
-        if (fetched.length > 0) {
-          setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
-        }
-      } catch {
-        // ignore
-      }
+    onAction(`Dispatched ${unit.callSign} (${unit.type}) to #${incident.id}`);
+    onDispatchConfirmed?.(unit.callSign, incident.id);
+    try {
+      const fetched = await fetchIncidentLog(incident);
+      setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+    } catch {
+      // The Action Log refreshes on the next incident change.
     }
   }
 
@@ -756,11 +785,11 @@ export function IncidentDetail({
             ref={logRef}
             className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px]"
           >
-            {displayLogs.length === 0 ? (
+            {liveLogs.length === 0 ? (
               <p className="text-slate-400">No entries yet for this incident.</p>
             ) : null}
 
-            {displayLogs.map((entry, index) => (
+            {liveLogs.map((entry, index) => (
               <div
                 key={`${entry.time}-${index}`}
                 className={cn(
@@ -1049,18 +1078,29 @@ export function IncidentDetail({
                 <div className="text-xs font-semibold text-slate-700 uppercase">
                   Select Available Rescue Unit:
                 </div>
+                <div className="text-xs font-semibold text-slate-700 uppercase">
+                  Select Available Rescue Unit:
+                </div>
                 <div className="space-y-2">
-                  {vehicles.map((unit) => {
+                  {rankedUnits.map((unit) => {
                     const isSelected = selectedUnit?.callSign === unit.callSign;
+                    const unitPreview =
+                      preview?.units.find((row) => row.vehicle_id === unit.vehicleId) ?? null;
+                    const selectable = unit.status === "AVAILABLE";
                     return (
                       <label
                         key={unit.callSign}
-                        onClick={() => setSelectedUnit(unit)}
+                        onClick={() => {
+                          if (!selectable) return;
+                          setSelectedUnit(unit);
+                        }}
                         className={cn(
-                          "flex cursor-pointer items-center justify-between rounded-xl p-3 border transition-colors",
+                          "flex items-center justify-between rounded-xl p-3 border transition-colors",
+                          !selectable && "opacity-60",
                           isSelected
                             ? "border-sky-600 bg-sky-50/60"
                             : "border-slate-200 bg-white hover:bg-slate-50",
+                          selectable ? "cursor-pointer" : "cursor-not-allowed",
                         )}
                       >
                         <div className="flex items-center gap-3">
@@ -1068,8 +1108,12 @@ export function IncidentDetail({
                             type="radio"
                             name="unit-select"
                             checked={isSelected}
-                            onChange={() => setSelectedUnit(unit)}
-                            className="text-sky-600"
+                            disabled={!selectable}
+                            onChange={() => {
+                              if (!selectable) return;
+                              setSelectedUnit(unit);
+                            }}
+                            className="text-sky-600 disabled:cursor-not-allowed"
                           />
                           <div>
                             <div className="text-xs font-bold text-slate-900">
@@ -1077,6 +1121,11 @@ export function IncidentDetail({
                             </div>
                             <div className="text-[11px] text-slate-500 font-mono">
                               Clearance: {unit.clearance_cm} cm • Speed: {unit.speed_kmh} km/h
+                              {selectable && unitPreview?.estimated_travel_time_minutes != null
+                                ? ` • ETA ~${Math.round(unitPreview.estimated_travel_time_minutes)} min • ${Math.round((unitPreview.total_distance_m ?? 0) / 100) / 10} km`
+                                : selectable && unitPreview?.detail
+                                  ? ` • ${unitPreview.detail}`
+                                  : ""}
                             </div>
                           </div>
                         </div>
@@ -1105,7 +1154,8 @@ export function IncidentDetail({
                   <button
                     type="button"
                     onClick={() => setModalStep(3)}
-                    className="flex-1 rounded-lg bg-sky-600 py-2 text-xs font-semibold text-white hover:bg-sky-500"
+                    disabled={!selectedUnit || selectedUnit.status !== "AVAILABLE"}
+                    className="flex-1 rounded-lg bg-sky-600 py-2 text-xs font-semibold text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Preview Safe Route &rarr;
                   </button>
@@ -1116,15 +1166,39 @@ export function IncidentDetail({
             {/* Step 3 Content */}
             {modalStep === 3 ? (
               <div className="space-y-4">
-                <div className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                  <span className="flex items-center gap-1 font-bold">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Safe Corridor Verified
-                  </span>
-                  <p className="text-[11px] text-emerald-800 leading-relaxed">
-                    A clearance-aware route (4.2 km) avoiding all active flood polygons has been
-                    calculated for {selectedUnit?.callSign}.
-                  </p>
-                </div>
+                {!preview && !previewError ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                    Calculating the flood-safe route for {selectedUnit?.callSign}…
+                  </div>
+                ) : selectedPreview?.estimated_travel_time_minutes != null ? (
+                  <div className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <span className="flex items-center gap-1 font-bold">
+                      <CheckCircle className="h-4 w-4 text-emerald-600" /> Safe Corridor Verified
+                    </span>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      A clearance-aware route (
+                      {Math.round((selectedPreview.total_distance_m ?? 0) / 100) / 10} km) avoiding
+                      all blocking flood hazards has been calculated for {selectedUnit?.callSign}.
+                      {selectedPreview.hazards.length > 0
+                        ? ` It crosses ${selectedPreview.hazards.length} reported hazard zone${
+                            selectedPreview.hazards.length === 1 ? "" : "s"
+                          }.`
+                        : ""}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <span className="flex items-center gap-1 font-bold">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" /> No route preview
+                    </span>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      {selectedPreview?.detail ??
+                        previewError ??
+                        "The road network could not produce a route for this unit."}{" "}
+                      The dispatch can still be confirmed.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs">
                   <div className="flex justify-between">
                     <span>Unit Assigned:</span>
@@ -1142,7 +1216,11 @@ export function IncidentDetail({
                   </div>
                   <div className="flex justify-between">
                     <span>Calculated ETA:</span>
-                    <strong className="text-emerald-700">12:13 PM PHT (~ 12 mins)</strong>
+                    <strong className="text-emerald-700">
+                      {selectedPreview?.estimated_travel_time_minutes != null
+                        ? `~ ${Math.round(selectedPreview.estimated_travel_time_minutes)} mins`
+                        : "Route unavailable"}
+                    </strong>
                   </div>
                 </div>
                 <div className="flex gap-2">

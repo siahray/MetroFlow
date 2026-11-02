@@ -681,12 +681,21 @@ header.
 | `POST` | `/api/v1/sos`                      | `latitude`, `longitude`, `note?` | `sos`    | BR-015 / FSD-FR-073      |
 | `GET`  | `/api/v1/sos`                      | —                      | `sos[]`  | BR-015 / FSD-FR-074, 087 |
 | `POST` | `/api/v1/sos/{sos_id}/assign`      | `vehicle_id`           | `sos`    | BR-016 / FSD-FR-088–089  |
+| `GET`  | `/api/v1/dispatch/{sos_id}/preview` | —                    | `{ sos_id, units[] }` | BR-016 / FSD-FR-088–089 |
 | `POST` | `/api/v1/dispatch/{sos_id}/confirm` | `note?`               | `sos`    | BR-016 / FSD-FR-089      |
 
 A new SOS is created with `status = "pending"`. Assignment sets the vehicle and
 moves the status to `"assigned"`, returning `404` when either the SOS or the
 vehicle does not exist. Confirmation appends the note to the existing one rather
 than replacing it, so the original distress text survives.
+
+The preview lists only `AVAILABLE` units, snaps each unit and the incident onto
+the nearest road node, and ranks them by flood-safe travel time (BRULE-008
+hazards excluded). A unit with no reported position or no passable route comes
+back with a `detail` message and no ETA; it is still assignable. Assignment
+enforces BRULE-011: a unit that is not `AVAILABLE` is refused with `409`, an
+accepted assignment sets it to `DISPATCHED`, and undo or reject returns it to
+`AVAILABLE`.
 
 ### 9.3 Hazards
 
@@ -731,7 +740,7 @@ The reporter is stored as a salted hash of the account, never as an id (BR-011),
 so the desk can see that two reports came from one device without learning whose.
 
 `depth_level` is `ANKLE`, `KNEE` or `IMPASSABLE`, and `source` is `PHOTO`,
-`SENSOR`, `CCTV` or `CALL` (default `PHOTO` with evidence, otherwise `CALL`).
+`SENSOR` or `CALL` (default `PHOTO` with evidence, otherwise `CALL`).
 Photos must be JPEG, PNG or WebP, decided from the bytes rather than the declared
 `Content-Type`, and are capped at 4 MB (`413` above it, `415` for anything else).
 The ceiling sits below the hosting platform's request-body limit, so an oversized
