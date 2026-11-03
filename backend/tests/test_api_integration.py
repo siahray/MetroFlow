@@ -1786,28 +1786,138 @@ def test_every_public_table_has_row_level_security(client):
     assert open_tables == [], f"tables without row level security: {open_tables}"
 
 
-def test_report_flags_a_sensor_mismatch_only_while_the_nearest_gauge_is_quiet(
-    client, created_records
-):
-    """FSD-FR-026: the "Sensor Mismatch" filter needs the API to say when a gauge disagrees."""
-    lat, lon = 14.6, 121.0
-    _make_sensor(client, "TEST_RAIN_MISMATCH", lat, lon, radius_m=100.0)
+# --- CR-004: flood state per road segment ----------------------------------
+
+
+def _read_at(client, sensor_id, value, minutes_ago, unit="mm_hr"):
+    """Post a reading that applies ``minutes_ago`` minutes before now."""
+    from datetime import UTC, datetime, timedelta
+
+    recorded = datetime.now(UTC) - timedelta(minutes=minutes_ago)
+    return client.post(
+        "/api/v1/sensors/readings",
+        json={
+            "sensor_id": sensor_id,
+            "value": value,
+            "unit": unit,
+            "recorded_at": recorded.isoformat().replace("+00:00", "Z"),
+        },
+    )
+
+
+def _flood_state(client):
+    response = client.get("/api/v1/flood-state")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _by_edge(state):
+    return {e["edge_id"]: e for e in state["edges"]}
+
+
+def _midpoint_of_first_edge():
+    node = {n.node_id: n for n in SEED_NODES}
+    edge = SEED_EDGES[0]
+    a, b = node[edge.start_node_id], node[edge.end_node_id]
+    return edge.edge_id, (a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2
+
+
+def test_a_breach_flags_only_the_roads_in_range_as_an_advisory_that_never_closes(client):
+    """TC-059, FSD-FR-091, BRULE-016."""
+    edge_id, lat, lon = _midpoint_of_first_edge()
+    _make_sensor(client, "TEST_FS_NEAR", lat, lon, radius_m=50.0)
     try:
-        report = submit_report(client, created_records, latitude=lat, longitude=lon)
+        assert _read_at(client, "TEST_FS_NEAR", 80.0, minutes_ago=2).status_code == 201
+        edges = _by_edge(_flood_state(client))
 
-        def flag():
-            listed = client.get("/api/v1/reports", params={"limit": 200}).json()
-            return next(r for r in listed if r["report_id"] == report["report_id"])[
-                "sensor_mismatch"
-            ]
+        hit = edges[edge_id]
+        assert hit["basis"] == "LIVE_ADVISORY"
+        assert hit["advisory"] is True
+        assert hit["closes_road"] is False
+        assert hit["source"] == "SENSOR:TEST_FS_NEAR"
+        assert hit["kind"] == "SIMULATED"  # the test sensor is created as simulated
+        assert hit["as_of"] is not None
 
-        # A gauge that has not reported cannot contradict anything.
-        assert flag() is False
-        # A quiet reading contradicts the citizen's flood report.
-        assert _post_reading(client, "TEST_RAIN_MISMATCH", 5.0).status_code == 201
-        assert flag() is True
-        # A breach agrees with it.
-        assert _post_reading(client, "TEST_RAIN_MISMATCH", 80.0).status_code == 201
-        assert flag() is False
+        flagged = [e for e in edges.values() if e["basis"] == "LIVE_ADVISORY"]
+        assert 0 < len(flagged) < len(edges)
+        # Everything out of range has no live data, which is not the same as safe.
+        quiet = next(e for e in edges.values() if e["basis"] == "NONE")
+        assert quiet["has_live_data"] is False
+        assert "No live data covers this segment" in quiet["notes"]
     finally:
-        client.delete("/api/v1/sensors/TEST_RAIN_MISMATCH")
+        client.delete("/api/v1/sensors/TEST_FS_NEAR")
+
+
+def test_a_quiet_reading_clears_the_advisory_but_still_counts_as_live_data(client):
+    edge_id, lat, lon = _midpoint_of_first_edge()
+    _make_sensor(client, "TEST_FS_CLEAR", lat, lon, radius_m=50.0)
+    try:
+        assert _read_at(client, "TEST_FS_CLEAR", 80.0, minutes_ago=4).status_code == 201
+        assert _by_edge(_flood_state(client))[edge_id]["basis"] == "LIVE_ADVISORY"
+
+        assert _read_at(client, "TEST_FS_CLEAR", 5.0, minutes_ago=1).status_code == 201
+        cleared = _by_edge(_flood_state(client))[edge_id]
+        assert cleared["basis"] == "NONE"
+        assert cleared["has_live_data"] is True
+    finally:
+        client.delete("/api/v1/sensors/TEST_FS_CLEAR")
+
+
+def test_a_stale_breach_is_ignored_and_reported_as_stale_not_as_safe(client):
+    """TC-060: past the freshness window the reading no longer counts."""
+    edge_id, lat, lon = _midpoint_of_first_edge()
+    _make_sensor(client, "TEST_FS_STALE", lat, lon, radius_m=50.0)
+    try:
+        assert _read_at(client, "TEST_FS_STALE", 80.0, minutes_ago=45).status_code == 201
+        edge = _by_edge(_flood_state(client))[edge_id]
+        assert edge["basis"] == "NONE"
+        assert edge["stale"] is True
+        assert "A flagged reading is out of date and was ignored" in edge["notes"]
+    finally:
+        client.delete("/api/v1/sensors/TEST_FS_STALE")
+
+
+def test_an_older_reading_arriving_late_never_overwrites_a_newer_one(client):
+    edge_id, lat, lon = _midpoint_of_first_edge()
+    _make_sensor(client, "TEST_FS_ORDER", lat, lon, radius_m=50.0)
+    try:
+        assert _read_at(client, "TEST_FS_ORDER", 80.0, minutes_ago=2).status_code == 201
+        # A quiet reading from 10 minutes ago arrives afterwards (delayed delivery).
+        assert _read_at(client, "TEST_FS_ORDER", 5.0, minutes_ago=10).status_code == 201
+        assert _by_edge(_flood_state(client))[edge_id]["basis"] == "LIVE_ADVISORY"
+    finally:
+        client.delete("/api/v1/sensors/TEST_FS_ORDER")
+
+
+def test_deleting_a_sensor_removes_its_advisories(client):
+    edge_id, lat, lon = _midpoint_of_first_edge()
+    _make_sensor(client, "TEST_FS_GONE", lat, lon, radius_m=50.0)
+    assert _read_at(client, "TEST_FS_GONE", 80.0, minutes_ago=1).status_code == 201
+    assert _by_edge(_flood_state(client))[edge_id]["basis"] == "LIVE_ADVISORY"
+
+    assert client.delete("/api/v1/sensors/TEST_FS_GONE").status_code in (200, 204)
+    gone = _by_edge(_flood_state(client))[edge_id]
+    assert gone["basis"] == "NONE"
+    assert gone["has_live_data"] is False
+
+
+def test_only_flagged_leaves_out_segments_with_nothing_to_report(client):
+    edge_id, lat, lon = _midpoint_of_first_edge()
+    _make_sensor(client, "TEST_FS_FILTER", lat, lon, radius_m=50.0)
+    try:
+        assert _read_at(client, "TEST_FS_FILTER", 80.0, minutes_ago=1).status_code == 201
+        everything = _flood_state(client)["edges"]
+        flagged = client.get("/api/v1/flood-state", params={"only_flagged": "true"}).json()["edges"]
+        assert 0 < len(flagged) < len(everything)
+        assert all(e["basis"] != "NONE" or e["stale"] for e in flagged)
+    finally:
+        client.delete("/api/v1/sensors/TEST_FS_FILTER")
+
+
+def test_flood_state_requires_a_session(client):
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    with TestClient(app) as anonymous:
+        assert anonymous.get("/api/v1/flood-state").status_code == 401

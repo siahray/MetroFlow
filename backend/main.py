@@ -12,11 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
 import audit
 import events
+import flood_state
 import models
 import network_seed
 import reports
@@ -38,6 +40,8 @@ from schemas import (
     EdgeFeature,
     EdgeFeatureCollection,
     EdgeProperties,
+    FloodStateEdge,
+    FloodStateResponse,
     HazardCreate,
     HazardResponse,
     HazardUpdate,
@@ -2125,10 +2129,10 @@ def create_sensor_reading(
     # BRULE-012: a breach is advisory until a dispatcher confirms it.
     is_breach = reading.value >= sensor.threshold_value
 
-    # shortcut: edges are listed in the audit record only, not flagged on the road
-    # graph. Add an advisory column on road_edges when routing should read it.
+    # Every reading is written to the roads in range, flagged or not, so the flood-state
+    # resolver can tell "covered and quiet" from "not covered" (CR-004, FSD-FR-091).
     edge_ids: list[int] = []
-    if is_breach and sensor.geom is not None:
+    if sensor.geom is not None:
         # geography casts make the radius metres; plain 4326 geometry would read it as degrees.
         edge_ids = [
             row.edge_id
@@ -2152,6 +2156,14 @@ def create_sensor_reading(
         breach=is_breach,
     )
     db.add(new_reading)
+    _upsert_advisories(
+        db,
+        edge_ids,
+        source=f"SENSOR:{sensor.sensor_id}",
+        kind=flood_state.SIMULATED if sensor.simulated else flood_state.OBSERVED,
+        flagged=is_breach,
+        as_of=reading.recorded_at.astimezone(UTC).replace(tzinfo=None),
+    )
     if is_breach:
         audit.record(
             db,
@@ -2169,6 +2181,123 @@ def create_sensor_reading(
     db.commit()
     db.refresh(new_reading)
     return new_reading
+
+
+def _upsert_advisories(
+    db: Session,
+    edge_ids: list[int],
+    *,
+    source: str,
+    kind: str,
+    flagged: bool,
+    as_of: datetime,
+) -> None:
+    """Record the latest observation of ``source`` on each edge; an older one never wins."""
+    if not edge_ids:
+        return
+    stmt = pg_insert(models.EdgeAdvisory).values(
+        [
+            {"edge_id": edge_id, "source": source, "kind": kind, "flagged": flagged, "as_of": as_of}
+            for edge_id in edge_ids
+        ]
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_edge_advisory_edge_source",
+        set_={
+            "kind": stmt.excluded.kind,
+            "flagged": stmt.excluded.flagged,
+            "as_of": stmt.excluded.as_of,
+            "updated_at": datetime.now(UTC).replace(tzinfo=None),
+        },
+        where=models.EdgeAdvisory.as_of <= stmt.excluded.as_of,
+    )
+    db.execute(stmt)
+
+
+_HAZARD_SEVERITY = ("CAUTION", "LEVEL_2", "LEVEL_3", "IMPASSABLE")
+
+
+def _is_raining(db: Session, now: datetime) -> bool:
+    """The rain gate for the NOAH fallback: an active rain gauge is over its threshold right now."""
+    window = timedelta(minutes=settings.flood_fresh_minutes)
+    for sensor in (
+        db.query(models.Sensor)
+        .filter(models.Sensor.sensor_type == "RAIN_GAUGE", models.Sensor.active)
+        .all()
+    ):
+        latest = (
+            db.query(models.SensorReading)
+            .filter(models.SensorReading.sensor_id == sensor.sensor_id)
+            .order_by(models.SensorReading.recorded_at.desc())
+            .first()
+        )
+        if latest and latest.breach:
+            recorded = latest.recorded_at.astimezone(UTC).replace(tzinfo=None)
+            if flood_state.is_fresh(recorded, now, window):
+                return True
+    return False
+
+
+@app.get("/api/v1/flood-state", response_model=FloodStateResponse)
+def get_flood_state(
+    only_flagged: Annotated[
+        bool, Query(description="Leave out segments with nothing flagged")
+    ] = False,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Resolved flood state per road segment, with the source and "as of" time (CR-004).
+
+    Verified hazards come first, then fresh live observations, then the NOAH fallback while
+    it rains. A live advisory never closes a road, and a segment with no data reports
+    ``NONE`` with ``has_live_data: false``: missing data is never reported as safe.
+    """
+    now = datetime.now(UTC).replace(tzinfo=None)
+    window = timedelta(minutes=settings.flood_fresh_minutes)
+
+    live: dict[int, list[flood_state.Observation]] = {}
+    for adv in db.query(models.EdgeAdvisory).all():
+        live.setdefault(adv.edge_id, []).append(
+            flood_state.Observation(adv.source, adv.kind, adv.as_of, adv.flagged)
+        )
+
+    hazards, covered = _load_hazard_coverage(db)
+    worst: dict[int, str] = {}
+    for hazard in hazards:
+        level = (hazard.obstruction_level or "").upper()
+        for edge_id in covered.get(hazard.hazard_id, ()):
+            current = worst.get(edge_id)
+            if current is None or _HAZARD_SEVERITY.index(level) > _HAZARD_SEVERITY.index(current):
+                worst[edge_id] = level
+    # An unrecognised level sorts below CAUTION rather than failing the whole request.
+    worst = {e: lv for e, lv in worst.items() if lv in _HAZARD_SEVERITY}
+
+    raining = _is_raining(db, now)
+    states: list[FloodStateEdge] = []
+    for (edge_id,) in db.query(models.RoadEdge.edge_id).order_by(models.RoadEdge.edge_id).all():
+        level = worst.get(edge_id)
+        resolved = flood_state.resolve(
+            flood_state.EdgeInputs(
+                edge_id,
+                hazard_level=level,
+                hazard_blocks=hazard_blocks(level),
+                live=tuple(live.get(edge_id, ())),
+            ),
+            now=now,
+            raining=raining,
+            fresh_window=window,
+        )
+        if only_flagged and resolved.basis == flood_state.NONE and not resolved.stale:
+            continue
+        states.append(FloodStateEdge(**asdict(resolved)))
+
+    return FloodStateResponse(
+        generated_at=now,
+        raining=raining,
+        fresh_window_minutes=settings.flood_fresh_minutes,
+        edges=states,
+    )
 
 
 @app.get("/api/v1/sensors", response_model=list[SensorResponse])
@@ -2294,6 +2423,9 @@ def delete_sensor(
     )
     # Readings reference the sensor; the audit entry above keeps the record of the deletion.
     db.query(models.SensorReading).filter(models.SensorReading.sensor_id == sensor_id).delete()
+    db.query(models.EdgeAdvisory).filter(
+        models.EdgeAdvisory.source == f"SENSOR:{sensor_id}"
+    ).delete()
     db.delete(db_sensor)
     db.commit()
 

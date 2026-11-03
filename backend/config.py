@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # Default vehicle clearance used when the client does not supply one.
     default_clearance_cm: float = 30.0
 
+    # --- Flood state (CR-004) --------------------------------------------------
+    # A live reading counts for this long after the time it applies to. Past it the
+    # reading is stale and the segment falls back to the next source; silence is
+    # never treated as "safe".
+    flood_fresh_minutes: int = 30
+
     # --- Bootstrap dispatcher --------------------------------------------------
     # Registration only ever creates driver accounts, so the first LGU
     # dispatcher has to come from configuration. These values are used once, when
