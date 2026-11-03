@@ -7,8 +7,9 @@ import {
   QUEUE_FILTERS,
   type Incident,
 } from "./incidents";
-import { isEscalatedReport, reportToIncident } from "./sos-to-incidents";
+import { isEscalatedReport, reportToIncident, sosToIncident } from "./sos-to-incidents";
 import type { FieldReport } from "./reports";
+import type { SOSRequest } from "./dispatch";
 
 // Only the flags the queue filters read; the rest of an Incident is irrelevant here.
 const incident = (flags: Partial<Pick<Incident, "hasPhoto" | "escalated" | "sensorMismatch">>) =>
@@ -99,5 +100,38 @@ describe("report to incident", () => {
     expect(
       (["photo", "sensor", "escalated"] as const).some((f) => matchesQueueFilter(result, f)),
     ).toBe(false);
+  });
+});
+
+const sos = (note: string | null): SOSRequest => ({
+  sos_id: 7,
+  latitude: 14.6,
+  longitude: 121.0,
+  note,
+  vehicle_id: null,
+  status: "pending",
+  created_at: "2026-11-03T10:00:00",
+});
+
+describe("nothing is invented about an SOS", () => {
+  test("a depth the person wrote is used", () => {
+    const result = sosToIncident(sos("water is 60 cm and rising"));
+    expect(result.waterDepthCm).toBe(60);
+  });
+
+  test("with no depth in the note the depth stays unknown, not a default", () => {
+    const result = sosToIncident(sos("please help"));
+    expect(result.waterDepthCm).toBeNull();
+    expect(result.submersionRange).toBe("Depth not reported");
+    expect(result.level).toBe("Distress signal (depth not reported)");
+  });
+
+  test("a report gives a depth band, never a made-up centimetre value", () => {
+    expect(reportToIncident(report({})).waterDepthCm).toBeNull();
+  });
+
+  test("a missing barangay is said to be missing", () => {
+    expect(reportToIncident(report({ barangay: null })).barangay).toBe("Barangay not given");
+    expect(sosToIncident(sos(null)).barangay).toBe("Barangay not given");
   });
 });

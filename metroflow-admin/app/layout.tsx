@@ -10,7 +10,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "MetroFlow — LGU Dispatch Portal",
-  description: "Incident triage and verification desk for LGU / MDRRMC dispatch operations.",
+  description: "Incident triage, verification and rescue dispatch for MetroFlow.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

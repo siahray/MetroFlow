@@ -26,20 +26,24 @@ export function sosToIncident(
     minute: "2-digit",
   });
 
+  // The depth is only known if the person wrote it in the note; never assume one.
   const depthMatch = sos.note?.match(/(\d+)\s*(?:cm|ft)/i);
-  let depthCm = 50;
+  let depthCm: number | null = null;
   if (depthMatch) {
     const val = Number.parseFloat(depthMatch[1]);
     depthCm = sos.note?.toLowerCase().includes("ft") ? Math.round(val * 30.48) : Math.round(val);
   }
 
-  const urgency = depthCm >= 75 ? 9.4 : depthCm >= 45 ? 7.8 : 6.2;
+  // A rough ordering for the queue: a reported depth raises it, an unknown one does not.
+  const urgency = depthCm === null ? 6.2 : depthCm >= 75 ? 9.4 : depthCm >= 45 ? 7.8 : 6.2;
   const level =
-    urgency >= 9
-      ? "Critical Flood Level 3"
-      : urgency >= 7.5
-        ? "Moderate Hazard Level 2"
-        : "Alert Level 1";
+    depthCm === null
+      ? "Distress signal (depth not reported)"
+      : urgency >= 9
+        ? "Critical Flood Level 3"
+        : urgency >= 7.5
+          ? "Moderate Hazard Level 2"
+          : "Alert Level 1";
 
   // Check for nearby field report evidence (within 1.5 km)
   let linkedReport: FieldReport | null = null;
@@ -61,22 +65,17 @@ export function sosToIncident(
       ? findNearestUnit(sos.latitude, sos.longitude, options.vehicles)
       : null;
 
-  const isRising =
-    sos.note?.toLowerCase().includes("rising") ||
-    (options?.hazards?.some((h) => h.active !== false && (h.avg_depth_cm ?? 0) >= 30) ?? false);
-
   return {
     id: `FR-${sos.sos_id.toString().padStart(4, "0")}`,
     level,
     urgency,
     reporter: "Citizen Distress Signal (SOS)",
     reportedAt: `${reportedAt}`,
-    aiConfidence: "98.5% Verified",
     narrative:
       sos.note ||
       `SOS rescue requested at coordinates ${sos.latitude.toFixed(4)}, ${sos.longitude.toFixed(4)}.`,
     location: `Lat ${sos.latitude.toFixed(4)}, Lon ${sos.longitude.toFixed(4)}`,
-    barangay: "Reported Corridor",
+    barangay: "Barangay not given",
     source: primarySource({
       escalated: sos.status === "escalated",
       sensorMismatch: linkedReport?.sensor_mismatch ?? false,
@@ -97,14 +96,12 @@ export function sosToIncident(
     photo: linkedReport?.photo ?? null,
     exif: linkedReport?.exif ?? null,
     submersionRange:
-      linkedReport?.depth_label ??
-      `${depthCm} cm (${depthCm >= 60 ? "Impassable" : "Critical Ponding"})`,
+      linkedReport?.depth_label ?? (depthCm === null ? "Depth not reported" : `${depthCm} cm`),
 
     // FSD-FR-035
     latitude: sos.latitude,
     longitude: sos.longitude,
     waterDepthCm: depthCm,
-    waterTrend: isRising ? "rising" : "stable",
     nearestUnit,
   };
 }
@@ -129,9 +126,6 @@ export function reportToIncident(
     minute: "2-digit",
   });
 
-  const depthCm =
-    report.depth_level === "IMPASSABLE" ? 75 : report.depth_level === "KNEE" ? 45 : 20;
-
   const level =
     report.depth_level === "IMPASSABLE"
       ? "Critical Flood Level 3"
@@ -153,13 +147,12 @@ export function reportToIncident(
     urgency: report.urgency_score,
     reporter: `Citizen Field Reporter (${report.reporter_hash.slice(0, 8)})`,
     reportedAt,
-    aiConfidence: `${Math.min(99, Math.max(70, Math.round(report.urgency_score * 10)))}% Verified`,
     narrative: report.narrative || `Citizen field report with ${report.depth_label.toLowerCase()}.`,
     location:
       report.latitude != null && report.longitude != null
         ? `Lat ${report.latitude.toFixed(4)}, Lon ${report.longitude.toFixed(4)}`
         : "GPS Fix Pending",
-    barangay: report.barangay || "Pilot Sector",
+    barangay: report.barangay || "Barangay not given",
     source: primarySource({
       escalated: isEscalatedReport(report),
       sensorMismatch: report.sensor_mismatch ?? false,
@@ -186,8 +179,8 @@ export function reportToIncident(
     // FSD-FR-035
     latitude: report.latitude,
     longitude: report.longitude,
-    waterDepthCm: depthCm,
-    waterTrend: "rising",
+    // The report gives a depth band (the label), not a measurement.
+    waterDepthCm: null,
     nearestUnit,
   };
 }

@@ -69,8 +69,8 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
     router.push("/login");
   };
 
-  const officerName = user?.name || "MDRRMC Operations";
-  const officerRole = user?.role === "SUPER_ADMIN" ? "Super Admin" : "Lead Dispatch Officer";
+  const officerName = user?.name || user?.email || "Signed in";
+  const officerRole = user?.role === "SUPER_ADMIN" ? "Super Admin" : "Dispatcher";
   const officerInitials =
     officerName
       .split(" ")
@@ -102,16 +102,9 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
             <span className="text-slate-400">Operations HQ</span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
             <span className="font-semibold text-slate-800">{title}</span>
-            <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 font-mono text-[10px] font-bold text-sky-700">
-              SECTOR DELTA ACTIVE
-            </span>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-600">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span>Monitoring Grid Active</span>
-            </div>
             <div className="flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 font-semibold text-rose-700">
               <span className="h-2 w-2 animate-pulse rounded-full bg-rose-600" />
               <span>Active SOS: {queueCount}</span>
