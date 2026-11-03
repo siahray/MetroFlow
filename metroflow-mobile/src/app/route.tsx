@@ -37,6 +37,7 @@ import {
 import { useAuth } from "../auth";
 import { RouteMap } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
+import { loadCache, saveCache } from "../offline";
 import {
   distanceToPolygonMeters,
   formatDistance,
@@ -51,6 +52,7 @@ import {
   type LatLng,
 } from "../navigation/geo";
 
+import { colors } from '../theme';
 const DRIVER_CLEARANCE_CM = 28;
 
 type Banner = {
@@ -60,9 +62,9 @@ type Banner = {
 } | null;
 
 const BANNER_COLORS = {
-  warning: { background: "#fffbeb", border: "#f59e0b", text: "#92400e" },
-  danger: { background: "#fef2f2", border: "#dc2626", text: "#991b1b" },
-  success: { background: "#f0fdf4", border: "#16a34a", text: "#166534" },
+  warning: { background: "#fffbeb", border: "#f59e0b", text: colors.amber800 },
+  danger: { background: colors.red50, border: colors.red600, text: colors.red800 },
+  success: { background: "#f0fdf4", border: colors.green600, text: "#166534" },
 } as const;
 
 function hazardAdvice(level: string): { label: string; action: string } {
@@ -212,10 +214,20 @@ export default function RouteScreen() {
     let cancelled = false;
     getNetworkState(DRIVER_CLEARANCE_CM)
       .then((state) => {
+        void saveCache("network", state);
         if (!cancelled) setNetwork(state);
       })
-      .catch((cause: unknown) => {
-        if (!cancelled) {
+      .catch(async (cause: unknown) => {
+        // Offline: fall back to the last graph and route (FSD-FR-070, 071).
+        const cached = await loadCache<NetworkState>("network");
+        if (cancelled) return;
+        if (cached) {
+          setNetwork(cached);
+          setHazards((await loadCache<HazardInfo[]>("hazards")) ?? []);
+          const lastRoute = await loadCache<RoutePlan>("route");
+          if (lastRoute) setRoute(lastRoute);
+          setError("Offline: showing the last saved map and route.");
+        } else {
           setError(cause instanceof Error ? cause.message : "Could not load the road network.");
         }
       });
@@ -229,6 +241,7 @@ export default function RouteScreen() {
     if (!user) return;
     return subscribeToHazards({
       onSnapshot: (snapshot) => {
+        void saveCache("hazards", snapshot);
         setHazards(snapshot);
         setStreamError(null);
       },
@@ -282,6 +295,7 @@ export default function RouteScreen() {
           clearance_cm: DRIVER_CLEARANCE_CM,
           ignore_hazards: unsafe,
         });
+        void saveCache("route", plan);
         setRoute(plan);
         setSelected(target);
         setDestinationQuery(target.properties.name ?? "");
@@ -514,13 +528,13 @@ export default function RouteScreen() {
       <SafeAreaView style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={18} color="#1e293b" />
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={18} color={colors.slate800} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Navigation</Text>
         </View>
         <View style={styles.signedOutCard}>
-          <ShieldAlert size={28} color="#2563eb" />
+          <ShieldAlert size={28} color={colors.blue600} />
           <Text style={styles.signedOutTitle}>Sign in to navigate</Text>
           <Text style={styles.signedOutBody}>
             Flood-safe routes and live hazard alerts are attached to your driver account.
@@ -538,8 +552,8 @@ export default function RouteScreen() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={18} color="#1e293b" />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
+          <ArrowLeft size={18} color={colors.slate800} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Navigation</Text>
@@ -547,7 +561,7 @@ export default function RouteScreen() {
             {DRIVER_CLEARANCE_CM} cm clearance • live hazards
           </Text>
         </View>
-        {streamError ? <AlertTriangle size={16} color="#dc2626" /> : null}
+        {streamError ? <AlertTriangle size={16} color={colors.red600} /> : null}
       </View>
 
       <View style={styles.mapArea}>
@@ -577,7 +591,7 @@ export default function RouteScreen() {
                 {banner.body}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setBanner(null)} hitSlop={8}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss alert" onPress={() => setBanner(null)} hitSlop={8}>
               <X size={16} color={BANNER_COLORS[banner.tone].text} />
             </TouchableOpacity>
           </View>
@@ -586,7 +600,7 @@ export default function RouteScreen() {
         {route && instruction ? (
           <View style={styles.instructionCard}>
             <View style={styles.instructionIcon}>
-              <Navigation size={20} color="#ffffff" />
+              <Navigation size={20} color={colors.white} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.instructionText}>{instruction.text}</Text>
@@ -610,24 +624,24 @@ export default function RouteScreen() {
             accessibilityLabel="Refresh route and alternatives"
           >
             {refreshing ? (
-              <ActivityIndicator size="small" color="#2563eb" />
+              <ActivityIndicator size="small" color={colors.blue600} />
             ) : (
-              <RefreshCw size={17} color="#2563eb" />
+              <RefreshCw size={17} color={colors.blue600} />
             )}
           </TouchableOpacity>
         ) : null}
 
         {!position && !locationError ? (
           <View style={styles.mapNotice}>
-            <ActivityIndicator color="#2563eb" />
+            <ActivityIndicator color={colors.blue600} />
             <Text style={styles.mapNoticeText}>Finding your position…</Text>
           </View>
         ) : null}
 
         {locationError ? (
           <View style={styles.mapNotice}>
-            <AlertTriangle size={18} color="#dc2626" />
-            <Text style={[styles.mapNoticeText, { color: "#991b1b" }]}>{locationError}</Text>
+            <AlertTriangle size={18} color={colors.red600} />
+            <Text style={[styles.mapNoticeText, { color: colors.red800 }]}>{locationError}</Text>
           </View>
         ) : null}
       </View>
@@ -657,7 +671,7 @@ export default function RouteScreen() {
               </View>
             ) : (
               <View style={styles.safeChip}>
-                <CheckCircle2 size={12} color="#15803d" />
+                <CheckCircle2 size={12} color={colors.green700} />
                 <Text style={styles.safeChipText}>Hazard-free</Text>
               </View>
             )}
@@ -665,7 +679,7 @@ export default function RouteScreen() {
 
           {unsafeRoute ? (
             <View style={styles.unsafeNotice}>
-              <AlertTriangle size={14} color="#b91c1c" />
+              <AlertTriangle size={14} color={colors.red700} />
               <Text style={styles.unsafeNoticeText}>
                 Unsafe alternative — this route crosses a verified hazard.
               </Text>
@@ -674,14 +688,14 @@ export default function RouteScreen() {
 
           {arrived ? (
             <View style={styles.arrivedRow}>
-              <CheckCircle2 size={18} color="#16a34a" />
+              <CheckCircle2 size={18} color={colors.green600} />
               <Text style={styles.arrivedText}>Arrived at your destination</Text>
             </View>
           ) : null}
 
           <View style={styles.panelButtons}>
             <TouchableOpacity style={styles.secondaryButton} onPress={resetRoute}>
-              <Search size={15} color="#1e293b" />
+              <Search size={15} color={colors.slate800} />
               <Text style={styles.secondaryButtonText}>New destination</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -698,7 +712,7 @@ export default function RouteScreen() {
       ) : (
         <View style={styles.searchPanel}>
           <View style={styles.searchBox}>
-            <MapPin size={16} color="#2563eb" />
+            <MapPin size={16} color={colors.blue600} />
             <TextInput
               value={destinationQuery}
               onChangeText={(value) => {
@@ -707,26 +721,28 @@ export default function RouteScreen() {
                 plannedFor.current = null;
               }}
               placeholder="Search a road or intersection"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.slate400}
               style={styles.searchInput}
               autoCorrect={false}
             />
             {destinationQuery ? (
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Clear destination"
                 onPress={() => {
                   setDestinationQuery("");
                   setSelected(null);
                 }}
                 hitSlop={8}
               >
-                <X size={16} color="#94a3b8" />
+                <X size={16} color={colors.slate400} />
               </TouchableOpacity>
             ) : null}
           </View>
 
           {planning ? (
             <View style={styles.planningRow}>
-              <ActivityIndicator color="#2563eb" />
+              <ActivityIndicator color={colors.blue600} />
               <Text style={styles.planningText}>Planning a flood-safe route…</Text>
             </View>
           ) : null}
@@ -779,7 +795,7 @@ export default function RouteScreen() {
                   }}
                 >
                   <View style={styles.resultIcon}>
-                    <MapPin size={14} color="#2563eb" />
+                    <MapPin size={14} color={colors.blue600} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.resultName}>{node.properties.name}</Text>
@@ -802,7 +818,7 @@ export default function RouteScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#ffffff" },
+  screen: { flex: 1, backgroundColor: colors.white },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -810,20 +826,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: colors.slate100,
   },
   backButton: {
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.slate50,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.slate200,
   },
-  headerTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
-  headerSubtitle: { fontSize: 10, color: "#64748b", marginTop: 1 },
+  headerTitle: { fontSize: 15, fontWeight: "800", color: colors.slate900 },
+  headerSubtitle: { fontSize: 10, color: colors.slate500, marginTop: 1 },
   mapArea: { flex: 1, position: "relative" },
   banner: {
     position: "absolute",
@@ -855,26 +871,26 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "#2563eb",
+    backgroundColor: colors.blue600,
     alignItems: "center",
     justifyContent: "center",
   },
-  instructionText: { fontSize: 14, fontWeight: "800", color: "#ffffff" },
-  instructionMeta: { fontSize: 11, color: "#cbd5e1", marginTop: 2 },
+  instructionText: { fontSize: 14, fontWeight: "800", color: colors.white },
+  instructionMeta: { fontSize: 11, color: colors.slate300, marginTop: 2 },
   mapNotice: {
     position: "absolute",
     top: "45%",
     left: 24,
     right: 24,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
     borderRadius: 14,
     padding: 14,
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.slate200,
   },
-  mapNoticeText: { fontSize: 12, color: "#334155", textAlign: "center" },
+  mapNoticeText: { fontSize: 12, color: colors.slate700, textAlign: "center" },
   refreshButton: {
     position: "absolute",
     right: 12,
@@ -882,22 +898,22 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.slate200,
   },
   routePanel: {
     borderTopWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.slate200,
     padding: 16,
     gap: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.white,
   },
   routeSummary: { flexDirection: "row", alignItems: "center", gap: 10 },
-  routeDestination: { fontSize: 14, fontWeight: "800", color: "#0f172a" },
-  routeMeta: { fontSize: 11, color: "#64748b", marginTop: 2 },
+  routeDestination: { fontSize: 14, fontWeight: "800", color: colors.slate900 },
+  routeMeta: { fontSize: 11, color: colors.slate500, marginTop: 2 },
   hazardChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -921,18 +937,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
   },
-  safeChipText: { fontSize: 10, fontWeight: "700", color: "#15803d" },
+  safeChipText: { fontSize: 10, fontWeight: "700", color: colors.green700 },
   unsafeNotice: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#fef2f2",
+    backgroundColor: colors.red50,
     borderRadius: 10,
     padding: 8,
   },
-  unsafeNoticeText: { flex: 1, fontSize: 10, color: "#b91c1c" },
+  unsafeNoticeText: { flex: 1, fontSize: 10, color: colors.red700 },
   arrivedRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  arrivedText: { fontSize: 12, fontWeight: "700", color: "#15803d" },
+  arrivedText: { fontSize: 12, fontWeight: "700", color: colors.green700 },
   panelButtons: { flexDirection: "row", gap: 10, marginTop: 4 },
   secondaryButton: {
     flex: 1,
@@ -943,94 +959,94 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.slate300,
+    backgroundColor: colors.slate50,
   },
-  secondaryButtonText: { fontSize: 12, fontWeight: "700", color: "#1e293b" },
+  secondaryButtonText: { fontSize: 12, fontWeight: "700", color: colors.slate800 },
   endButton: {
     paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: "#0f172a",
+    backgroundColor: colors.slate900,
     alignItems: "center",
     justifyContent: "center",
   },
-  endButtonText: { fontSize: 12, fontWeight: "800", color: "#ffffff" },
-  searchPanel: { borderTopWidth: 1, borderColor: "#e2e8f0", padding: 16, gap: 10 },
+  endButtonText: { fontSize: 12, fontWeight: "800", color: colors.white },
+  searchPanel: { borderTopWidth: 1, borderColor: colors.slate200, padding: 16, gap: 10 },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#f8fafc",
+    backgroundColor: colors.slate50,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: colors.slate200,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  searchInput: { flex: 1, fontSize: 13, color: "#0f172a" },
+  searchInput: { flex: 1, fontSize: 13, color: colors.slate900 },
   planningRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  planningText: { fontSize: 11, color: "#475569" },
-  errorText: { flex: 1, fontSize: 11, color: "#b91c1c" },
+  planningText: { fontSize: 11, color: colors.slate600 },
+  errorText: { flex: 1, fontSize: 11, color: colors.red700 },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  errorRetry: { fontSize: 11, fontWeight: "800", color: "#b91c1c" },
+  errorRetry: { fontSize: 11, fontWeight: "800", color: colors.red700 },
   refusalCard: {
-    backgroundColor: "#fef2f2",
+    backgroundColor: colors.red50,
     borderWidth: 1,
     borderColor: "#fecaca",
     borderRadius: 14,
     padding: 12,
     gap: 6,
   },
-  refusalTitle: { fontSize: 13, fontWeight: "800", color: "#991b1b" },
+  refusalTitle: { fontSize: 13, fontWeight: "800", color: colors.red800 },
   refusalBody: { fontSize: 11, color: "#7f1d1d", lineHeight: 15 },
   dangerButton: {
     flex: 1.4,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: "#b91c1c",
+    backgroundColor: colors.red700,
     alignItems: "center",
     justifyContent: "center",
   },
-  dangerButtonText: { fontSize: 12, fontWeight: "700", color: "#ffffff" },
+  dangerButtonText: { fontSize: 12, fontWeight: "700", color: colors.white },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: colors.slate100,
   },
   resultIcon: {
     width: 30,
     height: 30,
     borderRadius: 9,
-    backgroundColor: "#eff6ff",
+    backgroundColor: colors.blue50,
     alignItems: "center",
     justifyContent: "center",
   },
-  resultName: { fontSize: 12, fontWeight: "700", color: "#1e293b" },
-  resultMeta: { fontSize: 10, color: "#94a3b8", marginTop: 1 },
-  emptyText: { fontSize: 11, color: "#64748b" },
-  hintText: { fontSize: 11, color: "#64748b", lineHeight: 16 },
+  resultName: { fontSize: 12, fontWeight: "700", color: colors.slate800 },
+  resultMeta: { fontSize: 10, color: colors.slate400, marginTop: 1 },
+  emptyText: { fontSize: 11, color: colors.slate500 },
+  hintText: { fontSize: 11, color: colors.slate500, lineHeight: 16 },
   signedOutCard: {
     margin: 20,
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
+    borderColor: colors.slate200,
+    backgroundColor: colors.slate50,
     alignItems: "center",
     gap: 10,
   },
-  signedOutTitle: { fontSize: 15, fontWeight: "800", color: "#0f172a" },
-  signedOutBody: { fontSize: 12, color: "#475569", textAlign: "center", lineHeight: 17 },
+  signedOutTitle: { fontSize: 15, fontWeight: "800", color: colors.slate900 },
+  signedOutBody: { fontSize: 12, color: colors.slate600, textAlign: "center", lineHeight: 17 },
   primaryButton: {
     marginTop: 6,
     paddingHorizontal: 28,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: "#0f172a",
+    backgroundColor: colors.slate900,
   },
-  primaryButtonText: { fontSize: 13, fontWeight: "800", color: "#ffffff" },
+  primaryButtonText: { fontSize: 13, fontWeight: "800", color: colors.white },
 });

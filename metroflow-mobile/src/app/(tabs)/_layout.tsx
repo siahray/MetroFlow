@@ -1,22 +1,35 @@
 import { Tabs } from 'expo-router';
 import { View, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePendingReports } from '../../offline';
 import { Droplet, Map as MapIcon, Bell, User } from 'lucide-react-native';
 
+import { colors } from '../../theme';
 export default function TabsLayout() {
+  const pending = usePendingReports();
+  const insets = useSafeAreaInsets();
   return (
+    <>
+    {pending > 0 && (
+      <View accessibilityRole="alert" style={{ backgroundColor: colors.amber100, paddingTop: insets.top + 6, paddingBottom: 6, paddingHorizontal: 16 }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.amber800 }}>
+          {pending} report{pending === 1 ? '' : 's'} waiting to sync
+        </Text>
+      </View>
+    )}
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#f1f5f9',
+          backgroundColor: colors.white,
+          borderTopColor: colors.slate100,
           borderTopWidth: 1,
           height: 62,
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarActiveTintColor: '#0284c7',
-        tabBarInactiveTintColor: '#94a3b8',
+        tabBarActiveTintColor: colors.sky600,
+        tabBarInactiveTintColor: colors.slate400,
         tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
       }}
     >
@@ -62,5 +75,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }
