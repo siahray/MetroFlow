@@ -10,7 +10,8 @@ import bcrypt
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import func
+from geoalchemy2 import Geography
+from sqlalchemy import cast, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
 
@@ -2104,51 +2105,45 @@ def export_incidents_csv(
 @app.post("/api/v1/sensors/readings", response_model=SensorReadingResponse, status_code=201)
 def create_sensor_reading(
     reading: SensorReadingRequest,
-    _user: models.User = Depends(require_user),
+    # Admin only: a driver account must not be able to raise a breach.
+    _user: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Gateway posts a sensor reading (FSD-FR-090)."""
-    import models
-
-    # Validate sensor exists and is active
     sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == reading.sensor_id).first()
     if not sensor:
         raise HTTPException(status_code=404, detail="Sensor not found")
     if not sensor.active:
         raise HTTPException(status_code=409, detail="Sensor is disabled")
-
-    # Validate reading is not in the future
+    if reading.unit != sensor.threshold_unit:
+        raise HTTPException(
+            status_code=422, detail=f"Sensor reports in {sensor.threshold_unit}, not {reading.unit}"
+        )
     if reading.recorded_at > datetime.now(UTC):
         raise HTTPException(status_code=422, detail="Recorded timestamp cannot be in the future")
 
-    # Check threshold breach (BRULE-012: advisory until dispatcher confirms)
-    is_breach = False
-    if sensor.threshold_unit == reading.unit:
-        is_breach = reading.value >= sensor.threshold_value
+    # BRULE-012: a breach is advisory until a dispatcher confirms it.
+    is_breach = reading.value >= sensor.threshold_value
 
-    # On breach, mark edges within impact radius as advisory (FSD-FR-091)
-    if is_breach and sensor.geom:
-        try:
-            # Find edges within impact radius using PostGIS ST_DWithin
-            impacted_edges = (
-                db.query(models.RoadEdge.edge_id)
-                .filter(func.ST_DWithin(models.RoadEdge.geom, sensor.geom, sensor.impact_radius_m))
-                .all()
+    # shortcut: edges are listed in the audit record only, not flagged on the road
+    # graph. Add an advisory column on road_edges when routing should read it.
+    edge_ids: list[int] = []
+    if is_breach and sensor.geom is not None:
+        # geography casts make the radius metres; plain 4326 geometry would read it as degrees.
+        edge_ids = [
+            row.edge_id
+            for row in db.query(models.RoadEdge.edge_id)
+            .join(models.Sensor, models.Sensor.sensor_id == sensor.sensor_id)
+            .filter(
+                func.ST_DWithin(
+                    cast(models.RoadEdge.geom, _GEOG),
+                    cast(models.Sensor.geom, _GEOG),
+                    models.Sensor.impact_radius_m,
+                ),
             )
-            # Store impacted edge IDs for advisory display
-            # This could be stored in a separate advisory_edges table, but for now
-            # we'll include it in the audit payload
-            edge_ids = [e.edge_id for e in impacted_edges]
-        except Exception:
-            # If geometry query fails, still store the reading
-            edge_ids = []
-    else:
-        edge_ids = []
+        ]
 
-    # Store reading
-    max_id = db.query(func.max(models.SensorReading.reading_id)).scalar() or 0
     new_reading = models.SensorReading(
-        reading_id=int(max_id) + 1,
         sensor_id=reading.sensor_id,
         value=reading.value,
         unit=reading.unit,
@@ -2214,6 +2209,7 @@ def create_sensor(
         sensor_id=sensor.sensor_id,
         sensor_type=sensor.sensor_type,
         name=sensor.name,
+        geom=_point(sensor.latitude, sensor.longitude),
         threshold_value=sensor.threshold_value,
         threshold_unit=sensor.threshold_unit,
         impact_radius_m=sensor.impact_radius_m,
@@ -2251,8 +2247,12 @@ def update_sensor(
         raise HTTPException(status_code=404, detail="Sensor not found")
 
     changes = sensor.model_dump(exclude_unset=True, exclude_none=True)
+    lat, lon = changes.pop("latitude", None), changes.pop("longitude", None)
     for field, value in changes.items():
         setattr(db_sensor, field, value)
+    if lat is not None:
+        db_sensor.geom = _point(lat, lon)
+        changes.update(latitude=lat, longitude=lon)
 
     audit.record(
         db,
@@ -2292,6 +2292,8 @@ def delete_sensor(
             "actor": _user.name or _user.email,
         },
     )
+    # Readings reference the sensor; the audit entry above keeps the record of the deletion.
+    db.query(models.SensorReading).filter(models.SensorReading.sensor_id == sensor_id).delete()
     db.delete(db_sensor)
     db.commit()
 
@@ -2306,16 +2308,19 @@ def get_nearest_sensor_reading(
     import models
 
     # Get the report
-    report = db.query(models.Report).filter(models.Report.report_id == report_id).first()
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    if report.latitude is None or report.longitude is None:
+    if report.geometry is None:
         return NearestSensorReading()
 
-    # Find nearest RAIN_GAUGE sensor using PostGIS ST_Distance
-    # Create a point from report coordinates
-    report_point = func.ST_SetSRID(func.ST_MakePoint(report.longitude, report.latitude), 4326)
+    # Geography casts give metres; 4326 geometry would return degrees.
+    distance_m = func.ST_Distance(
+        cast(models.Sensor.geom, _GEOG), cast(models.IncidentReport.geometry, _GEOG)
+    )
 
     # Find nearest active RAIN_GAUGE sensor with its latest reading
     nearest = (
@@ -2325,12 +2330,13 @@ def get_nearest_sensor_reading(
             models.Sensor.sensor_type,
             models.Sensor.threshold_value,
             models.Sensor.threshold_unit,
-            func.ST_Distance(models.Sensor.geom, report_point).label("distance"),
+            distance_m.label("distance"),
         )
+        .join(models.IncidentReport, models.IncidentReport.report_id == report.report_id)
         .filter(models.Sensor.sensor_type == "RAIN_GAUGE")
         .filter(models.Sensor.active)
         .filter(models.Sensor.geom.isnot(None))
-        .order_by(func.ST_Distance(models.Sensor.geom, report_point))
+        .order_by(distance_m)
         .first()
     )
 
@@ -2350,7 +2356,7 @@ def get_nearest_sensor_reading(
             sensor_id=nearest.sensor_id,
             sensor_name=nearest.name,
             sensor_type=nearest.sensor_type,
-            distance_km=nearest.distance / 1000.0 if nearest.distance else None,
+            distance_km=nearest.distance / 1000.0 if nearest.distance is not None else None,
         )
 
     # Check if reading is a breach
@@ -2365,7 +2371,7 @@ def get_nearest_sensor_reading(
         latest_value=latest_reading.value,
         latest_unit=latest_reading.unit,
         latest_recorded_at=latest_reading.recorded_at,
-        distance_km=nearest.distance / 1000.0 if nearest.distance else None,
+        distance_km=nearest.distance / 1000.0 if nearest.distance is not None else None,
         is_breach=is_breach,
     )
 
@@ -2373,6 +2379,9 @@ def get_nearest_sensor_reading(
 # ---------------------------------------------------------------------------
 # Field reports and moderation (FSD-FR-065 to 067, 077 to 081)
 # ---------------------------------------------------------------------------
+
+
+_GEOG = Geography(srid=4326)
 
 
 def _point(latitude: float, longitude: float):
@@ -2526,6 +2535,9 @@ def submit_report(
     barangay: Annotated[str | None, Form(max_length=120)] = None,
     captured_at: Annotated[str | None, Form(description="Device capture time, ISO 8601")] = None,
     source: Annotated[str | None, Form(description="PHOTO, SENSOR, CCTV or CALL")] = None,
+    client_id: Annotated[
+        UUID | None, Form(description="Device id; makes a replay idempotent")
+    ] = None,
     photo: Annotated[UploadFile | None, File()] = None,
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
@@ -2537,6 +2549,20 @@ def submit_report(
     moderation desk decides. The reporter is stored as a salted hash, never as a
     user id, so the queue can de-duplicate without holding an identity (BR-011).
     """
+    # An offline replay whose first attempt already landed returns that report.
+    if client_id is not None:
+        existing = (
+            db.query(models.IncidentReport.report_id)
+            .filter(
+                models.IncidentReport.client_id == client_id,
+                models.IncidentReport.reporter_hash
+                == reports.reporter_hash(_user.user_id, settings.report_hash_salt),
+            )
+            .first()
+        )
+        if existing:
+            return _report_detail(db, existing[0])
+
     if depth_level not in reports.DEPTH_LEVELS:
         raise HTTPException(
             status_code=422, detail=f"depth_level must be one of {list(reports.DEPTH_LEVELS)}"
@@ -2588,6 +2614,7 @@ def submit_report(
     submitted = _parse_captured_at(captured_at)
     report = models.IncidentReport(
         report_id=uuid4(),
+        client_id=client_id,
         reporter_hash=reports.reporter_hash(_user.user_id, settings.report_hash_salt),
         source=source,
         geometry=point,

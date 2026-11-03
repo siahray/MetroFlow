@@ -5,6 +5,7 @@ import MapView, { Marker, Polygon, Polyline, type Region } from "react-native-ma
 import type { HazardInfo, RoutePlan } from "../api";
 import { polygonRing, routeCoordinates, type LatLng } from "./geo";
 
+import { colors } from '../theme';
 type MapHazard = Pick<HazardInfo, "hazard_id" | "name" | "obstruction_level" | "geometry">;
 
 type Props = {
@@ -62,7 +63,7 @@ export function RouteMap({ route, position, destination, destinationName, hazard
         {line.length > 1 ? (
           <Polyline
             coordinates={line}
-            strokeColor="#2563eb"
+            strokeColor={colors.blue600}
             strokeWidth={5}
             lineCap="round"
             lineJoin="round"
@@ -78,7 +79,7 @@ export function RouteMap({ route, position, destination, destinationName, hazard
               key={hazard.hazard_id}
               coordinates={ring}
               fillColor={closed ? "rgba(220,38,38,0.25)" : "rgba(245,158,11,0.22)"}
-              strokeColor={closed ? "#dc2626" : "#f59e0b"}
+              strokeColor={closed ? colors.red600 : "#f59e0b"}
               strokeWidth={2}
             />
           );
@@ -88,7 +89,7 @@ export function RouteMap({ route, position, destination, destinationName, hazard
           <Marker
             coordinate={position}
             title="Your location"
-            pinColor="#2563eb"
+            pinColor={colors.blue600}
             tracksViewChanges={false}
           />
         ) : null}
@@ -97,7 +98,7 @@ export function RouteMap({ route, position, destination, destinationName, hazard
           <Marker
             coordinate={destination}
             title={destinationName ?? "Destination"}
-            pinColor="#dc2626"
+            pinColor={colors.red600}
             tracksViewChanges={false}
           />
         ) : null}
@@ -107,5 +108,5 @@ export function RouteMap({ route, position, destination, destinationName, hazard
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, overflow: "hidden", backgroundColor: "#e2e8f0" },
+  container: { flex: 1, overflow: "hidden", backgroundColor: colors.slate200 },
 });

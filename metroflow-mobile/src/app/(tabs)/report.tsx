@@ -31,6 +31,7 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { useAuth } from '../../auth';
+import { enqueueReport, newClientId } from '../../offline';
 import {
   ApiError,
   submitReport,
@@ -39,6 +40,7 @@ import {
   type ReportPhoto,
 } from '../../api';
 
+import { colors } from '../../theme';
 type Depth = 'ankle' | 'knee' | 'waist';
 type Passability = 'all' | 'high' | 'none';
 type LocationState = 'locating' | 'ready' | 'denied' | 'error';
@@ -250,33 +252,42 @@ export default function ReportScreen() {
     setMsg('');
     setResult(null);
 
+    const selected = DEPTH_OPTIONS.find((d) => d.id === depth)!;
+    // One id per submission, so a retry after a lost response is stored once.
+    const payload = {
+      clientId: newClientId(),
+      depthLevel: selected.api,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      barangay: barangay.trim() || null,
+      capturedAt: photo?.capturedAt ?? new Date().toISOString(),
+      photo: photo ? { uri: photo.uri, name: photo.name, type: photo.type } : null,
+    };
+    let narrative = '';
     try {
-      const selected = DEPTH_OPTIONS.find((d) => d.id === depth)!;
       // Passability is a driver observation too, so it travels in the narrative
       // the moderator reads rather than inventing a field the API does not have.
-      const narrative = [`Passability: ${PASSABILITY_LABELS[passability]}.`, notes.trim()]
+      narrative = [`Passability: ${PASSABILITY_LABELS[passability]}.`, notes.trim()]
         .filter(Boolean)
         .join(' ');
 
-      const created = await submitReport({
-        depthLevel: selected.api,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        narrative,
-        barangay: barangay.trim() || null,
-        capturedAt: photo?.capturedAt ?? new Date().toISOString(),
-        photo: photo
-          ? { uri: photo.uri, name: photo.name, type: photo.type }
-          : null,
-      });
+      const created = await submitReport({ ...payload, narrative });
 
       setResult(created);
       setMsgTone('info');
       setMsg('Report received. The moderation desk now sees it in the queue.');
       setTimeout(() => router.replace('/(tabs)/home'), 2500);
     } catch (error) {
-      setMsgTone('error');
-      setMsg(describeError(error));
+      if (!(error instanceof ApiError)) {
+        // No connection: keep the report and send it when one returns (FSD-FR-068).
+        await enqueueReport({ ...payload, narrative });
+        setMsgTone('info');
+        setMsg('You are offline. The report is saved and will be sent when the connection returns.');
+        setTimeout(() => router.replace('/(tabs)/home'), 2500);
+      } else {
+        setMsgTone('error');
+        setMsg(describeError(error));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -285,32 +296,32 @@ export default function ReportScreen() {
   const canSubmit = !submitting && !result && locationState === 'ready' && position !== null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
-      <View style={{ paddingTop: 10, paddingBottom: 10, paddingHorizontal: 20, backgroundColor: '#ffffff', borderBottomWidth: 1, borderColor: '#f8fafc' }}>
+      <View style={{ paddingTop: 10, paddingBottom: 10, paddingHorizontal: 20, backgroundColor: colors.white, borderBottomWidth: 1, borderColor: colors.slate50 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: '#dbeafe', backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' }}>
-              <Waves size={18} color="#2563eb" />
+            <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.blue100, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
+              <Waves size={18} color={colors.blue600} />
             </View>
             <View>
-              <Text style={{ fontSize: 9, fontWeight: '800', color: '#2563eb', textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
+              <Text style={{ fontSize: 9, fontWeight: '800', color: colors.blue600, textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
                 METROFLOW
               </Text>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', lineHeight: 20 }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: colors.slate900, lineHeight: 20 }}>
                 Report Hazard
               </Text>
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/home')}>
-              <Bell size={20} color="#475569" />
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => router.push('/(tabs)/home')}>
+              <Bell size={20} color={colors.slate600} />
             </TouchableOpacity>
             <Image
               source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80' }}
-              style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' }}
+              style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: colors.slate200 }}
             />
           </View>
         </View>
@@ -321,11 +332,11 @@ export default function ReportScreen() {
             onPress={() => router.back()}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}
           >
-            <ChevronLeft size={18} color="#475569" />
-            <Text style={{ fontSize: 14, fontWeight: '500', color: '#475569' }}>Back</Text>
+            <ChevronLeft size={18} color={colors.slate600} />
+            <Text style={{ fontSize: 14, fontWeight: '500', color: colors.slate600 }}>Back</Text>
           </TouchableOpacity>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.blue50, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 }}>
             <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#3b82f6' }} />
             <Text style={{ fontSize: 11, fontWeight: '700', color: '#1e40af' }}>Moderation Queue</Text>
           </View>
@@ -342,13 +353,13 @@ export default function ReportScreen() {
         {/* Banner */}
         <View style={{ backgroundColor: '#f4f7fa', borderRadius: 18, padding: 16, flexDirection: 'row', gap: 14 }}>
           <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(224,242,254,0.7)', alignItems: 'center', justifyContent: 'center' }}>
-            <Droplet size={20} color="#0284c7" />
+            <Droplet size={20} color={colors.sky600} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#061d38', marginBottom: 2 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: colors.slate900, marginBottom: 2 }}>
               Community Flood Watch
             </Text>
-            <Text style={{ fontSize: 12, color: '#64748b', lineHeight: 18 }}>
+            <Text style={{ fontSize: 12, color: colors.slate500, lineHeight: 18 }}>
               Your report joins the moderation queue. Once verified, it becomes a hazard that reroutes fellow drivers.
             </Text>
           </View>
@@ -365,60 +376,60 @@ export default function ReportScreen() {
         {/* Section 1: Photo */}
         <View style={{ gap: 10 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a' }}>
-              1. Take a photo <Text style={{ color: '#94a3b8', fontWeight: '400' }}>(optional)</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>
+              1. Take a photo <Text style={{ color: colors.slate400, fontWeight: '400' }}>(optional)</Text>
             </Text>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563eb' }}>Speeds up verification</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.blue600 }}>Speeds up verification</Text>
           </View>
 
           {photo ? (
-            <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, overflow: 'hidden', backgroundColor: '#fafbfc' }}>
+            <View style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 18, overflow: 'hidden', backgroundColor: '#fafbfc' }}>
               <Image source={{ uri: photo.uri }} style={{ width: '100%', height: 170 }} resizeMode="cover" />
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: '#1e293b' }}>
+                  <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: colors.slate800 }}>
                     {photo.name}
                   </Text>
-                  <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                  <Text style={{ fontSize: 11, color: colors.slate500, marginTop: 2 }}>
                     Captured {formatClock(photo.capturedAt)}
                   </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setPhoto(null)}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#fef2f2', borderRadius: 999 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: colors.red50, borderRadius: 999 }}
                 >
-                  <X size={13} color="#b91c1c" />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#b91c1c' }}>Remove</Text>
+                  <X size={13} color={colors.red700} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red700 }}>Remove</Text>
                 </TouchableOpacity>
               </View>
             </View>
           ) : (
-            <View style={{ borderWidth: 1.5, borderColor: '#e2e8f0', borderStyle: 'dashed', borderRadius: 18, paddingVertical: 22, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fafbfc' }}>
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#ffffff', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 6 }}>
-                {photoBusy ? <ActivityIndicator color="#2563eb" /> : <Camera size={22} color="#2563eb" />}
+            <View style={{ borderWidth: 1.5, borderColor: colors.slate200, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 22, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fafbfc' }}>
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.white, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.slate100, marginBottom: 6 }}>
+                {photoBusy ? <ActivityIndicator color={colors.blue600} /> : <Camera size={22} color={colors.blue600} />}
               </View>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b' }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.slate800 }}>
                 Snap the waterline against a curb or vehicle
               </Text>
-              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+              <Text style={{ fontSize: 11, color: colors.slate400, marginTop: 2 }}>
                 JPEG, PNG or WebP up to 4 MB
               </Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                 <TouchableOpacity
                   onPress={() => void handleCapture(true)}
                   disabled={photoBusy}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#eff6ff', borderRadius: 999, borderWidth: 1, borderColor: '#dbeafe', opacity: photoBusy ? 0.6 : 1 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.blue50, borderRadius: 999, borderWidth: 1, borderColor: colors.blue100, opacity: photoBusy ? 0.6 : 1 }}
                 >
-                  <Camera size={14} color="#1d4ed8" />
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1d4ed8' }}>Camera</Text>
+                  <Camera size={14} color={colors.blue700} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.blue700 }}>Camera</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => void handleCapture(false)}
                   disabled={photoBusy}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#ffffff', borderRadius: 999, borderWidth: 1, borderColor: '#e2e8f0', opacity: photoBusy ? 0.6 : 1 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.white, borderRadius: 999, borderWidth: 1, borderColor: colors.slate200, opacity: photoBusy ? 0.6 : 1 }}
                 >
-                  <ImagePlus size={14} color="#475569" />
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>Library</Text>
+                  <ImagePlus size={14} color={colors.slate600} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.slate600 }}>Library</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -427,35 +438,35 @@ export default function ReportScreen() {
 
         {/* Section 2: Location & Depth */}
         <View style={{ gap: 12 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a' }}>
-            2. Location & Depth <Text style={{ color: '#ef4444' }}>*</Text>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>
+            2. Location & Depth <Text style={{ color: colors.red500 }}>*</Text>
           </Text>
 
           {/* GPS card */}
-          <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ffffff', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: locationState === 'ready' ? '#ecfdf5' : '#eff6ff', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: locationState === 'ready' ? '#ecfdf5' : colors.blue50, alignItems: 'center', justifyContent: 'center' }}>
               {locationState === 'locating' ? (
-                <ActivityIndicator color="#2563eb" />
+                <ActivityIndicator color={colors.blue600} />
               ) : (
-                <MapPin size={20} color={locationState === 'ready' ? '#059669' : '#2563eb'} />
+                <MapPin size={20} color={locationState === 'ready' ? '#059669' : colors.blue600} />
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: colors.slate400, textTransform: 'uppercase', letterSpacing: 0.6 }}>
                 {locationState === 'ready' ? 'GPS PIN' : 'DATE & GPS'}
               </Text>
               {locationState === 'ready' && position ? (
                 <>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginTop: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900, marginTop: 1 }}>
                     {formatCoordinate(position.latitude, 'N', 'S')}, {formatCoordinate(position.longitude, 'E', 'W')}
                   </Text>
-                  <Text style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                  <Text style={{ fontSize: 11, color: colors.slate500, marginTop: 1 }}>
                     {position.accuracy != null ? `±${Math.round(position.accuracy)} m • ` : ''}
                     {fixAt ? `Pin taken ${formatClock(fixAt)}` : 'Pin taken'}
                   </Text>
                 </>
               ) : (
-                <Text style={{ fontSize: 12, color: locationState === 'denied' ? '#b91c1c' : '#64748b', marginTop: 2, lineHeight: 17 }}>
+                <Text style={{ fontSize: 12, color: locationState === 'denied' ? colors.red700 : colors.slate500, marginTop: 2, lineHeight: 17 }}>
                   {locationState === 'locating'
                     ? 'Reading your position…'
                     : locationError ?? 'Position unavailable.'}
@@ -465,30 +476,30 @@ export default function ReportScreen() {
             {locationState !== 'ready' && locationState !== 'locating' ? (
               <TouchableOpacity
                 onPress={handleRetryLocation}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#eff6ff', borderRadius: 10 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.blue50, borderRadius: 10 }}
               >
-                <RefreshCw size={12} color="#1d4ed8" />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#1d4ed8' }}>Retry</Text>
+                <RefreshCw size={12} color={colors.blue700} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.blue700 }}>Retry</Text>
               </TouchableOpacity>
             ) : null}
           </View>
 
           {/* Barangay */}
-          <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#ffffff' }}>
-            <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+          <View style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.white }}>
+            <Text style={{ fontSize: 10, fontWeight: '800', color: colors.slate400, textTransform: 'uppercase', letterSpacing: 0.6 }}>
               Barangay (optional)
             </Text>
             <TextInput
               value={barangay}
               onChangeText={setBarangay}
               placeholder="e.g. Barangay 309"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.slate400}
               maxLength={120}
-              style={{ fontSize: 13, color: '#0f172a', paddingVertical: 4 }}
+              style={{ fontSize: 13, color: colors.slate900, paddingVertical: 4 }}
             />
           </View>
 
-          <Text style={{ fontSize: 12, fontWeight: '500', color: '#64748b', marginTop: 2 }}>
+          <Text style={{ fontSize: 12, fontWeight: '500', color: colors.slate500, marginTop: 2 }}>
             Estimated Depth Level
           </Text>
 
@@ -497,77 +508,77 @@ export default function ReportScreen() {
             {/* Ankle deep */}
             <TouchableOpacity
               onPress={() => setDepth('ankle')}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, borderWidth: depth === 'ankle' ? 1.5 : 1, borderColor: depth === 'ankle' ? '#3b82f6' : '#e2e8f0', backgroundColor: depth === 'ankle' ? '#eff6ff' : '#ffffff' }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, borderWidth: depth === 'ankle' ? 1.5 : 1, borderColor: depth === 'ankle' ? '#3b82f6' : colors.slate200, backgroundColor: depth === 'ankle' ? colors.blue50 : colors.white }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
-                  <Waves size={16} color="#64748b" />
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.slate100, alignItems: 'center', justifyContent: 'center' }}>
+                  <Waves size={16} color={colors.slate500} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#061d38' }}>Ankle deep</Text>
-                  <Text style={{ fontSize: 11, color: '#64748b' }}>Around 0.5 ft (15 cm)</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>Ankle deep</Text>
+                  <Text style={{ fontSize: 11, color: colors.slate500 }}>Around 0.5 ft (15 cm)</Text>
                 </View>
               </View>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: depth === 'ankle' ? 0 : 1.5, borderColor: '#cbd5e1', backgroundColor: depth === 'ankle' ? '#061d38' : '#f8fafc', alignItems: 'center', justifyContent: 'center' }}>
-                {depth === 'ankle' && <Check size={12} color="#ffffff" strokeWidth={3} />}
+              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: depth === 'ankle' ? 0 : 1.5, borderColor: colors.slate300, backgroundColor: depth === 'ankle' ? colors.slate900 : colors.slate50, alignItems: 'center', justifyContent: 'center' }}>
+                {depth === 'ankle' && <Check size={12} color={colors.white} strokeWidth={3} />}
               </View>
             </TouchableOpacity>
 
             {/* Knee deep */}
             <TouchableOpacity
               onPress={() => setDepth('knee')}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, borderWidth: depth === 'knee' ? 1.5 : 1, borderColor: depth === 'knee' ? '#3b82f6' : '#e2e8f0', backgroundColor: depth === 'knee' ? '#eff6ff' : '#ffffff' }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, borderWidth: depth === 'knee' ? 1.5 : 1, borderColor: depth === 'knee' ? '#3b82f6' : colors.slate200, backgroundColor: depth === 'knee' ? colors.blue50 : colors.white }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' }}>
-                  <Waves size={16} color="#2563eb" />
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.blue100, alignItems: 'center', justifyContent: 'center' }}>
+                  <Waves size={16} color={colors.blue600} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#061d38' }}>Knee deep</Text>
-                  <Text style={{ fontSize: 11, color: '#64748b' }}>Around 1.5 ft (45 cm)</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>Knee deep</Text>
+                  <Text style={{ fontSize: 11, color: colors.slate500 }}>Around 1.5 ft (45 cm)</Text>
                 </View>
               </View>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: depth === 'knee' ? 0 : 1.5, borderColor: '#cbd5e1', backgroundColor: depth === 'knee' ? '#061d38' : '#f8fafc', alignItems: 'center', justifyContent: 'center' }}>
-                {depth === 'knee' && <Check size={12} color="#ffffff" strokeWidth={3} />}
+              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: depth === 'knee' ? 0 : 1.5, borderColor: colors.slate300, backgroundColor: depth === 'knee' ? colors.slate900 : colors.slate50, alignItems: 'center', justifyContent: 'center' }}>
+                {depth === 'knee' && <Check size={12} color={colors.white} strokeWidth={3} />}
               </View>
             </TouchableOpacity>
 
             {/* Waist deep */}
             <TouchableOpacity
               onPress={() => setDepth('waist')}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, borderWidth: depth === 'waist' ? 1.5 : 1, borderColor: depth === 'waist' ? '#ef4444' : '#e2e8f0', backgroundColor: depth === 'waist' ? '#fef2f2' : '#ffffff' }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 18, borderWidth: depth === 'waist' ? 1.5 : 1, borderColor: depth === 'waist' ? colors.red500 : colors.slate200, backgroundColor: depth === 'waist' ? colors.red50 : colors.white }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#fef2f2', alignItems: 'center', justifyContent: 'center' }}>
-                  <Home size={16} color="#ef4444" />
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.red50, alignItems: 'center', justifyContent: 'center' }}>
+                  <Home size={16} color={colors.red500} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#061d38' }}>Waist deep / Submerged</Text>
-                  <Text style={{ fontSize: 11, color: '#64748b' }}>Exceeds 3.0 ft (&gt;90 cm) • Severe</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>Waist deep / Submerged</Text>
+                  <Text style={{ fontSize: 11, color: colors.slate500 }}>Exceeds 3.0 ft (&gt;90 cm) • Severe</Text>
                 </View>
               </View>
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: depth === 'waist' ? 0 : 1.5, borderColor: '#cbd5e1', backgroundColor: depth === 'waist' ? '#dc2626' : '#f8fafc', alignItems: 'center', justifyContent: 'center' }}>
-                {depth === 'waist' && <Check size={12} color="#ffffff" strokeWidth={3} />}
+              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: depth === 'waist' ? 0 : 1.5, borderColor: colors.slate300, backgroundColor: depth === 'waist' ? colors.red600 : colors.slate50, alignItems: 'center', justifyContent: 'center' }}>
+                {depth === 'waist' && <Check size={12} color={colors.white} strokeWidth={3} />}
               </View>
             </TouchableOpacity>
           </View>
 
           {/* Passability Status */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#061d38' }}>
-              Passability Status <Text style={{ color: '#ef4444' }}>*</Text>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.slate900 }}>
+              Passability Status <Text style={{ color: colors.red500 }}>*</Text>
             </Text>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748b' }}>Select vehicle safety</Text>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.slate500 }}>Select vehicle safety</Text>
           </View>
 
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {/* Passable for all */}
             <TouchableOpacity
               onPress={() => setPassability('all')}
-              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: passability === 'all' ? 1.5 : 1, borderColor: passability === 'all' ? '#061d38' : '#e2e8f0', backgroundColor: passability === 'all' ? '#061d38' : '#ffffff', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: passability === 'all' ? 1.5 : 1, borderColor: passability === 'all' ? colors.slate900 : colors.slate200, backgroundColor: passability === 'all' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: 6 }}
             >
-              <Car size={20} color={passability === 'all' ? '#ffffff' : '#061d38'} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: passability === 'all' ? '#ffffff' : '#061d38', textAlign: 'center' }}>
+              <Car size={20} color={passability === 'all' ? colors.white : colors.slate900} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: passability === 'all' ? colors.white : colors.slate900, textAlign: 'center' }}>
                 Passable for all
               </Text>
             </TouchableOpacity>
@@ -575,10 +586,10 @@ export default function ReportScreen() {
             {/* Passable: high vehicle */}
             <TouchableOpacity
               onPress={() => setPassability('high')}
-              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: passability === 'high' ? 1.5 : 1, borderColor: passability === 'high' ? '#061d38' : '#e2e8f0', backgroundColor: passability === 'high' ? '#061d38' : '#ffffff', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: passability === 'high' ? 1.5 : 1, borderColor: passability === 'high' ? colors.slate900 : colors.slate200, backgroundColor: passability === 'high' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: 6 }}
             >
-              <Truck size={20} color={passability === 'high' ? '#ffffff' : '#061d38'} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: passability === 'high' ? '#ffffff' : '#061d38', textAlign: 'center' }}>
+              <Truck size={20} color={passability === 'high' ? colors.white : colors.slate900} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: passability === 'high' ? colors.white : colors.slate900, textAlign: 'center' }}>
                 Passable: high vehicle
               </Text>
             </TouchableOpacity>
@@ -586,10 +597,10 @@ export default function ReportScreen() {
             {/* Not passable */}
             <TouchableOpacity
               onPress={() => setPassability('none')}
-              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: passability === 'none' ? 1.5 : 1, borderColor: passability === 'none' ? '#0284c7' : '#e2e8f0', borderStyle: passability === 'none' ? 'dashed' : 'solid', backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: passability === 'none' ? 1.5 : 1, borderColor: passability === 'none' ? colors.sky600 : colors.slate200, borderStyle: passability === 'none' ? 'dashed' : 'solid', backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', gap: 6 }}
             >
-              <Ban size={20} color={passability === 'none' ? '#0284c7' : '#94a3b8'} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: passability === 'none' ? '#0284c7' : '#64748b', textAlign: 'center' }}>
+              <Ban size={20} color={passability === 'none' ? colors.sky600 : colors.slate400} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: passability === 'none' ? colors.sky600 : colors.slate500, textAlign: 'center' }}>
                 Not passable
               </Text>
             </TouchableOpacity>
@@ -598,20 +609,20 @@ export default function ReportScreen() {
 
         {/* Section 3: Additional Details */}
         <View style={{ gap: 10 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a' }}>
-            3. Additional details <Text style={{ color: '#94a3b8', fontWeight: '400' }}>(optional)</Text>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>
+            3. Additional details <Text style={{ color: colors.slate400, fontWeight: '400' }}>(optional)</Text>
           </Text>
 
-          <View style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 18, padding: 14, backgroundColor: '#ffffff', minHeight: 126 }}>
+          <View style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 18, padding: 14, backgroundColor: colors.white, minHeight: 126 }}>
             <TextInput
               value={notes}
               onChangeText={setNotes}
               placeholder="Add notes (e.g., passable by SUV only, strong current, landmark)..."
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.slate400}
               multiline
               numberOfLines={3}
               maxLength={1000}
-              style={{ fontSize: 13, color: '#0f172a', textAlignVertical: 'top', minHeight: 60 }}
+              style={{ fontSize: 13, color: colors.slate900, textAlignVertical: 'top', minHeight: 60 }}
             />
 
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
@@ -619,9 +630,9 @@ export default function ReportScreen() {
                 <TouchableOpacity
                   key={tag}
                   onPress={() => handleToggleTag(tag)}
-                  style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#f1f5f9', borderRadius: 999 }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.slate100, borderRadius: 999 }}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '500', color: '#475569' }}>{tag}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '500', color: colors.slate600 }}>{tag}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -637,7 +648,7 @@ export default function ReportScreen() {
               Reference #{result.report_id.slice(0, 8).toUpperCase()} • {result.depth_label} • waiting for moderation.
             </Text>
             {result.possible_duplicate_of ? (
-              <Text style={{ fontSize: 12, color: '#92400e', lineHeight: 18 }}>
+              <Text style={{ fontSize: 12, color: colors.amber800, lineHeight: 18 }}>
                 A recent report nearby may describe the same flood; the desk will merge them if so.
               </Text>
             ) : null}
@@ -646,16 +657,16 @@ export default function ReportScreen() {
 
         {msg ? (
           <View style={{ gap: 8 }}>
-            <Text style={{ fontSize: 12, textAlign: 'center', fontWeight: '600', color: msgTone === 'error' ? '#dc2626' : '#16a34a', lineHeight: 18 }}>
+            <Text style={{ fontSize: 12, textAlign: 'center', fontWeight: '600', color: msgTone === 'error' ? colors.red600 : colors.green600, lineHeight: 18 }}>
               {msg}
             </Text>
             {msgTone === 'error' && canSubmit ? (
               <TouchableOpacity
                 onPress={() => void handleSubmit()}
-                style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, backgroundColor: colors.red50, borderWidth: 1, borderColor: '#fecaca', flexDirection: 'row', alignItems: 'center', gap: 6 }}
               >
-                <RefreshCw size={12} color="#dc2626" />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#dc2626' }}>Retry Submission</Text>
+                <RefreshCw size={12} color={colors.red600} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.red600 }}>Retry Submission</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -666,26 +677,25 @@ export default function ReportScreen() {
           <TouchableOpacity
             onPress={() => void handleSubmit()}
             disabled={submitting || result !== null}
-            style={{ backgroundColor: canSubmit ? '#061d38' : '#94a3b8', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, shadowColor: '#000', shadowOpacity: canSubmit ? 0.1 : 0, shadowRadius: 8, elevation: canSubmit ? 3 : 0 }}
+            style={{ backgroundColor: canSubmit ? colors.slate900 : colors.slate400, paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, shadowColor: '#000', shadowOpacity: canSubmit ? 0.1 : 0, shadowRadius: 8, elevation: canSubmit ? 3 : 0 }}
           >
             {submitting ? (
-              <ActivityIndicator color="#ffffff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <>
-                <Send size={16} color="#ffffff" />
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#ffffff' }}>
+                <Send size={16} color={colors.white} />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.white }}>
                   {result ? 'Report submitted' : locationState === 'locating' ? 'Waiting for GPS…' : 'Submit Report'}
                 </Text>
               </>
             )}
           </TouchableOpacity>
 
-          <Text style={{ fontSize: 10, color: '#64748b', textAlign: 'center', lineHeight: 16, paddingHorizontal: 12 }}>
-            Reports are reviewed before they redirect traffic • Emergency? Dial{' '}
-            <Text style={{ fontWeight: '700', color: '#2563eb' }}>911</Text> or activate{' '}
+          <Text style={{ fontSize: 10, color: colors.slate500, textAlign: 'center', lineHeight: 16, paddingHorizontal: 12 }}>
+            Reports are reviewed before they redirect traffic • Emergency? Activate{' '}
             <Text
               onPress={() => router.push('/(tabs)/sos')}
-              style={{ fontWeight: '700', color: '#ef4444' }}
+              style={{ fontWeight: '700', color: colors.red500 }}
             >
               Rescue SOS
             </Text>

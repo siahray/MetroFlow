@@ -127,32 +127,6 @@ class HazardZone(Base):
 class Vehicle(Base):
     __tablename__ = "vehicles"
     vehicle_id = Column(Integer, primary_key=True, index=True)
-
-
-class Sensor(Base):
-    __tablename__ = "sensors"
-    sensor_id = Column(String(60), primary_key=True, index=True)
-    sensor_type = Column(String(20), nullable=False, index=True)  # RIVER_GAUGE or RAIN_GAUGE
-    name = Column(String(120), nullable=False)  # Human label
-    geom = Column(Geometry(geometry_type="POINT", srid=4326), nullable=True)  # Sensor location
-    threshold_value = Column(Float, nullable=False)  # Breach threshold
-    threshold_unit = Column(String(20), nullable=False)  # m or mm_hr
-    impact_radius_m = Column(Float, nullable=False)  # Radius for edge marking
-    active = Column(
-        Boolean, default=True, index=True, nullable=True
-    )  # Disabled sensors reject readings
-    simulated = Column(Boolean, default=False, nullable=True)  # True for pilot-generated values
-
-
-class SensorReading(Base):
-    __tablename__ = "sensor_readings"
-    reading_id = Column(BigInteger, primary_key=True, index=True)
-    sensor_id = Column(String(60), ForeignKey("sensors.sensor_id"), nullable=False)
-    value = Column(Float, nullable=False)  # Reading value
-    unit = Column(String(20), nullable=False)  # Unit at capture
-    recorded_at = Column(DateTime(timezone=True), nullable=False)  # Sensor timestamp
-    received_at = Column(DateTime(timezone=True), nullable=False)  # Gateway receipt time
-    breach = Column(Boolean, nullable=True, index=True)  # Threshold exceeded at evaluation time
     # ``unique=True`` with ``index=True`` renders the unique index the deployed
     # database has; ``unique`` alone would ask Alembic for a table constraint.
     call_sign = Column(
@@ -180,6 +154,36 @@ class SensorReading(Base):
     speed_kmh = Column(Float, nullable=True, comment="Current speed in km/h")
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class Sensor(Base):
+    __tablename__ = "sensors"
+    sensor_id = Column(String(60), primary_key=True, index=True, unique=True)
+    sensor_type = Column(String(20), nullable=False, index=True)  # RIVER_GAUGE or RAIN_GAUGE
+    name = Column(String(120), nullable=False)  # Human label
+    geom = Column(Geometry(geometry_type="POINT", srid=4326), nullable=True)  # Sensor location
+    threshold_value = Column(Float, nullable=False)  # Breach threshold
+    threshold_unit = Column(String(20), nullable=False)  # m or mm_hr
+    impact_radius_m = Column(Float, nullable=False)  # Radius for edge marking
+    active = Column(
+        Boolean, default=True, index=True, nullable=True
+    )  # Disabled sensors reject readings
+    simulated = Column(Boolean, default=False, nullable=True)  # True for pilot-generated values
+
+
+class SensorReading(Base):
+    __tablename__ = "sensor_readings"
+    reading_id = Column(BigInteger, primary_key=True, index=True, unique=True)
+    sensor_id = Column(String(60), ForeignKey("sensors.sensor_id"), nullable=False)
+    value = Column(Float, nullable=False)  # Reading value
+    unit = Column(String(20), nullable=False)  # Unit at capture
+    recorded_at = Column(DateTime(timezone=True), nullable=False)  # Sensor timestamp
+    received_at = Column(DateTime(timezone=True), nullable=False)  # Gateway receipt time
+    breach = Column(Boolean, nullable=True)  # Threshold exceeded at evaluation time
+    __table_args__ = (
+        Index("ix_sensor_readings_sensor_id_recorded_at", "sensor_id", "recorded_at"),
+        Index("ix_sensor_readings_breach_received_at", "breach", "received_at"),
+    )
 
 
 class SOSRequest(Base):
@@ -240,6 +244,13 @@ class IncidentReport(Base):
         nullable=False,
         index=True,
         comment="Salted hash of the reporter; no raw identity",
+    )
+    client_id = Column(
+        UUID(as_uuid=True),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Device-generated id that makes an offline replay idempotent",
     )
     source = Column(
         String(20), nullable=False, default="PHOTO", comment="PHOTO, SENSOR, CCTV or CALL"
