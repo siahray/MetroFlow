@@ -65,6 +65,8 @@ export type FieldReport = {
   decision_reason: string | null;
   hazard_id: number | null;
   nearest_sensor?: NearestSensorReading | null;
+  /** True when the nearest rain gauge in range reports no breach (FSD-FR-026). */
+  sensor_mismatch?: boolean;
 };
 
 export type NearestSensorReading = {

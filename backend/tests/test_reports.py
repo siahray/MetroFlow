@@ -159,3 +159,24 @@ def test_photo_type_is_decided_from_the_bytes_not_the_upload_header():
     assert reports.sniff_image_mime(b"GIF89a" + b"0" * 10) is None
     assert reports.sniff_image_mime(b"RIFF\x00\x00\x00\x00WAVEfmt ") is None
     assert reports.sniff_image_mime(b"") is None
+
+
+def test_sensor_mismatch_only_when_the_nearest_gauge_in_range_contradicts_the_report():
+    here = (14.6, 121.0)
+    near = (14.601, 121.0)  # about 110 m away
+    far = (14.7, 121.0)  # about 11 km away: out of range
+
+    # Nearest gauge has reported and is quiet: the report is contradicted.
+    assert reports.sensor_mismatch(*here, [(*near, True, False)]) is True
+    # Gauge in breach agrees with the report.
+    assert reports.sensor_mismatch(*here, [(*near, True, True)]) is False
+    # No reading yet, no gauge, or only a far gauge: absence of data is not a contradiction.
+    assert reports.sensor_mismatch(*here, [(*near, False, False)]) is False
+    assert reports.sensor_mismatch(*here, []) is False
+    assert reports.sensor_mismatch(*here, [(*far, True, False)]) is False
+    # The nearest gauge decides, not any gauge.
+    assert (
+        reports.sensor_mismatch(*here, [(*near, True, True), (14.603, 121.0, True, False)]) is False
+    )
+    # A report without a position cannot be compared.
+    assert reports.sensor_mismatch(None, None, [(*near, True, False)]) is False

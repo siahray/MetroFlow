@@ -8,7 +8,7 @@ import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
 import { IncidentQueue } from "@/components/incident-queue";
 import { useToast } from "@/components/toast-provider";
-import { type QueueFilter, type Incident } from "@/lib/incidents";
+import { matchesQueueFilter, type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
@@ -87,7 +87,7 @@ export default function TriagePage() {
     const needle = query.trim().toLowerCase();
 
     return allIncidents.filter((incident) => {
-      const matchesFilter = filter === "all" || incident.source === filter;
+      const matchesFilter = matchesQueueFilter(incident, filter);
       const matchesQuery =
         needle === "" ||
         [incident.id, incident.reporter, incident.location, incident.barangay].some((value) =>

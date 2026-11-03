@@ -1784,3 +1784,30 @@ def test_every_public_table_has_row_level_security(client):
             )
         ]
     assert open_tables == [], f"tables without row level security: {open_tables}"
+
+
+def test_report_flags_a_sensor_mismatch_only_while_the_nearest_gauge_is_quiet(
+    client, created_records
+):
+    """FSD-FR-026: the "Sensor Mismatch" filter needs the API to say when a gauge disagrees."""
+    lat, lon = 14.6, 121.0
+    _make_sensor(client, "TEST_RAIN_MISMATCH", lat, lon, radius_m=100.0)
+    try:
+        report = submit_report(client, created_records, latitude=lat, longitude=lon)
+
+        def flag():
+            listed = client.get("/api/v1/reports", params={"limit": 200}).json()
+            return next(r for r in listed if r["report_id"] == report["report_id"])[
+                "sensor_mismatch"
+            ]
+
+        # A gauge that has not reported cannot contradict anything.
+        assert flag() is False
+        # A quiet reading contradicts the citizen's flood report.
+        assert _post_reading(client, "TEST_RAIN_MISMATCH", 5.0).status_code == 201
+        assert flag() is True
+        # A breach agrees with it.
+        assert _post_reading(client, "TEST_RAIN_MISMATCH", 80.0).status_code == 201
+        assert flag() is False
+    finally:
+        client.delete("/api/v1/sensors/TEST_RAIN_MISMATCH")
