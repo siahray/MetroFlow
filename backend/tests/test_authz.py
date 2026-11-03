@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 
 from auth_utils import get_current_user, require_roles
-from main import app, require_admin
+from main import app, require_admin, require_super_admin
 
 # The only routes a caller may reach without a session. Everything else in
 # /api/v1 has to resolve a user first.
@@ -36,8 +36,6 @@ PORTAL_ONLY_ROUTES = [
     ("POST", "/api/v1/hazards"),
     ("PATCH", "/api/v1/hazards/{hazard_id}"),
     ("POST", "/api/v1/hazards/{hazard_id}/publish"),
-    ("POST", "/api/v1/vehicles"),
-    ("PATCH", "/api/v1/vehicles/{vehicle_id}"),
     ("GET", "/api/v1/audit"),
     ("GET", "/api/v1/audit/verify"),
     ("GET", "/api/v1/reports"),
@@ -46,6 +44,14 @@ PORTAL_ONLY_ROUTES = [
     ("POST", "/api/v1/reports/{report_id}/approve"),
     ("POST", "/api/v1/reports/{report_id}/reject"),
     ("POST", "/api/v1/sensors/readings"),
+]
+
+
+# Adding, editing and removing rescue units is the super admin's alone.
+SUPER_ADMIN_ONLY_ROUTES = [
+    ("POST", "/api/v1/vehicles"),
+    ("PATCH", "/api/v1/vehicles/{vehicle_id}"),
+    ("DELETE", "/api/v1/vehicles/{vehicle_id}"),
 ]
 
 
@@ -92,6 +98,19 @@ def test_portal_routes_require_a_portal_role(method: str, path: str):
     calls = _dependency_calls(route)
     assert get_current_user in calls
     assert require_admin in calls
+
+
+@pytest.mark.parametrize("method,path", SUPER_ADMIN_ONLY_ROUTES)
+def test_fleet_management_requires_the_super_admin(method: str, path: str):
+    route = next(
+        route
+        for route in _api_routes()
+        if route.path == path and method in (route.methods or set())
+    )
+    calls = _dependency_calls(route)
+    assert get_current_user in calls
+    assert require_super_admin in calls
+    assert require_admin not in calls
 
 
 def test_hazard_stream_is_open_to_any_authenticated_user():

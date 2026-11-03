@@ -44,23 +44,20 @@ export async function readErrorMessage(res: Response): Promise<string> {
     return "You don't have permission to perform this action. Contact your administrator.";
   }
 
-  if (res.status === 404) {
-    return "The requested resource was not found. It may have been deleted or moved.";
-  }
-
-  if (res.status === 409) {
-    return "This resource has been modified by another user. Please refresh and try again.";
-  }
-
-  if (res.status === 422) {
-    return "The data you submitted is invalid. Please check your input and try again.";
-  }
-
   if (res.status >= 500) {
     return "Server error. Please try again later or contact support if the problem persists.";
   }
 
+  // 404, 409 and 422 carry the API's own explanation (a duplicate call sign, a unit that is
+  // committed to a dispatch, which field failed); prefer it over a generic sentence.
+  const generic: Record<number, string> = {
+    404: "The requested resource was not found. It may have been deleted or moved.",
+    409: "This change conflicts with the current state. Please refresh and try again.",
+    422: "The data you submitted is invalid. Please check your input and try again.",
+  };
+
   const body = await res.text().catch(() => "");
+  if (generic[res.status] && !body) return generic[res.status];
   if (body) {
     try {
       const parsed: unknown = JSON.parse(body);
@@ -75,7 +72,7 @@ export async function readErrorMessage(res: Response): Promise<string> {
     } catch {
       // Not JSON: a proxy page or a plain-text error. Returned as-is below.
     }
-    return body;
+    return generic[res.status] ?? body;
   }
 
   return `Request failed: ${res.status}`;
@@ -108,6 +105,8 @@ export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T>
   if (!res.ok) {
     throw new ApiError(res.status, await readErrorMessage(res), parseRetryAfter(res));
   }
+  // A successful DELETE answers 204 with no body.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

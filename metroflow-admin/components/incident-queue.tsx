@@ -183,10 +183,12 @@ export function IncidentQueue({
                     <span
                       className={cn(
                         "rounded-full border px-2 py-0.5 text-[10px] font-bold",
-                        urgencyClass(incident.urgency),
+                        incident.urgency === null
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : urgencyClass(incident.urgency),
                       )}
                     >
-                      Urgency {incident.urgency.toFixed(1)}
+                      {incident.urgency === null ? "SOS" : `Urgency ${incident.urgency.toFixed(1)}`}
                     </span>
                   </div>
                   <span className="text-[11px] text-slate-400">

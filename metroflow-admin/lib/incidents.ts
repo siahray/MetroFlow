@@ -12,7 +12,10 @@ export type QueueSource = "photo" | "sensor" | "escalated" | "other";
 export type Incident = {
   id: string;
   level: string;
-  urgency: number;
+  /** Reports carry the API's score; an SOS has none, because the person never gave one. */
+  urgency: number | null;
+  /** When the person submitted it (ISO). Used to order SOS signals, newest first. */
+  createdAt: string | null;
   reporter: string;
   reportedAt: string;
   narrative: string;
@@ -74,7 +77,7 @@ export const QUEUE_FILTERS = [
 export type QueueFilter = (typeof QUEUE_FILTERS)[number]["id"];
 
 /**
- * Masks a phone number for PII protection (e.g. +63 917 555 0192 -> +63 91** *** ****)
+ * Masks a phone number for PII protection (for example, a +63 9XX number is shown as +63 9** *** ****)
  * Per UI/UX Design Audit & Scope Resolution.
  */
 export function maskPhoneNumber(phone: string): string {
@@ -99,6 +102,18 @@ export function maskPhoneNumber(phone: string): string {
   }
 
   return "+63 9** *** ****";
+}
+
+/**
+ * Queue order: SOS signals first (someone is asking for rescue; no score is invented to rank
+ * them), newest first; then field reports by their urgency score, highest first, newest on ties.
+ */
+export function compareIncidents(a: Incident, b: Incident): number {
+  const aSos = a.incidentType === "sos";
+  const bSos = b.incidentType === "sos";
+  if (aSos !== bSos) return aSos ? -1 : 1;
+  if (!aSos && (a.urgency ?? 0) !== (b.urgency ?? 0)) return (b.urgency ?? 0) - (a.urgency ?? 0);
+  return Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? "") || 0;
 }
 
 /** The label shown for an incident, in order of how much a dispatcher should care. */

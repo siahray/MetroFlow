@@ -17,6 +17,8 @@ const BANNED: [RegExp, string][] = [
   [/8888-FLOW|CDMO/, "invented contact"],
   [/156\.\d+ ?MHz|Marine/i, "invented radio channel"],
   [/"(1\.2 km|35 cm|12 mins|45 cm)"/, "invented fallback value"],
+  [/\+63 ?9\d\d ?555/, "a hardcoded phone number; no phone is collected"],
+  [/Urgency Score[\s\S]{0,200}8\.4/, "a hardcoded urgency score"],
 ];
 
 function sourceFiles(dir: string): string[] {
