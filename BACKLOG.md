@@ -51,6 +51,7 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | F-5 | `/dashboard` is a thin page and `components/dashboard.tsx` duplicates triage logic. Build or delete. | UI backlog P1-1, FR-024 | M |
 | F-6 | Driver telemetry never sends: needs `vehicle_id` in the token or `EXPO_PUBLIC_TELEMETRY_VEHICLE_ID`. | FR-072 | S |
 | F-7 | Offline Maps screen shows "None / 0 MB". Show real cache status (graph age, queued reports) instead. | FR-070, LIM-017 | S |
+| F-8 | **Hazard drawing on the portal map**: draw a flood polygon and a closure line, and send `geometry`. Today the Hazards page can only attach a hazard to a road segment. Also a hazard withdraw endpoint and button. | FSD-FR-082, 083, 085 | M |
 
 ## 3. Quality, tests, CI
 
