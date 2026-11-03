@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
+import { OfflineBanner } from "./error-notice";
 import { Sidebar, type NavItem } from "./sidebar";
 import { listReports } from "@/lib/reports";
 import { listSOS } from "@/lib/sos-live";
@@ -16,7 +17,21 @@ type AppShellProps = {
   children: ReactNode;
 };
 
+function subscribeOnline(cb: () => void) {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+}
+
 export function AppShell({ activeItem, title, children }: AppShellProps) {
+  const online = useSyncExternalStore(
+    subscribeOnline,
+    () => navigator.onLine,
+    () => true,
+  );
   const router = useRouter();
   // The portal has no server-side session, so the shell reads the browser cache
   // through useSyncExternalStore instead of copying it into state from an effect.
@@ -115,6 +130,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
         </header>
 
         {/* Page Content */}
+        {!online && <OfflineBanner />}
         <main className="flex-1 space-y-6 overflow-y-auto p-6">{children}</main>
       </div>
     </div>

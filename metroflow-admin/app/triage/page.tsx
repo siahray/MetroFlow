@@ -27,14 +27,13 @@ export default function TriagePage() {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
-      setError(null);
       try {
         const [sosList, reportList, vehicleList, hazardList] = await Promise.all([
-          listSOS().catch(() => []),
+          listSOS(),
           listReports().catch(() => []),
           listVehicles().catch(() => []),
           listHazards().catch(() => []),
@@ -48,6 +47,7 @@ export default function TriagePage() {
         const incidents = [...sosIncidents, ...reportIncidents].sort(
           (a, b) => b.urgency - a.urgency,
         );
+        setError(null);
         setLiveIncidents(incidents);
         setVehicles(vehicleList);
         setHazards(hazardList);
@@ -56,8 +56,12 @@ export default function TriagePage() {
         } else if (incidents.length === 0) {
           setSelectedId("");
         }
-      } catch (err) {
-        setError("Failed to load incidents");
+      } catch {
+        setError(
+          navigator.onLine
+            ? "Could not load incidents. The server may be unavailable."
+            : "You are offline. Check your connection and retry.",
+        );
       } finally {
         setLoading(false);
       }
@@ -65,7 +69,7 @@ export default function TriagePage() {
     load();
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
-  }, [selectedId]);
+  }, [selectedId, reloadKey]);
 
   const allIncidents = useMemo(() => {
     return liveIncidents;
@@ -229,6 +233,7 @@ export default function TriagePage() {
           onRetry={() => {
             setLoading(true);
             setError(null);
+            setReloadKey((k) => k + 1);
           }}
           onSelect={handleSelect}
           onDismiss={handleDismiss}

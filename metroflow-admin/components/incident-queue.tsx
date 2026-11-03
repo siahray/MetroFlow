@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, RefreshCw, AlertCircle, InBox, FilterX } from "lucide-react";
+import { Search, RefreshCw, AlertCircle, Inbox, FilterX } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import {
@@ -108,6 +108,7 @@ export function IncidentQueue({
           <Search className="absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
           <input
             type="search"
+            aria-label="Search incidents"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="Search Report ID, Citizen name, Barangay..."
@@ -136,7 +137,7 @@ export function IncidentQueue({
           <IncidentQueueSkeleton count={5} />
         ) : incidents.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
-            <InBox className="h-12 w-12 text-slate-300" />
+            <Inbox className="h-12 w-12 text-slate-300" />
             <p className="text-sm font-semibold text-slate-700">No incidents match this filter</p>
             <p className="text-xs text-slate-500">
               {query.trim() || filter !== "all"
@@ -156,85 +157,88 @@ export function IncidentQueue({
           </div>
         ) : (
           incidents.map((incident) => {
-          const selected = incident.id === selectedId;
-          const isDismissed = dismissed.has(incident.id);
-          const reporterDisplay = incident.reporter.includes("+63")
-            ? maskPhoneNumber(incident.reporter)
-            : incident.reporter;
+            const selected = incident.id === selectedId;
+            const isDismissed = dismissed.has(incident.id);
+            const reporterDisplay = incident.reporter.includes("+63")
+              ? maskPhoneNumber(incident.reporter)
+              : incident.reporter;
 
-          return (
-            <div
-              key={incident.id}
-              onClick={() => onSelect(incident.id)}
-              className={cn(
-                "relative cursor-pointer border-l-4 p-4 transition-colors",
-                selected
-                  ? "border-sky-600 bg-sky-50/70 hover:bg-sky-50"
-                  : "border-transparent hover:bg-slate-50/80",
-                isDismissed && "opacity-40",
-              )}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-slate-800">#{incident.id}</span>
-                  <span
-                    className={cn(
-                      "rounded-full border px-2 py-0.5 text-[10px] font-bold",
-                      urgencyClass(incident.urgency),
-                    )}
-                  >
-                    Urgency {incident.urgency.toFixed(1)}
+            return (
+              <div
+                key={incident.id}
+                onClick={() => onSelect(incident.id)}
+                className={cn(
+                  "relative cursor-pointer border-l-4 p-4 transition-colors",
+                  selected
+                    ? "border-sky-600 bg-sky-50/70 hover:bg-sky-50"
+                    : "border-transparent hover:bg-slate-50/80",
+                  isDismissed && "opacity-40",
+                )}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-800">
+                      #{incident.id}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[10px] font-bold",
+                        urgencyClass(incident.urgency),
+                      )}
+                    >
+                      Urgency {incident.urgency.toFixed(1)}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    {incident.reportedAt.split("(")[1]?.replace(")", "")}
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  {incident.reportedAt.split("(")[1]?.replace(")", "")}
-                </span>
-              </div>
 
-              <h3 className="mt-1 text-xs font-bold text-slate-900">{incident.location}</h3>
-              <p className="mt-0.5 text-[11px] text-slate-500">{reporterDisplay}</p>
+                <h3 className="mt-1 text-xs font-bold text-slate-900">{incident.location}</h3>
+                <p className="mt-0.5 text-[11px] text-slate-500">{reporterDisplay}</p>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
-                {incident.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className={cn("rounded border px-2 py-0.5 font-medium", tagClass(tag))}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                  {incident.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className={cn("rounded border px-2 py-0.5 font-medium", tagClass(tag))}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDismiss(incident.id);
+                    }}
+                    className="rounded border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-200/60 hover:text-slate-800"
                   >
-                    {tag}
-                  </span>
-                ))}
+                    Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect(incident.id);
+                    }}
+                    className={cn(
+                      "rounded px-3 py-1 text-[11px] font-medium",
+                      selected
+                        ? "bg-sky-800 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+                    )}
+                  >
+                    {selected ? "Reviewing Detail" : "Open"}
+                  </button>
+                </div>
               </div>
-
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDismiss(incident.id);
-                  }}
-                  className="rounded border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-200/60 hover:text-slate-800"
-                >
-                  Dismiss
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelect(incident.id);
-                  }}
-                  className={cn(
-                    "rounded px-3 py-1 text-[11px] font-medium",
-                    selected
-                      ? "bg-sky-800 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200",
-                  )}
-                >
-                  {selected ? "Reviewing Detail" : "Open"}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { Shield, Trash2, Edit, Plus, Search, User as UserIcon, Mail, Clock } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import {
@@ -14,6 +14,8 @@ import {
   updateUser,
 } from "@/lib/users";
 import { useToast } from "./toast-provider";
+import { ErrorNotice } from "./error-notice";
+import { Skeleton } from "./skeleton";
 
 export function UsersManagement() {
   const { show } = useToast();
@@ -29,13 +31,17 @@ export function UsersManagement() {
     role: "LGU_DISPATCHER",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadUsers = async () => {
     try {
-      const data = await listUsers();
-      setUsers(data);
-    } catch (error) {
-      show("Failed to load users");
+      setUsers(await listUsers());
+      setLoadError(null);
+    } catch {
+      setLoadError("Could not load users. Check your connection and retry.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -106,9 +112,18 @@ export function UsersManagement() {
       user.email.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  useState(() => {
-    loadUsers();
-  });
+  useEffect(() => {
+    let cancelled = false;
+    listUsers()
+      .then((data) => !cancelled && setUsers(data))
+      .catch(
+        () => !cancelled && setLoadError("Could not load users. Check your connection and retry."),
+      )
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -125,6 +140,17 @@ export function UsersManagement() {
           Add User
         </button>
       </div>
+
+      {loadError && (
+        <ErrorNotice
+          message={loadError}
+          onRetry={() => {
+            setLoading(true);
+            setLoadError(null);
+            void loadUsers();
+          }}
+        />
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
@@ -150,6 +176,23 @@ export function UsersManagement() {
               </tr>
             </thead>
             <tbody>
+              {loading &&
+                [0, 1, 2].map((i) => (
+                  <tr key={i}>
+                    <td colSpan={5} className="py-2">
+                      <Skeleton className="h-8 w-full" />
+                    </td>
+                  </tr>
+                ))}
+              {!loading && !loadError && filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-500">
+                    {searchQuery
+                      ? "No users match your search."
+                      : "No users yet. Add the first one."}
+                  </td>
+                </tr>
+              )}
               {filteredUsers.map((user) => (
                 <tr key={user.user_id} className="border-b border-slate-50 last:border-0">
                   <td className="py-3">
