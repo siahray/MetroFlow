@@ -15,7 +15,6 @@ export type Incident = {
   urgency: number;
   reporter: string;
   reportedAt: string;
-  aiConfidence: string;
   narrative: string;
   location: string;
   barangay: string;
@@ -48,8 +47,8 @@ export type Incident = {
   // FSD-FR-035: Location and sensor context
   latitude?: number | null;
   longitude?: number | null;
+  /** Only a depth the reporter actually gave; never a guessed default. */
   waterDepthCm?: number | null;
-  waterTrend?: "rising" | "stable" | "receding";
   nearestUnit?: {
     callSign: string;
     type: string;

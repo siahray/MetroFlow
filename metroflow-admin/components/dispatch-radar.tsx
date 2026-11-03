@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertOctagon,
   AlertTriangle,
   ArrowLeft,
   Camera,
@@ -19,6 +18,7 @@ import {
   Waves,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { maskPhoneNumber, type Incident } from "@/lib/incidents";
@@ -152,12 +152,10 @@ export function DispatchRadar({
                 Emergency Dispatch Radar #{incident.id}
               </h2>
               <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 uppercase tracking-wider">
-                Pending Verification
+                Awaiting dispatch decision
               </span>
             </div>
-            <p className="text-xs text-slate-500">
-              Live distress telemetry stream and nearest rescue unit ranking (Sector Delta)
-            </p>
+            <p className="text-xs text-slate-500">Distress details and the nearest rescue unit</p>
           </div>
         </div>
 
@@ -193,64 +191,51 @@ export function DispatchRadar({
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Radar Visual Display & Overlays (Left 7 Cols) */}
-        <div className="relative flex min-h-[660px] flex-col justify-between overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-6 text-white shadow-xl lg:col-span-7">
-          {/* Concentric circles and sweep */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
-            <div className="h-[520px] w-[520px] rounded-full border border-sky-400" />
-            <div className="absolute h-[380px] w-[380px] rounded-full border border-sky-400" />
-            <div className="absolute h-[240px] w-[240px] rounded-full border border-sky-400" />
-            <div className="absolute h-[100px] w-[100px] rounded-full border border-sky-400" />
-            <div className="radar-sweep" />
+        {/* Incident location and response facts (left 7 cols): real data only */}
+        <div className="flex min-h-[420px] flex-col justify-between gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-7">
+          <div>
+            <h3 className="text-xs font-bold tracking-wider text-slate-500 uppercase">
+              Incident location
+            </h3>
+            <p className="mt-2 font-mono text-lg font-bold text-slate-900">{incident.location}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {incident.barangay} · reported {incident.reportedAt}
+            </p>
+            <Link
+              href="/hazards"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Navigation className="h-3.5 w-3.5" /> Open the live operations map
+            </Link>
           </div>
 
-          {/* Top Radar telemetry header */}
-          <div className="relative z-10 flex items-center justify-between">
-            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-1.5 backdrop-blur">
-              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-500" />
-              <span className="font-mono text-xs font-bold text-sky-400">
-                RADAR SWEEP: ACTIVE MONITORING
-              </span>
-            </div>
-            <div className="font-mono text-xs text-slate-400">Anchor: {incident.location}</div>
-          </div>
-
-          {/* Interactive Pins on Radar */}
-          <div className="relative z-10 flex flex-1 items-center justify-center">
-            {/* Active SOS Target */}
-            <div className="absolute top-[34%] left-[48%] flex flex-col items-center animate-bounce">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg shadow-rose-600/50">
-                <AlertOctagon className="h-5 w-5" />
-              </div>
-              <div className="mt-1 whitespace-nowrap rounded border border-rose-500 bg-slate-950/90 px-2 py-0.5 font-mono text-[10px] text-white">
-                #{incident.id} (6 Trapped • 75 cm Submersion)
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold text-slate-400 uppercase">Water depth</div>
+              <div className="mt-1 text-sm font-bold text-slate-900">
+                {incident.waterDepthCm != null
+                  ? `${incident.waterDepthCm} cm`
+                  : incident.submersionRange || "Not reported"}
               </div>
             </div>
-
-            {/* Dispatched Unit */}
-            <div className="absolute top-[58%] left-[28%] flex flex-col items-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-white shadow-lg shadow-sky-500/50">
-                <Navigation className="h-4 w-4" />
-              </div>
-              <div className="mt-1 whitespace-nowrap rounded border border-sky-500 bg-slate-950/90 px-2 py-0.5 font-mono text-[10px] text-sky-300">
-                Unit En Route
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold text-slate-400 uppercase">Urgency</div>
+              <div className="mt-1 text-sm font-bold text-slate-900">
+                {incident.urgency.toFixed(1)} · {incident.level}
               </div>
             </div>
-          </div>
-
-          {/* Bottom Telemetry Specs */}
-          <div className="relative z-10 grid grid-cols-3 gap-4 rounded-xl border border-slate-800 bg-slate-950/85 p-4 font-mono text-xs backdrop-blur">
-            <div>
-              <span className="block text-[10px] text-slate-400 uppercase">Monitor Frequency</span>
-              <span className="font-bold text-white">156.800 MHz (Ch. 16 Marine)</span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400 uppercase">Distress Priority</span>
-              <span className="font-bold text-rose-400">Level 3 Critical Flood</span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400 uppercase">Response Range</span>
-              <span className="font-bold text-emerald-400">5.8 km Safe Corridor</span>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold text-slate-400 uppercase">Nearest unit</div>
+              <div className="mt-1 text-sm font-bold text-slate-900">
+                {incident.nearestUnit
+                  ? `${incident.nearestUnit.callSign} · ${incident.nearestUnit.distanceKm} km`
+                  : "No unit with a known position"}
+              </div>
+              {incident.nearestUnit ? (
+                <div className="text-[11px] text-slate-500">
+                  ~{incident.nearestUnit.etaMinutes} min straight-line estimate
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -270,14 +255,14 @@ export function DispatchRadar({
                     {incident.reporter} ({displayedPhone})
                   </div>
                   <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
-                    <CheckCircle className="h-3 w-3" /> Citizen SOS Verified
+                    <CheckCircle className="h-3 w-3" /> Citizen SOS
                   </div>
                 </div>
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase">Date &amp; Time</div>
                   <div className="text-xs font-semibold text-slate-800">{incident.reportedAt}</div>
                   <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                    <Clock className="h-3 w-3" /> Verified Incident
+                    <Clock className="h-3 w-3" /> Reported
                   </div>
                 </div>
               </div>
@@ -286,9 +271,6 @@ export function DispatchRadar({
                   <div className="text-xs font-bold text-slate-800">{incident.barangay}</div>
                   <div className="font-mono text-[11px] text-slate-500">{incident.location}</div>
                 </div>
-                <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-                  Sector Delta
-                </span>
               </div>
             </div>
 
@@ -337,10 +319,6 @@ export function DispatchRadar({
                   {incident.source}
                 </div>
               </div>
-              <div className="rounded border border-sky-100 bg-sky-50 p-2">
-                <div className="text-[9px] font-bold text-sky-600 uppercase">AI Confidence</div>
-                <div className="text-xs font-bold text-sky-800">{incident.aiConfidence}</div>
-              </div>
             </div>
 
             {/* Recommended Rescue Resource (FSD-FR-035) */}
@@ -351,25 +329,29 @@ export function DispatchRadar({
                     ? `Recommended: ${incident.nearestUnit.callSign}`
                     : "Recommended: Assign nearest vehicle"}
                 </span>
-                <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
-                  {incident.nearestUnit?.status ?? "AVAILABLE"}
-                </span>
+                {incident.nearestUnit ? (
+                  <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
+                    {incident.nearestUnit.status}
+                  </span>
+                ) : null}
               </div>
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-slate-600">
                 <div>
                   <span className="block text-[9px] text-slate-400">DISTANCE</span>
                   <strong>
-                    {incident.nearestUnit ? `${incident.nearestUnit.distanceKm} km` : "1.2 km"}
+                    {incident.nearestUnit ? `${incident.nearestUnit.distanceKm} km` : "—"}
                   </strong>
                 </div>
                 <div>
                   <span className="block text-[9px] text-slate-400">DEPTH</span>
-                  <strong>{incident.waterDepthCm ? `${incident.waterDepthCm} cm` : "35 cm"}</strong>
+                  <strong>
+                    {incident.waterDepthCm != null ? `${incident.waterDepthCm} cm` : "Not reported"}
+                  </strong>
                 </div>
                 <div>
                   <span className="block text-[9px] text-slate-400">CORRIDOR ETA</span>
                   <strong className="text-sky-700">
-                    {incident.nearestUnit ? `~${incident.nearestUnit.etaMinutes} mins` : "12 mins"}
+                    {incident.nearestUnit ? `~${incident.nearestUnit.etaMinutes} mins` : "—"}
                   </strong>
                 </div>
               </div>

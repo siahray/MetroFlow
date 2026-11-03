@@ -25,7 +25,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
-import { RESCUE_UNITS, toUnitStatus, type RescueUnit } from "@/lib/rescue";
+import { toUnitStatus, type RescueUnit } from "@/lib/rescue";
 import {
   addSOSNote,
   assignSOS,
@@ -83,7 +83,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
   const [note, setNote] = useState("");
   const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<1 | 2 | 3>(1);
-  const [vehicles, setVehicles] = useState<RescueUnit[]>(RESCUE_UNITS);
+  const [vehicles, setVehicles] = useState<RescueUnit[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<RescueUnit | null>(null);
   // FSD-FR-089: the route is previewed by the API before the dispatch is committed.
   const [preview, setPreview] = useState<DispatchPreview | null>(null);
@@ -180,14 +180,17 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             status: toUnitStatus(v.status),
             clearance_cm: v.clearance_cm ?? 0,
             speed_kmh: v.speed_kmh ?? 0,
-            location: "Depot",
+            location:
+              v.current_location_lat != null && v.current_location_lon != null
+                ? `${v.current_location_lat.toFixed(4)}, ${v.current_location_lon.toFixed(4)}`
+                : "Position not reported",
             vehicleId: v.vehicle_id,
           }));
           setVehicles(mapped);
           setSelectedUnit(mapped.find((unit) => unit.status === "AVAILABLE") ?? null);
         }
       } catch {
-        // The static fallback list stays in place when the fleet API is down.
+        // No units are listed while the fleet API is down; the assign step then shows none.
       }
     };
     load();
@@ -408,13 +411,6 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
               </span>
             </div>
           </div>
-
-          <div className="shrink-0 self-start rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-right whitespace-nowrap">
-            <div className="text-[10px] font-bold tracking-wider text-emerald-700 uppercase">
-              AI Confidence Score
-            </div>
-            <div className="text-sm font-extrabold text-emerald-800">{incident.aiConfidence}</div>
-          </div>
         </div>
 
         {/* Submission Parameters Card */}
@@ -529,7 +525,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                   </button>
                 )}
                 <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                  {photoUrl ? "Verified Photo" : "Verified Signal"}
+                  {photoUrl ? "Photo evidence" : "SOS signal"}
                 </span>
               </div>
             </div>
@@ -596,12 +592,14 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                 <div className="font-semibold text-slate-700 truncate">
                   {incident.exif?.camera_make || incident.exif?.camera_model
                     ? `${incident.exif.camera_make ?? ""} ${incident.exif.camera_model ?? ""}`.trim()
-                    : "Citizen Mobile"}
+                    : "Unknown device"}
                 </div>
               </div>
               <div className="rounded border border-sky-100 bg-sky-50 p-1.5">
-                <div className="text-[9px] text-sky-600 uppercase">AI Confidence</div>
-                <div className="font-bold text-sky-800">{incident.aiConfidence}</div>
+                <div className="text-[9px] text-sky-600 uppercase">Captured</div>
+                <div className="font-bold text-sky-800">
+                  {incident.exif?.captured_at ?? "Not recorded"}
+                </div>
               </div>
             </div>
 
@@ -687,7 +685,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                 <span className="font-bold text-slate-800">
                   {incident.waterDepthCm
                     ? `${incident.waterDepthCm} cm (${incident.submersionRange})`
-                    : incident.submersionRange || "45 cm"}
+                    : incident.submersionRange || "Not reported"}
                 </span>
               </div>
             </div>
