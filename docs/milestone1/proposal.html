@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PBL Milestone 1 - MetroFlow Technical Proposal</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<style>
+@page { size: A4; margin: 18mm 17mm; }
+@page slides { size: 13.333in 7.5in; margin: 0; }
+* { box-sizing: border-box; }
+body { font: 10.5pt/1.45 "Helvetica Neue", Arial, sans-serif; color: #0f172a; margin: 0; }
+h1 { font-size: 17pt; margin: 0 0 4pt; color: #0f172a; }
+h2 { font-size: 13pt; margin: 16pt 0 5pt; padding-bottom: 2pt; border-bottom: 2px solid #0f172a; page-break-after: avoid; }
+h3 { font-size: 11pt; margin: 11pt 0 3pt; color: #065f46; page-break-after: avoid; }
+p { margin: 4pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 6pt 0; font-size: 9.5pt; page-break-inside: auto; }
+th, td { border: 1px solid #94a3b8; padding: 4pt 6pt; vertical-align: top; text-align: left; }
+th { background: #e2e8f0; }
+code, pre { font-family: Menlo, Consolas, monospace; font-size: 8.6pt; }
+pre { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6pt 8pt; white-space: pre-wrap; page-break-inside: avoid; }
+.ai { font-size: 8.5pt; color: #475569; border-left: 3px solid #f59e0b; padding: 2pt 7pt; background: #fffbeb; margin: 6pt 0; }
+.title-page { page-break-after: always; }
+.title-page .sub { color: #475569; margin-bottom: 14pt; }
+.pb { page-break-before: always; }
+.refs li { margin-bottom: 3pt; }
+svg text { font-family: "Helvetica Neue", Arial, sans-serif; }
+
+/* ---------- Slides ---------- */
+.slides { page: slides; }
+.slide { page: slides; width: 13.333in; height: 7.5in; padding: 0.45in 0.6in; page-break-after: always; break-after: page; overflow: hidden; position: relative; background: #fff; }
+.slide h2 { font-size: 24pt; border: 0; margin: 0 0 10pt; padding: 0; }
+.slide h2::after { content: ""; display: block; width: 70px; height: 4px; background: #10b981; margin-top: 6pt; }
+.slide { font-size: 13.5pt; line-height: 1.38; }
+.slide ul { margin: 4pt 0 4pt 18pt; padding: 0; }
+.slide li { margin-bottom: 4pt; }
+.slide table { font-size: 12pt; }
+.slide pre { font-size: 10.5pt; }
+.slide .cols { display: flex; gap: 26pt; }
+.slide .cols > div { flex: 1; }
+.slide .num { position: absolute; right: 0.5in; bottom: 0.3in; font-size: 10pt; color: #64748b; }
+.slide.dark { background: #0f172a; color: #f8fafc; }
+.slide.dark h2 { color: #f8fafc; }
+.slide.dark table th { background: #1e293b; color: #f8fafc; }
+.slide.dark td, .slide.dark th { border-color: #475569; }
+.small { font-size: 10pt; color: #475569; }
+</style>
+</head>
+<body>
+
+<!-- ======================= TITLE PAGE ======================= -->
+<section class="title-page">
+<h1>PBL Milestone 1: Algorithm Architecture Specification &amp; Software Engineering Proposal</h1>
+<div class="sub">ALGOCOM (Algorithms and Complexity) / SOFTENG (Software Engineering) &middot; Team Assignment</div>
+
+<table>
+<tr><th style="width:28%">Metadata Field</th><th>Project Team Specification</th></tr>
+<tr><td>Project Title</td><td>MetroFlow</td></tr>
+<tr><td>Team Name</td><td>F4</td></tr>
+<tr><td>Section &amp; Year</td><td>III-CCSAD</td></tr>
+<tr><td>Team Members &amp; Roles</td><td>
+1. Lead Algorithm Architect: Lapating, Khent U.<br>
+2. Backend / Systems Engineer: De Vera, Josiah Ray S.<br>
+3. Data / QA Engineer: Vergara, John Gabriel D.<br>
+4. Systems Analyst / Technical Lead: Felipe, Marck Aaron V.</td></tr>
+<tr><td>Repository URL</td><td>https://github.com/siahray/MetroFlow.git</td></tr>
+<tr><td>Submission Date</td><td>November 4, 2026</td></tr>
+</table>
+
+<h2>Proposal at a glance</h2>
+<p><b>Computational problem.</b> MetroFlow is a flood-response and rescue-dispatch system. Its core computation is a <i>vehicle-specific, flood-aware shortest-time path</i> on a live road graph: given a rescue vehicle's ground clearance and the current standing-water depth on every road segment, find the fastest route that never enters a segment the vehicle cannot cross.</p>
+<p><b>Core algorithm.</b> A* search with a min-heap frontier, an admissible and consistent great-circle/top-speed heuristic, a hard clearance cut-off, and a depth-dependent speed-degradation edge cost [1], [2]. This is implemented in <code>backend/routing.py</code> (<code>td_a_star_search</code>).</p>
+<p><b>Upstream input generator.</b> A hydrology engine (SCS Curve Number runoff &rarr; ponding depth) converts rainfall into the per-segment depths the router consumes [8].</p>
+<p><b>Contents.</b> Task 1 Problem Modeling &middot; Task 2 Paradigm &amp; Pseudocode &middot; Task 3 Complexity &amp; Scalability &middot; Task 4 Decoupled Architecture &amp; API Schema &middot; Task 5 Agile Backlog &amp; Benchmarks &middot; Task 6 Defense Questions &middot; References &middot; Presentation Deck (12 slides, appended).</p>
+<div class="ai">&lt;!-- AI Assistance: We used Claude (Claude Code) to read our existing repository, draft the mathematical formulation, complexity derivations, pseudocode, JSON schemas and review answers in this document, and to lay out the report. The team reviewed each formula against <code>backend/routing.py</code> and <code>backend/hydrology.py</code>. --&gt;</div>
+</section>
+
+<!-- ======================= TASK 1 ======================= -->
+<h2>Task 1: Computational Problem Modeling &amp; Formal Mathematical Formulation</h2>
+
+<h3>1.1 Problem statement &amp; domain context</h3>
+<p>During typhoon-driven flooding, standing water makes road segments impassable for some vehicles and merely slow for others. A rescue unit with 28 cm of ground clearance cannot use a lane that a 70 cm truck can. Routing that ignores depth and vehicle clearance sends units into submerged streets. The operational question is therefore: <i>for a given vehicle, what is the fastest route to a victim that only uses road segments the vehicle can actually cross, and does any such route exist?</i></p>
+<p>Flood depth is a standard predictor of road-network disruption: speed falls as depth rises and vehicles stop at a depth tied to their clearance [7]. Prior work on emergency services during floods assigns depths to road links and derives reduced vehicle speeds and service areas from them [6]. MetroFlow adopts the same modelling idea, using a per-vehicle clearance threshold and a depth-dependent speed penalty, and runs it on a live, sensor- and report-updated graph. Shortest-path search under constraints is a core graph problem [1], and goal-directed A* search is the standard way to cut the explored region on road networks [2], [5].</p>
+
+<h3>1.2 Formal specification</h3>
+<p><b>Input parameters (\(I\)).</b> A directed graph \(G=(V,E)\) with \(|V|=n\), \(|E|=m\). Each node \(u\in V\) has a coordinate \(x_u=(\varphi_u,\lambda_u)\) (latitude, longitude). Each edge \(e=(u,v)\in E\) has length \(\ell_e>0\) (m), posted speed \(s_e>0\) (km/h) and live water depth \(d_e\ge 0\) (cm). A query supplies a source \(s\in V\), target \(t\in V\) and vehicle clearance \(c>0\) (cm).</p>
+<p>Depths \(d_e\) are produced by the hydrology engine: for rainfall \(P\) (mm), curve number \(CN\), \(S=\tfrac{25400}{CN}-254\) and initial abstraction \(I_a=0.2S\), the direct runoff is
+\[ Q=\begin{cases}0 & P\le I_a\\[2pt] \dfrac{(P-I_a)^2}{P-I_a+S} & P>I_a\end{cases}\]
+which is then scaled to a street ponding depth in cm [8]. Verified hazards and sensor breaches can additionally close edges.</p>
+
+<p><b>Boundary conditions &amp; constraints (\(C\)).</b></p>
+<ul>
+<li>Passability: \(d_e < c\) (an edge with \(d_e \ge c\) is <i>submerged</i> and removed). The feasible subgraph is \(G_c=(V,E_c)\), \(E_c=\{e: d_e<c\}\setminus H\), where \(H\) is the set of edges closed by a verified blocking hazard (levels LEVEL_2, LEVEL_3, IMPASSABLE).</li>
+<li>\(0 < c \le 200\) cm (enforced at the API); \(s,t\in V\).</li>
+<li>Effective speed floor: \(v_e \ge 0.5\) m/s so every traversal time is finite.</li>
+<li>Depth and speed are in cm and km/h throughout (project unit policy).</li>
+</ul>
+
+<p><b>Objective function (\(f\)).</b> This is an <b>optimization problem</b> (minimization) over \(s\)&ndash;\(t\) paths in \(G_c\). Define the depth-degraded speed and traversal time of an edge:
+\[ v_e=\max\!\Big(\frac{s_e/3.6}{1+(d_e/10)^{1.8}},\;0.5\Big)\ \text{[m/s]},\qquad w_e=\frac{\ell_e}{v_e}\ \text{[s]} \]
+\[ \min_{P=(e_1,\dots,e_k)\ \text{path } s\to t\ \text{in } G_c}\ T(P)=\sum_{i=1}^{k} w_{e_i} \]
+A companion <b>decision problem</b> is: does an \(s\)&ndash;\(t\) path exist in \(G_c\)? This is the 404 / "no safe route" case.</p>
+
+<p><b>Output certificate (\(O\)).</b> A deterministic tuple \((\text{status},\,P^*,\,T^*)\): <code>status</code> &isin; {OK, NO_SAFE_ROUTE, INVALID_NODE}; \(P^*\) the node sequence; \(T^*=T(P^*)\) the minimal travel time. If no path exists, \(P^*=\emptyset\) and \(T^*=\infty\). Optimality is checkable: \(T^*\) must equal the Dijkstra reference value on the same \(G_c\) [4].</p>
+
+<p><b>Dispatch extension.</b> For an SOS with \(K\) candidate vehicles, each with clearance \(c_k\) and position \(s_k\), the preview solves \(K\) independent instances and ranks units by \(T^*_k\).</p>
+<div class="ai">&lt;!-- AI Assistance: Claude helped formalise the objective function and the SCS-CN statement from our code. The speed-degradation exponent 1.8 and the 0.5 m/s floor come from our existing implementation. They are modelling choices of the team, not values taken from [6] or [7]. --&gt;</div>
+
+<!-- ======================= TASK 2 ======================= -->
+<h2>Task 2: Algorithmic Paradigm Selection &amp; Logic Specification</h2>
+
+<table>
+<tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Clearance-Constrained, Depth-Penalized A* (implemented as <code>td_a_star_search</code>; "time-dependent" in the sense that edge costs are recomputed from the live depth state on every query, not that cost varies during one search).</td></tr>
+<tr><td>Design Paradigm</td><td>Graph Algorithms &amp; Network Theory: best-first search with an admissible, consistent heuristic over a min-heap priority queue.</td></tr>
+<tr><td>Foundational References</td><td>Hart, Nilsson &amp; Raphael (A*) [2]; Dechter &amp; Pearl (optimality of A*) [3]; Dijkstra [4]; Cormen et al., Ch. 22 and 24 [1]; road-network context in Bast et al. [5].</td></tr>
+<tr><td>Baseline Alternative</td><td>Exhaustive simple-path enumeration (DFS with no pruning), then take the minimum. Secondary baseline: Dijkstra (\(h\equiv 0\)), which is correct but explores in all directions.</td></tr>
+<tr><td>Computational Justification</td><td>The number of simple \(s\)&ndash;\(t\) paths grows factorially in \(n\), so enumeration is infeasible beyond toy graphs. A* returns the same optimum in \(O(m\log n)\) and, with a consistent heuristic, settles each node at most once; the heuristic additionally steers the frontier toward \(t\), expanding fewer nodes than Dijkstra [1], [2], [3].</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>
+Bellman recurrence on the feasible graph: \(g(s)=0,\quad g(v)=\min_{(u,v)\in E_c}\big(g(u)+w_{uv}\big)\). Priority: \(f(v)=g(v)+h(v)\).<br>
+Heuristic: \(h(v)=\dfrac{\mathrm{hav}(x_v,x_t)}{v_{\max}}\), \(v_{\max}=\max_e s_e/3.6\).<br>
+<b>Admissible:</b> \(w_{uv}\ge \ell_{uv}/v_{\max}\ge \mathrm{hav}(x_u,x_v)/v_{\max}\) (the penalty factor is \(\ge1\)), so \(h\) never overestimates the remaining time.<br>
+<b>Consistent:</b> \(h(u)\le w_{uv}+h(v)\) by the triangle inequality of great-circle distance, so \(f\) is non-decreasing along any path and the first time a node is popped its \(g\) is optimal [2], [3].<br>
+Loop invariant: every node in <code>settled</code> has final optimal \(g\); every heap entry has \(g\ge g_{\text{best}}\).</td></tr>
+</table>
+
+<h3>Structured pseudocode</h3>
+<pre>
+TD-ASTAR(G, coords, s, t, c):                  // G: adjacency u -> [(v, len_m, speed_kmh, depth_cm)]
+ 1  if s not in coords or t not in coords: return (INVALID_NODE, [], inf)
+ 2  if s == t: return (OK, [s], 0)
+ 3  v_max  &larr; max(max over all edges of speed_kmh / 3.6, 0.1)           // m/s, fixed for this query
+ 4  h(x)   &larr; haversine(coords[x], coords[t]) / v_max
+ 5  g[x]   &larr; inf for all x;  g[s] &larr; 0;  parent &larr; {};  settled &larr; {}
+ 6  PQ     &larr; min-heap { (h(s), 0, s) }                                   // (f, g, node)
+ 7  while PQ not empty:
+ 8      (f, gu, u) &larr; POP-MIN(PQ)
+ 9      if u in settled or gu &gt; g[u]: continue                            // stale duplicate
+10      settled &larr; settled &cup; {u}
+11      if u == t: return (OK, RECONSTRUCT(parent, s, t), g[t])
+12      for (v, len, speed, depth) in G[u]:
+13          if depth &ge; c: continue                                          // hard clearance cut-off
+14          pen &larr; 1 + (depth / 10)^1.8                                    // depth penalty, pen &ge; 1
+15          v_eff &larr; max((speed / 3.6) / pen, 0.5)                         // m/s, floor keeps cost finite
+16          g' &larr; gu + len / v_eff
+17          if g' &lt; g[v]: g[v] &larr; g'; parent[v] &larr; u; PUSH(PQ, (g' + h(v), g', v))
+18  return (NO_SAFE_ROUTE, [], inf)                                            // frontier exhausted: t unreachable in G_c
+
+RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
+</pre>
+<p>Termination: each node is settled at most once and edges are finite, so the loop ends in at most \(m+1\) pops; line 18 is the termination certificate for the infeasible case.</p>
+<div class="ai">&lt;!-- AI Assistance: Claude produced the pseudocode by reading <code>td_a_star_search</code> and wrote the admissibility/consistency argument. The team should be able to re-derive both on the board. Note: an earlier version of our code used a hard-coded 50 km/h in <code>h</code> and was inadmissible; our regression fuzz test in <code>tests/test_routing.py</code> guards that fix. --&gt;</div>
+
+<!-- ======================= TASK 3 ======================= -->
+<h2>Task 3: Theoretical Asymptotic Analysis &amp; Scalability Profiling</h2>
+
+<h3>3.1 Worst-case time \(O(\cdot)\)</h3>
+<ol>
+<li><b>Initialisation</b> (lines 3&ndash;6): scanning all edges for \(v_{\max}\) is \(O(m)\); setting \(g[x]=\infty\) for all nodes is \(O(n)\). Subtotal \(O(n+m)\).</li>
+<li><b>Settlement bound.</b> Because \(h\) is consistent (Task 2), a node's first valid pop carries its optimal \(g\) and it is never re-expanded [3]. Hence lines 10&ndash;17 run for each node at most once.</li>
+<li><b>Relaxations.</b> Line 12 iterates the out-edges of the settled node, so across the whole run each edge is examined at most once: at most \(m\) executions of lines 13&ndash;17, each \(O(1)\) apart from the push.</li>
+<li><b>Heap operations.</b> Each successful relaxation pushes one entry, so at most \(m+1\) entries are ever pushed and popped. Each push or pop costs \(O(\log |PQ|)\le O(\log (m+1))\). Since \(m\le n^2\), \(\log m\le 2\log n\), i.e. \(O(\log n)\) [1].</li>
+<li><b>Total.</b> \(T_{\text{worst}}(n,m)=O(n+m)+O\big((m+1)\log n\big)=O(m\log n)\) for a connected road graph (\(m\ge n-1\)). With \(h\equiv0\) the same bound is Dijkstra's with a binary heap [1], [4]; A* never does worse.</li>
+</ol>
+<p>The master theorem does not apply: the algorithm is iterative, with no divide-and-conquer recurrence [1].</p>
+<p><b>Baseline:</b> exhaustive simple-path enumeration visits up to \((n-2)!\) paths on a dense graph, i.e. \(O(n!)\) [1].</p>
+
+<h3>3.2 Best- and average-case time \(\Omega(\cdot)\), \(E[\cdot]\)</h3>
+<p><b>Best case.</b> If \(h\) is near-perfect (a near-straight, uniform-speed corridor), the search only settles nodes on the path of length \(k\): \(\Omega(k\log n)\) plus the \(O(n+m)\) initialisation done by the current code.</p>
+<p><b>Average case.</b> City road graphs are sparse (\(m=\Theta(n)\), degree about 3&ndash;4) and near-planar. A goal-directed search settles only a region around the straight line \(s\to t\), typically far fewer than \(n\) nodes. This is expected behaviour [5] and is what Task 5's benchmark measures; we do not claim a closed-form bound for it. Heavy flooding lowers \(v_e\) while \(v_{\max}\) is unchanged, which weakens \(h\) and moves the average case toward Dijkstra's.</p>
+
+<h3>3.3 Auxiliary space \(S(\cdot)\)</h3>
+<p><code>g</code>, <code>parent</code>, <code>settled</code>: \(O(n)\) each. Heap: lazy deletion allows stale duplicates, so up to \(m+1\) entries. No recursion (iterative loop, path rebuilt iteratively). Total \(S=O(n+m)\). The graph itself is \(O(n+m)\) input, not auxiliary.</p>
+
+<h3>3.4 Big Data (3 V's) evaluation</h3>
+<table>
+<tr><th style="width:12%">Dimension</th><th style="width:30%">Engineering Parameter</th><th>System Scalability Impact &amp; Mitigation Strategy</th></tr>
+<tr><td>Volume</td><td>Pilot: a seeded district graph (<code>backend/network_seed.py</code>). Projected: a metro-scale graph, order \(10^5\) nodes and \(4\times10^5\) directed edges (a planning figure, to be replaced by the real extract).</td><td>Python dict adjacency at that size is tens to low hundreds of MB. Mitigation: cache the static topology in the worker and refresh only the live depth overlay; load by bounding box (PostGIS <code>ST_DWithin</code> [14]) around \(s\) and \(t\) instead of the whole city; use compact arrays (CSR) if memory binds.</td></tr>
+<tr><td>Velocity</td><td>Burst arrival during a typhoon: an SOS triggers \(K\) vehicle previews (one search each). Target: a few to tens of queries/s, with depth updates arriving from sensors and reports.</td><td>Searches are CPU-bound and independent. Run them in a worker pool (async queue) so request threads stay free; return a job id when a batch would exceed the request time budget. Searches read an immutable snapshot of the depth state, so concurrent writers cannot change costs mid-query.</td></tr>
+<tr><td>Variety</td><td>Heterogeneous inputs: GeoJSON/PostGIS geometry, sensor readings, citizen reports, hazard polygons, rainfall values.</td><td>Normalise at the gateway into the one in-engine form (<code>depth_cm</code>, <code>speed_kmh</code>, <code>length_m</code>), validate with Pydantic, and keep unit conversion in a single place. The engine sees only numbers and node ids.</td></tr>
+</table>
+
+<!-- ======================= TASK 4 ======================= -->
+<h2>Task 4: Decoupled Software Architecture &amp; Service-Layer Integration</h2>
+
+<h3>4.1 Component diagram</h3>
+<div id="arch-report"></div>
+<p><b>Current state vs. target.</b> Today <code>routing.py</code> is already a pure module: it imports no ORM, HTTP or database code and takes plain dicts and numbers. FastAPI endpoints (<code>main.py</code>) load the graph with SQLAlchemy, call it in-process, and format the response. The <b>target</b> shown by the dashed boxes moves the call behind a job queue and a worker, so the engine can be scaled and timed out independently of web threads. Boundaries: Presentation never reaches the database; the gateway owns auth, validation and persistence; the engine owns computation only [12].</p>
+
+<h3>4.2 Interface data contract</h3>
+<p><b>Request: <code>POST /api/v1/algorithm/solve</code></b> (JSON, <code>application/json</code>, JWT bearer; documented as OpenAPI 3.1 [11]). It generalises the existing <code>GET /api/v1/routing/navigate</code> and <code>GET /api/v1/dispatch/{id}/preview</code>.</p>
+<pre>
+{
+  "request_id": "7c1e2f0a-3b8e-4a1c-9d57-0a1f2b3c4d5e",
+  "algorithm": "td_a_star",
+  "start_node": 101,
+  "target_node": 482,
+  "vehicle": { "vehicle_id": 7, "clearance_cm": 28.0 },
+  "options": { "ignore_hazards": false, "time_limit_ms": 250 }
+}
+</pre>
+<p>Constraints: <code>start_node</code>, <code>target_node</code> integer &ge; 1; <code>clearance_cm</code> number, 0 &lt; x &le; 200; <code>time_limit_ms</code> integer 1&ndash;5000; unknown fields rejected.</p>
+<p><b>Response certificate</b> (<code>200 OK</code>; asynchronous mode returns <code>202</code> with <code>job_id</code> and the same body on <code>GET /api/v1/algorithm/jobs/{job_id}</code>):</p>
+<pre>
+{
+  "request_id": "7c1e2f0a-3b8e-4a1c-9d57-0a1f2b3c4d5e",
+  "status": "OK",                       // OK | NO_SAFE_ROUTE | INVALID_NODE | TIMEOUT
+  "result": {
+    "path": [101, 134, 219, 482],
+    "travel_time_s": 412.6,
+    "distance_m": 3180.4,
+    "segments": [ { "from": 101, "to": 134, "length_m": 820.0, "depth_cm": 6.0, "passability": "LIGHT_FLOOD" } ],
+    "hazards_on_route": []
+  },
+  "metrics": { "nodes_settled": 348, "edges_relaxed": 1210, "runtime_ms": 14.2, "optimal": true },
+  "flags": { "used_ignore_hazards": false, "truncated": false }
+}
+</pre>
+<p><b>Errors</b> use RFC 9457 <code>application/problem+json</code> [9] with HTTP semantics per RFC 9110 [10]: <code>422</code> invalid body, <code>404</code> / status <code>NO_SAFE_ROUTE</code> when no passable route exists, <code>401/403</code> auth, <code>429</code> rate limit, <code>504</code> <code>TIMEOUT</code>.</p>
+
+<!-- ======================= TASK 5 ======================= -->
+<h2>Task 5: Agile Implementation Backlog &amp; Empirical Validation Plan</h2>
+
+<p><b>Process note.</b> MetroFlow follows a waterfall lifecycle (BRD &rarr; FSD &rarr; TSD &rarr; implementation &rarr; verification). The user stories and ticket below use the format this milestone requires, but they are <i>not</i> sprint items: each is a work-package statement traced to an existing requirement. Story 1 traces to FSD-FR-089 (rescue route preview, per-vehicle) and TSD ADR-004 (A* routing); Story 2 to FSD-FR-057 (turn-by-turn routing) and the hazard-blocking rule in TSD &sect;2.6. DEV-ALGO-101 is verified in the TSD's test-case phase, not a sprint review.</p>
+
+<h3>5.1 User stories</h3>
+<ol>
+<li><b>As a</b> dispatcher, <b>I want</b> the system to run the flood-aware A* search from every available rescue vehicle to a victim's SOS location using each vehicle's own clearance, <b>so that</b> I can assign the unit with the lowest safe travel time and never send a unit into water it cannot cross.</li>
+<li><b>As a</b> rescue driver, <b>I want</b> the route calculation to re-run on the latest water depths and hazards, and tell me clearly when no safe route exists, <b>so that</b> I am rerouted around newly flooded streets instead of being routed into one.</li>
+</ol>
+
+<h3>5.2 Implementation &amp; benchmarking ticket</h3>
+<table>
+<tr><th style="width:26%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-101</td></tr>
+<tr><td>Module / Service</td><td><code>backend/routing.py</code> (engine), <code>backend/tests/test_routing.py</code> and a new <code>backend/tests/test_routing_benchmark.py</code> (benchmark); API wiring in <code>backend/main.py</code>.</td></tr>
+<tr><td>Associated Algorithm</td><td>Clearance-constrained, depth-penalized A* with min-heap (<code>td_a_star_search</code>).</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td>
+<td>
+&bull; Unknown <code>start</code>/<code>target</code> node &rarr; <code>INVALID_NODE</code>, not an exception.<br>
+&bull; <code>start == target</code> &rarr; <code>[start]</code>, \(T=0\).<br>
+&bull; Empty graph, or disconnected components (target unreachable) &rarr; <code>NO_SAFE_ROUTE</code>, <code>inf</code>.<br>
+&bull; Depth \(\ge\) clearance on every cut edge &rarr; no route (404). Depth exactly equal to clearance is blocked.<br>
+&bull; Zero or negative speed, NaN / negative depth &rarr; reject at the gateway; speed floor 0.5 m/s in the engine prevents division by zero.<br>
+&bull; Clearance bound \(0<c\le200\) and integer node ids validated at the API (injection-safe, parameterised SQL via the ORM).<br>
+&bull; Rate limiting and JWT auth at the gateway; per-query time limit to stop abusive or pathological inputs.
+</td></tr>
+<tr><td>Concrete Implementation Steps</td>
+<td>
+1. Build the adjacency map from <code>road_edges</code> joined with <code>live_edge_states</code> (length, speed, depth), excluding hazard-closed edges.<br>
+2. Compute \(v_{\max}\) and the haversine heuristic for the query target.<br>
+3. Initialise <code>g</code>, <code>parent</code>, <code>settled</code> and the min-heap with \((h(s),0,s)\).<br>
+4. Pop, skip stale/settled entries, settle, and return on the target.<br>
+5. Relax out-edges: apply the clearance cut-off, depth penalty and speed floor; push improved neighbours.<br>
+6. Reconstruct the path; return the certificate with metrics (nodes settled, runtime).<br>
+7. Add a Dijkstra reference implementation in tests for the optimality check.<br>
+8. Add the benchmark test and wire it into CI.
+</td></tr>
+<tr><td>Automated Benchmarking Assertion</td>
+<td>
+&bull; <code>assert astar_cost == pytest.approx(dijkstra_cost)</code> on 10,000 random graphs/queries (optimality; extends the existing fuzz guard).<br>
+&bull; <code>assert p95_runtime_ms &lt; 250</code> on a synthetic grid graph with N = 5,000 nodes (about 20,000 edges), 100 random queries.<br>
+&bull; <code>assert nodes_settled_astar &lt;= nodes_settled_dijkstra</code> on the same queries (heuristic never hurts).<br>
+&bull; <code>assert route is None</code> (empty path, <code>inf</code>) when every edge on the only path has depth &ge; clearance.
+</td></tr>
+</table>
+<p class="small">The 250 ms / N = 5,000 threshold is a target we set, not yet a measured result. The CI job will fail the build if it is exceeded, and we will record the measured value in the repository.</p>
+
+<!-- ======================= TASK 6 ======================= -->
+<h2>Task 6: Academic Review Questions &amp; Defense Checkpoints</h2>
+
+<h3>Q1. Why must heavy algorithmic processing be decoupled from database ORMs and web request threads?</h3>
+<p>(a) <b>Responsiveness:</b> a CPU-bound search holds a worker thread for its whole run; with a bounded thread pool, \(K\) concurrent searches starve unrelated requests (login, map reads) [12]. Moving them to a worker pool behind a queue [15] bounds request latency and allows independent scaling. (b) <b>Testability and correctness:</b> a pure function over plain numbers can be unit-tested and fuzzed against a reference (Dijkstra) without a database; ORM lazy loading inside the loop would add a hidden query per edge, turning \(O(m\log n)\) compute into \(O(m)\) database round-trips. (c) <b>Consistency:</b> the engine should read an immutable snapshot so concurrent depth writes cannot change costs mid-search, which would break the optimality argument. (d) <b>Replaceability:</b> the same engine can be called by the dispatch preview, the driver app and batch jobs.</p>
+
+<h3>Q2. If the algorithm has exponential worst-case complexity, what keeps it viable?</h3>
+<p>Our core engine is not exponential: it is \(O(m\log n)\) (Task 3). The exponential algorithm is the <i>baseline</i> (path enumeration). Had we extended the problem to a <i>multi-criteria</i> or <i>capacity-constrained</i> variant, which is NP-hard, we would use pruning by the admissible bound \(f\) [2], [3], dominance pruning, and an \(\varepsilon\)-bounded weighted A* (\(f=g+(1+\varepsilon)h\)) that guarantees a cost within \((1+\varepsilon)\) of optimal, plus the per-request <code>time_limit_ms</code> returning the best route found with <code>truncated=true</code>.</p>
+
+<h3>Q3. Exact vs. approximate / heuristic algorithms in production?</h3>
+<p>An exact algorithm guarantees the optimal answer and a checkable certificate, at a cost that may grow quickly. A heuristic or approximate algorithm trades a bounded or unbounded loss in quality for speed [1]. Our A* is <b>exact</b> because \(h\) is admissible and consistent [2], [3]; "heuristic" describes how it is guided, not that its answer is approximate. In a rescue setting a wrong (non-optimal) route has a safety cost, so we keep the exact search and use an approximate variant only as a time-limited fallback. The hydrology model, by contrast, is an approximation (SCS-CN, a decision aid, not a hydrodynamic model) [8], and we label it as such.</p>
+
+<h3>Q4. Empirical benchmarking vs. asymptotic analysis?</h3>
+<p>Asymptotic analysis is done <i>before</i> implementation, on a model of computation, and states how cost grows with \(n,m\) while ignoring constants, hardware and the interpreter [1]. Empirical profiling is done <i>after</i> implementation, on real code and data, and measures constants, cache and Python overhead, and the average case that theory cannot give in closed form. We use both: Task 3 predicts \(O(m\log n)\); the CI benchmark (Task 5) checks the growth trend (runtime vs. \(N\)) and enforces an absolute budget. Neither replaces the other: a good bound with a slow constant can still miss the 250 ms target, and a fast run on one dataset proves nothing about the worst case.</p>
+
+<h3>Q5. Cold start / data sparsity (if ML or preference matrices are used)?</h3>
+<p>The routing engine uses no learned model or user-preference matrix, so the classic cold-start problem does not apply. The analogous risk is <b>sparse live data</b>: few sensors and reports at launch, so many edges have no measured depth. Mitigation: default unknown edges to the hydrology engine's modelled depth [8], treat sensor and verified-report values as overrides, and surface edges without recent data as lower-confidence rather than silently safe. If we later add a learned depth predictor, we would seed it from the physical model and historic flood records.</p>
+
+<h3>Q6. How are edge-case inputs handled without crashing the service?</h3>
+<p>Every degenerate input has a defined return value rather than an exception: unknown nodes &rarr; <code>INVALID_NODE</code>; <code>s = t</code> &rarr; zero-length path; <b>disconnected subgraphs</b> or fully flooded corridors &rarr; the frontier empties and the search returns <code>NO_SAFE_ROUTE</code> (the termination certificate in line 18); <b>cycles</b> are harmless because <code>settled</code> makes every node expand once [1]; the speed floor removes division by zero. No singular-matrix case arises, as the engine uses no linear algebra. Inputs are validated at the gateway (Pydantic, bounded ranges) and errors are returned as RFC 9457 problem documents [9], so a bad request cannot take down the worker.</p>
+
+<!-- ======================= REFERENCES ======================= -->
+<h2 class="pb">References</h2>
+<ol class="refs" style="font-size:9.5pt;padding-left:20pt;">
+<li>T. H. Cormen, C. E. Leiserson, R. L. Rivest, and C. Stein, <i>Introduction to Algorithms</i>, 4th ed. Cambridge, MA, USA: MIT Press, 2022.</li>
+<li>P. E. Hart, N. J. Nilsson, and B. Raphael, "A formal basis for the heuristic determination of minimum cost paths," <i>IEEE Trans. Syst. Sci. Cybern.</i>, vol. 4, no. 2, pp. 100&ndash;107, 1968. (Seminal source, pre-2021.)</li>
+<li>R. Dechter and J. Pearl, "Generalized best-first search strategies and the optimality of A*," <i>J. ACM</i>, vol. 32, no. 3, pp. 505&ndash;536, 1985. (Seminal source, pre-2021.)</li>
+<li>E. W. Dijkstra, "A note on two problems in connexion with graphs," <i>Numerische Mathematik</i>, vol. 1, pp. 269&ndash;271, 1959. (Seminal source, pre-2021.)</li>
+<li>H. Bast <i>et al.</i>, "Route planning in transportation networks," in <i>Algorithm Engineering</i>, LNCS vol. 9220. Cham, Switzerland: Springer, 2016, pp. 19&ndash;80.</li>
+<li>S. Tsang and D. M. Scott, "An integrated approach to modeling the impact of floods on emergency services: A case study of Calgary, Alberta," <i>J. Transport Geography</i>, vol. 86, 2020.</li>
+<li>M. Pregnolato, A. Ford, S. M. Wilkinson, and R. J. Dawson, "The impact of flooding on road transport: A depth-disruption function," <i>Transp. Res. D, Transp. Environ.</i>, vol. 55, pp. 67&ndash;81, 2017.</li>
+<li>USDA Natural Resources Conservation Service, "Estimation of direct runoff from storm rainfall," in <i>National Engineering Handbook, Part 630 Hydrology</i>, ch. 10, 2004.</li>
+<li>M. Nottingham, E. Wilde, and S. Dalal, "Problem details for HTTP APIs," IETF, RFC 9457, Jul. 2023. [Online]. Available: https://www.rfc-editor.org/rfc/rfc9457</li>
+<li>R. Fielding, M. Nottingham, and J. Reschke, Eds., "HTTP semantics," IETF, RFC 9110, Jun. 2022. [Online]. Available: https://www.rfc-editor.org/rfc/rfc9110</li>
+<li>OpenAPI Initiative, "OpenAPI Specification v3.1.0," Feb. 2021. [Online]. Available: https://spec.openapis.org/oas/v3.1.0</li>
+<li>S. Ram&iacute;rez, "FastAPI," software documentation. [Online]. Available: https://fastapi.tiangolo.com (accessed Nov. 2026).</li>
+<li>Python Software Foundation, "heapq &mdash; Heap queue algorithm," <i>The Python Standard Library</i>, Python 3 docs. [Online]. Available: https://docs.python.org/3/library/heapq.html (accessed Nov. 2026).</li>
+<li>PostGIS Project, "PostGIS manual: ST_DWithin." [Online]. Available: https://postgis.net/docs/ST_DWithin.html (accessed Nov. 2026).</li>
+<li>Celery Project, "Celery: Distributed task queue," documentation. [Online]. Available: https://docs.celeryq.dev (accessed Nov. 2026). (Proposed worker queue; not yet deployed.)</li>
+</ol>
+
+<!-- ======================= DECK ======================= -->
+<div class="slides">
+
+<section class="slide dark">
+<h2>MetroFlow: Flood-Aware Rescue Routing</h2>
+<p>PBL Milestone 1 &middot; ALGOCOM / SOFTENG &middot; Team F4 &middot; III-CCSAD &middot; Nov 4, 2026</p>
+<table style="margin-top:14pt">
+<tr><th style="width:24%">Project</th><td>MetroFlow</td></tr>
+<tr><th>Team</th><td>F4 &middot; Section III-CCSAD</td></tr>
+<tr><th>Members &amp; roles</th><td>Lapating, Khent U. (Lead Algorithm Architect) &middot; De Vera, Josiah Ray S. (Backend / Systems) &middot; Vergara, John Gabriel D. (Data / QA) &middot; Felipe, Marck Aaron V. (Systems Analyst / Tech Lead)</td></tr>
+<tr><th>Repository</th><td>https://github.com/siahray/MetroFlow.git</td></tr>
+</table>
+<div class="num">1</div>
+</section>
+
+<section class="slide">
+<h2>The problem</h2>
+<ul>
+<li>Typhoon flooding makes roads impassable <b>for some vehicles, not others</b>.</li>
+<li>A 28 cm unit and a 70 cm truck face different road networks.</li>
+<li>Dispatchers need: the <b>fastest route a given vehicle can actually drive</b>, from live water depths, or a clear &ldquo;no safe route&rdquo;.</li>
+<li>Depth-based road disruption and flood-aware emergency access are documented [6], [7].</li>
+</ul>
+<div class="num">2</div>
+</section>
+
+<section class="slide">
+<h2>Mathematical formulation</h2>
+<div class="cols"><div>
+<ul>
+<li><b>Input:</b> \(G=(V,E)\); per edge \(\ell_e\) (m), \(s_e\) (km/h), \(d_e\) (cm); query \((s,t,c)\)</li>
+<li><b>Constraint:</b> \(d_e<c\), minus hazard-closed edges</li>
+<li><b>Objective:</b> minimise travel time</li>
+<li><b>Output:</b> \((\text{status},P^*,T^*)\)</li>
+</ul></div><div>
+\[ v_e=\max\!\Big(\tfrac{s_e/3.6}{1+(d_e/10)^{1.8}},\,0.5\Big) \]
+\[ \min_{P:\,s\to t\ \text{in}\ G_c} \sum_{e\in P}\frac{\ell_e}{v_e} \]
+<p class="small">Depths from SCS-CN runoff [8].</p>
+</div></div>
+<div class="num">3</div>
+</section>
+
+<section class="slide">
+<h2>Algorithm: clearance-constrained A*</h2>
+<table>
+<tr><th style="width:26%">Field</th><th>Detail</th></tr>
+<tr><td>Paradigm</td><td>Graph theory: best-first search, min-heap [1], [2]</td></tr>
+<tr><td>Baseline</td><td>Exhaustive path enumeration \(O(n!)\); Dijkstra (\(h\equiv0\)) [4]</td></tr>
+<tr><td>Recurrence</td><td>\(g(v)=\min_{(u,v)\in E_c}(g(u)+w_{uv})\), \(f=g+h\)</td></tr>
+<tr><td>Heuristic</td><td>\(h(v)=\mathrm{hav}(v,t)/v_{\max}\): <b>admissible and consistent</b> &rArr; exact, each node settled once [3]</td></tr>
+</table>
+<div class="num">4</div>
+</section>
+
+<section class="slide">
+<h2>Pseudocode (core loop)</h2>
+<pre>
+g[s]=0; PQ={(h(s),0,s)}; settled={}
+while PQ not empty:
+    (f, gu, u) = pop_min(PQ)
+    if u in settled or gu &gt; g[u]: continue
+    settled.add(u)
+    if u == t: return path, g[t]
+    for (v, len, speed, depth) in G[u]:
+        if depth &gt;= c: continue                  # clearance cut-off
+        pen   = 1 + (depth/10)^1.8
+        v_eff = max((speed/3.6)/pen, 0.5)
+        g2    = gu + len / v_eff
+        if g2 &lt; g[v]: g[v]=g2; parent[v]=u; push(PQ,(g2+h(v), g2, v))
+return NO_SAFE_ROUTE
+</pre>
+<div class="num">5</div>
+</section>
+
+<section class="slide">
+<h2>Complexity</h2>
+<table>
+<tr><th style="width:26%">Measure</th><th>Result</th></tr>
+<tr><td>Worst-case time</td><td>\(O(m\log n)\): \(\le m+1\) heap ops, \(\log m\le2\log n\) [1]</td></tr>
+<tr><td>Best case</td><td>\(\Omega(k\log n)\) when \(h\) is near-perfect (path length \(k\))</td></tr>
+<tr><td>Average</td><td>Sparse planar graph: settles a corridor, not all of \(V\); measured in CI</td></tr>
+<tr><td>Space</td><td>\(O(n+m)\): \(g\), parent, settled \(O(n)\); lazy heap \(\le m+1\)</td></tr>
+<tr><td>Baseline</td><td>\(O(n!)\) enumeration</td></tr>
+</table>
+<p class="small">Master theorem not applicable: iterative, no divide-and-conquer recurrence.</p>
+<div class="num">6</div>
+</section>
+
+<section class="slide">
+<h2>Scalability (3 V's)</h2>
+<table>
+<tr><th style="width:14%">V</th><th>Parameter</th><th>Mitigation</th></tr>
+<tr><td>Volume</td><td>Pilot district graph &rarr; \(\sim10^5\) nodes planned</td><td>Cache topology, load by bounding box (PostGIS) [14], CSR if needed</td></tr>
+<tr><td>Velocity</td><td>Typhoon bursts; \(K\) searches per SOS</td><td>Worker pool + job queue; immutable depth snapshot</td></tr>
+<tr><td>Variety</td><td>GeoJSON, sensors, reports, hazards</td><td>Normalise to <code>cm</code>, <code>km/h</code>, <code>m</code> at gateway; Pydantic validation</td></tr>
+</table>
+<div class="num">7</div>
+</section>
+
+<section class="slide">
+<h2>Decoupled architecture</h2>
+<div id="arch-slide"></div>
+<div class="num">8</div>
+</section>
+
+<section class="slide">
+<h2>Data contract: <code>POST /api/v1/algorithm/solve</code></h2>
+<div class="cols"><div>
+<pre>
+// request
+{ "request_id": "uuid",
+  "algorithm": "td_a_star",
+  "start_node": 101, "target_node": 482,
+  "vehicle": { "vehicle_id": 7,
+               "clearance_cm": 28.0 },
+  "options": { "ignore_hazards": false,
+               "time_limit_ms": 250 } }
+</pre></div><div>
+<pre>
+// response certificate
+{ "status": "OK",   // NO_SAFE_ROUTE | TIMEOUT
+  "result": { "path": [101,134,219,482],
+              "travel_time_s": 412.6,
+              "distance_m": 3180.4 },
+  "metrics": { "nodes_settled": 348,
+               "runtime_ms": 14.2,
+               "optimal": true } }
+</pre></div></div>
+<p class="small">OpenAPI 3.1 [11]; errors as RFC 9457 problem+json [9]; HTTP semantics per RFC 9110 [10].</p>
+<div class="num">9</div>
+</section>
+
+<section class="slide">
+<h2>Agile backlog &amp; benchmarks</h2>
+<ul>
+<li><b>Story 1:</b> Dispatcher runs per-vehicle searches to assign the lowest safe travel time.</li>
+<li><b>Story 2:</b> Driver is rerouted on latest depths, or told there is no safe route.</li>
+<li><b>DEV-ALGO-101</b> (<code>backend/routing.py</code>): edge cases &ndash; unknown node, <code>s=t</code>, disconnected, depth = clearance, bad speed.</li>
+<li><b>CI assertions:</b> A* cost = Dijkstra cost on 10,000 random cases; p95 &lt; 250 ms at N = 5,000 (target); A* settles &le; Dijkstra.</li>
+</ul>
+<div class="num">10</div>
+</section>
+
+<section class="slide">
+<h2>Defense highlights</h2>
+<ul>
+<li><b>Why decouple?</b> CPU-bound search starves request threads; pure function is fuzz-testable; immutable snapshot keeps optimality valid.</li>
+<li><b>Exact vs heuristic:</b> our A* is exact (admissible + consistent); weighted A* only as a time-limited fallback.</li>
+<li><b>Theory vs benchmark:</b> Big-O predicts growth; CI measures constants and the average case.</li>
+<li><b>Sparse data, not cold start:</b> default to modelled depth [8]; mark stale edges low-confidence.</li>
+<li><b>Edge cases:</b> defined statuses, never exceptions; cycles harmless via <code>settled</code>.</li>
+</ul>
+<div class="num">11</div>
+</section>
+
+<section class="slide">
+<h2>References</h2>
+<ol style="font-size:10pt;columns:2;column-gap:28pt;margin:0;padding-left:18pt;">
+<li>Cormen <i>et al.</i>, <i>Introduction to Algorithms</i>, 4th ed., MIT Press, 2022.</li>
+<li>Hart, Nilsson, Raphael, IEEE Trans. SSC, 4(2), 1968.</li>
+<li>Dechter, Pearl, J. ACM, 32(3), 1985.</li>
+<li>Dijkstra, Numer. Math., 1, 1959.</li>
+<li>Bast <i>et al.</i>, Route planning in transportation networks, LNCS 9220, 2016.</li>
+<li>Tsang, Scott, J. Transport Geography, 86, 2020.</li>
+<li>Pregnolato <i>et al.</i>, Transp. Res. D, 55, 2017.</li>
+<li>USDA NRCS, NEH Part 630, Ch. 10, 2004.</li>
+<li>RFC 9457, Problem Details for HTTP APIs, 2023.</li>
+<li>RFC 9110, HTTP Semantics, 2022.</li>
+<li>OpenAPI Specification v3.1.0, 2021.</li>
+<li>FastAPI documentation.</li>
+<li>Python <code>heapq</code> documentation.</li>
+<li>PostGIS manual, ST_DWithin.</li>
+<li>Celery documentation.</li>
+</ol>
+<div class="num">12</div>
+</section>
+
+</div>
+
+<!-- ======================= Architecture diagram (shared) ======================= -->
+<template id="arch-svg">
+<svg viewBox="0 0 900 400" width="100%" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0f172a"/></marker></defs>
+  <g font-size="13" fill="#0f172a">
+    <rect x="10" y="20" width="170" height="150" rx="8" fill="#e2e8f0" stroke="#0f172a"/>
+    <text x="95" y="44" text-anchor="middle" font-weight="700">Presentation layer</text>
+    <text x="95" y="70" text-anchor="middle">Dispatcher portal</text><text x="95" y="88" text-anchor="middle" font-size="11">Next.js</text>
+    <text x="95" y="116" text-anchor="middle">Driver app</text><text x="95" y="134" text-anchor="middle" font-size="11">Expo / React Native</text>
+
+    <rect x="260" y="20" width="200" height="150" rx="8" fill="#d1fae5" stroke="#0f172a"/>
+    <text x="360" y="44" text-anchor="middle" font-weight="700">API gateway / orchestration</text>
+    <text x="360" y="70" text-anchor="middle">FastAPI</text>
+    <text x="360" y="92" text-anchor="middle" font-size="12">JWT auth &middot; rate limit</text>
+    <text x="360" y="110" text-anchor="middle" font-size="12">Pydantic validation</text>
+    <text x="360" y="128" text-anchor="middle" font-size="12">graph snapshot loader</text>
+    <text x="360" y="146" text-anchor="middle" font-size="12">audit log</text>
+
+    <rect x="540" y="20" width="200" height="150" rx="8" fill="#e2e8f0" stroke="#0f172a"/>
+    <text x="640" y="44" text-anchor="middle" font-weight="700">Persistence</text>
+    <text x="640" y="70" text-anchor="middle">Postgres + PostGIS (Supabase)</text>
+    <text x="640" y="94" text-anchor="middle" font-size="12">road_nodes &middot; road_edges</text>
+    <text x="640" y="112" text-anchor="middle" font-size="12">live_edge_states</text>
+    <text x="640" y="130" text-anchor="middle" font-size="12">hazard_zones &middot; vehicles</text>
+    <text x="640" y="148" text-anchor="middle" font-size="12">sos_requests &middot; sensors</text>
+
+    <rect x="260" y="250" width="200" height="60" rx="8" fill="#fff" stroke="#0f172a" stroke-dasharray="6 4"/>
+    <text x="360" y="276" text-anchor="middle" font-weight="700">Job queue (proposed)</text>
+    <text x="360" y="296" text-anchor="middle" font-size="12">Redis / Celery</text>
+
+    <rect x="260" y="335" width="200" height="55" rx="8" fill="#0f172a"/>
+    <text x="360" y="358" text-anchor="middle" font-weight="700" fill="#f8fafc">Isolated core engine</text>
+    <text x="360" y="378" text-anchor="middle" font-size="12" fill="#f8fafc">routing.py &middot; pure functions</text>
+
+    <rect x="540" y="250" width="200" height="60" rx="8" fill="#fff" stroke="#0f172a"/>
+    <text x="640" y="276" text-anchor="middle" font-weight="700">Hydrology engine</text>
+    <text x="640" y="296" text-anchor="middle" font-size="12">SCS-CN &rarr; depth_cm</text>
+  </g>
+  <g stroke="#0f172a" stroke-width="1.6" fill="none" marker-end="url(#ar)">
+    <path d="M180 95 H258"/>
+    <path d="M460 95 H538"/>
+    <path d="M360 170 V248" stroke-dasharray="6 4"/>
+    <path d="M360 310 V333" stroke-dasharray="6 4"/>
+    <path d="M640 250 V172"/>
+  </g>
+  <g font-size="11" fill="#475569">
+    <text x="219" y="86" text-anchor="middle">HTTPS/JSON</text>
+    <text x="499" y="86" text-anchor="middle">SQL</text>
+    <text x="368" y="212">job (JSON)</text>
+    <text x="650" y="215">writes depth</text>
+    <text x="10" y="260">Solid = implemented today</text>
+    <text x="10" y="278">Dashed = target decoupling</text>
+    <text x="10" y="296">Engine has no DB / HTTP imports</text>
+  </g>
+</svg>
+</template>
+
+<script>
+for (const id of ["arch-report", "arch-slide"]) {
+  document.getElementById(id).appendChild(document.getElementById("arch-svg").content.cloneNode(true));
+}
+renderMathInElement(document.body, {
+  delimiters: [{left: "\\[", right: "\\]", display: true}, {left: "\\(", right: "\\)", display: false}],
+  throwOnError: false
+});
+</script>
+</body>
+</html>

@@ -80,6 +80,7 @@ they are resolved or explicitly deferred in writing.
 | `OD-D23` | Offline provider, licence, package contents, storage limits and stale-data policy | Scenario reviewer / Engineering | CR-002 approved; design decisions still open |
 | `OD-D24` | Sentinel-1 access route, credential type, processing, confidence, latency and offline retention | Scenario reviewer / Engineering | CR-003 approved; design decisions still open |
 | `OD-D25` | PAGASA river telemetry access route, station list for the pilot corridor, thresholds, freshness window and licence | Project Lead / Engineering | CR-004 approved; access route open |
+| `OD-D26` | Open data sources for CR-004: Open-Meteo (fair use, attribution) and NASA GPM IMERG (Earthdata token) terms, resolution, and the pilot river points | Project Lead / Engineering | CR-004 rev 1.1 approved; terms to confirm |
 
 ### 2.2 Decision record
 
@@ -89,6 +90,7 @@ they are resolved or explicitly deferred in writing.
 | 27 Oct 2026 | A-11 (CR-002) | Approved | Final-product Offline Areas accepted; the pilot offline screen stays a labelled placeholder |
 | 27 Oct 2026 | A-12 (CR-003) | Approved | Sentinel-1 selected as the final-product satellite source; no feed exists yet |
 | 3 Nov 2026 | A-15 (CR-004) | Approved by the Project Lead | PAGASA telemetry and satellite are the live sources; NOAH is a rain-gated advisory fallback. The Project Lead approves change requests under standing authority; adviser and panel acknowledgement is not recorded. `OD-D25` (PAGASA access route) is open |
+| 3 Nov 2026 | A-15 (CR-004 rev 1.1) | Approved by the Project Lead | Open data sources (Open-Meteo, NASA GPM IMERG) added as the working live sources while PAGASA access is open; values are labelled observed, modelled or estimated. Adviser and panel acknowledgement not recorded |
 
 Approving the three change requests settles scope. It does not move A-01 to A-09,
 which remain For Review, and it does not close the open design decisions in
