@@ -48,7 +48,14 @@ export function LoginScreen({
       onSignIn(user, data.access_token);
     } catch (err) {
       setIsSubmitting(false);
-      const message = err instanceof ApiError ? err.message : "Invalid credentials";
+      // Say what actually went wrong: a wrong password, a throttled login, or a server the
+      // browser could not reach (API down, wrong NEXT_PUBLIC_API_BASE_URL, or blocked by CORS).
+      const message =
+        err instanceof ApiError
+          ? err.status === 401
+            ? "Invalid email or password."
+            : err.message
+          : "Cannot reach the server. Check your connection and that the API is running.";
       setError(message);
       show("Authentication failed");
     }
