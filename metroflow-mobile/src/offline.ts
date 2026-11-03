@@ -1,3 +1,4 @@
+import { Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
@@ -80,8 +81,45 @@ export function newClientId(): string {
   });
 }
 
+// --- Queued photos ---------------------------------------------------------
+// The picker returns a cache file the OS may clear before the queue syncs, so a
+// queued photo is copied into app document storage and removed once it is sent.
+
+const photoDir = () => new Directory(Paths.document, "queued-reports");
+
+/** Copy the photo into document storage; on any failure keep the original reference. */
+function persistPhoto(photo: ReportPhoto, clientId: string): ReportPhoto {
+  try {
+    const dir = photoDir();
+    if (!dir.exists) dir.create();
+    const dest = new File(dir, `${clientId}-${photo.name}`);
+    new File(photo.uri).copy(dest, { overwrite: true });
+    return { ...photo, uri: dest.uri };
+  } catch {
+    return photo;
+  }
+}
+
+/** Delete a persisted copy; never touches a file outside our own queue folder. */
+function discardPhoto(photo?: ReportPhoto | null): void {
+  try {
+    if (photo && photo.uri.startsWith(photoDir().uri)) new File(photo.uri).delete();
+  } catch {
+    // Already gone.
+  }
+}
+
+function photoExists(photo: ReportPhoto): boolean {
+  try {
+    return new File(photo.uri).exists;
+  } catch {
+    return false;
+  }
+}
+
 export async function enqueueReport(report: QueuedReport): Promise<void> {
-  await (await db()).runAsync("INSERT INTO report_queue (payload) VALUES (?)", JSON.stringify(report));
+  const stored = report.photo ? { ...report, photo: persistPhoto(report.photo, report.clientId) } : report;
+  await (await db()).runAsync("INSERT INTO report_queue (payload) VALUES (?)", JSON.stringify(stored));
   notify();
 }
 
@@ -97,8 +135,10 @@ export async function flushReports(): Promise<void> {
   flushing = true;
   try {
     for (let queue = await readQueue(); queue.length > 0; queue = await readQueue()) {
+      const next = queue[0];
       try {
-        await submitReport(queue[0]);
+        // A photo the OS removed must not block the queue: send the report without it.
+        await submitReport(next.photo && !photoExists(next.photo) ? { ...next, photo: null } : next);
       } catch (cause) {
         const permanent =
           cause instanceof ApiError &&
@@ -108,7 +148,8 @@ export async function flushReports(): Promise<void> {
           cause.status !== 429;
         if (!permanent) return;
       }
-      await (await db()).runAsync("DELETE FROM report_queue WHERE seq = ?", queue[0].seq);
+      await (await db()).runAsync("DELETE FROM report_queue WHERE seq = ?", next.seq);
+      discardPhoto(next.photo);
       notify();
     }
   } finally {
