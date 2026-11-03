@@ -22,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { listVehicles, type SOSRequest } from "@/lib/dispatch";
 import { listSOS } from "@/lib/sos-live";
 import { toUnitStatus, type FleetUnit, type MissionMilestone } from "@/lib/rescue";
+import { ErrorNotice } from "./error-notice";
 
 type RescueTrackingProps = {
   onBack: () => void;
@@ -31,14 +32,13 @@ type RescueTrackingProps = {
 export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const [fleet, setFleet] = useState<FleetUnit[]>([]);
   const [sosList, setSosList] = useState<SOSRequest[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [vehiclesData, sosData] = await Promise.all([
-          listVehicles().catch(() => []),
-          listSOS().catch(() => []),
-        ]);
+        const [vehiclesData, sosData] = await Promise.all([listVehicles(), listSOS()]);
 
         if (vehiclesData && vehiclesData.length > 0) {
           const mapped: FleetUnit[] = vehiclesData.map((v) => {
@@ -62,14 +62,16 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
           setFleet(mapped);
         }
         setSosList(sosData);
+        setLoadError(null);
       } catch {
-        // keep fallback
+        // Keep the last data on screen and say it is stale.
+        setLoadError("Could not refresh fleet data. Showing the last known state.");
       }
     };
     load();
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reloadKey]);
 
   const activeMission = sosList.find(
     (s) => s.vehicle_id != null && (s.status === "assigned" || s.status === "confirmed"),
@@ -78,12 +80,14 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
 
   return (
     <div className="space-y-6">
+      {loadError && <ErrorNotice message={loadError} onRetry={() => setReloadKey((k) => k + 1)} />}
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onBack}
+            aria-label="Back"
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -350,7 +354,11 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
               -
             </button>
             <div className="h-px bg-slate-100 mx-1"></div>
-            <button type="button" className="p-1 text-slate-600 hover:bg-slate-100 rounded">
+            <button
+              type="button"
+              aria-label="Recentre map"
+              className="p-1 text-slate-600 hover:bg-slate-100 rounded"
+            >
               <Navigation className="h-3 w-3" />
             </button>
           </div>

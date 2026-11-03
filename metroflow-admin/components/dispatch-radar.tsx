@@ -140,6 +140,7 @@ export function DispatchRadar({
           <button
             type="button"
             onClick={onBack}
+            aria-label="Back"
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-2xs transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
