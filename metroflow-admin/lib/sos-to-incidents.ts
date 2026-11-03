@@ -34,14 +34,13 @@ export function sosToIncident(
     depthCm = sos.note?.toLowerCase().includes("ft") ? Math.round(val * 30.48) : Math.round(val);
   }
 
-  // A rough ordering for the queue: a reported depth raises it, an unknown one does not.
-  const urgency = depthCm === null ? 6.2 : depthCm >= 75 ? 9.4 : depthCm >= 45 ? 7.8 : 6.2;
+  // Describes only what the person reported; it does not rank the incident.
   const level =
     depthCm === null
       ? "Distress signal (depth not reported)"
-      : urgency >= 9
+      : depthCm >= 75
         ? "Critical Flood Level 3"
-        : urgency >= 7.5
+        : depthCm >= 45
           ? "Moderate Hazard Level 2"
           : "Alert Level 1";
 
@@ -68,12 +67,11 @@ export function sosToIncident(
   return {
     id: `FR-${sos.sos_id.toString().padStart(4, "0")}`,
     level,
-    urgency,
+    urgency: null,
+    createdAt: sos.created_at ?? null,
     reporter: "Citizen Distress Signal (SOS)",
     reportedAt: `${reportedAt}`,
-    narrative:
-      sos.note ||
-      `SOS rescue requested at coordinates ${sos.latitude.toFixed(4)}, ${sos.longitude.toFixed(4)}.`,
+    narrative: sos.note ?? "",
     location: `Lat ${sos.latitude.toFixed(4)}, Lon ${sos.longitude.toFixed(4)}`,
     barangay: "Barangay not given",
     source: primarySource({
@@ -145,9 +143,10 @@ export function reportToIncident(
     id: `REP-${report.report_id.slice(0, 8)}`,
     level,
     urgency: report.urgency_score,
+    createdAt: report.submitted_at ?? report.captured_at ?? null,
     reporter: `Citizen Field Reporter (${report.reporter_hash.slice(0, 8)})`,
     reportedAt,
-    narrative: report.narrative || `Citizen field report with ${report.depth_label.toLowerCase()}.`,
+    narrative: report.narrative ?? "",
     location:
       report.latitude != null && report.longitude != null
         ? `Lat ${report.latitude.toFixed(4)}, Lon ${report.longitude.toFixed(4)}`

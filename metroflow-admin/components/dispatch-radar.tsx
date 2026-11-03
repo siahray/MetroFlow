@@ -6,14 +6,11 @@ import {
   Camera,
   CheckCircle,
   Clock,
-  Eye,
-  EyeOff,
   FileText,
   MapPin,
   MessageSquare,
   Navigation,
   Send,
-  Shield,
   User,
   Waves,
   X,
@@ -21,7 +18,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 
-import { maskPhoneNumber, type Incident } from "@/lib/incidents";
+import { type Incident } from "@/lib/incidents";
 import { cn } from "@/lib/cn";
 import { addSOSNote, escalateSOS, rejectSOS } from "@/lib/dispatch";
 import { addReportNote, escalateReport, rejectReport } from "@/lib/reports";
@@ -42,7 +39,6 @@ export function DispatchRadar({
   onMessage,
   onOpenDispatchModal,
 }: DispatchRadarProps) {
-  const [phoneRevealed, setPhoneRevealed] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [actionModalOpen, setActionModalOpen] = useState(false);
@@ -56,21 +52,6 @@ export function DispatchRadar({
   const isDispatched =
     incident.tags.includes("Vehicle Assigned") || incident.tags.includes("Dispatched");
   const isRejected = incident.tags.includes("Rejected");
-
-  const rawPhone = "+63 917 555 0192";
-  const displayedPhone = phoneRevealed ? rawPhone : maskPhoneNumber(rawPhone);
-
-  function togglePhone() {
-    setPhoneRevealed((prev) => {
-      const next = !prev;
-      onMessage(
-        next
-          ? "Authorized: Citizen phone number revealed for emergency dispatch."
-          : "Citizen phone number masked for PII privacy protection.",
-      );
-      return next;
-    });
-  }
 
   async function handleSaveNote() {
     if (!noteText.trim()) return;
@@ -160,31 +141,12 @@ export function DispatchRadar({
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={togglePhone}
-            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
-          >
-            <Shield className="h-3.5 w-3.5 text-sky-600" />
-            <span>
-              {phoneRevealed
-                ? "PII Revealed (Authorized)"
-                : `PII Masked (${maskPhoneNumber(rawPhone)})`}
-            </span>
-            {phoneRevealed ? (
-              <EyeOff className="h-3.5 w-3.5 text-slate-400" />
-            ) : (
-              <Eye className="h-3.5 w-3.5 text-slate-400" />
-            )}
-          </button>
-
-          {/* Urgency Score Card */}
           <div className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-right shadow-2xs">
             <div className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">
-              Urgency Score
+              {incident.urgency === null ? "Priority" : "Urgency score"}
             </div>
-            <div className="text-base font-extrabold text-rose-600 leading-none">
-              8.4<span className="text-xs font-medium text-slate-400">/10</span>
+            <div className="text-base font-extrabold leading-none text-rose-600">
+              {incident.urgency === null ? "SOS" : incident.urgency.toFixed(1)}
             </div>
           </div>
         </div>
@@ -221,7 +183,9 @@ export function DispatchRadar({
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-[10px] font-bold text-slate-400 uppercase">Urgency</div>
               <div className="mt-1 text-sm font-bold text-slate-900">
-                {incident.urgency.toFixed(1)} · {incident.level}
+                {incident.urgency === null
+                  ? incident.level
+                  : `${incident.urgency.toFixed(1)} · ${incident.level}`}
               </div>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -251,9 +215,7 @@ export function DispatchRadar({
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase">Submitted by</div>
-                  <div className="text-xs font-bold text-slate-900">
-                    {incident.reporter} ({displayedPhone})
-                  </div>
+                  <div className="text-xs font-bold text-slate-900">{incident.reporter}</div>
                   <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
                     <CheckCircle className="h-3 w-3" /> Citizen SOS
                   </div>
@@ -281,7 +243,11 @@ export function DispatchRadar({
                 Description
               </h3>
               <p className="text-xs font-semibold text-slate-800">
-                &ldquo;{incident.narrative}&rdquo;
+                {incident.narrative ? (
+                  <>&ldquo;{incident.narrative}&rdquo;</>
+                ) : (
+                  "No description was given."
+                )}
               </p>
             </div>
 
