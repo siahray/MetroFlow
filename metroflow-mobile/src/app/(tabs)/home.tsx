@@ -23,7 +23,7 @@ import {
 import { listActiveHazards, type HazardInfo } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
-import { loadCache, saveCache } from '../../offline';
+import { loadCache, saveCache, useOnline } from '../../offline';
 import { colors } from '../../theme';
 
 const LEVEL_LABEL: Record<string, string> = {
@@ -46,6 +46,7 @@ export default function HomeScreen() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const online = useOnline();
 
   const displayName = user?.name || user?.email || 'Guest';
 
@@ -66,9 +67,10 @@ export default function HomeScreen() {
     [],
   );
 
+  // Load on mount and again whenever the connection returns.
   useEffect(() => {
-    load();
-  }, [load]);
+    if (online) load();
+  }, [online, load]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -155,7 +157,7 @@ export default function HomeScreen() {
               {user ? 'Signed in' : 'Guest: sign in to submit reports'}
             </Text>
           </View>
-          {offline ? (
+          {offline || !online ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
               <WifiOff size={13} color={colors.amber800} />
               <Text style={{ fontSize: 11, fontWeight: '700', color: colors.amber800 }}>Offline</Text>

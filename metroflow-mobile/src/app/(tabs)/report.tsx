@@ -33,7 +33,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
-import { enqueueReport, newClientId } from '../../offline';
+import { enqueueReport, isOffline, newClientId } from '../../offline';
 import {
   ApiError,
   submitReport,
@@ -273,6 +273,8 @@ export default function ReportScreen() {
         .filter(Boolean)
         .join(' ');
 
+      // Known offline: queue at once rather than waiting for the request to fail.
+      if (await isOffline()) throw new TypeError('offline');
       const created = await submitReport({ ...payload, narrative });
 
       setResult(created);

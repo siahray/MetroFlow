@@ -1,3 +1,4 @@
+import NetInfo, { type NetInfoState } from "@react-native-community/netinfo";
 import { Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import { useEffect, useState } from "react";
@@ -157,6 +158,23 @@ export async function flushReports(): Promise<void> {
   }
 }
 
+// --- Connectivity ------------------------------------------------------------
+
+/** Unknown (null) counts as online: only an explicit "no" blocks a request. */
+const reachable = (s: NetInfoState) => s.isConnected !== false && s.isInternetReachable !== false;
+
+/** True when the device reports no usable connection, so we need not wait for a request to time out. */
+export async function isOffline(): Promise<boolean> {
+  return !reachable(await NetInfo.fetch());
+}
+
+/** Live connectivity for UI that shows an online/offline state. */
+export function useOnline(): boolean {
+  const [online, setOnline] = useState(true);
+  useEffect(() => NetInfo.addEventListener((s) => setOnline(reachable(s))), []);
+  return online;
+}
+
 // --- Pending state (FSD-FR-068) ---------------------------------------------
 
 const listeners = new Set<() => void>();
@@ -172,7 +190,10 @@ export function usePendingReports(): number {
     retry();
     const timer = setInterval(retry, 30_000);
     const sub = AppState.addEventListener("change", (s) => s === "active" && retry());
+    // Sync as soon as the connection returns instead of waiting for the next tick.
+    const unsubscribeNet = NetInfo.addEventListener((s) => reachable(s) && retry());
     return () => {
+      unsubscribeNet();
       listeners.delete(refresh);
       clearInterval(timer);
       sub.remove();
