@@ -2526,6 +2526,9 @@ def submit_report(
     barangay: Annotated[str | None, Form(max_length=120)] = None,
     captured_at: Annotated[str | None, Form(description="Device capture time, ISO 8601")] = None,
     source: Annotated[str | None, Form(description="PHOTO, SENSOR, CCTV or CALL")] = None,
+    client_id: Annotated[
+        UUID | None, Form(description="Device id; makes a replay idempotent")
+    ] = None,
     photo: Annotated[UploadFile | None, File()] = None,
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
@@ -2537,6 +2540,20 @@ def submit_report(
     moderation desk decides. The reporter is stored as a salted hash, never as a
     user id, so the queue can de-duplicate without holding an identity (BR-011).
     """
+    # An offline replay whose first attempt already landed returns that report.
+    if client_id is not None:
+        existing = (
+            db.query(models.IncidentReport.report_id)
+            .filter(
+                models.IncidentReport.client_id == client_id,
+                models.IncidentReport.reporter_hash
+                == reports.reporter_hash(_user.user_id, settings.report_hash_salt),
+            )
+            .first()
+        )
+        if existing:
+            return _report_detail(db, existing[0])
+
     if depth_level not in reports.DEPTH_LEVELS:
         raise HTTPException(
             status_code=422, detail=f"depth_level must be one of {list(reports.DEPTH_LEVELS)}"
@@ -2588,6 +2605,7 @@ def submit_report(
     submitted = _parse_captured_at(captured_at)
     report = models.IncidentReport(
         report_id=uuid4(),
+        client_id=client_id,
         reporter_hash=reports.reporter_hash(_user.user_id, settings.report_hash_salt),
         source=source,
         geometry=point,

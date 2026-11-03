@@ -1653,3 +1653,10 @@ def test_sensor_registry_crud(client):
     # Delete sensor
     delete_resp = client.delete("/api/v1/sensors/TEST_RIVER_01")
     assert delete_resp.status_code == 204
+
+
+def test_report_replay_with_the_same_client_id_is_stored_once(client, created_records):
+    client_id = str(__import__("uuid").uuid4())
+    first = submit_report(client, created_records, client_id=client_id)
+    second = submit_report(client, created_records, client_id=client_id)
+    assert second["report_id"] == first["report_id"]
