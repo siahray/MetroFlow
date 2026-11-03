@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from config import settings
 
@@ -392,8 +392,9 @@ class SensorReadingRequest(BaseModel):
     """Gateway posts a sensor reading (FSD-FR-090)."""
 
     sensor_id: str = Field(..., description="Sensor identifier")
-    value: float = Field(..., description="Reading value")
-    unit: str = Field(..., description="Unit at capture (m or mm_hr)")
+    # Gauges cannot read below zero; nan/inf would poison the threshold compare.
+    value: float = Field(..., ge=0, allow_inf_nan=False, description="Reading value")
+    unit: Literal["m", "mm_hr"] = Field(..., description="Unit at capture")
     recorded_at: datetime = Field(..., description="Sensor timestamp")
 
 
@@ -445,9 +446,11 @@ class SensorCreateRequest(BaseModel):
     sensor_id: str = Field(..., description="Sensor identifier")
     sensor_type: str = Field(..., description="RIVER_GAUGE or RAIN_GAUGE")
     name: str = Field(..., description="Human label")
-    threshold_value: float = Field(..., description="Breach threshold")
-    threshold_unit: str = Field(..., description="m or mm_hr")
-    impact_radius_m: float = Field(..., description="Radius for edge marking")
+    latitude: float = Field(..., ge=-90, le=90, description="Sensor location")
+    longitude: float = Field(..., ge=-180, le=180, description="Sensor location")
+    threshold_value: float = Field(..., gt=0, description="Breach threshold")
+    threshold_unit: Literal["m", "mm_hr"] = Field(..., description="m or mm_hr")
+    impact_radius_m: float = Field(..., gt=0, description="Radius for edge marking, in metres")
     simulated: bool = Field(False, description="True for pilot-generated values")
 
 
@@ -455,11 +458,19 @@ class SensorUpdateRequest(BaseModel):
     """Update an existing sensor (FSD-FR-091)."""
 
     name: str | None = None
-    threshold_value: float | None = None
-    threshold_unit: str | None = None
-    impact_radius_m: float | None = None
+    latitude: float | None = Field(None, ge=-90, le=90)
+    longitude: float | None = Field(None, ge=-180, le=180)
+    threshold_value: float | None = Field(None, gt=0)
+    threshold_unit: Literal["m", "mm_hr"] | None = None
+    impact_radius_m: float | None = Field(None, gt=0)
     active: bool | None = None
     simulated: bool | None = None
+
+    @model_validator(mode="after")
+    def _location_is_a_pair(self):
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be given together")
+        return self
 
 
 class AuditResponse(BaseModel):

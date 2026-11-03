@@ -833,14 +833,30 @@ which is the row an edit or a deletion disturbed. It reports `valid: false` with
 Actor identity is a `user_id`; join it against `/api/v1/auth/me` or the users
 table for a name. `payload` is returned as an object, not as the stored string.
 
-### 9.7 Not yet implemented
+### 9.7 Sensors, telemetry and streams
+
+| Method   | Path                                     | Body / query                                                                                   | Role       | Reference           |
+| -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- |
+| `POST`   | `/api/v1/sensors/readings`               | `sensor_id`, `value` (≥ 0), `unit` (must equal the sensor's unit), `recorded_at` → `201` reading with `breach` | admin | BR-017 / FSD-FR-090 |
+| `GET`    | `/api/v1/sensors`                        | —                                                                                              | admin      | BR-017 / FSD-FR-091 |
+| `POST`   | `/api/v1/sensors`                        | `sensor_id`, `sensor_type`, `name`, `latitude`, `longitude`, `threshold_value`, `threshold_unit`, `impact_radius_m`, `simulated` | admin | BR-017 / FSD-FR-091 |
+| `PATCH`  | `/api/v1/sensors/{sensor_id}`            | any of `name`, `latitude` + `longitude`, thresholds, `impact_radius_m`, `active`, `simulated`                            | admin      | BR-017 / FSD-FR-091 |
+| `DELETE` | `/api/v1/sensors/{sensor_id}`            | — → `204`; the sensor's readings are deleted with it                                           | admin      | BR-017 / FSD-FR-091 |
+| `GET`    | `/api/v1/reports/{report_id}/nearest-sensor` | — → nearest active rain gauge, its latest reading, `distance_km`, `is_breach` (empty when none) | admin  | BR-014 / FSD-FR-079 |
+| `POST`   | `/api/v1/vehicles/{vehicle_id}/telemetry` | position/speed batch → `204`                                                                  | any user   | FSD-FR-072          |
+| `GET`    | `/api/v1/hazards/stream`, `/vehicles/stream`, `/sos/stream` | SSE; `after` resumes from an event id                                    | any user   | FSD-FR-082–086      |
+
+A breach (`value >= threshold_value`) writes a `SENSOR_BREACH` audit entry that
+lists the ids of the road edges within `impact_radius_m` metres of the sensor.
+The edges are not yet flagged on the road graph, so routing does not read the
+advisory; BRULE-012 keeps a breach advisory until a dispatcher confirms it.
+Other sensor changes are audited too. Rescue
+route preview is `GET /api/v1/dispatch/{sos_id}/preview` (§9.2).
+
+### 9.7a Not yet implemented
 
 The following remain specified but absent, and must not be assumed by a client:
 
-- server-sent event streams (`/hazards/stream`, `/vehicles/stream`);
-- sensor ingestion and thresholds (`/api/v1/sensors*`);
-- vehicle telemetry batches (`/vehicles/{id}/telemetry`);
-- rescue route preview (`/dispatch/{id}/route`);
 - hazard withdrawal (`DELETE /api/v1/hazards/{id}`).
 
 ### 9.8 Error additions in this slice

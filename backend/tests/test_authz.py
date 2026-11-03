@@ -45,6 +45,7 @@ PORTAL_ONLY_ROUTES = [
     ("GET", "/api/v1/reports/{report_id}/photo"),
     ("POST", "/api/v1/reports/{report_id}/approve"),
     ("POST", "/api/v1/reports/{report_id}/reject"),
+    ("POST", "/api/v1/sensors/readings"),
 ]
 
 

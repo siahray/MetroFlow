@@ -1,13 +1,12 @@
 """add_report_client_id
 
 Revision ID: e1a9c3b7d204
-Revises: 5d8a58ada077, 7c9d874e8509
+Revises: e2a9c4b7d815
 Create Date: 2026-11-03
 
 The driver app queues reports while offline and replays them on reconnect
 (FSD-FR-068, 069). A device-generated id makes the replay idempotent: a retry
 after a lost response returns the stored report instead of creating a second.
-Also merges the two migration heads.
 """
 
 from collections.abc import Sequence
@@ -17,7 +16,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "e1a9c3b7d204"
-down_revision: str | Sequence[str] | None = ("5d8a58ada077", "7c9d874e8509")
+down_revision: str | Sequence[str] | None = "e2a9c4b7d815"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
