@@ -564,6 +564,111 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         {streamError ? <AlertTriangle size={16} color={colors.red600} /> : null}
       </View>
 
+      {!route ? (
+        <View style={styles.searchPanel}>
+          <View style={styles.searchBox}>
+            <MapPin size={16} color={colors.blue600} />
+            <TextInput
+              value={destinationQuery}
+              onChangeText={(value) => {
+                setDestinationQuery(value);
+                setSelected(null);
+                plannedFor.current = null;
+              }}
+              placeholder="Search a road or intersection"
+              placeholderTextColor={colors.slate400}
+              style={styles.searchInput}
+              autoCorrect={false}
+            />
+            {destinationQuery ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Clear destination"
+                onPress={() => {
+                  setDestinationQuery("");
+                  setSelected(null);
+                }}
+                hitSlop={8}
+              >
+                <X size={16} color={colors.slate400} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {planning ? (
+            <View style={styles.planningRow}>
+              <ActivityIndicator color={colors.blue600} />
+              <Text style={styles.planningText}>Planning a flood-safe route…</Text>
+            </View>
+          ) : null}
+
+          {error ? (
+            <View style={styles.errorRow}>
+              <Text style={styles.errorText}>{error}</Text>
+              {selected ? (
+                <TouchableOpacity onPress={() => void planRoute(selected)} hitSlop={8}>
+                  <Text style={styles.errorRetry}>Retry</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
+
+          {refusal && selected ? (
+            <View style={styles.refusalCard}>
+              <Text style={styles.refusalTitle}>No safe route</Text>
+              <Text style={styles.refusalBody}>
+                Every verified route to {selected.properties.name ?? "this destination"} is blocked
+                for your {DRIVER_CLEARANCE_CM} cm clearance.
+              </Text>
+              <View style={styles.panelButtons}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => void planRoute(selected)}
+                >
+                  <Text style={styles.secondaryButtonText}>Retry</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dangerButton}
+                  onPress={() => void planRoute(selected, true)}
+                >
+                  <Text style={styles.dangerButtonText}>Show unsafe route</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {matches.length > 0 ? (
+            <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
+              {matches.map((node) => (
+                <TouchableOpacity
+                  key={node.id}
+                  style={styles.resultRow}
+                  onPress={() => {
+                    setSelected(node);
+                    setDestinationQuery(node.properties.name ?? "");
+                    setError(null);
+                  }}
+                >
+                  <View style={styles.resultIcon}>
+                    <MapPin size={14} color={colors.blue600} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resultName}>{node.properties.name}</Text>
+                    <Text style={styles.resultMeta}>Road node {node.properties.node_id}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : destinationQuery && !planning && !refusal ? (
+            <Text style={styles.emptyText}>No seeded road node matches that search.</Text>
+          ) : (
+            <Text style={styles.hintText}>
+              Search the seeded corridor by arterial or intersection, for example “C5” or “Shaw”.
+            </Text>
+          )}
+        </View>
+      ) : null}
+
       <View style={styles.mapArea}>
         <RouteMap
           route={route}
@@ -709,110 +814,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             </TouchableOpacity>
           </View>
         </View>
-      ) : (
-        <View style={styles.searchPanel}>
-          <View style={styles.searchBox}>
-            <MapPin size={16} color={colors.blue600} />
-            <TextInput
-              value={destinationQuery}
-              onChangeText={(value) => {
-                setDestinationQuery(value);
-                setSelected(null);
-                plannedFor.current = null;
-              }}
-              placeholder="Search a road or intersection"
-              placeholderTextColor={colors.slate400}
-              style={styles.searchInput}
-              autoCorrect={false}
-            />
-            {destinationQuery ? (
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Clear destination"
-                onPress={() => {
-                  setDestinationQuery("");
-                  setSelected(null);
-                }}
-                hitSlop={8}
-              >
-                <X size={16} color={colors.slate400} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          {planning ? (
-            <View style={styles.planningRow}>
-              <ActivityIndicator color={colors.blue600} />
-              <Text style={styles.planningText}>Planning a flood-safe route…</Text>
-            </View>
-          ) : null}
-
-          {error ? (
-            <View style={styles.errorRow}>
-              <Text style={styles.errorText}>{error}</Text>
-              {selected ? (
-                <TouchableOpacity onPress={() => void planRoute(selected)} hitSlop={8}>
-                  <Text style={styles.errorRetry}>Retry</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : null}
-
-          {refusal && selected ? (
-            <View style={styles.refusalCard}>
-              <Text style={styles.refusalTitle}>No safe route</Text>
-              <Text style={styles.refusalBody}>
-                Every verified route to {selected.properties.name ?? "this destination"} is blocked
-                for your {DRIVER_CLEARANCE_CM} cm clearance.
-              </Text>
-              <View style={styles.panelButtons}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => void planRoute(selected)}
-                >
-                  <Text style={styles.secondaryButtonText}>Retry</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dangerButton}
-                  onPress={() => void planRoute(selected, true)}
-                >
-                  <Text style={styles.dangerButtonText}>Show unsafe route</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-
-          {matches.length > 0 ? (
-            <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
-              {matches.map((node) => (
-                <TouchableOpacity
-                  key={node.id}
-                  style={styles.resultRow}
-                  onPress={() => {
-                    setSelected(node);
-                    setDestinationQuery(node.properties.name ?? "");
-                    setError(null);
-                  }}
-                >
-                  <View style={styles.resultIcon}>
-                    <MapPin size={14} color={colors.blue600} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.resultName}>{node.properties.name}</Text>
-                    <Text style={styles.resultMeta}>Road node {node.properties.node_id}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : destinationQuery && !planning && !refusal ? (
-            <Text style={styles.emptyText}>No seeded road node matches that search.</Text>
-          ) : (
-            <Text style={styles.hintText}>
-              Search the seeded corridor by arterial or intersection, for example “C5” or “Shaw”.
-            </Text>
-          )}
-        </View>
-      )}
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -972,7 +974,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   endButtonText: { fontSize: 12, fontWeight: "800", color: colors.white },
-  searchPanel: { borderTopWidth: 1, borderColor: colors.slate200, padding: 16, gap: 10 },
+  searchPanel: {
+    borderBottomWidth: 1,
+    borderColor: colors.slate200,
+    padding: 16,
+    gap: 10,
+    backgroundColor: colors.white,
+  },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
