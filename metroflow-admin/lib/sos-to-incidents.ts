@@ -1,8 +1,13 @@
-import type { Incident } from "./incidents";
+import { primarySource, type Incident } from "./incidents";
 import type { SOSRequest, Vehicle } from "./dispatch";
 import type { FieldReport } from "./reports";
 import type { HazardZone } from "./hazards";
 import { findNearestUnit, haversineDistanceKm } from "./geo";
+
+/** The API records an escalation in the report's decision reason (the report stays pending). */
+export function isEscalatedReport(report: FieldReport): boolean {
+  return report.decision_reason?.startsWith("Escalated to") ?? false;
+}
 
 export function sosToIncident(
   sos: SOSRequest,
@@ -72,8 +77,16 @@ export function sosToIncident(
       `SOS rescue requested at coordinates ${sos.latitude.toFixed(4)}, ${sos.longitude.toFixed(4)}.`,
     location: `Lat ${sos.latitude.toFixed(4)}, Lon ${sos.longitude.toFixed(4)}`,
     barangay: "Reported Corridor",
-    source: linkedReport?.photo ? "photo" : "sensor",
+    source: primarySource({
+      escalated: sos.status === "escalated",
+      sensorMismatch: linkedReport?.sensor_mismatch ?? false,
+      hasPhoto: Boolean(linkedReport?.photo),
+    }),
+    hasPhoto: Boolean(linkedReport?.photo),
+    escalated: sos.status === "escalated",
+    sensorMismatch: linkedReport?.sensor_mismatch ?? false,
     tags: [
+      ...(sos.status === "escalated" ? ["Escalated"] : []),
       ...(sos.vehicle_id ? ["Vehicle Assigned"] : ["Active SOS"]),
       ...(linkedReport?.photo ? ["Corroborating Evidence Attached"] : []),
     ],
@@ -147,8 +160,21 @@ export function reportToIncident(
         ? `Lat ${report.latitude.toFixed(4)}, Lon ${report.longitude.toFixed(4)}`
         : "GPS Fix Pending",
     barangay: report.barangay || "Pilot Sector",
-    source: report.photo ? "photo" : "sensor",
-    tags: [report.depth_label, report.status, ...(report.photo ? ["Photo Evidence"] : [])],
+    source: primarySource({
+      escalated: isEscalatedReport(report),
+      sensorMismatch: report.sensor_mismatch ?? false,
+      hasPhoto: Boolean(report.photo),
+    }),
+    hasPhoto: Boolean(report.photo),
+    escalated: isEscalatedReport(report),
+    sensorMismatch: report.sensor_mismatch ?? false,
+    tags: [
+      report.depth_label,
+      report.status,
+      ...(isEscalatedReport(report) ? ["Escalated"] : []),
+      ...(report.sensor_mismatch ? ["Gauge disagrees"] : []),
+      ...(report.photo ? ["Photo Evidence"] : []),
+    ],
     incidentType: "report",
 
     // FSD-FR-034

@@ -1,12 +1,13 @@
 /**
  * Shapes the triage queue shares between the SOS feed and the UI.
  *
- * The queue itself is live: `sosToIncident` maps `GET /api/v1/sos` rows, and
- * field reports are moderated on `/moderation` from `GET /api/v1/reports`. This
- * module holds the types and the display helpers, not demo data.
+ * The queue itself is live: `sosToIncident` maps `GET /api/v1/sos` rows and
+ * `reportToIncident` maps `GET /api/v1/reports`, so SOS signals and field reports
+ * share one urgency-ordered queue. This module holds the types and the display
+ * helpers, not demo data.
  */
 
-export type QueueSource = "photo" | "sensor" | "escalated";
+export type QueueSource = "photo" | "sensor" | "escalated" | "other";
 
 export type Incident = {
   id: string;
@@ -18,7 +19,12 @@ export type Incident = {
   narrative: string;
   location: string;
   barangay: string;
+  /** Display label: the most notable thing about this incident. */
   source: QueueSource;
+  /** FSD-FR-026: the queue filters read these flags, so an incident can match several. */
+  hasPhoto: boolean;
+  escalated: boolean;
+  sensorMismatch: boolean;
   tags: string[];
   incidentType?: "sos" | "report";
 
@@ -96,6 +102,31 @@ export function maskPhoneNumber(phone: string): string {
   return "+63 9** *** ****";
 }
 
-export function countBySource(incidents: Incident[], source: QueueSource) {
-  return incidents.filter((incident) => incident.source === source).length;
+/** The label shown for an incident, in order of how much a dispatcher should care. */
+export function primarySource(flags: {
+  escalated: boolean;
+  sensorMismatch: boolean;
+  hasPhoto: boolean;
+}): QueueSource {
+  if (flags.escalated) return "escalated";
+  if (flags.sensorMismatch) return "sensor";
+  return flags.hasPhoto ? "photo" : "other";
+}
+
+/** FSD-FR-026: filters are independent flags, so counts can overlap. */
+export function matchesQueueFilter(incident: Incident, filter: QueueFilter): boolean {
+  switch (filter) {
+    case "photo":
+      return incident.hasPhoto;
+    case "sensor":
+      return incident.sensorMismatch;
+    case "escalated":
+      return incident.escalated;
+    default:
+      return true;
+  }
+}
+
+export function countByFilter(incidents: Incident[], filter: QueueFilter): number {
+  return incidents.filter((incident) => matchesQueueFilter(incident, filter)).length;
 }

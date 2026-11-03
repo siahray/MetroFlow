@@ -2572,6 +2572,40 @@ def _neighbour_map(rows, now: datetime) -> dict[UUID, tuple[int, UUID | None]]:
     return neighbours
 
 
+def _rain_gauges(db: Session) -> list[tuple[float, float, bool, bool]]:
+    """Active rain gauges as ``(lat, lon, has_reading, is_breach)`` for the mismatch rule."""
+    gauges: list[tuple[float, float, bool, bool]] = []
+    sensors = (
+        db.query(
+            models.Sensor.sensor_id,
+            func.ST_Y(models.Sensor.geom),
+            func.ST_X(models.Sensor.geom),
+            models.Sensor.threshold_value,
+            models.Sensor.threshold_unit,
+        )
+        .filter(models.Sensor.sensor_type == "RAIN_GAUGE", models.Sensor.active)
+        .filter(models.Sensor.geom.isnot(None))
+        .all()
+    )
+    for sensor_id, lat, lon, threshold, unit in sensors:
+        latest = (
+            db.query(models.SensorReading)
+            .filter(models.SensorReading.sensor_id == sensor_id)
+            .order_by(models.SensorReading.recorded_at.desc())
+            .first()
+        )
+        breach = latest is not None and latest.unit == unit and latest.value >= threshold
+        gauges.append((lat, lon, latest is not None, breach))
+    return gauges
+
+
+def _flag_sensor_mismatch(db: Session, responses: list[ReportResponse]) -> list[ReportResponse]:
+    gauges = _rain_gauges(db)
+    for item in responses:
+        item.sensor_mismatch = reports.sensor_mismatch(item.latitude, item.longitude, gauges)
+    return responses
+
+
 def _report_response(
     report: models.IncidentReport,
     latitude: float | None,
@@ -2635,9 +2669,10 @@ def _report_detail(db: Session, report_id: UUID) -> ReportResponse:
         .one()
     )
     now = datetime.now(UTC).replace(tzinfo=None)
-    return _report_response(
+    detail = _report_response(
         row[0], row[1], row[2], row[3], _neighbour_map([row], now)[report_id], now
     )
+    return _flag_sensor_mismatch(db, [detail])[0]
 
 
 def _parse_captured_at(value: str | None) -> datetime | None:
@@ -2822,10 +2857,13 @@ def list_reports(
     )
     now = datetime.now(UTC).replace(tzinfo=None)
     neighbours = _neighbour_map(rows, now)
-    results = [
-        _report_response(row[0], row[1], row[2], row[3], neighbours[row[0].report_id], now)
-        for row in rows
-    ]
+    results = _flag_sensor_mismatch(
+        db,
+        [
+            _report_response(row[0], row[1], row[2], row[3], neighbours[row[0].report_id], now)
+            for row in rows
+        ],
+    )
     results.sort(key=lambda item: (item.urgency_score, item.submitted_at or now), reverse=True)
     return results[:limit]
 

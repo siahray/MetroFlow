@@ -771,6 +771,7 @@ response as a blob. The `report` body carries only the metadata (`mime`,
   "urgency_score": 2.61,
   "nearby_reports": 1,
   "possible_duplicate_of": null,
+  "sensor_mismatch": false,
   "photo": { "mime": "image/jpeg", "sha256": "9f2c…", "bytes": 184320 },
   "exif": { "camera_make": "Apple", "captured_at": "2026:10:29 13:00:00", "gps_latitude": 14.5764, "gps_longitude": 121.0851, "gps_in_pilot_area": true },
   "captured_at": "2026-10-29T13:00:00",
@@ -786,7 +787,7 @@ response as a blob. The `report` body carries only the metadata (`mime`,
 `urgency_score` is the stored submission-time score multiplied by the recency
 decay for the report's age (TSD §2.8), so the queue sorts by what still matters
 rather than by intake order. `nearby_reports` counts pending reports inside 150 m
-and 15 minutes; `possible_duplicate_of` names the nearest of them. Both are hints
+and 15 minutes; `possible_duplicate_of` names the nearest of them. `sensor_mismatch` is true when the nearest active rain gauge within 5 km has reported and is not in breach, so the citizen report and the gauge disagree (FSD-FR-026). Both are hints
 for the decision, never a reason to drop a report.
 
 Approval (`FSD-FR-080`) verifies the report and creates **and publishes** a hazard

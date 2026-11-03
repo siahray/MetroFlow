@@ -549,6 +549,8 @@ class ReportResponse(BaseModel):
     # the nearest one if it looks like the same event (FSD-FR-081).
     nearby_reports: int = 0
     possible_duplicate_of: UUID | None = None
+    # True when the nearest rain gauge in range reports no breach (FSD-FR-026).
+    sensor_mismatch: bool = False
     photo: ReportPhotoInfo | None = None
     exif: dict[str, Any] | None = None
     captured_at: datetime | None = None
