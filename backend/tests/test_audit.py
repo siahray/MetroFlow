@@ -167,3 +167,38 @@ def test_first_entry_is_the_chain_origin(db: Session):
     (entry,) = entries(db)
     assert audit.previous_hash(db) == entry.hash_signature
     assert audit.verify_chain(entries(db))["valid"] is True
+
+
+# Routes that change data but are not privileged actions: sign-in and sign-up, and the
+# citizen-side submissions that anyone may make. Everything else needs an audit entry.
+_UNAUDITED_BY_DESIGN = {
+    ("POST", "/api/v1/auth/login"),
+    ("POST", "/api/v1/auth/register"),
+    ("POST", "/api/v1/auth/send-verification"),
+    ("POST", "/api/v1/auth/verify"),
+    ("POST", "/api/v1/sos"),
+    ("POST", "/api/v1/reports"),
+    ("POST", "/api/v1/vehicles/{vehicle_id}/telemetry"),
+}
+
+
+def test_every_privileged_mutating_route_writes_an_audit_entry():
+    """FSD-FR-047, FSD-FR-093: overrides and dispatch decisions are always audited.
+
+    Fails when a new POST/PATCH/PUT/DELETE route is added without ``audit.record`` and is
+    not on the short list of routes that are public or citizen-side by design.
+    """
+    import pathlib
+    import re
+
+    source = (pathlib.Path(__file__).resolve().parents[1] / "main.py").read_text()
+    blocks = re.split(r"\n(?=@app\.(?:get|post|put|patch|delete)\()", source)
+    unaudited = set()
+    for block in blocks:
+        match = re.match(r'@app\.(post|put|patch|delete)\(\s*"([^"]+)"', block)
+        if match and "audit.record(" not in block:
+            unaudited.add((match.group(1).upper(), match.group(2)))
+    assert unaudited == _UNAUDITED_BY_DESIGN, (
+        f"unexpected unaudited routes: {sorted(unaudited - _UNAUDITED_BY_DESIGN)}; "
+        f"no longer unaudited: {sorted(_UNAUDITED_BY_DESIGN - unaudited)}"
+    )

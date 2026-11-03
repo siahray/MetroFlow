@@ -336,3 +336,29 @@ def read_exif(data: bytes) -> dict[str, object]:
     except (IndexError, ValueError):
         return {}
     return {}
+
+
+# A citizen report claims flooding. If the nearest rain gauge in range has reported and is
+# *not* in breach, the two disagree and the dispatcher should look harder (FSD-FR-026).
+SENSOR_MISMATCH_RADIUS_M = 5_000.0
+
+
+def sensor_mismatch(
+    latitude: float | None,
+    longitude: float | None,
+    gauges: list[tuple[float, float, bool, bool]],
+) -> bool:
+    """True when the nearest in-range gauge has a reading that contradicts the report.
+
+    ``gauges`` holds ``(latitude, longitude, has_reading, is_breach)``. A gauge with no
+    reading, or no gauge in range, is not a mismatch: absence of data is not a
+    contradiction.
+    """
+    if latitude is None or longitude is None:
+        return False
+    nearest: tuple[float, bool, bool] | None = None
+    for g_lat, g_lon, has_reading, is_breach in gauges:
+        distance = haversine_m(latitude, longitude, g_lat, g_lon)
+        if distance <= SENSOR_MISMATCH_RADIUS_M and (nearest is None or distance < nearest[0]):
+            nearest = (distance, has_reading, is_breach)
+    return nearest is not None and nearest[1] and not nearest[2]

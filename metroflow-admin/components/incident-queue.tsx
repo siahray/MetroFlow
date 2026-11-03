@@ -5,7 +5,7 @@ import { Search, RefreshCw, AlertCircle, Inbox, FilterX } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   QUEUE_FILTERS,
-  countBySource,
+  countByFilter,
   maskPhoneNumber,
   type Incident,
   type QueueFilter,
@@ -67,7 +67,7 @@ export function IncidentQueue({
 }: IncidentQueueProps) {
   const filters = QUEUE_FILTERS.map((option) => ({
     ...option,
-    count: option.id === "all" ? incidents.length : countBySource(incidents, option.id),
+    count: option.id === "all" ? incidents.length : countByFilter(incidents, option.id),
   }));
 
   return (
