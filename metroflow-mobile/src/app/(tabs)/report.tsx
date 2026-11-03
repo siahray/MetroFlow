@@ -5,17 +5,18 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import {
   Waves,
-  Bell,
   ChevronLeft,
   Droplet,
   Camera,
@@ -31,6 +32,7 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { useAuth } from '../../auth';
+import { Avatar } from '../../components/Avatar';
 import { enqueueReport, newClientId } from '../../offline';
 import {
   ApiError,
@@ -296,7 +298,7 @@ export default function ReportScreen() {
   const canSubmit = !submitting && !result && locationState === 'ready' && position !== null;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.white }}>
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
@@ -316,13 +318,7 @@ export default function ReportScreen() {
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => router.push('/(tabs)/home')}>
-              <Bell size={20} color={colors.slate600} />
-            </TouchableOpacity>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80' }}
-              style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: colors.slate200 }}
-            />
+            <Avatar name={user?.name || user?.email} size={32} />
           </View>
         </View>
 
@@ -344,7 +340,8 @@ export default function ReportScreen() {
       </View>
 
       {/* Scrollable Content */}
-      <ScrollView
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+<ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 32, gap: 20 }}
         keyboardShouldPersistTaps="handled"
@@ -703,6 +700,7 @@ export default function ReportScreen() {
           </Text>
         </View>
       </ScrollView>
+</KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

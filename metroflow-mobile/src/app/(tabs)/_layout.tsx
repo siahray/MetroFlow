@@ -9,14 +9,6 @@ export default function TabsLayout() {
   const pending = usePendingReports();
   const insets = useSafeAreaInsets();
   return (
-    <>
-    {pending > 0 && (
-      <View accessibilityRole="alert" style={{ backgroundColor: colors.amber100, paddingTop: insets.top + 6, paddingBottom: 6, paddingHorizontal: 16 }}>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.amber800 }}>
-          {pending} report{pending === 1 ? '' : 's'} waiting to sync
-        </Text>
-      </View>
-    )}
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -24,8 +16,8 @@ export default function TabsLayout() {
           backgroundColor: colors.white,
           borderTopColor: colors.slate100,
           borderTopWidth: 1,
-          height: 62,
-          paddingBottom: 8,
+          height: 56 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 6,
         },
         tabBarActiveTintColor: colors.sky600,
@@ -51,6 +43,9 @@ export default function TabsLayout() {
         name="report"
         options={{
           title: 'Report',
+          // Reports saved offline and not yet sent (FSD-FR-068).
+          tabBarBadge: pending > 0 ? pending : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.amber800, color: colors.white },
           tabBarIcon: ({ color, size }) => <Bell size={20} color={color} />,
         }}
       />
@@ -75,6 +70,5 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
-    </>
   );
 }

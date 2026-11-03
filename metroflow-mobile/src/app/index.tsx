@@ -5,13 +5,16 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Waves, ArrowRight, ShieldCheck } from 'lucide-react-native';
 import { useAuth } from '../auth';
+import { PasswordField } from '../components/PasswordField';
 import { login as apiLogin, register as apiRegister } from '../api';
 
 import { colors } from '../theme';
@@ -25,6 +28,7 @@ export default function IndexScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -52,6 +56,8 @@ export default function IndexScreen() {
     setError('');
     try {
       if (!name.trim()) throw new Error('Full name is required.');
+      if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+      if (password !== confirmPassword) throw new Error('Passwords do not match.');
       const user = await apiRegister({ name, email, password, role: 'DRIVER' });
       signIn(user);
       goToApp();
@@ -129,7 +135,8 @@ export default function IndexScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.slate50 }}>
       <StatusBar barStyle="dark-content" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+<ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24 }} keyboardShouldPersistTaps="handled">
         <TouchableOpacity
           onPress={() => { setMode('splash'); setError(''); }}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 32 }}
@@ -173,16 +180,20 @@ export default function IndexScreen() {
               placeholder="you@example.com"
             />
           </View>
-          <View>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.slate700, marginBottom: 6 }}>Password</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: colors.slate200, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 13, color: colors.slate900 }}
-              placeholder="••••••••"
+          <PasswordField
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            autoComplete={mode === 'register' ? 'new-password' : 'password'}
+          />
+          {mode === 'register' && (
+            <PasswordField
+              label="Confirm password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              autoComplete="new-password"
             />
-          </View>
+          )}
 
           {error ? (
             <Text style={{ fontSize: 12, color: colors.red600, textAlign: 'center' }}>
@@ -203,7 +214,7 @@ export default function IndexScreen() {
             }
           </TouchableOpacity>
 
-          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
+          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setConfirmPassword(''); }}>
             <Text style={{ fontSize: 13, color: colors.slate600 }}>
               {mode === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Sign In'}
             </Text>
@@ -214,6 +225,7 @@ export default function IndexScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+</KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

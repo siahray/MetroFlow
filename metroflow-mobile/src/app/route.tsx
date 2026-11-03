@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -84,7 +84,7 @@ function samePath(a: RoutePlan, b: RoutePlan) {
   return a.optimal_path_nodes.join(",") === b.optimal_path_nodes.join(",");
 }
 
-export default function RouteScreen() {
+export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const router = useRouter();
   const { user } = useAuth();
   const { destination: destinationParam } = useLocalSearchParams<{ destination?: string }>();
@@ -525,7 +525,7 @@ export default function RouteScreen() {
 
   if (!user) {
     return (
-      <SafeAreaView style={styles.screen}>
+      <SafeAreaView edges={edges} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
@@ -548,7 +548,7 @@ export default function RouteScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView edges={edges} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>

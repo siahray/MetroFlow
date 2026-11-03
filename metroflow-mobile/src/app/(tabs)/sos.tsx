@@ -4,24 +4,21 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Alert,
-  Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import {
   Waves,
-  Bell,
   ArrowLeft,
   Info,
   Target,
   Lock,
   MapPin,
   CheckCircle2,
-  ArrowUp,
   Car,
   User,
   BriefcaseMedical,
@@ -31,6 +28,8 @@ import {
 } from 'lucide-react-native';
 import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 
+import { useAuth } from '../../auth';
+import { Avatar } from '../../components/Avatar';
 import { colors } from '../../theme';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
@@ -39,6 +38,7 @@ const SOS_LOCATION_MAX_AGE_MS = 60_000;
 
 export default function SOSScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [situation, setSituation] = useState<SituationType>('pedestrian');
   const [sending, setSending] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -144,7 +144,7 @@ export default function SOSScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.slate50 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.slate50 }}>
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
@@ -164,13 +164,7 @@ export default function SOSScreen() {
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => Alert.alert('Notifications', 'SOS live channel monitoring active.')}>
-              <Bell size={20} color={colors.slate600} />
-            </TouchableOpacity>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80' }}
-              style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: colors.slate200 }}
-            />
+            <Avatar name={user?.name || user?.email} size={32} />
           </View>
         </View>
 
@@ -244,54 +238,18 @@ export default function SOSScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                 <Text style={{ fontSize: 10, fontWeight: '800', color: colors.blue600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                  IDENTIFIED LOCATION
+                  YOUR LOCATION
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                  <CheckCircle2 size={12} color={colors.slate400} />
-                  <Text style={{ fontSize: 10, fontWeight: '600', color: colors.slate400 }}>±3m accuracy</Text>
-                </View>
               </View>
               <Text style={{ fontSize: 15, fontWeight: '700', color: colors.slate900 }}>
-                Rizal Ave near LRT Station
+                {"Shared from your phone's GPS"}
               </Text>
               <Text style={{ fontSize: 12, color: colors.slate500, marginTop: 2 }}>
-                Metro District Sector 4 • Northbound
+                A fresh location fix is taken when you send the request.
               </Text>
             </View>
           </View>
 
-          {/* Water Hazard Level */}
-          <View style={{ backgroundColor: colors.white, borderRadius: 18, padding: 14, flexDirection: 'row', gap: 14, borderWidth: 1, borderColor: colors.slate100, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.red50, alignItems: 'center', justifyContent: 'center' }}>
-              <Waves size={20} color={colors.red500} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.red600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                  WATER HAZARD LEVEL
-                </Text>
-                <View style={{ backgroundColor: colors.red500, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: colors.white, textTransform: 'uppercase' }}>
-                    CRITICAL
-                  </Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.slate900 }}>
-                  1.5 ft
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.red50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                  <ArrowUp size={11} color={colors.red500} />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red500 }}>
-                    Rising fast (+0.2ft/10m)
-                  </Text>
-                </View>
-              </View>
-              <Text style={{ fontSize: 12, color: colors.slate500, marginTop: 2 }}>
-                Sensor Station #RZA-09 telemetry
-              </Text>
-            </View>
-          </View>
         </View>
 
         {/* Situation Type */}
