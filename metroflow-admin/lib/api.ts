@@ -36,6 +36,30 @@ export async function readErrorMessage(res: Response): Promise<string> {
       : `Too many requests. Try again in ${retryAfter} second${retryAfter === 1 ? "" : "s"}.`;
   }
 
+  if (res.status === 401) {
+    return "Your session has expired. Please sign in again.";
+  }
+
+  if (res.status === 403) {
+    return "You don't have permission to perform this action. Contact your administrator.";
+  }
+
+  if (res.status === 404) {
+    return "The requested resource was not found. It may have been deleted or moved.";
+  }
+
+  if (res.status === 409) {
+    return "This resource has been modified by another user. Please refresh and try again.";
+  }
+
+  if (res.status === 422) {
+    return "The data you submitted is invalid. Please check your input and try again.";
+  }
+
+  if (res.status >= 500) {
+    return "Server error. Please try again later or contact support if the problem persists.";
+  }
+
   const body = await res.text().catch(() => "");
   if (body) {
     try {

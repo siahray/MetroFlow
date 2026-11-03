@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Search, RefreshCw, AlertCircle, InBox, FilterX } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import {
@@ -10,6 +10,7 @@ import {
   type Incident,
   type QueueFilter,
 } from "@/lib/incidents";
+import { IncidentQueueSkeleton } from "./skeleton";
 
 type IncidentQueueProps = {
   incidents: Incident[];
@@ -17,6 +18,9 @@ type IncidentQueueProps = {
   filter: QueueFilter;
   query: string;
   dismissed: ReadonlySet<string>;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   onSelect: (id: string) => void;
   onDismiss: (id: string) => void;
   onFilterChange: (filter: QueueFilter) => void;
@@ -53,6 +57,9 @@ export function IncidentQueue({
   filter,
   query,
   dismissed,
+  loading = false,
+  error = null,
+  onRetry,
   onSelect,
   onDismiss,
   onFilterChange,
@@ -70,7 +77,7 @@ export function IncidentQueue({
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-slate-900">Incoming Queue</h2>
             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-800">
-              {incidents.length}
+              {loading ? "..." : incidents.length}
             </span>
           </div>
           <span className="text-xs text-slate-400">
@@ -110,11 +117,45 @@ export function IncidentQueue({
       </div>
 
       <div className="flex-1 divide-y divide-slate-100 overflow-y-auto">
-        {incidents.length === 0 ? (
-          <p className="p-6 text-center text-xs text-slate-400">No incidents match this filter.</p>
-        ) : null}
-
-        {incidents.map((incident) => {
+        {error ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <AlertCircle className="h-8 w-8 text-rose-500" />
+            <p className="text-xs text-slate-600">Failed to load queue</p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Retry
+              </button>
+            )}
+          </div>
+        ) : loading ? (
+          <IncidentQueueSkeleton count={5} />
+        ) : incidents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <InBox className="h-12 w-12 text-slate-300" />
+            <p className="text-sm font-semibold text-slate-700">No incidents match this filter</p>
+            <p className="text-xs text-slate-500">
+              {query.trim() || filter !== "all"
+                ? "Try adjusting your search or filter to see more incidents."
+                : "All incidents have been processed. Great work!"}
+            </p>
+            {filter !== "all" && (
+              <button
+                type="button"
+                onClick={() => onFilterChange("all")}
+                className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                <FilterX className="h-3 w-3" />
+                Clear filter
+              </button>
+            )}
+          </div>
+        ) : (
+          incidents.map((incident) => {
           const selected = incident.id === selectedId;
           const isDismissed = dismissed.has(incident.id);
           const reporterDisplay = incident.reporter.includes("+63")
