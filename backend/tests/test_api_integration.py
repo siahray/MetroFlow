@@ -1377,8 +1377,9 @@ def test_dispatch_preview_ranks_and_blocks_double_booking(client):
             "vehicle_type": "flood_truck",
             "clearance_cm": 35,
             "status": "AVAILABLE",
-            "current_location_lat": 14.5995,
-            "current_location_lon": 120.9842,
+            # Must snap to a different node than the SOS below, or the route has no length.
+            "current_location_lat": 14.5850,
+            "current_location_lon": 121.0560,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -1423,7 +1424,8 @@ def test_dispatch_preview_ranks_and_blocks_double_booking(client):
         assert blocked.status_code == 409
 
         # Undo frees the unit, so the second incident can now take it.
-        assert client.post(f"/api/v1/dispatch/{sos_id}/confirm").status_code == 200
+        first = client.post(f"/api/v1/dispatch/{sos_id}/confirm", json={})
+        assert first.status_code == 200, first.text
         assert client.post(f"/api/v1/dispatch/{sos_id}/undo").status_code == 200
         assert (
             client.post(
@@ -1431,7 +1433,8 @@ def test_dispatch_preview_ranks_and_blocks_double_booking(client):
             ).status_code
             == 200
         )
-        assert client.post(f"/api/v1/dispatch/{sos2_id}/confirm").status_code == 200
+        second = client.post(f"/api/v1/dispatch/{sos2_id}/confirm", json={})
+        assert second.status_code == 200, second.text
         assert client.post(f"/api/v1/dispatch/{sos2_id}/undo").status_code == 200
     finally:
         _delete_test_vehicle(client, vehicle_id)
@@ -1521,8 +1524,12 @@ def test_user_management_self_protection(client):
 
 
 def test_user_management_last_admin_protection(client):
-    """FSD-FR-048: Cannot delete the last administrator account."""
-    # Try to delete the bootstrap admin (which is likely the only admin)
+    """FSD-FR-048: the only administrator cannot be deleted.
+
+    The caller of this admin-only route is itself an administrator, so deleting the
+    sole admin is always a self-delete and is refused (403) before the last-admin
+    check (409) can apply; the 409 stays as defence in depth.
+    """
     users = client.get("/api/v1/users")
     assert users.status_code == 200
     admins = [u for u in users.json() if u["role"] in ("SUPER_ADMIN", "LGU_DISPATCHER")]
@@ -1530,8 +1537,11 @@ def test_user_management_last_admin_protection(client):
     if len(admins) == 1:
         admin_id = admins[0]["user_id"]
         delete_resp = client.delete(f"/api/v1/users/{admin_id}")
-        assert delete_resp.status_code == 409
-        assert "last administrator" in delete_resp.json()["detail"].lower()
+        assert delete_resp.status_code == 403
+        assert "own account" in delete_resp.json()["detail"].lower()
+        # The refusal changed nothing.
+        remaining = client.get("/api/v1/users").json()
+        assert any(u["user_id"] == admin_id for u in remaining)
 
 
 def test_export_audit_csv(client):
