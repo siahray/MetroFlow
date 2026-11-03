@@ -3,11 +3,11 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Mail, Car, Map, ChevronRight, LogOut, ShieldCheck, Gauge, AlertTriangle } from 'lucide-react-native';
+import { Mail, Car, Map, ChevronRight, LogOut, ShieldCheck, Gauge } from 'lucide-react-native';
 import { useAuth } from '../../auth';
 
 import { colors } from '../../theme';
@@ -30,7 +30,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.slate50 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.slate50 }}>
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
@@ -46,15 +46,14 @@ export default function ProfileScreen() {
           </View>
           <Text style={{ fontSize: 18, fontWeight: '800', color: colors.slate900 }}>{displayName}</Text>
           <Text style={{ fontSize: 12, color: colors.blue600, fontWeight: '600', marginTop: 4 }}>
-            {user?.role && user.role !== 'EMERGENCY_DRIVER' ? user.role : 'Public Motorist / Commuter'}
+            {user?.role && user.role !== 'EMERGENCY_DRIVER' ? user.role : 'Driver'}
           </Text>
 
           {/* Stats row */}
           <View style={{ flexDirection: 'row', width: '100%', marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderColor: colors.slate100, gap: 0 }}>
             {[
               { label: 'Clearance', value: '28 cm', icon: Gauge, color: colors.slate900 },
-              { label: 'Alert Sync', value: 'Active',  icon: ShieldCheck, color: colors.green600 },
-              { label: 'Reports',   value: '0',       icon: AlertTriangle, color: colors.slate900 },
+              { label: 'Account', value: user ? 'Signed in' : 'Guest', icon: ShieldCheck, color: user ? colors.green600 : colors.slate500 },
             ].map((stat, i) => {
               const Icon = stat.icon;
               return (
@@ -88,8 +87,8 @@ export default function ProfileScreen() {
                 <Car size={15} color={colors.slate500} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 10, color: colors.slate400 }}>Registered Vehicle</Text>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>Personal Vehicle (SUV / Sedan)</Text>
+                <Text style={{ fontSize: 10, color: colors.slate400 }}>Routing clearance</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>28 cm (pilot default)</Text>
               </View>
             </View>
           </View>
@@ -109,7 +108,7 @@ export default function ProfileScreen() {
                 </View>
                 <View>
                   <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>Offline Maps</Text>
-                  <Text style={{ fontSize: 10, color: colors.slate400 }}>Visual placeholder — out of pilot scope</Text>
+                  <Text style={{ fontSize: 10, color: colors.slate400 }}>Saved route data and reports waiting to sync</Text>
                 </View>
               </View>
               <ChevronRight size={16} color={colors.slate300} />
