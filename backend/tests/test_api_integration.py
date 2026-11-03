@@ -1744,3 +1744,10 @@ def test_nearest_sensor_distance_is_in_kilometres(client, created_records):
         assert 0.9 < got["distance_km"] < 1.1
     finally:
         client.delete("/api/v1/sensors/TEST_RAIN_DIST")
+
+
+def test_report_replay_with_the_same_client_id_is_stored_once(client, created_records):
+    client_id = str(__import__("uuid").uuid4())
+    first = submit_report(client, created_records, client_id=client_id)
+    second = submit_report(client, created_records, client_id=client_id)
+    assert second["report_id"] == first["report_id"]

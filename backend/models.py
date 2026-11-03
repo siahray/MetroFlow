@@ -245,6 +245,13 @@ class IncidentReport(Base):
         index=True,
         comment="Salted hash of the reporter; no raw identity",
     )
+    client_id = Column(
+        UUID(as_uuid=True),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="Device-generated id that makes an offline replay idempotent",
+    )
     source = Column(
         String(20), nullable=False, default="PHOTO", comment="PHOTO, SENSOR, CCTV or CALL"
     )
