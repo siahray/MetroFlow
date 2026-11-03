@@ -1761,3 +1761,26 @@ def test_report_replay_with_the_same_client_id_is_stored_once(client, created_re
     first = submit_report(client, created_records, client_id=client_id)
     second = submit_report(client, created_records, client_id=client_id)
     assert second["report_id"] == first["report_id"]
+
+
+def test_every_public_table_has_row_level_security(client):
+    """Supabase exposes the schema over PostgREST: a table without RLS is open to the anon key.
+
+    spatial_ref_sys is the PostGIS system catalogue, owned by the extension.
+    """
+    from sqlalchemy import text
+
+    from database import engine
+
+    with engine.connect() as connection:
+        open_tables = [
+            row[0]
+            for row in connection.execute(
+                text(
+                    "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                    "WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity "
+                    "AND c.relname <> 'spatial_ref_sys' ORDER BY 1"
+                )
+            )
+        ]
+    assert open_tables == [], f"tables without row level security: {open_tables}"
