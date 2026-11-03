@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Eye, EyeOff, Lock, ShieldAlert, ShieldCheck, User, Waves } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, ShieldAlert, User, Waves } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { useToast } from "./toast-provider";
@@ -67,17 +67,8 @@ export function LoginScreen({
         <div className="flex items-center gap-2">
           <span className="inline-block h-2 w-2 animate-ping rounded-full bg-emerald-500" />
           <span className="font-semibold tracking-wider text-slate-700 uppercase">
-            MDRRMC Operational Grid
+            MetroFlow Flood Response
           </span>
-          <span className="text-slate-300">•</span>
-          <span className="font-mono text-slate-500">NODE PH-NCR-04</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1 text-slate-600 shadow-sm">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-            <span>SSL 256-Bit Encrypted</span>
-          </span>
-          <span className="font-mono text-slate-400">v4.8.2-rc</span>
         </div>
       </div>
 
@@ -132,9 +123,7 @@ export function LoginScreen({
                 </label>
                 <button
                   type="button"
-                  onClick={() =>
-                    show("Please contact CDMO System Admin (+63 2 8888-FLOW) to reset credentials.")
-                  }
+                  onClick={() => show("Ask a MetroFlow administrator to reset your password.")}
                   className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
                 >
                   Forgot password?
@@ -193,22 +182,19 @@ export function LoginScreen({
 
           <div className="space-y-2 border-t border-slate-100 pt-4 text-center">
             <span className="inline-block text-[10px] font-bold tracking-widest text-slate-400 uppercase">
-              Official Service
+              Restricted access
             </span>
             <div className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               <ShieldAlert className="h-4 w-4 text-sky-600" />
-              <span className="font-medium">Authorized LGU & MDRRMC Personnel Only</span>
+              <span className="font-medium">Authorized dispatchers and administrators only</span>
             </div>
           </div>
         </div>
       </div>
 
       <div className="space-y-1 py-2 text-center text-xs text-slate-500">
-        <p>Pasig-Marikina River Basin Disaster Risk Reduction Network</p>
-        <p className="text-slate-400">
-          Need operational support? Contact CDMO Ops at{" "}
-          <span className="font-mono text-slate-600">+63 (2) 8888-FLOW</span>
-        </p>
+        <p>MetroFlow: flood-aware mobility and rescue dispatch</p>
+        <p className="text-slate-400">An academic project. Not an official government system.</p>
       </div>
     </div>
   );

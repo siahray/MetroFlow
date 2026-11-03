@@ -162,14 +162,12 @@ export function Sidebar({
       {/* Station / Officer Profile Box */}
       <div className="m-3 space-y-1 rounded-lg border border-slate-800 bg-slate-800/40 p-3 text-[11px] text-slate-400">
         <div className="flex items-center justify-between font-semibold text-slate-300">
-          <span>MDRRMC PASIG</span>
+          <span>MetroFlow</span>
           <Shield className="h-3.5 w-3.5 text-sky-400" />
         </div>
-        <p className="font-medium text-slate-300">
-          {user?.name ? `${user.name}` : "MDRRMC Operations"}
-        </p>
+        <p className="font-medium text-slate-300">{user?.name || user?.email || "Signed in"}</p>
         <p className="font-mono text-[10px] text-slate-500">
-          {user?.role === "SUPER_ADMIN" ? "Super Admin" : "Station 4 • Dispatch Officer"}
+          {user?.role === "SUPER_ADMIN" ? "Super Admin" : "Dispatcher"}
         </p>
         <button
           type="button"
