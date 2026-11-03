@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
-import MapView, { Marker, Polygon, Polyline, type Region } from "react-native-maps";
+import { StyleSheet, Text, View } from "react-native";
+import MapView, { Marker, Polygon, Polyline, UrlTile, type Region } from "react-native-maps";
 
 import type { HazardInfo, RoutePlan } from "../api";
 import { polygonRing, routeCoordinates, type LatLng } from "./geo";
+import { basemap } from "./tiles";
 
 import { colors } from '../theme';
 type MapHazard = Pick<HazardInfo, "hazard_id" | "name" | "obstruction_level" | "geometry">;
@@ -59,7 +60,11 @@ export function RouteMap({ route, position, destination, destinationName, hazard
         region={region ?? undefined}
         showsUserLocation={false}
         toolbarEnabled={false}
+        // The basemap comes from our own raster tiles, not Google's.
+        mapType="none"
       >
+        <UrlTile urlTemplate={basemap.urlTemplate} maximumZ={basemap.maximumZ} tileSize={256} zIndex={-1} />
+
         {line.length > 1 ? (
           <Polyline
             coordinates={line}
@@ -103,10 +108,21 @@ export function RouteMap({ route, position, destination, destinationName, hazard
           />
         ) : null}
       </MapView>
+      <Text style={styles.attribution}>{basemap.attribution}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: "hidden", backgroundColor: colors.slate200 },
+  attribution: {
+    position: "absolute",
+    right: 6,
+    bottom: 4,
+    fontSize: 9,
+    color: colors.slate600,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    paddingHorizontal: 4,
+    borderRadius: 3,
+  },
 });
