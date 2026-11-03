@@ -46,6 +46,7 @@ from schemas import HazardResponse, SOSResponse, VehicleResponse
 HAZARD = "hazard"
 VEHICLE = "vehicle"
 SOS = "sos"
+REPORTS = "reports"
 
 HAZARD_CREATED = "hazard.created"
 HAZARD_UPDATED = "hazard.updated"
@@ -54,6 +55,8 @@ VEHICLE_CREATED = "vehicle.created"
 VEHICLE_UPDATED = "vehicle.updated"
 SOS_CREATED = "sos.created"
 SOS_UPDATED = "sos.updated"
+REPORT_CREATED = "report.created"
+REPORT_UPDATED = "report.updated"
 
 # The first frame of a fresh subscription: the current state, so a client does
 # not have to fetch the collection and then subscribe and reconcile the overlap.

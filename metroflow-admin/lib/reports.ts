@@ -81,7 +81,9 @@ export type NearestSensorReading = {
 };
 
 export async function listReports(status: ReportStatus = "PENDING"): Promise<FieldReport[]> {
-  return fetchJSON<FieldReport[]>(`/api/v1/reports?status=${encodeURIComponent(status)}`);
+  return fetchJSON<FieldReport[]>(`/api/v1/reports?status=${encodeURIComponent(status)}`, {
+    cache: "no-store",
+  });
 }
 
 export async function getReport(reportId: string): Promise<FieldReport> {
