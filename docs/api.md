@@ -717,8 +717,18 @@ rows as `GET /api/v1/hazards?active=true`.
 | Method  | Path                            | Body                                                       | Response    | Reference               |
 | ------- | ------------------------------- | ---------------------------------------------------------- | ----------- | ----------------------- |
 | `GET`   | `/api/v1/vehicles`              | —                                                          | `vehicle[]` | BR-016 / FSD-FR-075–076 |
-| `POST`  | `/api/v1/vehicles`              | `call_sign`, `vehicle_type`, `clearance_cm`, `speed_kmh`   | `vehicle`   | BR-016 / FSD-FR-075     |
-| `PATCH` | `/api/v1/vehicles/{vehicle_id}` | any of the above, plus `status`                            | `vehicle`   | BR-016 / FSD-FR-076     |
+| `POST`  | `/api/v1/vehicles`              | `call_sign`, `vehicle_type`, `clearance_cm`, `status?`, `current_location_lat?` + `current_location_lon?` | `vehicle`   | BR-016 / FSD-FR-075     |
+| `PATCH` | `/api/v1/vehicles/{vehicle_id}` | any of the above, plus `speed_kmh`                         | `vehicle`   | BR-016 / FSD-FR-076     |
+| `DELETE` | `/api/v1/vehicles/{vehicle_id}` | —                                                          | `204`       | BR-016 / FSD-FR-075     |
+
+Adding, editing and removing units is **super admin only** (`403` for a dispatcher); every change is
+audited (`VEHICLE_CREATE`, `VEHICLE_UPDATE`, `VEHICLE_DELETE`) and, for stream clients, emitted as
+`vehicle.created`, `vehicle.updated` or `vehicle.deleted`. `status` is `AVAILABLE`, `DISPATCHED`,
+`ON_SCENE` or `OUT_OF_SERVICE` (case-insensitive, stored upper case); `DISPATCHED` is set by the
+dispatch flow. `clearance_cm` is 1 to 300. A call sign is unique **ignoring case**: a duplicate on create
+or rename is `409`. `DELETE` is `409` while the unit is on a live dispatch (an incident `assigned`,
+`confirmed` or `dispatched`); otherwise finished incidents that referenced it keep their record with
+`vehicle_id` set to `null`. Invalid values are `422`.
 
 Clearance is in centimetres and speed in km/h, matching §2 and the driver UI.
 

@@ -1921,3 +1921,157 @@ def test_flood_state_requires_a_session(client):
 
     with TestClient(app) as anonymous:
         assert anonymous.get("/api/v1/flood-state").status_code == 401
+
+
+# --- Fleet management: the super admin adds, edits and removes units --------
+
+
+def _unit(client, call_sign, **over):
+    body = {"call_sign": call_sign, "vehicle_type": "RESCUE_BOAT", "clearance_cm": 60, **over}
+    return client.post("/api/v1/vehicles", json=body)
+
+
+def _audit_count(client, action_type):
+    return len(client.get("/api/v1/audit", params={"action_type": action_type}).json())
+
+
+def test_super_admin_adds_edits_and_removes_a_unit_with_one_audit_entry_each(client):
+    created_before = _audit_count(client, "VEHICLE_CREATE")
+    updated_before = _audit_count(client, "VEHICLE_UPDATE")
+    deleted_before = _audit_count(client, "VEHICLE_DELETE")
+
+    added = _unit(client, "TEST-FLEET-1", status="available")
+    assert added.status_code == 200, added.text
+    unit = added.json()
+    vehicle_id = unit["vehicle_id"]
+    assert unit["status"] == "AVAILABLE"  # normalised
+    assert unit["clearance_cm"] == 60
+
+    edited = client.patch(
+        f"/api/v1/vehicles/{vehicle_id}",
+        json={"call_sign": "TEST-FLEET-1B", "clearance_cm": 75, "status": "out_of_service"},
+    )
+    assert edited.status_code == 200, edited.text
+    assert (edited.json()["call_sign"], edited.json()["clearance_cm"], edited.json()["status"]) == (
+        "TEST-FLEET-1B",
+        75,
+        "OUT_OF_SERVICE",
+    )
+    assert any(v["vehicle_id"] == vehicle_id for v in client.get("/api/v1/vehicles").json())
+
+    assert client.delete(f"/api/v1/vehicles/{vehicle_id}").status_code == 204
+    assert all(v["vehicle_id"] != vehicle_id for v in client.get("/api/v1/vehicles").json())
+    assert client.delete(f"/api/v1/vehicles/{vehicle_id}").status_code == 404
+
+    assert _audit_count(client, "VEHICLE_CREATE") == created_before + 1
+    assert _audit_count(client, "VEHICLE_UPDATE") == updated_before + 1
+    assert _audit_count(client, "VEHICLE_DELETE") == deleted_before + 1
+
+
+def test_a_call_sign_cannot_be_reused_even_in_a_different_case(client):
+    first = _unit(client, "TEST-FLEET-DUP")
+    assert first.status_code == 200
+    other = _unit(client, "TEST-FLEET-OTHER")
+    assert other.status_code == 200
+    try:
+        assert _unit(client, "test-fleet-dup").status_code == 409
+        clash = client.patch(
+            f"/api/v1/vehicles/{other.json()['vehicle_id']}", json={"call_sign": "Test-Fleet-Dup"}
+        )
+        assert clash.status_code == 409
+    finally:
+        for created in (first, other):
+            client.delete(f"/api/v1/vehicles/{created.json()['vehicle_id']}")
+
+
+def test_a_unit_is_validated_before_it_is_stored(client):
+    assert _unit(client, "TEST-FLEET-BAD", status="flying").status_code == 422
+    assert _unit(client, "TEST-FLEET-BAD", clearance_cm=0).status_code == 422
+    assert _unit(client, "TEST-FLEET-BAD", clearance_cm=900).status_code == 422
+    assert _unit(client, "   ").status_code == 422
+    assert _unit(client, "TEST-FLEET-BAD", current_location_lat=123).status_code == 422
+
+
+def test_a_unit_on_a_live_dispatch_cannot_be_removed_but_a_finished_one_can(client):
+    unit = _unit(
+        client, "TEST-FLEET-BUSY", current_location_lat=14.5850, current_location_lon=121.0560
+    )
+    assert unit.status_code == 200
+    vehicle_id = unit.json()["vehicle_id"]
+    sos_id = client.post(
+        "/api/v1/sos",
+        json={"latitude": 14.6060, "longitude": 120.9850, "note": "fleet delete test"},
+    ).json()["sos_id"]
+    try:
+        assert (
+            client.post(f"/api/v1/sos/{sos_id}/assign", json={"vehicle_id": vehicle_id}).status_code
+            == 200
+        )
+        blocked = client.delete(f"/api/v1/vehicles/{vehicle_id}")
+        assert blocked.status_code == 409
+        assert "dispatch" in blocked.json()["detail"].lower()
+
+        # Rejecting the incident releases the unit, but the incident still points at it.
+        assert (
+            client.post(f"/api/v1/sos/{sos_id}/reject", json={"reason": "fleet test"}).status_code
+            == 200
+        )
+        assert client.delete(f"/api/v1/vehicles/{vehicle_id}").status_code == 204
+        # The finished incident keeps its record, with the unit detached.
+        remaining = next(s for s in client.get("/api/v1/sos").json() if s["sos_id"] == sos_id)
+        assert remaining["status"] == "rejected"
+        assert remaining["vehicle_id"] is None
+    finally:
+        # Free the unit whatever happened above, then remove it through the API, which
+        # detaches any incident that still points at it.
+        client.post(f"/api/v1/sos/{sos_id}/reject", json={"reason": "fleet test cleanup"})
+        client.delete(f"/api/v1/vehicles/{vehicle_id}")
+
+
+def test_a_dispatcher_can_see_the_fleet_but_not_change_it(client):
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    created = client.post(
+        "/api/v1/users",
+        json={
+            "name": "Fleet Test Dispatcher",
+            "email": "fleet.dispatcher@example.com",
+            "password": "SecurePass123",
+            "role": "LGU_DISPATCHER",
+        },
+    )
+    assert created.status_code == 201, created.text
+    user_id = created.json()["user_id"]
+    unit = _unit(client, "TEST-FLEET-GUARD")
+    assert unit.status_code == 200
+    vehicle_id = unit.json()["vehicle_id"]
+    try:
+        with TestClient(app) as dispatcher:
+            login = dispatcher.post(
+                "/api/v1/auth/login",
+                json={"email": "fleet.dispatcher@example.com", "password": "SecurePass123"},
+            )
+            assert login.status_code == 200, login.text
+            dispatcher.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
+
+            assert dispatcher.get("/api/v1/vehicles").status_code == 200
+            assert _unit(dispatcher, "TEST-FLEET-NOPE").status_code == 403
+            assert (
+                dispatcher.patch(
+                    f"/api/v1/vehicles/{vehicle_id}", json={"clearance_cm": 99}
+                ).status_code
+                == 403
+            )
+            assert dispatcher.delete(f"/api/v1/vehicles/{vehicle_id}").status_code == 403
+        # Nothing was changed by the refused calls.
+        assert (
+            next(v for v in client.get("/api/v1/vehicles").json() if v["vehicle_id"] == vehicle_id)[
+                "clearance_cm"
+            ]
+            == 60
+        )
+    finally:
+        client.delete(f"/api/v1/vehicles/{vehicle_id}")
+        client.delete(f"/api/v1/users/{user_id}")

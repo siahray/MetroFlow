@@ -104,6 +104,8 @@ ALLOWED_ROLES = ADMIN_ROLES | DRIVER_ROLES
 # because a driver account is authenticated but never privileged.
 require_user = get_current_user
 require_admin = require_roles(*ADMIN_ROLES)
+# Managing the fleet itself (add, edit, remove units) is for the super admin only.
+require_super_admin = require_roles("SUPER_ADMIN")
 
 
 def seed_database(db: Session) -> None:
@@ -1685,14 +1687,28 @@ def list_hazards(
     return query.order_by(models.HazardZone.created_at.desc()).all()
 
 
+def _call_sign_taken(db: Session, call_sign: str, *, except_id: int | None = None) -> bool:
+    query = db.query(models.Vehicle.vehicle_id).filter(
+        func.lower(models.Vehicle.call_sign) == call_sign.lower()
+    )
+    if except_id is not None:
+        query = query.filter(models.Vehicle.vehicle_id != except_id)
+    return query.first() is not None
+
+
 @app.post("/api/v1/vehicles", response_model=VehicleResponse)
 def create_vehicle(
     vehicle: VehicleCreate,
-    _user: models.User = Depends(require_admin),
+    _user: models.User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    """Add a rescue unit to the fleet (super admin only, audited)."""
     import models
 
+    if _call_sign_taken(db, vehicle.call_sign):
+        raise HTTPException(
+            status_code=409, detail=f"Call sign {vehicle.call_sign} is already in use"
+        )
     max_id = db.query(func.max(models.Vehicle.vehicle_id)).scalar() or 0
     new_vehicle = models.Vehicle(
         vehicle_id=int(max_id) + 1,
@@ -1732,15 +1748,20 @@ def create_vehicle(
 def update_vehicle(
     vehicle_id: int,
     vehicle: VehicleUpdate,
-    _user: models.User = Depends(require_admin),
+    _user: models.User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    """Edit a rescue unit (super admin only, audited)."""
     import models
 
     db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
     if not db_vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     changes = vehicle.model_dump(exclude_unset=True, exclude_none=True)
+    if "call_sign" in changes and _call_sign_taken(db, changes["call_sign"], except_id=vehicle_id):
+        raise HTTPException(
+            status_code=409, detail=f"Call sign {changes['call_sign']} is already in use"
+        )
     for field, value in changes.items():
         setattr(db_vehicle, field, value)
     if changes:
@@ -1760,6 +1781,59 @@ def update_vehicle(
     db.commit()
     db.refresh(db_vehicle)
     return db_vehicle
+
+
+@app.delete("/api/v1/vehicles/{vehicle_id}", status_code=204)
+def delete_vehicle(
+    vehicle_id: int,
+    _user: models.User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Remove a rescue unit (super admin only, audited).
+
+    A unit committed to a live dispatch cannot be removed: undo or finish the dispatch first.
+    Finished incidents keep their record, with the unit detached.
+    """
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
+    if not db_vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    live_dispatch = (
+        db.query(models.SOSRequest.sos_id)
+        .filter(
+            models.SOSRequest.vehicle_id == vehicle_id,
+            models.SOSRequest.status.in_(("assigned", "confirmed", "dispatched")),
+        )
+        .first()
+    )
+    if live_dispatch or (db_vehicle.status or "").upper() == "DISPATCHED":
+        raise HTTPException(
+            status_code=409,
+            detail="This unit is committed to a dispatch. Undo or finish it before removing the unit.",
+        )
+
+    db.query(models.SOSRequest).filter(models.SOSRequest.vehicle_id == vehicle_id).update(
+        {models.SOSRequest.vehicle_id: None}
+    )
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.VEHICLE_DELETE,
+        payload={
+            "vehicle_id": vehicle_id,
+            "call_sign": db_vehicle.call_sign,
+            "vehicle_type": db_vehicle.vehicle_type,
+            "actor": _user.name or _user.email,
+        },
+    )
+    events.emit(
+        db,
+        channel=events.VEHICLE,
+        event_type=events.VEHICLE_DELETED,
+        payload={"vehicle_id": vehicle_id, "call_sign": db_vehicle.call_sign},
+    )
+    db.delete(db_vehicle)
+    db.commit()
 
 
 @app.post("/api/v1/vehicles/{vehicle_id}/telemetry", status_code=204)

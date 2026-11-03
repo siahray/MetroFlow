@@ -52,6 +52,7 @@ HAZARD_UPDATED = "hazard.updated"
 HAZARD_PUBLISHED = "hazard.published"
 VEHICLE_CREATED = "vehicle.created"
 VEHICLE_UPDATED = "vehicle.updated"
+VEHICLE_DELETED = "vehicle.deleted"
 SOS_CREATED = "sos.created"
 SOS_UPDATED = "sos.updated"
 
