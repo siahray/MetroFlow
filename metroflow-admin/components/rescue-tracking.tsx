@@ -1,15 +1,25 @@
 "use client";
 
-import { ArrowLeft, RefreshCw, Truck } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { cn } from "@/lib/cn";
-import { listVehicles, type SOSRequest, type Vehicle } from "@/lib/dispatch";
+import {
+  createVehicle,
+  deleteVehicle,
+  listVehicles,
+  updateVehicle,
+  type SOSRequest,
+  type Vehicle,
+} from "@/lib/dispatch";
+import { unitToForm } from "@/lib/fleet";
+import { getSessionUser, subscribeToSession } from "@/lib/session";
 import { listSOS } from "@/lib/sos-live";
 import { toUnitStatus } from "@/lib/rescue";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
+import { UnitFormModal } from "./unit-form-modal";
 
 type RescueTrackingProps = {
   onBack: () => void;
@@ -40,6 +50,14 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Only the super admin manages the fleet; everyone else sees it read-only.
+  const user = useSyncExternalStore(subscribeToSession, getSessionUser, () => null);
+  const canManage = user?.role === "SUPER_ADMIN";
+  const [editing, setEditing] = useState<Vehicle | "new" | null>(null);
+  const [removing, setRemoving] = useState<Vehicle | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -61,6 +79,22 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const missionOf = (vehicleId: number) => missions.find((m) => m.vehicle_id === vehicleId);
   const callSignOf = (vehicleId: number | null) =>
     vehicles?.find((v) => v.vehicle_id === vehicleId)?.call_sign ?? "unit";
+
+  async function handleConfirmRemove() {
+    if (!removing || removeBusy) return;
+    setRemoveBusy(true);
+    setRemoveError(null);
+    try {
+      await deleteVehicle(removing.vehicle_id);
+      onAction(`Removed unit ${removing.call_sign}`);
+      setRemoving(null);
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      setRemoveError(error instanceof Error ? error.message : "Could not remove the unit.");
+    } finally {
+      setRemoveBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -98,16 +132,27 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setReloadKey((k) => k + 1);
-            onAction("Refreshing fleet data");
-          }}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => setEditing("new")}
+              className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add unit
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setReloadKey((k) => k + 1);
+              onAction("Refreshing fleet data");
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Units */}
@@ -124,7 +169,9 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
             <Truck className="mx-auto h-8 w-8 text-slate-300" />
             <p className="mt-2 text-sm font-semibold text-slate-700">No rescue units registered</p>
             <p className="text-xs text-slate-500">
-              Units added through the fleet API will appear here.
+              {canManage
+                ? "Use Add unit to register the first one."
+                : "A super admin can register units."}
             </p>
           </div>
         ) : (
@@ -179,6 +226,29 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                       Assigned to #{missionId(mission.sos_id)}
                     </Link>
                   ) : null}
+                  {canManage ? (
+                    <div className="flex gap-2 border-t border-slate-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditing(unit)}
+                        aria-label={`Edit ${unit.call_sign}`}
+                        className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Pencil className="h-3 w-3" /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoveError(null);
+                          setRemoving(unit);
+                        }}
+                        aria-label={`Remove ${unit.call_sign}`}
+                        className="flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                      >
+                        <Trash2 className="h-3 w-3" /> Remove
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -229,6 +299,71 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
           </ul>
         )}
       </section>
+
+      {editing !== null ? (
+        <UnitFormModal
+          title={editing === "new" ? "Add a rescue unit" : `Edit ${editing.call_sign}`}
+          submitLabel={editing === "new" ? "Add unit" : "Save changes"}
+          initial={editing === "new" ? undefined : unitToForm(editing)}
+          onClose={() => setEditing(null)}
+          onSubmit={async (payload) => {
+            if (editing === "new") {
+              const created = await createVehicle(payload);
+              onAction(`Added unit ${created.call_sign}`);
+            } else {
+              const saved = await updateVehicle(editing.vehicle_id, payload);
+              onAction(`Saved unit ${saved.call_sign}`);
+            }
+            setEditing(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      ) : null}
+
+      {removing ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="remove-unit-title"
+            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <h2 id="remove-unit-title" className="text-base font-bold text-slate-900">
+              Remove {removing.call_sign}?
+            </h2>
+            <p className="text-xs text-slate-600">
+              The unit leaves the fleet and can no longer be dispatched. Past incidents keep their
+              record. This is written to the audit log.
+            </p>
+            {removeError ? (
+              <p
+                role="alert"
+                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+              >
+                {removeError}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRemoving(null)}
+                disabled={removeBusy}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemove}
+                disabled={removeBusy}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {removeBusy ? "Removing…" : "Remove unit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
