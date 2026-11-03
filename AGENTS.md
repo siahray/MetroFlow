@@ -131,7 +131,7 @@ Location: `supabase-migrations/`
 - Native telephony/SMS in SOS
 - Functional SQLite tile caching for offline maps
 - Real CCTV integration
-- Real rain-gauge integration
+- Real rain-gauge integration beyond the CR-004 sources (PAGASA river telemetry and satellite are the live sources; Project NOAH is the advisory fallback: see `docs/CR-004.md`)
 
 ### Units
 - All depths: centimeters (cm)

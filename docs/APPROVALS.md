@@ -7,7 +7,7 @@
 | Project        | MetroFlow                                                             |
 | Document       | Approval Register                                                     |
 | Version        | 1.0                                                                   |
-| Status         | For Review — CR-001, CR-002 and CR-003 approved 27 October 2026        |
+| Status         | For Review — CR-001, CR-002 and CR-003 approved 27 October 2026; CR-004 approved by the Project Lead 3 November 2026        |
 | Date           | 23 October 2026                                                       |
 | Context        | Academic capstone project — not an official LGU project               |
 | Cost boundary  | No project fee; free tiers, open data and institutional resources only |
@@ -60,6 +60,7 @@ cannot close until its dependencies are approved.
 | A-10 | [CR-001](CR-001.md) | 1.0 | Native Expo driver app, live hazards, fleet dispatch and sensors | «Project Adviser» / panel | Approved 27 Oct 2026 | No |
 | A-11 | [CR-002](CR-002.md) | 1.0 | Final-product Offline Areas; pilot scope unchanged | «Project Adviser» / panel | Approved 27 Oct 2026 | No — final-product scope only |
 | A-12 | [CR-003](CR-003.md) | 1.0 | Sentinel-1 advisory flood observations; pilot scope unchanged | «Project Adviser» / panel | Approved 27 Oct 2026 | No — final-product scope only |
+| A-15 | [CR-004](CR-004.md) | 1.0 | Live flood state from PAGASA river telemetry and satellite; Project NOAH as the advisory fallback | Project Lead (adviser and panel acknowledgement not recorded) | Approved 3 Nov 2026 by the Project Lead | No — final-product scope only |
 | A-13 | Implementation start gate | — | A-01 to A-12 approved or formally deferred; open decisions closed | «Project Adviser» / panel | Partly cleared — A-10 to A-12 approved; A-01 to A-09 still For Review | Yes |
 | A-14 | Data and privacy approach | — | Synthetic/public data, no real personal data, no live CCTV | «Project Adviser» / panel | For Review | Yes before any real data |
 | A-15 | Native distribution path (`OD-D07`) | — | EAS/TestFlight/internal build path, bundle identifiers and accounts; public store release remains separate | «Project Adviser» / panel | Open | Yes before a native binary is distributed |
@@ -78,6 +79,7 @@ they are resolved or explicitly deferred in writing.
 | `OD-D07` | Native distribution, EAS, bundle identifiers and store accounts | Engineering | Open |
 | `OD-D23` | Offline provider, licence, package contents, storage limits and stale-data policy | Scenario reviewer / Engineering | CR-002 approved; design decisions still open |
 | `OD-D24` | Sentinel-1 access route, credential type, processing, confidence, latency and offline retention | Scenario reviewer / Engineering | CR-003 approved; design decisions still open |
+| `OD-D25` | PAGASA river telemetry access route, station list for the pilot corridor, thresholds, freshness window and licence | Project Lead / Engineering | CR-004 approved; access route open |
 
 ### 2.2 Decision record
 
@@ -86,6 +88,7 @@ they are resolved or explicitly deferred in writing.
 | 27 Oct 2026 | A-10 (CR-001) | Approved | Scope accepted; implementation continues, with route-level token enforcement tracked as TSD LIM-022 |
 | 27 Oct 2026 | A-11 (CR-002) | Approved | Final-product Offline Areas accepted; the pilot offline screen stays a labelled placeholder |
 | 27 Oct 2026 | A-12 (CR-003) | Approved | Sentinel-1 selected as the final-product satellite source; no feed exists yet |
+| 3 Nov 2026 | A-15 (CR-004) | Approved by the Project Lead | PAGASA telemetry and satellite are the live sources; NOAH is a rain-gated advisory fallback. The Project Lead approves change requests under standing authority; adviser and panel acknowledgement is not recorded. `OD-D25` (PAGASA access route) is open |
 
 Approving the three change requests settles scope. It does not move A-01 to A-09,
 which remain For Review, and it does not close the open design decisions in
