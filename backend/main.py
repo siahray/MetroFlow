@@ -104,6 +104,7 @@ ALLOWED_ROLES = ADMIN_ROLES | DRIVER_ROLES
 # because a driver account is authenticated but never privileged.
 require_user = get_current_user
 require_admin = require_roles(*ADMIN_ROLES)
+require_super_admin = require_roles("SUPER_ADMIN")
 
 
 def seed_database(db: Session) -> None:
@@ -730,6 +731,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "name": user.name,
             "email": user.email,
             "role": user.role,
+            "vehicle_id": user.vehicle_id,
         },
     }
 
@@ -742,6 +744,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role,
+        "vehicle_id": current_user.vehicle_id,
     }
 
 
@@ -896,6 +899,7 @@ def create_user(
             "utf-8"
         ),
         role=user_req.role,
+        vehicle_id=user_req.vehicle_id,
     )
     db.add(new_user)
     audit.record(
@@ -907,6 +911,7 @@ def create_user(
             "name": new_user.name,
             "email": new_user.email,
             "role": new_user.role,
+            "vehicle_id": new_user.vehicle_id,
             "actor": _user.name or _user.email,
         },
     )
@@ -1443,6 +1448,56 @@ def reject_sos(
     return db_sos
 
 
+@app.post("/api/v1/sos/{sos_id}/resolve", response_model=SOSResponse)
+def resolve_sos(
+    sos_id: int,
+    current_user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Close an incident when the dispatched unit reaches the scene (FSD-FR-046).
+
+    The assigned driver may resolve it from the app; a dispatcher may resolve
+    any incident. The vehicle returns to the available pool and the assignment
+    stays on the row as the record of who attended.
+    """
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if current_user.role not in ADMIN_ROLES and (
+        db_sos.vehicle_id is None or current_user.vehicle_id != db_sos.vehicle_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="Only the assigned unit or a dispatcher can resolve this"
+        )
+    if db_sos.status not in ("assigned", "confirmed"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot resolve an incident in state '{db_sos.status}'",
+        )
+    db_sos.status = "resolved"
+    if db_sos.vehicle_id:
+        _release_vehicle(db, db_sos.vehicle_id)
+    audit.record(
+        db,
+        user=current_user,
+        action_type=audit.SOS_RESOLVE,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "vehicle_id": db_sos.vehicle_id,
+            "actor": current_user.name or current_user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
 @app.post("/api/v1/sos/{sos_id}/hold", response_model=SOSResponse)
 def hold_sos(
     sos_id: int,
@@ -1688,7 +1743,7 @@ def list_hazards(
 @app.post("/api/v1/vehicles", response_model=VehicleResponse)
 def create_vehicle(
     vehicle: VehicleCreate,
-    _user: models.User = Depends(require_admin),
+    _user: models.User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     import models
@@ -1732,7 +1787,7 @@ def create_vehicle(
 def update_vehicle(
     vehicle_id: int,
     vehicle: VehicleUpdate,
-    _user: models.User = Depends(require_admin),
+    _user: models.User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     import models
@@ -1760,6 +1815,42 @@ def update_vehicle(
     db.commit()
     db.refresh(db_vehicle)
     return db_vehicle
+
+
+@app.delete("/api/v1/vehicles/{vehicle_id}")
+def delete_vehicle(
+    vehicle_id: int,
+    _user: models.User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    import models
+
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
+    if not db_vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    # Check if vehicle is assigned to an active SOS
+    active_sos = (
+        db.query(models.SOSRequest)
+        .filter(models.SOSRequest.vehicle_id == vehicle_id)
+        .filter(models.SOSRequest.status.in_(["PENDING", "ASSIGNED", "DISPATCHED"]))
+        .first()
+    )
+    if active_sos:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete vehicle: assigned to active SOS request",
+        )
+
+    audit.record(
+        db,
+        user=_user,
+        action_type=audit.VEHICLE_DELETE,
+        payload={"vehicle_id": vehicle_id, "call_sign": db_vehicle.call_sign},
+    )
+    db.delete(db_vehicle)
+    db.commit()
+    return {"message": "Vehicle deleted successfully"}
 
 
 @app.post("/api/v1/vehicles/{vehicle_id}/telemetry", status_code=204)
@@ -1945,6 +2036,33 @@ def get_sos(
     if not db_sos:
         raise HTTPException(status_code=404, detail="SOS request not found")
     return db_sos
+
+
+@app.get("/api/v1/vehicles/{vehicle_id}/mission", response_model=SOSResponse | None)
+def get_vehicle_mission(
+    vehicle_id: int,
+    current_user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """The incident this unit is currently dispatched to, if any (FSD-FR-074).
+
+    This is what the driver app polls: the dispatcher assigns a unit in the
+    portal, and the unit discovers its mission here without seeing the whole
+    SOS queue. A driver may only ask about their own unit.
+    """
+    import models
+
+    if current_user.role not in ADMIN_ROLES and current_user.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=403, detail="This account is not linked to that vehicle")
+    return (
+        db.query(models.SOSRequest)
+        .filter(
+            models.SOSRequest.vehicle_id == vehicle_id,
+            models.SOSRequest.status.in_(("assigned", "confirmed")),
+        )
+        .order_by(models.SOSRequest.created_at.desc())
+        .first()
+    )
 
 
 # ---------------------------------------------------------------------------
