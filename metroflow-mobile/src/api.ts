@@ -366,6 +366,7 @@ export async function submitReport(input: {
   barangay?: string | null;
   capturedAt?: string | null;
   photo?: ReportPhoto | null;
+  clientId?: string;
 }): Promise<ReportCreated> {
   const form = new FormData();
   form.append("depth_level", input.depthLevel);
@@ -374,6 +375,7 @@ export async function submitReport(input: {
   if (input.narrative?.trim()) form.append("narrative", input.narrative.trim());
   if (input.barangay?.trim()) form.append("barangay", input.barangay.trim());
   if (input.capturedAt) form.append("captured_at", input.capturedAt);
+  if (input.clientId) form.append("client_id", input.clientId);
   if (input.photo) {
     // React Native's FormData accepts this descriptor as a file part.
     form.append("photo", input.photo as unknown as Blob);

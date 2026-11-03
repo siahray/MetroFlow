@@ -42,7 +42,8 @@
           "cameraPermission": "MetroFlow uses the camera to photograph flood water levels for field reports.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sqlite"
     ]
   }
 }
