@@ -1,6 +1,6 @@
 # MetroFlow - Consolidated Backlog
 
-**Revised:** 3 November 2026 (evening) · **Baseline:** `main` at PR #48 (+ PR #49 open)
+**Revised:** 3 November 2026 (night) · **Baseline:** `main` at PR #50 (Backend CI and Web CI green)
 **Method:** cross-checked FSD status table, TSD §7, PM plan, PROGRESS_REPORT, FEATURES_AND_DELIVERABLES,
 UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Items marked *(unverified)* were not run.
 
@@ -13,16 +13,18 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | Sensor bug fixes (`fix/sensor-geography`) | Merged (#43) |
 | Hosted DB migrated to head; sensor tables created (they were missing in production) | Done. Head is `f3b7d9a1c562` |
 | RLS enabled on `sensors`, `sensor_readings` | Merged (#48), applied live |
-| Backlog document | Merged (#47) |
+| Two failing API contract tests (test bugs: shared node, missing body, self-delete order) | Merged (#49). **Backend CI is green on `main`** |
+| Backlog document and refresh | Merged (#47, #50) |
+| Hosted DB migration pipeline (`Supabase - Apply migrations`) | Ran successfully after green CI; confirms the DB is at head |
 
 ## 0. Do first
 
 | # | Item | Why |
 |---|------|-----|
-| H-1 | **Merge #49**: fixes the two failing API contract tests (dispatch preview, last-admin). | Backend CI has been red on `main` for several merges, which hides real regressions. Both were test bugs |
-| H-2 | **Enable RLS on `incident_reports` and `event_log`.** Needs a migration and a live apply (same recipe as #48). | These tables hold reporter hashes, evidence photos and EXIF, and are reachable with the anon key. `spatial_ref_sys` is a PostGIS system table; leave it |
-| H-3 | Delete merged branches: `pr/*`, `fix/sensors-rls`, `fix/contract-tests` (after #49), and the stale `feat/moderation-desk`, `feat/network-map`, `feat/report-intake*`, `feat/ui-polish-backlog`, `feat/driver-navigation`, `feat/loading-states-and-error-boundaries`. Decide on `backup/local-main-oct27`, `feat/scope-resolution-frontend-slice`, `worktree-docs-sync`. | Noise; some already caused confusion |
-| H-4 | Local dev database is stale (old 4-node graph, leftover rows), so `pytest -m integration` against it fails misleadingly. Recreate it, or run integration tests on a throwaway DB (`CREATE DATABASE metroflow_ci`, `alembic upgrade head`, then test). Document the recipe in `backend/README`. | Wasted debugging time |
+| H-1 | **Enable RLS on `incident_reports` and `event_log`.** Needs a migration and a live apply (same recipe as #48). Add **S-7** (CI check for RLS on every public table) in the same PR. | These tables hold reporter hashes, evidence photos and EXIF, and are reachable with the anon key. `spatial_ref_sys` is a PostGIS system table; leave it |
+| H-2 | **Migrations only reach production through green CI.** The `Supabase - Apply migrations` workflow runs after Backend CI on `main` and is *skipped* when CI is red. CI was red for several merges, so production silently lagged (sensor tables were missing until applied by hand). Fix: make a skipped run visible (notification or a status check), require green CI via branch protection, and document the pipeline in `AGENTS.md`/TSD (it currently says "Migration Status: Complete"). | Silent production drift |
+| H-3 | Branch and worktree cleanup. Delete merged branches (`pr/*`, `fix/*`, `docs/backlog-*`, `feat/driver-navigation`, `feat/loading-states-and-error-boundaries`, `feat/moderation-desk`, `feat/network-map`, `feat/report-intake*`, `feat/ui-polish-backlog`). Remove the worktrees `../MetroFlow-docs` and `.claude/worktrees/docs-sync`. Drop the stale lint-staged `stash@{0}` (its content was merged in #46). Decide on `backup/local-main-oct27`, `feat/scope-resolution-frontend-slice`, `worktree-docs-sync`. `feat/driver-navigation` shows 24 "unpushed" commits that `git cherry` reports as already in `main`. | Noise; caused confusion twice |
+| H-4 | Local dev database is stale (old 4-node graph, leftover rows), so `pytest -m integration` against it fails misleadingly. Recreate it, or run integration tests on a throwaway DB (`CREATE DATABASE metroflow_ci`, `alembic upgrade head`, test, drop). Document the recipe in `backend/README`. | Wasted debugging time |
 
 ## 1. Documentation drift (code is ahead of the docs)
 
@@ -34,7 +36,7 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | D-4 | `docs/FSD.md` | Offline row updated (#45). Still: "Incident queue" and "Portal and driver app UI" are Partial; reword or close. |
 | D-5 | `docs/PROJ_MANAGEMENT_PLAN.md` | I-005 ("CR-001 increment is planned") is outdated; release checklist (lines ~458-467) is all unchecked; Bun test and Playwright still "planned". |
 | D-6 | `docs/TSD.md` | Add an ADR/limitation note: on-device SQLite for graph, hazards and queue (distinct from the out-of-scope tile cache); `client_id` idempotency; LIM-017 stays. |
-| D-7 | `AGENTS.md` | Wrong in three places: says offline is "Conflicts with scope resolution" and "Marked Offline Maps … no SQLite" (offline is built); says "RLS: Enabled on all tables" (not true until H-2 lands); "Next Steps" are stale. |
+| D-7 | `AGENTS.md` | Wrong in four places: "Migration Status: Complete" (see H-2); says offline is "Conflicts with scope resolution" and "Marked Offline Maps … no SQLite" (offline is built); says "RLS: Enabled on all tables" (not true until H-2 lands); "Next Steps" are stale. |
 | D-8 | `docs/design/*BASELINE.md` | "Missing from UI 2" notes are stale (hold, duplicate, plausibility, decision summary all exist). Mark as a spec; tick what is built. |
 | D-9 | `UI_UX_AUDIT_SCOPE_RESOLUTION.md` | Referenced by the FEATURES doc but not in the repo. Restore or remove the reference. |
 
@@ -89,8 +91,8 @@ aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primar
 
 ## 6. Suggested order
 
-1. **H-1** merge #49, confirm Backend CI is green.
-2. **H-2** RLS on `incident_reports` and `event_log` (migration, live apply, PR). Add **S-7** so it stays fixed.
+1. **H-1** RLS on `incident_reports` and `event_log` (migration, live apply, PR) with the **S-7** CI check.
+2. **H-2** make a skipped migration run visible and require green CI.
 3. **Q-2** device test of offline; fix what breaks.
 4. **D-1..D-9** documentation sync in one PR (includes **H-3** branch cleanup and **H-4** recipe).
 5. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers, one Playwright smoke (login, triage), one offline-queue test.
