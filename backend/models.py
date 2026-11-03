@@ -16,6 +16,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -184,6 +185,28 @@ class SensorReading(Base):
         Index("ix_sensor_readings_sensor_id_recorded_at", "sensor_id", "recorded_at"),
         Index("ix_sensor_readings_breach_received_at", "breach", "received_at"),
     )
+
+
+class EdgeAdvisory(Base):
+    """The latest live observation that covers a road edge, one row per source (CR-004).
+
+    A sensor reading is written to every edge inside the sensor's impact radius, flagged
+    or not, so the flood-state resolver can tell "a live source covers this edge and is
+    quiet" from "nothing covers this edge". Advisory only: nothing here closes a road
+    (BRULE-012).
+    """
+
+    __tablename__ = "edge_advisories"
+    advisory_id = Column(Integer, primary_key=True, index=True)
+    edge_id = Column(
+        Integer, ForeignKey("road_edges.edge_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source = Column(String(80), nullable=False, comment="e.g. SENSOR:RIVER-01")
+    kind = Column(String(12), nullable=False, comment="OBSERVED, MODELLED or SIMULATED")
+    flagged = Column(Boolean, nullable=False, comment="Over its threshold at as_of")
+    as_of = Column(DateTime, nullable=False, comment="When the value applies (UTC)")
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+    __table_args__ = (UniqueConstraint("edge_id", "source", name="uq_edge_advisory_edge_source"),)
 
 
 class SOSRequest(Base):

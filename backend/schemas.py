@@ -388,6 +388,31 @@ class UserUpdateRequest(BaseModel):
     # Password update is a separate operation for security
 
 
+class FloodStateEdge(BaseModel):
+    """The resolved flood state of one road segment and why (CR-004, FSD-FR-110, 114)."""
+
+    edge_id: int
+    basis: str = Field(
+        description="VERIFIED_HAZARD, LIVE_ADVISORY, NOAH_CAUTION, NOAH_LAYER or NONE"
+    )
+    source: str | None = None
+    kind: str | None = Field(default=None, description="OBSERVED, MODELLED, SIMULATED or STATIC")
+    as_of: datetime | None = None
+    has_live_data: bool = False
+    stale: bool = False
+    advisory: bool = False
+    closes_road: bool = False
+    route_penalty: float = 1.0
+    notes: list[str] = []
+
+
+class FloodStateResponse(BaseModel):
+    generated_at: datetime
+    raining: bool
+    fresh_window_minutes: int
+    edges: list[FloodStateEdge]
+
+
 class SensorReadingRequest(BaseModel):
     """Gateway posts a sensor reading (FSD-FR-090)."""
 

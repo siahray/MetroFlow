@@ -846,12 +846,53 @@ table for a name. `payload` is returned as an object, not as the stored string.
 | `POST`   | `/api/v1/vehicles/{vehicle_id}/telemetry` | position/speed batch → `204`                                                                  | any user   | FSD-FR-072          |
 | `GET`    | `/api/v1/hazards/stream`, `/vehicles/stream`, `/sos/stream` | SSE; `after` resumes from an event id                                    | any user   | FSD-FR-082–086      |
 
-A breach (`value >= threshold_value`) writes a `SENSOR_BREACH` audit entry that
-lists the ids of the road edges within `impact_radius_m` metres of the sensor.
-The edges are not yet flagged on the road graph, so routing does not read the
-advisory; BRULE-012 keeps a breach advisory until a dispatcher confirms it.
+Every accepted reading is written to the road edges within `impact_radius_m` metres of
+the sensor (`edge_advisories`, one row per edge and source; an older reading never
+overwrites a newer one). A breach (`value >= threshold_value`) flags those edges and also
+writes a `SENSOR_BREACH` audit entry listing their ids. A flag is an **advisory** that
+never closes a road (BRULE-012, BRULE-016): routing does not read it. Read the result
+with `GET /api/v1/flood-state` (§9.7b). Deleting a sensor deletes its advisories.
 Other sensor changes are audited too. Rescue
 route preview is `GET /api/v1/dispatch/{sos_id}/preview` (§9.2).
+
+### 9.7b `GET /api/v1/flood-state` (CR-004)
+
+Resolved flood state per road segment, with the source and the time it applies to. Any
+signed-in account may read it. Query: `only_flagged` (default `false`) leaves out segments
+with nothing to report.
+
+```json
+{
+  "generated_at": "2026-11-03T12:00:00",
+  "raining": false,
+  "fresh_window_minutes": 30,
+  "edges": [
+    {
+      "edge_id": 7,
+      "basis": "LIVE_ADVISORY",
+      "source": "SENSOR:RIVER-01",
+      "kind": "OBSERVED",
+      "as_of": "2026-11-03T11:55:00",
+      "has_live_data": true,
+      "stale": false,
+      "advisory": true,
+      "closes_road": false,
+      "route_penalty": 1.0,
+      "notes": ["Advisory until a dispatcher confirms it"]
+    }
+  ]
+}
+```
+
+`basis` is the first rule that applies: `VERIFIED_HAZARD` (a published hazard; the only
+basis that can have `closes_road: true`), `LIVE_ADVISORY` (a **fresh** reading over its
+threshold; observed beats modelled beats simulated, newest wins), `NOAH_CAUTION` or
+`NOAH_LAYER` (Project NOAH fallback; not populated yet), or `NONE`. A reading older than
+`fresh_window_minutes` is ignored and marked `stale`. `NONE` with `has_live_data: false`
+means **nothing covers the segment**, not that it is safe. `kind` says whether a value is
+`OBSERVED`, `MODELLED`, `SIMULATED` or `STATIC`; a client must not present a modelled value
+as a measurement. `raining` is true while an active rain gauge is over its threshold; it
+gates the NOAH fallback.
 
 ### 9.7a Not yet implemented
 
