@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
 import { colors } from '../../theme';
+import { subscribeToSOS } from '../../navigation/sos-stream';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
 /** Location staleness limit for SOS submissions (VAL-021). */
@@ -46,6 +47,32 @@ export default function SOSScreen() {
   const [dispatchedSOS, setDispatchedSOS] = useState<SOSRequest | null>(null);
   const [sosStatus, setSosStatus] = useState<string | null>(null);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+
+  // Subscribe to SOS stream for real-time status updates
+  useEffect(() => {
+    if (!dispatchedSOS) return;
+
+    const unsubscribe = subscribeToSOS({
+      onSnapshot: (sosList) => {
+        const mySOS = sosList.find((s) => s.sos_id === dispatchedSOS.sos_id);
+        if (mySOS) {
+          setSosStatus(mySOS.status);
+          setDispatchedSOS(mySOS);
+        }
+      },
+      onSOS: (event, sos) => {
+        if (sos.sos_id === dispatchedSOS.sos_id) {
+          setSosStatus(sos.status);
+          setDispatchedSOS(sos);
+        }
+      },
+      onError: (error) => {
+        console.error('SOS stream error:', error);
+      },
+    });
+
+    return unsubscribe;
+  }, [dispatchedSOS]);
 
   async function handleSOS() {
     if (sending || locating) return;

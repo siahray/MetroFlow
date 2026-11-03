@@ -2,12 +2,14 @@
 
 import { ArrowLeft, RefreshCw, Truck } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { listVehicles, type SOSRequest, type Vehicle } from "@/lib/dispatch";
 import { listSOS } from "@/lib/sos-live";
 import { toUnitStatus } from "@/lib/rescue";
+import { subscribeToVehicles, vehiclesFromEvent } from "@/lib/vehicle-stream";
+import { subscribeToSOS, sosFromEvent } from "@/lib/sos-stream";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
 
@@ -40,10 +42,16 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const vehiclesRef = useRef<Vehicle[]>([]);
+  const sosListRef = useRef<SOSRequest[]>([]);
+
   useEffect(() => {
     const load = async () => {
       try {
         const [vehicleData, sosData] = await Promise.all([listVehicles(), listSOS()]);
+        vehiclesRef.current = vehicleData;
+        sosListRef.current = sosData;
         setVehicles(vehicleData);
         setSosList(sosData);
         setLoadError(null);
@@ -52,9 +60,35 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         setLoadError("Could not refresh fleet data. Showing the last known state.");
       }
     };
+
     load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
+
+    // Set up SSE streams for real-time updates
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const signal = abortController.signal;
+
+    // Subscribe to vehicle stream
+    subscribeToVehicles((event) => {
+      const vehicleList = vehiclesFromEvent(event);
+      if (vehicleList) {
+        vehiclesRef.current = vehicleList;
+        setVehicles(vehicleList);
+      }
+    }, signal);
+
+    // Subscribe to SOS stream
+    subscribeToSOS((event) => {
+      const sosData = sosFromEvent(event);
+      if (sosData) {
+        sosListRef.current = sosData;
+        setSosList(sosData);
+      }
+    }, signal);
+
+    return () => {
+      abortController.abort();
+    };
   }, [reloadKey]);
 
   const missions = sosList.filter((s) => s.vehicle_id != null && ACTIVE_MISSION.has(s.status));

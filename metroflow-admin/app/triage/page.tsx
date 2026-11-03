@@ -2,7 +2,7 @@
 
 import { CircleCheck, Shield, Siren, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
@@ -11,9 +11,12 @@ import { useToast } from "@/components/toast-provider";
 import { matchesQueueFilter, type QueueFilter, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
-import { listVehicles, type Vehicle } from "@/lib/dispatch";
+import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
 import { listHazards, type HazardZone } from "@/lib/hazards";
-import { listReports } from "@/lib/reports";
+import { listReports, type FieldReport } from "@/lib/reports";
+import { subscribeToSOS, sosFromEvent } from "@/lib/sos-stream";
+import { subscribeToVehicles, vehiclesFromEvent } from "@/lib/vehicle-stream";
+import { subscribeToHazards, hazardsFromEvent } from "@/lib/hazard-stream";
 
 export default function TriagePage() {
   const router = useRouter();
@@ -23,13 +26,37 @@ export default function TriagePage() {
   const [liveIncidents, setLiveIncidents] = useState<Incident[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [hazards, setHazards] = useState<HazardZone[]>([]);
+  const [reports, setReports] = useState<FieldReport[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const sosListRef = useRef<SOSRequest[]>([]);
+  const selectedIdRef = useRef<string>("");
+
+  // Keep selectedId ref in sync
   useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  // Recalculate incidents when any dependency changes
+  useEffect(() => {
+    const recalculate = () => {
+      const sosIncidents = sosListRef.current.map((s) =>
+        sosToIncident(s, { reports, vehicles, hazards }),
+      );
+      const reportIncidents = reports.map((r) => reportToIncident(r, { vehicles, hazards }));
+      const incidents = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
+      setLiveIncidents(incidents);
+    };
+    recalculate();
+  }, [reports, vehicles, hazards]);
+
+  useEffect(() => {
+    // Initial load to get snapshot data
     const load = async () => {
       try {
         const [sosList, reportList, vehicleList, hazardList] = await Promise.all([
@@ -38,22 +65,21 @@ export default function TriagePage() {
           listVehicles().catch(() => []),
           listHazards().catch(() => []),
         ]);
-        const sosIncidents = sosList.map((s) =>
-          sosToIncident(s, { reports: reportList, vehicles: vehicleList, hazards: hazardList }),
-        );
-        const reportIncidents = reportList.map((r) =>
-          reportToIncident(r, { vehicles: vehicleList, hazards: hazardList }),
-        );
-        const incidents = [...sosIncidents, ...reportIncidents].sort(
-          (a, b) => b.urgency - a.urgency,
-        );
         setError(null);
-        setLiveIncidents(incidents);
+        sosListRef.current = sosList;
         setVehicles(vehicleList);
         setHazards(hazardList);
-        if (incidents.length > 0 && !incidents.some((i) => i.id === selectedId)) {
-          setSelectedId(incidents[0].id);
-        } else if (incidents.length === 0) {
+        setReports(reportList);
+        // Auto-select first incident on initial load
+        const currentSelectedId = selectedIdRef.current;
+        if (sosList.length > 0 && !sosList.some((s) => `SOS-${s.sos_id}` === currentSelectedId)) {
+          setSelectedId(`SOS-${sosList[0].sos_id}`);
+        } else if (
+          reportList.length > 0 &&
+          !reportList.some((r) => r.report_id === currentSelectedId)
+        ) {
+          setSelectedId(reportList[0].report_id);
+        } else if (sosList.length === 0 && reportList.length === 0) {
           setSelectedId("");
         }
       } catch {
@@ -66,10 +92,54 @@ export default function TriagePage() {
         setLoading(false);
       }
     };
+
     load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
-  }, [selectedId, reloadKey]);
+
+    // Poll reports periodically (no SSE endpoint for reports yet)
+    const loadReports = async () => {
+      try {
+        const reportList = await listReports();
+        setReports(reportList);
+      } catch {
+        // Silent fail for reports
+      }
+    };
+    const reportInterval = setInterval(loadReports, 10000);
+
+    // Set up SSE streams for real-time updates
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const signal = abortController.signal;
+
+    // Subscribe to SOS stream
+    subscribeToSOS((event) => {
+      const sosList = sosFromEvent(event);
+      if (sosList) {
+        sosListRef.current = sosList;
+      }
+    }, signal);
+
+    // Subscribe to vehicle stream
+    subscribeToVehicles((event) => {
+      const vehicleList = vehiclesFromEvent(event);
+      if (vehicleList) {
+        setVehicles(vehicleList);
+      }
+    }, signal);
+
+    // Subscribe to hazard stream
+    subscribeToHazards((event) => {
+      const hazardList = hazardsFromEvent(event);
+      if (hazardList) {
+        setHazards(hazardList);
+      }
+    }, signal);
+
+    return () => {
+      abortController.abort();
+      clearInterval(reportInterval);
+    };
+  }, [reloadKey]);
 
   const allIncidents = useMemo(() => {
     return liveIncidents;

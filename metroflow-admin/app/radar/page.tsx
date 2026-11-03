@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckSquare } from "lucide-react";
 
@@ -11,8 +11,10 @@ import { useToast } from "@/components/toast-provider";
 import { type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
-import { listReports } from "@/lib/reports";
-import { listVehicles } from "@/lib/dispatch";
+import { listReports, type FieldReport } from "@/lib/reports";
+import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
+import { subscribeToSOS, sosFromEvent } from "@/lib/sos-stream";
+import { subscribeToVehicles, vehiclesFromEvent } from "@/lib/vehicle-stream";
 
 function RadarContent() {
   const router = useRouter();
@@ -22,8 +24,31 @@ function RadarContent() {
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [reports, setReports] = useState<FieldReport[]>([]);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const sosListRef = useRef<SOSRequest[]>([]);
+  const selectedIdRef = useRef<string>("");
+
+  // Keep selectedId ref in sync
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  // Recalculate incidents when any dependency changes
+  useEffect(() => {
+    const recalculate = () => {
+      const sosIncidents = sosListRef.current.map((s) => sosToIncident(s, { reports, vehicles }));
+      const reportIncidents = reports.map((r) => reportToIncident(r, { vehicles }));
+      const mapped = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
+      setIncidents(mapped);
+    };
+    recalculate();
+  }, [reports, vehicles]);
 
   useEffect(() => {
+    // Initial load to get snapshot data
     const load = async () => {
       try {
         const [sosList, reportList, vehicleList] = await Promise.all([
@@ -31,27 +56,74 @@ function RadarContent() {
           listReports().catch(() => []),
           listVehicles().catch(() => []),
         ]);
-        const sosIncidents = sosList.map((s) =>
-          sosToIncident(s, { reports: reportList, vehicles: vehicleList }),
-        );
-        const reportIncidents = reportList.map((r) =>
-          reportToIncident(r, { vehicles: vehicleList }),
-        );
-        const mapped = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
-        setIncidents(mapped);
-        if (requestedId && mapped.some((i) => i.id === requestedId)) {
+        sosListRef.current = sosList;
+        setVehicles(vehicleList);
+        setReports(reportList);
+        // Auto-select first incident on initial load
+        const currentSelectedId = selectedIdRef.current;
+        if (
+          requestedId &&
+          (sosList.some((s) => `SOS-${s.sos_id}` === requestedId) ||
+            reportList.some((r) => r.report_id === requestedId))
+        ) {
           setSelectedId(requestedId);
-        } else if (mapped.length > 0 && !selectedId) {
-          setSelectedId(mapped[0].id);
+        } else if (
+          sosList.length > 0 &&
+          !sosList.some((s) => `SOS-${s.sos_id}` === currentSelectedId)
+        ) {
+          setSelectedId(`SOS-${sosList[0].sos_id}`);
+        } else if (
+          reportList.length > 0 &&
+          !reportList.some((r) => r.report_id === currentSelectedId)
+        ) {
+          setSelectedId(reportList[0].report_id);
+        } else if (sosList.length === 0 && reportList.length === 0) {
+          setSelectedId("");
         }
       } catch {
         // keep fallback
       }
     };
+
     load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
-  }, [requestedId, selectedId]);
+
+    // Poll reports periodically (no SSE endpoint for reports yet)
+    const loadReports = async () => {
+      try {
+        const reportList = await listReports();
+        setReports(reportList);
+      } catch {
+        // Silent fail for reports
+      }
+    };
+    const reportInterval = setInterval(loadReports, 10000);
+
+    // Set up SSE streams for real-time updates
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const signal = abortController.signal;
+
+    // Subscribe to SOS stream
+    subscribeToSOS((event) => {
+      const sosList = sosFromEvent(event);
+      if (sosList) {
+        sosListRef.current = sosList;
+      }
+    }, signal);
+
+    // Subscribe to vehicle stream
+    subscribeToVehicles((event) => {
+      const vehicleList = vehiclesFromEvent(event);
+      if (vehicleList) {
+        setVehicles(vehicleList);
+      }
+    }, signal);
+
+    return () => {
+      abortController.abort();
+      clearInterval(reportInterval);
+    };
+  }, [requestedId]);
 
   const selected = incidents.find((i) => i.id === selectedId) || incidents[0] || null;
   const activeId = selected?.id ?? "";
