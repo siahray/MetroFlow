@@ -356,7 +356,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Distress and dispatch    | FSD-FR-087 to 089 | Implemented | Incident list, assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
 | User management          | FSD-FR-048         | Implemented | CRUD endpoints for users with audit trail; admin UI with search, role badges, create/edit modals, delete confirmation; security: role validation, email uniqueness, self-protection, last admin protection |
 | Export                   | FSD-FR-049         | Implemented | CSV export for audit logs and incidents; admin UI with one-click export buttons and toast notifications |
-| Sensor ingestion         | FSD-FR-090, 091   | Implemented | POST /api/v1/sensors/readings with threshold breach detection; sensor registry CRUD (GET, POST, PATCH, DELETE); impact radius edge marking using PostGIS ST_DWithin; audit trail for sensor operations |
+| Sensor ingestion         | FSD-FR-090, 091   | Partial     | POST /api/v1/sensors/readings with threshold breach detection; sensor registry CRUD (GET, POST, PATCH, DELETE); impact-radius edge list (metres, PostGIS geography) recorded in the breach audit entry, not yet flagged on the road graph; audit trail for sensor operations |
 | Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |
 
 ## Actors

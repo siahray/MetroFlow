@@ -1577,16 +1577,20 @@ def test_sensor_reading_rejection(client):
     assert resp.status_code == 404
 
     # Future timestamp
-    resp = client.post(
-        "/api/v1/sensors/readings",
-        json={
-            "sensor_id": "TEST_SENSOR",
-            "value": 10.5,
-            "unit": "m",
-            "recorded_at": "2099-01-01T00:00:00Z",
-        },
-    )
-    assert resp.status_code == 422
+    _make_sensor(client, "TEST_SENSOR", 14.6, 121.0, radius_m=100.0, unit="m")
+    try:
+        resp = client.post(
+            "/api/v1/sensors/readings",
+            json={
+                "sensor_id": "TEST_SENSOR",
+                "value": 10.5,
+                "unit": "m",
+                "recorded_at": "2099-01-01T00:00:00Z",
+            },
+        )
+        assert resp.status_code == 422
+    finally:
+        client.delete("/api/v1/sensors/TEST_SENSOR")
 
 
 def test_sensor_registry_crud(client):
@@ -1601,6 +1605,8 @@ def test_sensor_registry_crud(client):
             "threshold_value": 5.0,
             "threshold_unit": "m",
             "impact_radius_m": 1000.0,
+            "latitude": 14.6,
+            "longitude": 121.0,
             "simulated": True,
         },
     )
@@ -1632,6 +1638,8 @@ def test_sensor_registry_crud(client):
             "threshold_value": 5.0,
             "threshold_unit": "m",
             "impact_radius_m": 1000.0,
+            "latitude": 14.6,
+            "longitude": 121.0,
         },
     )
     assert bad_type.status_code == 422
@@ -1646,6 +1654,8 @@ def test_sensor_registry_crud(client):
             "threshold_value": 5.0,
             "threshold_unit": "mm_hr",
             "impact_radius_m": 1000.0,
+            "latitude": 14.6,
+            "longitude": 121.0,
         },
     )
     assert duplicate.status_code == 409
@@ -1653,3 +1663,84 @@ def test_sensor_registry_crud(client):
     # Delete sensor
     delete_resp = client.delete("/api/v1/sensors/TEST_RIVER_01")
     assert delete_resp.status_code == 204
+
+
+def _make_sensor(client, sensor_id, lat, lon, radius_m, unit="mm_hr", threshold=50.0):
+    resp = client.post(
+        "/api/v1/sensors",
+        json={
+            "sensor_id": sensor_id,
+            "sensor_type": "RAIN_GAUGE",
+            "name": sensor_id,
+            "latitude": lat,
+            "longitude": lon,
+            "threshold_value": threshold,
+            "threshold_unit": unit,
+            "impact_radius_m": radius_m,
+            "simulated": True,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def _post_reading(client, sensor_id, value, unit="mm_hr"):
+    return client.post(
+        "/api/v1/sensors/readings",
+        json={
+            "sensor_id": sensor_id,
+            "value": value,
+            "unit": unit,
+            "recorded_at": "2026-11-02T10:00:00Z",
+        },
+    )
+
+
+def test_sensor_breach_lists_only_edges_inside_the_radius_in_metres(client):
+    """FSD-FR-091: the radius is metres, so a 50 m gauge must not reach the whole map."""
+    node = {n.node_id: n for n in SEED_NODES}
+    edge = SEED_EDGES[0]
+    a, b = node[edge.start_node_id], node[edge.end_node_id]
+    lat, lon = (a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2
+
+    _make_sensor(client, "TEST_RAIN_NEAR", lat, lon, radius_m=50.0)
+    try:
+        # Below threshold: stored, no breach, nothing audited as a breach.
+        quiet = _post_reading(client, "TEST_RAIN_NEAR", 10.0)
+        assert quiet.status_code == 201
+        assert quiet.json()["breach"] is False
+
+        loud = _post_reading(client, "TEST_RAIN_NEAR", 80.0)
+        assert loud.status_code == 201
+        assert loud.json()["breach"] is True
+
+        entries = client.get("/api/v1/audit", params={"action_type": "SENSOR_BREACH"}).json()
+        edge_ids = next(e for e in entries if e["payload"]["sensor_id"] == "TEST_RAIN_NEAR")[
+            "payload"
+        ]["impacted_edge_ids"]
+        assert edge.edge_id in edge_ids
+        assert 0 < len(edge_ids) < EDGE_COUNT
+    finally:
+        client.delete("/api/v1/sensors/TEST_RAIN_NEAR")
+
+
+def test_sensor_reading_unit_must_match_the_sensor(client):
+    """A mismatched unit used to return 201 and silently never breach."""
+    _make_sensor(client, "TEST_RAIN_UNIT", 14.6, 121.0, radius_m=100.0, unit="mm_hr")
+    try:
+        assert _post_reading(client, "TEST_RAIN_UNIT", 80.0, unit="m").status_code == 422
+        assert _post_reading(client, "TEST_RAIN_UNIT", -1.0).status_code == 422
+    finally:
+        client.delete("/api/v1/sensors/TEST_RAIN_UNIT")
+
+
+def test_nearest_sensor_distance_is_in_kilometres(client, created_records):
+    """ST_Distance on 4326 geometry is degrees; the endpoint must report real km."""
+    lat, lon = 14.6, 121.0
+    _make_sensor(client, "TEST_RAIN_DIST", lat, lon, radius_m=100.0)
+    try:
+        report = submit_report(client, created_records, latitude=lat + 0.009, longitude=lon)
+        got = client.get(f"/api/v1/reports/{report['report_id']}/nearest-sensor").json()
+        # 0.009 degrees of latitude is about 1.0 km.
+        assert 0.9 < got["distance_km"] < 1.1
+    finally:
+        client.delete("/api/v1/sensors/TEST_RAIN_DIST")

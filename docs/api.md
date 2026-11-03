@@ -837,18 +837,20 @@ table for a name. `payload` is returned as an object, not as the stored string.
 
 | Method   | Path                                     | Body / query                                                                                   | Role       | Reference           |
 | -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------- | ------------------- |
-| `POST`   | `/api/v1/sensors/readings`               | `sensor_id`, `value`, `unit` (`m` or `mm_hr`), `recorded_at` → `201` reading with `breach`     | any user   | BR-017 / FSD-FR-090 |
+| `POST`   | `/api/v1/sensors/readings`               | `sensor_id`, `value` (≥ 0), `unit` (must equal the sensor's unit), `recorded_at` → `201` reading with `breach` | admin | BR-017 / FSD-FR-090 |
 | `GET`    | `/api/v1/sensors`                        | —                                                                                              | admin      | BR-017 / FSD-FR-091 |
-| `POST`   | `/api/v1/sensors`                        | `sensor_id`, `sensor_type`, `name`, `threshold_value`, `threshold_unit`, `impact_radius_m`, `simulated` | admin | BR-017 / FSD-FR-091 |
-| `PATCH`  | `/api/v1/sensors/{sensor_id}`            | any of `name`, thresholds, `impact_radius_m`, `active`, `simulated`                            | admin      | BR-017 / FSD-FR-091 |
-| `DELETE` | `/api/v1/sensors/{sensor_id}`            | — → `204`                                                                                      | admin      | BR-017 / FSD-FR-091 |
+| `POST`   | `/api/v1/sensors`                        | `sensor_id`, `sensor_type`, `name`, `latitude`, `longitude`, `threshold_value`, `threshold_unit`, `impact_radius_m`, `simulated` | admin | BR-017 / FSD-FR-091 |
+| `PATCH`  | `/api/v1/sensors/{sensor_id}`            | any of `name`, `latitude` + `longitude`, thresholds, `impact_radius_m`, `active`, `simulated`                            | admin      | BR-017 / FSD-FR-091 |
+| `DELETE` | `/api/v1/sensors/{sensor_id}`            | — → `204`; the sensor's readings are deleted with it                                           | admin      | BR-017 / FSD-FR-091 |
 | `GET`    | `/api/v1/reports/{report_id}/nearest-sensor` | — → nearest active rain gauge, its latest reading, `distance_km`, `is_breach` (empty when none) | admin  | BR-014 / FSD-FR-079 |
 | `POST`   | `/api/v1/vehicles/{vehicle_id}/telemetry` | position/speed batch → `204`                                                                  | any user   | FSD-FR-072          |
 | `GET`    | `/api/v1/hazards/stream`, `/vehicles/stream`, `/sos/stream` | SSE; `after` resumes from an event id                                    | any user   | FSD-FR-082–086      |
 
-A breach (`value >= threshold_value`, same unit) marks road edges within
-`impact_radius_m` of the sensor as advisory; BRULE-012 keeps that advisory until
-a dispatcher confirms it. Sensor changes are written to the audit trail. Rescue
+A breach (`value >= threshold_value`) writes a `SENSOR_BREACH` audit entry that
+lists the ids of the road edges within `impact_radius_m` metres of the sensor.
+The edges are not yet flagged on the road graph, so routing does not read the
+advisory; BRULE-012 keeps a breach advisory until a dispatcher confirms it.
+Other sensor changes are audited too. Rescue
 route preview is `GET /api/v1/dispatch/{sos_id}/preview` (§9.2).
 
 ### 9.7a Not yet implemented
