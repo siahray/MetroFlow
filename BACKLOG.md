@@ -1,6 +1,6 @@
 # MetroFlow - Consolidated Backlog
 
-**Revised:** 3 November 2026 (night) · **Baseline:** `main` at PR #50 (Backend CI and Web CI green)
+**Revised:** 4 November 2026 · **Baseline:** `feat/real-time-sse` at PR #65 (all four checks green)
 **Method:** cross-checked FSD status table, TSD §7, PM plan, PROGRESS_REPORT, FEATURES_AND_DELIVERABLES,
 UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Items marked *(unverified)* were not run.
 
@@ -21,7 +21,10 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | **F-8** Hazard drawing on the portal map | `network-map.tsx` gained a click-to-place draw tool (polygon or line) with a draft preview layer and Finish/Undo/Cancel controls; `flood-closure-editor.tsx` added a Shape selector (segment / flood area / closure line) and a per-hazard Withdraw button (`PATCH .../active=false`). Backend: `hazard_zones.geometry` widened from POLYGON-only to generic `Geometry` (migration `a9c1f4e7d823`, applied live — hosted DB is at head), `create_hazard`/`update_hazard` now convert the posted GeoJSON via `geojson_to_geometry` (422 on anything but Polygon/LineString) |
 | **H-2** Silent migration drift | `.github/workflows/supabase-migrate.yml`: the job used to be *skipped* (not failed) when Backend CI was red on `main`, which is how the sensor tables went missing in production unnoticed. It now always runs and fails loudly, with an `::error` annotation naming the failed CI run, when triggered by a non-green `Backend CI` — a real failure gets the normal GitHub notification a skip never did. `AGENTS.md`'s stale "Migration Status: Complete" line is corrected to point at `alembic current`/`alembic heads` instead of asserting a status. Branch protection on `main` now requires `Unit tests` and `API contract tests` (Backend CI) to pass and be current before merge; force-push and delete are blocked |
 | **Sensor advisories: portal view, map layer, routing** | `metroflow-admin`: new `/sensors` registry page (CRUD, mirrors Fleet) and a colour-coded sensor layer on the live network map (grey disabled, sky blue normal, amber on a fresh breach). Backend: `GET /sensors` now returns `latitude`/`longitude` (from `Sensor.geom`) and the latest reading; `td_a_star_search` takes a 5th `advisory_flagged` element per edge and applies a soft time penalty (`ADVISORY_PENALTY = 1.5`) so a flagged, fresh sensor advisory is routed around when a safe alternative exists but never blocks (BRULE-012) — verified with a dedicated routing test and the full integration suite |
-| **H-5** Backend CI red on `main` (discovered while verifying the above) | `hazard_zones.hazard_id`, `vehicles.vehicle_id` and `sos_requests.sos_id` were created in `1311ec28b5ad` with `autoincrement=False` and no sequence, so creating a hazard, vehicle or SOS request fails on any environment built fresh from migration history — which is exactly what CI's ephemeral Postgres and `alembic upgrade head` do. Confirmed via `gh run list`: **CI has been red on `main` since the PR #64 merge.** The hosted DB itself was unaffected (fixed by hand previously, like the sensor_readings sequence before `e2a9c4b7d815`). Migration `b3f6a2c9e415` codifies that fix idempotently (only acts where the column default is still missing) and is applied to the hosted DB; local Docker Postgres and the full 80-test integration suite verified clean on a from-scratch DB. **Still needed: commit and push so CI actually goes green again** — until then nothing can merge to `main` under the new branch protection |
+| **H-5** Backend CI red on `main` (discovered while verifying the above) | `hazard_zones.hazard_id`, `vehicles.vehicle_id` and `sos_requests.sos_id` were created in `1311ec28b5ad` with `autoincrement=False` and no sequence, so creating a hazard, vehicle or SOS request fails on any environment built fresh from migration history — which is exactly what CI's ephemeral Postgres and `alembic upgrade head` do. Confirmed via `gh run list`: **CI has been red on `main` since the PR #64 merge.** The hosted DB itself was unaffected (fixed by hand previously, like the sensor_readings sequence before `e2a9c4b7d815`). Migration `b3f6a2c9e415` codifies that fix idempotently (only acts where the column default is still missing) and is applied to the hosted DB; local Docker Postgres and the full 80-test integration suite verified clean on a from-scratch DB. Pushed as part of PR #65, where Backend CI is green; `main` goes green when that PR merges |
+| **F-6** Driver telemetry never sends | Closed: the token already carries `vehicle_id` (`/auth/login` and `/auth/me` return it), and `route.tsx` posts a telemetry batch every 5 s while navigation is active and the account is linked to a unit; the server enforces the same 5 s throttle (`telemetry_min_seconds`) |
+| **F-7** Offline screen showed "None / 0 MB" | Closed: `offline.ts::cacheStats()` reads the on-device SQLite cache and `offline.tsx` reports the road graph, hazard count, last route and bytes used — the placeholder counter and the disabled "Download Region" button are gone |
+| **FSD-FR-087** dispatcher entry | Closed: the triage screen has a "Log a call-in distress signal" modal (lat/long/note) posting to `POST /api/v1/sos`; the incident arrives through the same SSE stream and is selected in the queue |
 
 ## 0. Do first
 
@@ -37,7 +40,6 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | D-1 | `FEATURES_AND_DELIVERABLES.md` | Lists offline (FR-068 to 071) as "Planned (Scope Conflict)" and FR-079 as missing. Both are built. |
 | D-2 | `docs/api.md` | No entry for `nearest-sensor`, `/users`, exports (`/audit/export`, `/incidents/export`) or the `client_id` form field. Check each of the 50 routes against `main.py`. |
 | D-3 | `PROGRESS_REPORT.md` | Dated 2 Nov; omits offline queue, SQLite cache, `client_id`, RLS fix. |
-| D-4 | `docs/FSD.md` | Offline row updated (#45). Still: "Incident queue" and "Portal and driver app UI" are Partial; reword or close. |
 | D-5 | `docs/PROJ_MANAGEMENT_PLAN.md` | I-005 ("CR-001 increment is planned") is outdated; release checklist (lines ~458-467) is all unchecked; Bun test and Playwright still "planned". |
 | D-6 | `docs/TSD.md` | Add an ADR/limitation note: on-device SQLite for graph, hazards and queue (distinct from the out-of-scope tile cache); `client_id` idempotency; LIM-017 stays. |
 | D-7 | `AGENTS.md` | Wrong in four places: "Migration Status: Complete" (see H-2); says offline is "Conflicts with scope resolution" and "Marked Offline Maps … no SQLite" (offline is built); says "RLS: Enabled on all tables" (not true until H-2 lands); "Next Steps" are stale. |
@@ -52,14 +54,12 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | F-3 | Connectivity is inferred from failed requests; add NetInfo for a real online/offline indicator. | FR-068 | S |
 | F-4 | Dispatch timeline lacks `COMPLETE` / `CANCELLED` milestones (baseline doc). *(unverified)* | FR-087-089 | S |
 | F-5 | `/dashboard` is a thin page and `components/dashboard.tsx` duplicates triage logic. Build or delete. | UI backlog P1-1, FR-024 | M |
-| F-6 | Driver telemetry never sends: needs `vehicle_id` in the token or `EXPO_PUBLIC_TELEMETRY_VEHICLE_ID`. | FR-072 | S |
-| F-7 | Offline Maps screen shows "None / 0 MB". Show real cache status (graph age, queued reports) instead. | FR-070, LIM-017 | S |
 
 ## 3. Quality, tests, CI
 
 | # | Item | Notes |
 |---|------|-------|
-| Q-1 | **No portal or driver unit tests, no E2E.** Only the backend has tests (about 170). PM plan promises Bun test + Playwright (online and offline). | LIM-009. Biggest verification gap for the defence |
+| Q-1 | **No portal component/E2E tests and no driver-app tests.** The backend has 259 tests and the portal has 50 unit tests over `lib/`, but nothing renders a component and nothing runs end to end. PM plan promises Playwright (online and offline). | LIM-009. Biggest verification gap for the defence |
 | Q-2 | **Offline device test (TC-029/030) not yet run.** Needs a native rebuild (`expo-sqlite` config plugin), airplane mode, submit, reconnect, check it syncs once. | Run before claiming FR-068 to 071 |
 | Q-3 | Mobile CI runs `tsc` only, no lint. 2 lint warnings remain in the driver app; admin has ~6 unused-var warnings. | Add `expo lint` to `mobile.yml` |
 | Q-4 | Offline-latency and hazard-publish latency tests (release checklist). | PM plan |

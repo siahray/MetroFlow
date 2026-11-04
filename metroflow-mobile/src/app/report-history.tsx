@@ -48,8 +48,16 @@ export default function ReportHistoryScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void (async () => {
+      try {
+        const rows = await listMyReports();
+        setReports(rows);
+        setError(null);
+      } catch (cause) {
+        setError(cause instanceof ApiError ? cause.message : 'Could not load your reports.');
+      }
+    })();
+  }, []);
 
   async function handleRefresh() {
     setRefreshing(true);

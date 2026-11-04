@@ -1,12 +1,13 @@
 "use client";
 
-import { CircleCheck, Shield, Siren, Truck } from "lucide-react";
+import { CircleCheck, PhoneCall, Shield, Siren, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
 import { IncidentQueue } from "@/components/incident-queue";
+import { LogSOSModal } from "@/components/log-sos-modal";
 import { useToast } from "@/components/toast-provider";
 import {
   compareIncidents,
@@ -34,6 +35,7 @@ export default function TriagePage() {
   const [reports, setReports] = useState<FieldReport[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [view, setView] = useState<"active" | "dismissed">("active");
+  const [logOpen, setLogOpen] = useState(false);
   const [dismissedSos, setDismissedSos] = useState<SOSRequest[]>([]);
   const [dismissedReports, setDismissedReports] = useState<FieldReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -252,6 +254,20 @@ export default function TriagePage() {
     [show, router],
   );
 
+  // FSD-FR-087: a distress call taken by telephone enters the same queue and map.
+  const handleCallLogged = useCallback(
+    (sos: SOSRequest) => {
+      setLogOpen(false);
+      setView("active");
+      setSelectedId(`SOS-${sos.sos_id}`);
+      // The SOS stream usually delivers it; reload as well so a dropped stream
+      // cannot hide an incident the dispatcher just created.
+      setReloadKey((key) => key + 1);
+      show(`Call-in incident #SOS-${sos.sos_id} added to the queue`);
+    },
+    [show],
+  );
+
   const assignedCount = liveIncidents.filter((i) => i.tags.includes("Vehicle Assigned")).length;
   const availableVehiclesCount = vehicles.filter(
     (v) => (v.status || "AVAILABLE").toUpperCase() === "AVAILABLE",
@@ -339,6 +355,18 @@ export default function TriagePage() {
         })}
       </div>
 
+      {/* FSD-FR-087: a distress call that arrives by telephone is logged here. */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setLogOpen(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+        >
+          <PhoneCall className="h-4 w-4" />
+          Log a call-in distress signal
+        </button>
+      </div>
+
       {/* Main Triage & Verification Split Pane */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <IncidentQueue
@@ -375,6 +403,10 @@ export default function TriagePage() {
           </div>
         )}
       </div>
+
+      {logOpen ? (
+        <LogSOSModal onLogged={handleCallLogged} onClose={() => setLogOpen(false)} />
+      ) : null}
     </AppShell>
   );
 }
