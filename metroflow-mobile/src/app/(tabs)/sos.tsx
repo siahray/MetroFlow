@@ -7,6 +7,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -83,7 +84,11 @@ export default function SOSScreen() {
       if (!perm.granted) {
         Alert.alert(
           'Location Required',
-          'Allow location access to send a rescue request.'
+          'A rescue team needs your exact position to reach you. Enable location access for MetroFlow in Settings and try again.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+          ],
         );
         setLocating(false);
         return;

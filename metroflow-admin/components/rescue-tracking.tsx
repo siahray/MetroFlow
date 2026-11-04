@@ -338,12 +338,12 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
       ) : null}
 
       {removing ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4">
           <div
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="remove-unit-title"
-            className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-sm animate-modal-in space-y-4 rounded-2xl bg-white p-6 shadow-xl"
           >
             <h2 id="remove-unit-title" className="text-base font-bold text-slate-900">
               Remove {removing.call_sign}?

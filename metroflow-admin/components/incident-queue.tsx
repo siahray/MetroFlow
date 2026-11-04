@@ -3,6 +3,7 @@
 import { Search, RefreshCw, AlertCircle, Inbox, FilterX } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { hoursUntilPurge } from "@/lib/dismissed";
 import {
   QUEUE_FILTERS,
   countByFilter,
@@ -17,12 +18,15 @@ type IncidentQueueProps = {
   selectedId: string;
   filter: QueueFilter;
   query: string;
-  dismissed: ReadonlySet<string>;
+  view: "active" | "dismissed";
+  dismissedCount: number;
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
   onSelect: (id: string) => void;
   onDismiss: (id: string) => void;
+  onRestore: (id: string) => void;
+  onViewChange: (view: "active" | "dismissed") => void;
   onFilterChange: (filter: QueueFilter) => void;
   onQueryChange: (query: string) => void;
 };
@@ -56,12 +60,15 @@ export function IncidentQueue({
   selectedId,
   filter,
   query,
-  dismissed,
+  view,
+  dismissedCount,
   loading = false,
   error = null,
   onRetry,
   onSelect,
   onDismiss,
+  onRestore,
+  onViewChange,
   onFilterChange,
   onQueryChange,
 }: IncidentQueueProps) {
@@ -83,6 +90,30 @@ export function IncidentQueue({
           <span className="text-xs text-slate-400">
             Sort by: <strong className="font-semibold text-slate-700">Urgency Score</strong>
           </span>
+        </div>
+
+        <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+          {(
+            [
+              ["active", "Queue"],
+              ["dismissed", `Dismissed (${dismissedCount})`],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onViewChange(id)}
+              aria-pressed={view === id}
+              className={cn(
+                "flex-shrink-0 rounded-lg border px-3 py-1 font-semibold transition-colors",
+                view === id
+                  ? "border-sky-700 bg-sky-50 text-sky-800"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-100",
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
@@ -142,7 +173,9 @@ export function IncidentQueue({
             <p className="text-xs text-slate-500">
               {query.trim() || filter !== "all"
                 ? "Try adjusting your search or filter to see more incidents."
-                : "All incidents have been processed. Great work!"}
+                : view === "dismissed"
+                  ? "Dismissed incidents stay here for 72 hours, then are deleted."
+                  : "All incidents have been processed. Great work!"}
             </p>
             {filter !== "all" && (
               <button
@@ -158,7 +191,6 @@ export function IncidentQueue({
         ) : (
           incidents.map((incident) => {
             const selected = incident.id === selectedId;
-            const isDismissed = dismissed.has(incident.id);
             const reporterDisplay = incident.reporter.includes("+63")
               ? maskPhoneNumber(incident.reporter)
               : incident.reporter;
@@ -172,7 +204,6 @@ export function IncidentQueue({
                   selected
                     ? "border-sky-600 bg-sky-50/70 hover:bg-sky-50"
                     : "border-transparent hover:bg-slate-50/80",
-                  isDismissed && "opacity-40",
                 )}
               >
                 <div className="flex items-start justify-between">
@@ -215,12 +246,17 @@ export function IncidentQueue({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onDismiss(incident.id);
+                      (view === "dismissed" ? onRestore : onDismiss)(incident.id);
                     }}
                     className="rounded border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-200/60 hover:text-slate-800"
                   >
-                    Dismiss
+                    {view === "dismissed" ? "Restore" : "Dismiss"}
                   </button>
+                  {incident.dismissedAt ? (
+                    <span className="self-center text-[10px] text-slate-400">
+                      Deleted in {hoursUntilPurge(incident.dismissedAt)}h
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={(event) => {

@@ -176,6 +176,7 @@ _UNAUDITED_BY_DESIGN = {
     ("POST", "/api/v1/auth/register"),
     ("POST", "/api/v1/auth/send-verification"),
     ("POST", "/api/v1/auth/verify"),
+    ("PATCH", "/api/v1/auth/me"),
     ("POST", "/api/v1/sos"),
     ("POST", "/api/v1/reports"),
     ("POST", "/api/v1/vehicles/{vehicle_id}/telemetry"),

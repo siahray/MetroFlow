@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-50: #f0f7ff;
-  --color-brand-100: #e0effe;
-  --color-brand-500: #0284c7;
-  --color-brand-800: #075985;
-  --color-brand-900: #0c4a6e;
-  --color-brand-950: #082f49;
-
-  --color-navy-800: #0f2942;
-  --color-navy-900: #0a1a2b;
+  /*
+   * MetroFlow's palette (per AGENTS.md scope): slate-900 primary, emerald-500
+   * success. Named here so a component reaches for a semantic token instead
+   * of a raw Tailwind shade when the role matters more than the exact hue.
+   */
+  --color-brand-primary: var(--color-slate-900);
+  --color-brand-success: var(--color-emerald-500);
+  --color-brand-danger: var(--color-rose-600);
+  --color-brand-warning: var(--color-amber-500);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
@@ -25,4 +25,33 @@
 @utility bg-grid-pattern {
   background-image: radial-gradient(rgba(14, 165, 233, 0.12) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+/* Modal open transition: a quiet fade + rise instead of appearing instantly. */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@utility animate-modal-in {
+  animation: modal-in 160ms ease-out;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@utility animate-backdrop-in {
+  animation: backdrop-in 160ms ease-out;
 }

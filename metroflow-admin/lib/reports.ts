@@ -64,6 +64,7 @@ export type FieldReport = {
   moderated_at: string | null;
   decision_reason: string | null;
   hazard_id: number | null;
+  dismissed_at?: string | null;
   nearest_sensor?: NearestSensorReading | null;
   /** True when the nearest rain gauge in range reports no breach (FSD-FR-026). */
   sensor_mismatch?: boolean;
@@ -80,10 +81,16 @@ export type NearestSensorReading = {
   is_breach: boolean;
 };
 
-export async function listReports(status: ReportStatus = "PENDING"): Promise<FieldReport[]> {
-  return fetchJSON<FieldReport[]>(`/api/v1/reports?status=${encodeURIComponent(status)}`, {
-    cache: "no-store",
-  });
+export async function listReports(
+  status: ReportStatus = "PENDING",
+  dismissed = false,
+): Promise<FieldReport[]> {
+  return fetchJSON<FieldReport[]>(
+    `/api/v1/reports?status=${encodeURIComponent(status)}&dismissed=${dismissed}`,
+    {
+      cache: "no-store",
+    },
+  );
 }
 
 export async function getReport(reportId: string): Promise<FieldReport> {

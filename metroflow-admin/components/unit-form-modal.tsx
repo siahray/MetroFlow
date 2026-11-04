@@ -77,14 +77,14 @@ export function UnitFormModal({
     errors[key] ? "border-rose-400" : "border-slate-200";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4">
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby="unit-form-title"
         onSubmit={handleSubmit}
         noValidate
-        className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+        className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl bg-white p-6 shadow-xl"
       >
         <div className="flex items-center justify-between">
           <h2 id="unit-form-title" className="text-base font-bold text-slate-900">

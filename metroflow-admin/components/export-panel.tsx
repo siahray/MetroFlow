@@ -1,8 +1,9 @@
 "use client";
 
-import { Download, FileText, Users } from "lucide-react";
+import { FileText, Users } from "lucide-react";
 import { useState } from "react";
 
+import { ApiError } from "@/lib/api";
 import { downloadBlob, exportAuditCSV, exportIncidentsCSV } from "@/lib/export";
 import { useToast } from "./toast-provider";
 
@@ -16,8 +17,8 @@ export function ExportPanel() {
       const blob = await exportAuditCSV();
       downloadBlob(blob, "audit_log.csv");
       show("Audit log exported successfully");
-    } catch (error) {
-      show("Failed to export audit log");
+    } catch (cause) {
+      show(cause instanceof ApiError ? cause.message : "Failed to export audit log");
     } finally {
       setIsExporting(null);
     }
@@ -29,8 +30,8 @@ export function ExportPanel() {
       const blob = await exportIncidentsCSV();
       downloadBlob(blob, "incidents.csv");
       show("Incidents exported successfully");
-    } catch (error) {
-      show("Failed to export incidents");
+    } catch (cause) {
+      show(cause instanceof ApiError ? cause.message : "Failed to export incidents");
     } finally {
       setIsExporting(null);
     }

@@ -13,16 +13,20 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | Sensor bug fixes (`fix/sensor-geography`) | Merged (#43) |
 | Hosted DB migrated to head; sensor tables created (they were missing in production) | Done. Head is `f3b7d9a1c562` |
 | RLS enabled on `sensors`, `sensor_readings` | Merged (#48), applied live |
-| Two failing API contract tests (test bugs: shared node, missing body, self-delete order) | Merged (#49). **Backend CI is green on `main`** |
+| Two failing API contract tests (test bugs: shared node, missing body, self-delete order) | Merged (#49). Backend CI was green on `main` at the time — **since broken again by PR #64, see H-5** |
 | Backlog document and refresh | Merged (#47, #50) |
 | Hosted DB migration pipeline (`Supabase - Apply migrations`) | Ran successfully after green CI; confirms the DB is at head |
+| **H-1** RLS on `incident_reports` and `event_log` | Merged (`14dbec4`, migration `a4c8e2d6b917`). Applied to the hosted database. Adds `test_every_public_table_has_row_level_security`, which fails CI if any public table lacks RLS — this is **S-7** |
+| **F-1** Offline route planning | `metroflow-mobile/src/navigation/offline-route.ts`: a JS port of the backend's time-dependent A* (`routing.py::td_a_star_search`) over the cached graph, with the same hazard-blocking rule (BRULE-008) and turn-by-turn instructions. `route.tsx`'s `requestRoute` falls back to it on a network failure (not on a real 404) for planning, auto-reroute and manual refresh. Verified against a synthetic 3-node graph (submerged-edge detour, hazard refusal, `ignore_hazards`) |
+| **F-8** Hazard drawing on the portal map | `network-map.tsx` gained a click-to-place draw tool (polygon or line) with a draft preview layer and Finish/Undo/Cancel controls; `flood-closure-editor.tsx` added a Shape selector (segment / flood area / closure line) and a per-hazard Withdraw button (`PATCH .../active=false`). Backend: `hazard_zones.geometry` widened from POLYGON-only to generic `Geometry` (migration `a9c1f4e7d823`, applied live — hosted DB is at head), `create_hazard`/`update_hazard` now convert the posted GeoJSON via `geojson_to_geometry` (422 on anything but Polygon/LineString) |
+| **H-2** Silent migration drift | `.github/workflows/supabase-migrate.yml`: the job used to be *skipped* (not failed) when Backend CI was red on `main`, which is how the sensor tables went missing in production unnoticed. It now always runs and fails loudly, with an `::error` annotation naming the failed CI run, when triggered by a non-green `Backend CI` — a real failure gets the normal GitHub notification a skip never did. `AGENTS.md`'s stale "Migration Status: Complete" line is corrected to point at `alembic current`/`alembic heads` instead of asserting a status. Branch protection on `main` now requires `Unit tests` and `API contract tests` (Backend CI) to pass and be current before merge; force-push and delete are blocked |
+| **Sensor advisories: portal view, map layer, routing** | `metroflow-admin`: new `/sensors` registry page (CRUD, mirrors Fleet) and a colour-coded sensor layer on the live network map (grey disabled, sky blue normal, amber on a fresh breach). Backend: `GET /sensors` now returns `latitude`/`longitude` (from `Sensor.geom`) and the latest reading; `td_a_star_search` takes a 5th `advisory_flagged` element per edge and applies a soft time penalty (`ADVISORY_PENALTY = 1.5`) so a flagged, fresh sensor advisory is routed around when a safe alternative exists but never blocks (BRULE-012) — verified with a dedicated routing test and the full integration suite |
+| **H-5** Backend CI red on `main` (discovered while verifying the above) | `hazard_zones.hazard_id`, `vehicles.vehicle_id` and `sos_requests.sos_id` were created in `1311ec28b5ad` with `autoincrement=False` and no sequence, so creating a hazard, vehicle or SOS request fails on any environment built fresh from migration history — which is exactly what CI's ephemeral Postgres and `alembic upgrade head` do. Confirmed via `gh run list`: **CI has been red on `main` since the PR #64 merge.** The hosted DB itself was unaffected (fixed by hand previously, like the sensor_readings sequence before `e2a9c4b7d815`). Migration `b3f6a2c9e415` codifies that fix idempotently (only acts where the column default is still missing) and is applied to the hosted DB; local Docker Postgres and the full 80-test integration suite verified clean on a from-scratch DB. **Still needed: commit and push so CI actually goes green again** — until then nothing can merge to `main` under the new branch protection |
 
 ## 0. Do first
 
 | # | Item | Why |
 |---|------|-----|
-| H-1 | **Enable RLS on `incident_reports` and `event_log`.** Needs a migration and a live apply (same recipe as #48). Add **S-7** (CI check for RLS on every public table) in the same PR. | These tables hold reporter hashes, evidence photos and EXIF, and are reachable with the anon key. `spatial_ref_sys` is a PostGIS system table; leave it |
-| H-2 | **Migrations only reach production through green CI.** The `Supabase - Apply migrations` workflow runs after Backend CI on `main` and is *skipped* when CI is red. CI was red for several merges, so production silently lagged (sensor tables were missing until applied by hand). Fix: make a skipped run visible (notification or a status check), require green CI via branch protection, and document the pipeline in `AGENTS.md`/TSD (it currently says "Migration Status: Complete"). | Silent production drift |
 | H-3 | Branch and worktree cleanup. Delete merged branches (`pr/*`, `fix/*`, `docs/backlog-*`, `feat/driver-navigation`, `feat/loading-states-and-error-boundaries`, `feat/moderation-desk`, `feat/network-map`, `feat/report-intake*`, `feat/ui-polish-backlog`). Remove the worktrees `../MetroFlow-docs` and `.claude/worktrees/docs-sync`. Drop the stale lint-staged `stash@{0}` (its content was merged in #46). Decide on `backup/local-main-oct27`, `feat/scope-resolution-frontend-slice`, `worktree-docs-sync`. `feat/driver-navigation` shows 24 "unpushed" commits that `git cherry` reports as already in `main`. | Noise; caused confusion twice |
 | H-4 | Local dev database is stale (old 4-node graph, leftover rows), so `pytest -m integration` against it fails misleadingly. Recreate it, or run integration tests on a throwaway DB (`CREATE DATABASE metroflow_ci`, `alembic upgrade head`, test, drop). Document the recipe in `backend/README`. | Wasted debugging time |
 
@@ -44,14 +48,12 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 
 | # | Item | Ref | Size |
 |---|------|-----|------|
-| F-1 | **Offline route planning**: client-side shortest path on the cached graph so a driver can pick a new destination offline. Today only the last route works offline. | FSD-FR-071, TC-030 | M |
 | F-2 | Queued report photos are stored as file paths; the OS may purge them. Copy into app document storage on enqueue. | FR-068 | S |
 | F-3 | Connectivity is inferred from failed requests; add NetInfo for a real online/offline indicator. | FR-068 | S |
 | F-4 | Dispatch timeline lacks `COMPLETE` / `CANCELLED` milestones (baseline doc). *(unverified)* | FR-087-089 | S |
 | F-5 | `/dashboard` is a thin page and `components/dashboard.tsx` duplicates triage logic. Build or delete. | UI backlog P1-1, FR-024 | M |
 | F-6 | Driver telemetry never sends: needs `vehicle_id` in the token or `EXPO_PUBLIC_TELEMETRY_VEHICLE_ID`. | FR-072 | S |
 | F-7 | Offline Maps screen shows "None / 0 MB". Show real cache status (graph age, queued reports) instead. | FR-070, LIM-017 | S |
-| F-8 | **Hazard drawing on the portal map**: draw a flood polygon and a closure line, and send `geometry`. Today the Hazards page can only attach a hazard to a road segment. Also a hazard withdraw endpoint and button. | FSD-FR-082, 083, 085 | M |
 
 ## 3. Quality, tests, CI
 
@@ -73,16 +75,16 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | S-4 | LIM-011/012 single-region DB; no backup/restore runbook or DR test; RPO/RTO undefined. | Open |
 | S-5 | LIM-015 driver app distribution: internal EAS/TestFlight build needed for the pilot. | Open |
 | S-6 | Reporter hash salt and JWT secret rotation procedure undocumented. *(unverified)* | |
-| S-7 | Add a CI check that every public table has RLS enabled (query `pg_class.relrowsecurity`), so the sensors gap cannot recur. | New |
+| S-7 | ~~Add a CI check that every public table has RLS enabled~~ | Done — see H-1 above |
 
 ## 5. UI polish (from `UI_POLISH_BACKLOG.md`, updated)
 
-Done: loading/empty/error states for the queue, users and rescue screens; offline banner (portal and driver app);
+Done: loading/empty/error states for the queue, users, rescue, sensors, radar and hazards screens (fleet, moderation and
+export already had them); modal open transitions; offline banner (portal and driver app);
 aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primary; Call-911 removed.
 
 | # | Item | Size |
 |---|------|------|
-| U-1 | Loading/error/empty states for remaining screens: hazards, fleet, moderation queue, export, radar, dispatch panel | M |
 | U-2 | Accessibility pass beyond buttons: form labels, focus order, contrast (emerald-500 on white fails), screen-reader test | M |
 | U-3 | Adopt `theme.ts` for font sizes and spacing; finish moving hex into tokens in the admin Tailwind config | S |
 | U-4 | P1-4 custom splash screen; P1-5 context-specific error messages (GPS denied, network) in the driver app | S |
@@ -92,14 +94,12 @@ aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primar
 
 ## 6. Suggested order
 
-1. **H-1** RLS on `incident_reports` and `event_log` (migration, live apply, PR) with the **S-7** CI check.
-2. **H-2** make a skipped migration run visible and require green CI.
-3. **Q-2** device test of offline; fix what breaks.
-4. **D-1..D-9** documentation sync in one PR (includes **H-3** branch cleanup and **H-4** recipe).
-5. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers, one Playwright smoke (login, triage), one offline-queue test.
-6. **F-1, F-2, F-6** to close FR-071 and telemetry honestly.
-7. **U-1, U-2, U-4**, then defer the rest of section 5 until after pilot feedback.
-8. **S-1, S-4** before any real users.
+1. **Q-2** device test of offline; fix what breaks.
+2. **D-1..D-9** documentation sync in one PR (includes **H-3** branch cleanup and **H-4** recipe).
+3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers, one Playwright smoke (login, triage), one offline-queue test.
+4. **F-2, F-6** to close out telemetry and the queued-photo gap honestly.
+5. **U-1, U-2, U-4**, then defer the rest of section 5 until after pilot feedback.
+6. **S-1, S-4** before any real users.
 
 ## Out of scope (unchanged)
 

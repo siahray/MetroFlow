@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { CloudRain, Route as RouteIcon, ShieldAlert, Truck, Waves } from "lucide-react";
+import { CloudRain, Gauge, Route as RouteIcon, ShieldAlert, Truck, Waves } from "lucide-react";
 import type {
   GeoJSONSource,
   Map as MapLibreMap,
@@ -30,6 +30,7 @@ import {
   type RouteResult,
 } from "@/lib/network";
 import { listSOS } from "@/lib/sos-live";
+import { listSensors, type Sensor } from "@/lib/sensors";
 import { listVehiclesLive } from "@/lib/vehicles-live";
 
 /**
@@ -56,6 +57,7 @@ const OVERLAY_LAYERS = {
   hazards: ["map-hazard-fill", "map-hazard-outline", "map-hazard-edges", "map-hazard-labels"],
   fleet: ["map-fleet-points", "map-fleet-labels"],
   sos: ["map-sos-points", "map-sos-labels"],
+  sensors: ["map-sensors-points", "map-sensors-labels"],
 } as const;
 
 type OverlayKey = keyof typeof OVERLAY_LAYERS;
@@ -64,6 +66,7 @@ const OVERLAY_LABELS: Record<OverlayKey, string> = {
   hazards: "Verified hazards",
   fleet: "Fleet units",
   sos: "SOS signals",
+  sensors: "Sensors",
 };
 
 /** Same colour language the driver app uses for obstruction levels. */
@@ -164,6 +167,25 @@ function sosCollection(requests: SOSRequest[]) {
   };
 }
 
+function sensorCollection(sensors: Sensor[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: sensors.flatMap((sensor) => {
+      if (sensor.latitude === null || sensor.longitude === null) return [];
+      return [
+        {
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates: [sensor.longitude, sensor.latitude] },
+          properties: {
+            label: sensor.sensor_id,
+            color: !sensor.active ? "#94a3b8" : sensor.last_flagged ? "#f59e0b" : "#0ea5e9",
+          },
+        },
+      ];
+    }),
+  };
+}
+
 const STATUS_FILTER: Record<
   "PASSABLE" | "LIGHT_FLOOD" | "SUBMERGED",
   "passable" | "lightFlood" | "submerged"
@@ -173,6 +195,10 @@ const STATUS_FILTER: Record<
   SUBMERGED: "submerged",
 };
 
+export type DrawnGeometry =
+  | { type: "Polygon"; coordinates: [number, number][][] }
+  | { type: "LineString"; coordinates: [number, number][] };
+
 type NetworkMapProps = {
   /** Layer checkbox in the editor: hide the graph, keep the basemap. */
   showGraph: boolean;
@@ -180,6 +206,14 @@ type NetworkMapProps = {
   onAction: (message: string) => void;
   /** Called whenever the rendered verdicts or the active route change. */
   onSummary: (summary: NetworkSummary) => void;
+  /**
+   * Hazard-shape drawing (FSD-FR-082, FSD-FR-083): "polygon" collects a flood
+   * area, "line" a closure line. `null` (the default) leaves ordinary map
+   * clicks alone.
+   */
+  drawMode?: "polygon" | "line" | null;
+  /** Fired with the finished shape on "Finish", or `null` on "Cancel". */
+  onDrawComplete?: (geometry: DrawnGeometry | null) => void;
 };
 
 function errorMessage(error: unknown): string {
@@ -219,11 +253,19 @@ function buildPopupContent(props: EdgeProperties): HTMLElement {
   return wrapper;
 }
 
-export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) {
+export function NetworkMap({
+  showGraph,
+  onAction,
+  onSummary,
+  drawMode = null,
+  onDrawComplete,
+}: NetworkMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const popupRef = useRef<MapLibrePopup | null>(null);
   const fittedRef = useRef(false);
+  const drawModeRef = useRef(drawMode);
+  const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
 
   const [ready, setReady] = useState(false);
   const [network, setNetwork] = useState<NetworkState | null>(null);
@@ -238,10 +280,12 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [sosRequests, setSosRequests] = useState<SOSRequest[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
   const [overlays, setOverlays] = useState<Record<OverlayKey, boolean>>({
     hazards: true,
     fleet: true,
     sos: true,
+    sensors: true,
   });
 
   // --- Map lifecycle -------------------------------------------------------
@@ -283,6 +327,7 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
         map.addSource("map-hazards", { type: "geojson", data: EMPTY_COLLECTION });
         map.addSource("map-fleet", { type: "geojson", data: EMPTY_COLLECTION });
         map.addSource("map-sos", { type: "geojson", data: EMPTY_COLLECTION });
+        map.addSource("map-sensors", { type: "geojson", data: EMPTY_COLLECTION });
 
         map.addLayer({
           id: "network-edges-casing",
@@ -491,7 +536,64 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
           },
         });
 
+        map.addLayer({
+          id: "map-sensors-points",
+          type: "circle",
+          source: "map-sensors",
+          paint: {
+            "circle-radius": 6,
+            "circle-color": ["get", "color"],
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+        map.addLayer({
+          id: "map-sensors-labels",
+          type: "symbol",
+          source: "map-sensors",
+          minzoom: 13,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 10,
+            "text-offset": [0, 1.3],
+            "text-anchor": "top",
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#0c4a6e",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.6,
+          },
+        });
+
+        map.addSource("draw-draft", { type: "geojson", data: EMPTY_COLLECTION });
+        map.addLayer({
+          id: "draw-draft-line",
+          type: "line",
+          source: "draw-draft",
+          filter: ["==", ["geometry-type"], "LineString"],
+          paint: { "line-color": "#f59e0b", "line-width": 2.5, "line-dasharray": [2, 1.5] },
+        });
+        map.addLayer({
+          id: "draw-draft-points",
+          type: "circle",
+          source: "draw-draft",
+          filter: ["==", ["geometry-type"], "Point"],
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#f59e0b",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+
+        map.on("click", (event: MapLayerMouseEvent) => {
+          if (!drawModeRef.current) return;
+          setDrawPoints((current) => [...current, [event.lngLat.lng, event.lngLat.lat]]);
+        });
+
         map.on("click", "network-edges-live", (event: MapLayerMouseEvent) => {
+          if (drawModeRef.current) return;
           const feature = event.features?.[0];
           if (!map || !feature) return;
           const props = feature.properties as unknown as EdgeProperties;
@@ -632,6 +734,65 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
     }
   }, [showGraph, ready]);
 
+  // --- Hazard-shape drawing (FSD-FR-082, FSD-FR-083) -----------------------
+  // Adjusting state during render on a prop change (not in an effect) per
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes.
+  if (drawModeRef.current !== drawMode) {
+    drawModeRef.current = drawMode;
+    setDrawPoints([]);
+  }
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map) map.getCanvas().style.cursor = drawMode ? "crosshair" : "";
+  }, [drawMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const source = map?.getSource("draw-draft") as GeoJSONSource | undefined;
+    if (!source) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: [
+        ...(drawPoints.length >= 2
+          ? [
+              {
+                type: "Feature" as const,
+                geometry: { type: "LineString" as const, coordinates: drawPoints },
+                properties: {},
+              },
+            ]
+          : []),
+        ...drawPoints.map((coordinates) => ({
+          type: "Feature" as const,
+          geometry: { type: "Point" as const, coordinates },
+          properties: {},
+        })),
+      ],
+    });
+  }, [drawPoints, ready]);
+
+  const minDrawPoints = drawMode === "polygon" ? 3 : 2;
+
+  const undoDrawPoint = useCallback(() => {
+    setDrawPoints((current) => current.slice(0, -1));
+  }, []);
+
+  const cancelDraw = useCallback(() => {
+    setDrawPoints([]);
+    onDrawComplete?.(null);
+  }, [onDrawComplete]);
+
+  const finishDraw = useCallback(() => {
+    if (drawPoints.length < minDrawPoints) return;
+    const geometry: DrawnGeometry =
+      drawMode === "polygon"
+        ? { type: "Polygon", coordinates: [[...drawPoints, drawPoints[0]]] }
+        : { type: "LineString", coordinates: drawPoints };
+    setDrawPoints([]);
+    onDrawComplete?.(geometry);
+  }, [drawMode, drawPoints, minDrawPoints, onDrawComplete]);
+
   // --- Live overlays (FSD-FR-075, FSD-FR-076) ------------------------------
   // One stream per layer, each pushing the whole list, so the map never shows a
   // fleet of one after a single unit reports its position.
@@ -666,16 +827,33 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
     };
   }, [ready]);
 
+  // Sensors have no live stream (FSD-FR-090, FR-091): a breach only changes
+  // when a gateway posts a new reading, so a short poll is enough to keep the
+  // map layer current.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    const load = () => void listSensors(false).then((rows) => !cancelled && setSensors(rows));
+    load();
+    const timer = window.setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [ready]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const hazardSource = map.getSource("map-hazards") as GeoJSONSource | undefined;
     const fleetSource = map.getSource("map-fleet") as GeoJSONSource | undefined;
     const sosSource = map.getSource("map-sos") as GeoJSONSource | undefined;
+    const sensorSource = map.getSource("map-sensors") as GeoJSONSource | undefined;
     hazardSource?.setData(hazardCollection(hazards, network));
     fleetSource?.setData(fleetCollection(vehicles));
     sosSource?.setData(sosCollection(sosRequests));
-  }, [hazards, vehicles, sosRequests, network, ready]);
+    sensorSource?.setData(sensorCollection(sensors));
+  }, [hazards, vehicles, sosRequests, sensors, network, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -784,6 +962,41 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
         </div>
       ) : null}
 
+      {drawMode ? (
+        <div className="absolute top-4 left-1/2 z-30 w-[min(360px,90%)] -translate-x-1/2 space-y-2 rounded-xl border border-amber-500/40 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
+          <p className="text-xs font-semibold text-amber-300">
+            Click the map to place{" "}
+            {drawMode === "polygon" ? "the flood area's" : "the closure line's"} points (
+            {drawPoints.length} placed, {minDrawPoints} minimum).
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={undoDrawPoint}
+              disabled={drawPoints.length === 0}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Undo point
+            </button>
+            <button
+              type="button"
+              onClick={finishDraw}
+              disabled={drawPoints.length < minDrawPoints}
+              className="flex-1 rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Finish shape
+            </button>
+            <button
+              type="button"
+              onClick={cancelDraw}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-100 hover:border-rose-500 hover:text-rose-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Live overlay toggles (FSD-FR-075, FSD-FR-076) */}
       <div className="absolute top-4 left-4 z-30 w-[186px] space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/95 p-2.5 text-slate-100 shadow-xl backdrop-blur">
         <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
@@ -794,6 +1007,7 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
             ["hazards", ShieldAlert, hazards.length],
             ["fleet", Truck, vehicles.length],
             ["sos", Waves, sosRequests.length],
+            ["sensors", Gauge, sensors.length],
           ] as [OverlayKey, typeof ShieldAlert, number][]
         ).map(([key, Icon, count]) => (
           <label

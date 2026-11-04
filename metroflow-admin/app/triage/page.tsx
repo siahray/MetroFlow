@@ -15,6 +15,7 @@ import {
   type Incident,
 } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
+import { dismissIncident, restoreIncident } from "@/lib/dismissed";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
 import { listHazards, type HazardZone } from "@/lib/hazards";
@@ -32,7 +33,9 @@ export default function TriagePage() {
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [reports, setReports] = useState<FieldReport[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const [view, setView] = useState<"active" | "dismissed">("active");
+  const [dismissedSos, setDismissedSos] = useState<SOSRequest[]>([]);
+  const [dismissedReports, setDismissedReports] = useState<FieldReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -56,6 +59,15 @@ export default function TriagePage() {
     recalculate();
   }, [sosList, reports, vehicles, hazards]);
 
+  const loadDismissed = useCallback(async () => {
+    const [sosRows, reportRows] = await Promise.all([
+      listSOS(undefined, true).catch(() => []),
+      listReports("PENDING", true).catch(() => []),
+    ]);
+    setDismissedSos(sosRows);
+    setDismissedReports(reportRows);
+  }, []);
+
   useEffect(() => {
     // Initial load to get snapshot data
     const load = async () => {
@@ -66,6 +78,7 @@ export default function TriagePage() {
           listVehicles().catch(() => []),
           listHazards().catch(() => []),
         ]);
+        void loadDismissed();
         setError(null);
         setSosList(sosList);
         setVehicles(vehicleList);
@@ -125,11 +138,24 @@ export default function TriagePage() {
       abortController.abort();
       clearInterval(reportInterval);
     };
-  }, [reloadKey]);
+  }, [reloadKey, loadDismissed]);
 
-  const allIncidents = useMemo(() => {
-    return liveIncidents;
-  }, [liveIncidents]);
+  const dismissedIncidents = useMemo(
+    () =>
+      [
+        ...dismissedSos.map((s) => ({
+          ...sosToIncident(s, { reports: dismissedReports, vehicles, hazards }),
+          dismissedAt: s.dismissed_at,
+        })),
+        ...dismissedReports.map((r) => ({
+          ...reportToIncident(r, { vehicles, hazards }),
+          dismissedAt: r.dismissed_at,
+        })),
+      ].sort(compareIncidents),
+    [dismissedSos, dismissedReports, vehicles, hazards],
+  );
+
+  const allIncidents = view === "dismissed" ? dismissedIncidents : liveIncidents;
 
   const incidentById = useMemo(() => {
     const map = new Map<string, Incident>();
@@ -158,18 +184,55 @@ export default function TriagePage() {
     ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null)
     : (allIncidents[0] ?? null);
   const activeId = selected?.id ?? "";
-  const pendingCount = allIncidents.length - dismissed.size;
+  const pendingCount = liveIncidents.length;
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
   }, []);
 
   const handleDismiss = useCallback(
-    (id: string) => {
-      setDismissed((current) => new Set(current).add(id));
-      show(`Incident #${id} dismissed from active queue`);
+    async (id: string) => {
+      const incident = incidentById.get(id);
+      if (!incident) return;
+      try {
+        await dismissIncident(incident);
+      } catch (err) {
+        show(err instanceof Error ? err.message : "Could not dismiss the incident");
+        return;
+      }
+      // The SOS stream drops the row itself; field reports are polled, so drop it here.
+      setSosList((rows) =>
+        incident.incidentType === "report"
+          ? rows
+          : rows.filter((row) => sosToIncident(row).id !== id),
+      );
+      setReports((rows) =>
+        rows.filter(
+          (row) => row.report_id !== incident.reportId || incident.incidentType !== "report",
+        ),
+      );
+      await loadDismissed();
+      show(`Incident #${id} moved to Dismissed; it is deleted after 72 hours`);
     },
-    [show],
+    [show, loadDismissed, incidentById],
+  );
+
+  const handleRestore = useCallback(
+    async (id: string) => {
+      const incident = incidentById.get(id);
+      if (!incident) return;
+      try {
+        await restoreIncident(incident);
+      } catch (err) {
+        show(err instanceof Error ? err.message : "Could not restore the incident");
+        return;
+      }
+      // The restored SOS reaches the queue through the stream; reports are re-read.
+      setReports(await listReports().catch(() => []));
+      await loadDismissed();
+      show(`Incident #${id} restored to the queue`);
+    },
+    [show, loadDismissed, incidentById],
   );
 
   // FSD-FR-043: the log is persisted per incident and read back by the detail
@@ -283,7 +346,9 @@ export default function TriagePage() {
           selectedId={selected?.id || ""}
           filter={filter}
           query={query}
-          dismissed={dismissed}
+          view={view}
+          dismissedCount={dismissedIncidents.length}
+          onViewChange={setView}
           loading={loading}
           error={error}
           onRetry={() => {
@@ -293,6 +358,7 @@ export default function TriagePage() {
           }}
           onSelect={handleSelect}
           onDismiss={handleDismiss}
+          onRestore={handleRestore}
           onFilterChange={setFilter}
           onQueryChange={setQuery}
         />

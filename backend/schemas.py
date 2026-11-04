@@ -30,6 +30,28 @@ def geometry_to_geojson(value: Any) -> dict[str, Any] | None:
         return None
 
 
+GEOMETRY_HAZARD_TYPES = {"Polygon", "LineString"}
+
+
+def geojson_to_geometry(value: dict[str, Any] | None) -> Any:
+    """Convert a GeoJSON Polygon or LineString into a PostGIS geometry value.
+
+    The admin map draws a flood polygon (FSD-FR-082) or a closure line
+    (FSD-FR-083) and sends it as GeoJSON; the ``hazard_zones.geometry`` column
+    takes any geometry type (migration ``*_widen_hazard_geometry``) so either
+    shape can be stored. Raises ``ValueError`` on an unsupported type or
+    malformed coordinates, which the endpoint turns into a 422.
+    """
+    if value is None:
+        return None
+    if value.get("type") not in GEOMETRY_HAZARD_TYPES:
+        raise ValueError(f"geometry must be a Polygon or LineString, got {value.get('type')!r}")
+    from geoalchemy2.shape import from_shape
+    from shapely.geometry import shape as shapely_shape
+
+    return from_shape(shapely_shape(value), srid=4326)
+
+
 class EdgeProperties(BaseModel):
     """Attributes the map renderer styles and the UI displays for one road edge."""
 
@@ -147,7 +169,7 @@ class RouteHazard(BaseModel):
     blocking: bool = Field(description="True when this hazard's level excludes the edge it covers.")
     geometry: dict[str, Any] | None = Field(
         default=None,
-        description="GeoJSON Polygon in [longitude, latitude] order, when the hazard has one.",
+        description="GeoJSON Polygon or LineString in [longitude, latitude] order, when the hazard has one.",
     )
     warning_radius_m: int
 
@@ -187,6 +209,7 @@ class SOSResponse(BaseModel):
     vehicle_id: int | None = None
     status: str
     created_at: datetime | None = None
+    dismissed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -207,6 +230,7 @@ class HazardUpdate(BaseModel):
     edge_id: int | None = None
     active: bool | None = None
     notes: str | None = None
+    geometry: dict[str, Any] | None = None
 
 
 class HazardResponse(BaseModel):
@@ -218,7 +242,7 @@ class HazardResponse(BaseModel):
     notes: str | None = None
     geometry: dict[str, Any] | None = Field(
         default=None,
-        description="GeoJSON Polygon in [longitude, latitude] order, when the hazard has one.",
+        description="GeoJSON Polygon or LineString in [longitude, latitude] order, when the hazard has one.",
     )
     warning_radius_m: int = Field(
         default_factory=lambda: settings.warning_radius_m,
@@ -422,6 +446,12 @@ class UserCreateRequest(BaseModel):
     )
 
 
+class SelfUpdateRequest(BaseModel):
+    """A signed-in user editing their own name (portal and driver profile)."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+
+
 class UserUpdateRequest(BaseModel):
     """Request to update an existing user (FSD-FR-048)."""
 
@@ -492,11 +522,20 @@ class SensorResponse(BaseModel):
     sensor_id: str
     sensor_type: str
     name: str
+    latitude: float | None = None
+    longitude: float | None = None
     threshold_value: float
     threshold_unit: str
     impact_radius_m: float
     active: bool
     simulated: bool
+    last_reading_at: datetime | None = Field(
+        default=None, description="When the sensor last reported, for the portal registry view"
+    )
+    last_value: float | None = None
+    last_flagged: bool | None = Field(
+        default=None, description="Whether the latest reading breached the threshold"
+    )
 
     model_config = {"from_attributes": True}
 
@@ -609,6 +648,7 @@ class ReportResponse(BaseModel):
     moderated_at: datetime | None = None
     decision_reason: str | None = None
     hazard_id: int | None = None
+    dismissed_at: datetime | None = None
 
 
 class ReportRejectRequest(BaseModel):

@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, MapPin, Navigation } from "lucide-react";
+import { Check, MapPin, Navigation, Pentagon, Spline, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
-import { NetworkMap } from "./network-map";
+import { ErrorNotice } from "./error-notice";
+import { NetworkMap, type DrawnGeometry } from "./network-map";
 import { subscribeToHazards } from "@/lib/live-stream";
-import { createHazard, publishHazard, type HazardZone } from "@/lib/hazards";
+import { createHazard, publishHazard, withdrawHazard, type HazardZone } from "@/lib/hazards";
 import { fetchNetworkState, type NetworkSummary } from "@/lib/network";
 
 type FloodClosureEditorProps = {
@@ -30,8 +31,20 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   const [level, setLevel] = useState<(typeof LEVELS)[number]["id"]>("LEVEL_2");
   const [depthCm, setDepthCm] = useState("");
   const [hazards, setHazards] = useState<HazardZone[]>([]);
+  // The stream sends a snapshot on connect, so this flips false on the first payload.
+  // shortcut: a dead feed stays on "Connecting…" because subscribe() retries silently;
+  // add an onError hook to live-stream.ts if the panel must say the feed failed.
+  const [hazardsLoading, setHazardsLoading] = useState(true);
+  const [segmentsLoading, setSegmentsLoading] = useState(true);
+  const [segmentsError, setSegmentsError] = useState<string | null>(null);
+  const [segmentsReloadKey, setSegmentsReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [withdrawingId, setWithdrawingId] = useState<number | null>(null);
   const [networkSummary, setNetworkSummary] = useState<NetworkSummary | null>(null);
+  // FSD-FR-082, FR-083: a hazard can be attached to one road segment (the
+  // default) or drawn as a flood polygon / closure line on the map.
+  const [shape, setShape] = useState<"segment" | "polygon" | "line">("segment");
+  const [drawnGeometry, setDrawnGeometry] = useState<DrawnGeometry | null>(null);
 
   // Stable so the map's summary effect does not re-run on every parent render.
   const handleNetworkSummary = useCallback((summary: NetworkSummary) => {
@@ -42,7 +55,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   useEffect(() => {
     const controller = new AbortController();
     fetchNetworkState(30, controller.signal)
-      .then((state) =>
+      .then((state) => {
         setSegments(
           state.edges.features.map((edge) => ({
             edgeId: edge.properties.edge_id,
@@ -50,14 +63,20 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
               edge.properties.end_name ?? `Node ${edge.properties.end_node_id}`
             }`,
           })),
-        ),
-      )
+        );
+        setSegmentsError(null);
+      })
       .catch(() => {
-        if (!controller.signal.aborted) onAction("Could not load the road segments");
+        if (!controller.signal.aborted) {
+          setSegments([]);
+          setSegmentsError("Could not load the road segments. Check the connection and retry.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSegmentsLoading(false);
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [segmentsReloadKey]);
 
   // Live hazard list (FSD-FR-086): the stream pushes each change once and the snapshot covers
   // whatever happened while this tab was disconnected.
@@ -65,21 +84,26 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
     const controller = new AbortController();
     void subscribeToHazards((rows) => {
       setHazards([...rows].sort((a, b) => b.hazard_id - a.hazard_id));
+      setHazardsLoading(false);
     }, controller.signal);
     return () => controller.abort();
   }, []);
 
-  const canPublish = !saving && edgeId !== null && name.trim().length > 0;
+  const canPublish =
+    !saving &&
+    name.trim().length > 0 &&
+    (shape === "segment" ? edgeId !== null : drawnGeometry !== null);
 
   async function handlePublish() {
-    if (!canPublish || edgeId === null) return;
+    if (!canPublish) return;
     setSaving(true);
     try {
       const created = await createHazard({
         name: name.trim(),
         obstruction_level: level,
         avg_depth_cm: depthCm === "" ? undefined : Number(depthCm),
-        edge_id: edgeId,
+        edge_id: shape === "segment" ? edgeId : null,
+        geometry: shape === "segment" ? null : drawnGeometry,
       });
       const published = await publishHazard(created.hazard_id);
       setHazards((current) => [
@@ -89,10 +113,26 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
       onAction(`Published hazard #${published.hazard_id}: ${published.name}`);
       setName("");
       setDepthCm("");
+      setDrawnGeometry(null);
     } catch {
       onAction(`Failed to publish the hazard "${name.trim()}"`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleWithdraw(hazard: HazardZone) {
+    setWithdrawingId(hazard.hazard_id);
+    try {
+      const withdrawn = await withdrawHazard(hazard.hazard_id);
+      setHazards((current) =>
+        current.map((h) => (h.hazard_id === withdrawn.hazard_id ? withdrawn : h)),
+      );
+      onAction(`Withdrew hazard #${withdrawn.hazard_id}: ${withdrawn.name}`);
+    } catch {
+      onAction(`Failed to withdraw hazard #${hazard.hazard_id}`);
+    } finally {
+      setWithdrawingId(null);
     }
   }
 
@@ -105,15 +145,24 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
           Live Road Network &amp; Hazards
         </h2>
         <p className="text-xs text-slate-500">
-          Publish a hazard on a road segment so drivers are warned and, from Level 2 up, routed
-          around it. Area-shaped hazards come from approving driver reports in Moderation.
+          Publish a hazard on a road segment, or draw a flood area or closure line directly on the
+          map, so drivers are warned and, from Level 2 up, routed around it.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Live network map */}
         <div className="relative min-h-[660px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-sm lg:col-span-7">
-          <NetworkMap showGraph onAction={onAction} onSummary={handleNetworkSummary} />
+          <NetworkMap
+            showGraph
+            onAction={onAction}
+            onSummary={handleNetworkSummary}
+            drawMode={shape === "segment" ? null : shape}
+            onDrawComplete={(geometry) => {
+              setDrawnGeometry(geometry);
+              if (!geometry) setShape("segment");
+            }}
+          />
         </div>
 
         {/* Publish form and live hazards */}
@@ -123,28 +172,95 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
           </h3>
 
           <div>
-            <label
-              htmlFor="hazard-segment"
-              className="mb-1 block text-xs font-semibold text-slate-700 uppercase"
-            >
-              Road segment
-            </label>
-            <select
-              id="hazard-segment"
-              value={edgeId ?? ""}
-              onChange={(e) => setEdgeId(e.target.value === "" ? null : Number(e.target.value))}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium focus:border-slate-900 focus:outline-none"
-            >
-              <option value="">
-                {segments.length === 0 ? "Loading segments…" : "Choose a segment"}
-              </option>
-              {segments.map((s) => (
-                <option key={s.edgeId} value={s.edgeId}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <span className="mb-1 block text-xs font-semibold text-slate-700 uppercase">Shape</span>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShape("segment");
+                  setDrawnGeometry(null);
+                }}
+                className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${
+                  shape === "segment"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700"
+                }`}
+              >
+                Road segment
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShape("polygon");
+                  setDrawnGeometry(null);
+                }}
+                className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${
+                  shape === "polygon"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700"
+                }`}
+              >
+                <Pentagon className="h-3 w-3" /> Flood area
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShape("line");
+                  setDrawnGeometry(null);
+                }}
+                className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${
+                  shape === "line"
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700"
+                }`}
+              >
+                <Spline className="h-3 w-3" /> Closure line
+              </button>
+            </div>
           </div>
+
+          {shape === "segment" ? (
+            <div>
+              <label
+                htmlFor="hazard-segment"
+                className="mb-1 block text-xs font-semibold text-slate-700 uppercase"
+              >
+                Road segment
+              </label>
+              {segmentsError ? (
+                <ErrorNotice
+                  message={segmentsError}
+                  onRetry={() => {
+                    setSegmentsError(null);
+                    setSegmentsLoading(true);
+                    setSegmentsReloadKey((key) => key + 1);
+                  }}
+                />
+              ) : (
+                <select
+                  id="hazard-segment"
+                  value={edgeId ?? ""}
+                  onChange={(e) => setEdgeId(e.target.value === "" ? null : Number(e.target.value))}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium focus:border-slate-900 focus:outline-none"
+                >
+                  <option value="">
+                    {segmentsLoading ? "Loading segments…" : "Choose a segment"}
+                  </option>
+                  {segments.map((s) => (
+                    <option key={s.edgeId} value={s.edgeId}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              {drawnGeometry
+                ? `Shape ready (${shape === "polygon" ? "flood area" : "closure line"}).`
+                : `Draw the ${shape === "polygon" ? "flood area" : "closure line"} on the map, then click "Finish shape".`}
+            </p>
+          )}
 
           <div>
             <label
@@ -216,10 +332,12 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-[10px] font-bold text-slate-600 uppercase">Active hazards</span>
               <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">
-                {hazards.length}
+                {hazardsLoading ? "—" : hazards.length}
               </span>
             </div>
-            {hazards.length === 0 ? (
+            {hazardsLoading ? (
+              <p className="py-1 text-[11px] text-slate-400">Connecting to the live hazard feed…</p>
+            ) : hazards.length === 0 ? (
               <p className="py-1 text-[11px] text-slate-400">No active hazards.</p>
             ) : (
               <ul className="max-h-48 space-y-1.5 overflow-y-auto">
@@ -231,9 +349,21 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
                     <span className="truncate font-medium text-slate-800">
                       #{hazard.hazard_id} {hazard.name}
                     </span>
-                    <span className="shrink-0 font-mono text-[10px] text-slate-500">
-                      {hazard.obstruction_level}
-                      {hazard.avg_depth_cm != null ? ` · ${hazard.avg_depth_cm} cm` : ""}
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span className="font-mono text-[10px] text-slate-500">
+                        {hazard.obstruction_level}
+                        {hazard.avg_depth_cm != null ? ` · ${hazard.avg_depth_cm} cm` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void handleWithdraw(hazard)}
+                        disabled={withdrawingId === hazard.hazard_id}
+                        aria-label={`Withdraw hazard ${hazard.name}`}
+                        title="Withdraw"
+                        className="rounded p-0.5 text-slate-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </span>
                   </li>
                 ))}

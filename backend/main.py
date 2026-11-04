@@ -64,6 +64,7 @@ from schemas import (
     RouteInstruction,
     RouteResponse,
     RouteSegment,
+    SelfUpdateRequest,
     SendVerifyRequest,
     SensorCreateRequest,
     SensorReadingRequest,
@@ -85,6 +86,7 @@ from schemas import (
     VehicleResponse,
     VehicleUpdate,
     VerifyRequest,
+    geojson_to_geometry,
     geometry_to_geojson,
 )
 
@@ -299,6 +301,23 @@ def _load_hazard_coverage(
             covered[hazard.hazard_id].add(hazard.edge_id)
 
     return hazards, covered
+
+
+def _load_flagged_advisory_edges(db: Session) -> set[int]:
+    """Edges under a fresh, flagged sensor advisory (CR-004, FSD-FR-090).
+
+    Advisory only: this never blocks an edge (BRULE-012) -- the router applies
+    a soft time penalty instead, so the same mapping the flood-state endpoint
+    reads also keeps a dispatcher's route preview and a driver's route in
+    agreement about which edges carry a live sensor warning.
+    """
+    now = datetime.now(UTC).replace(tzinfo=None)
+    window = timedelta(minutes=settings.flood_fresh_minutes)
+    return {
+        advisory.edge_id
+        for advisory in db.query(models.EdgeAdvisory).filter(models.EdgeAdvisory.flagged.is_(True))
+        if flood_state.is_fresh(advisory.as_of, now, window)
+    }
 
 
 def _straight_line(start: models.RoadNode, end: models.RoadNode) -> list[list[float]]:
@@ -547,6 +566,7 @@ def get_optimal_route(
         for hazard in hazards:
             if hazard_blocks(hazard.obstruction_level):
                 blocked_edges |= hazard_edges.get(hazard.hazard_id, set())
+    flagged_edges = _load_flagged_advisory_edges(db)
 
     graph_nodes: dict[int, tuple[float, float]] = {
         node_id: (node.latitude, node.longitude) for node_id, node in nodes.items()
@@ -554,7 +574,7 @@ def get_optimal_route(
 
     # Roads are treated as bidirectional: a flooded evacuation corridor is
     # usable in both directions, and a one-way seed made reverse trips 404.
-    graph_edges: dict[int, list[tuple[int, float, float, float]]] = {}
+    graph_edges: dict[int, list[tuple[int, float, float, float, bool]]] = {}
     pair_index: dict[tuple[int, int], models.RoadEdge] = {}
 
     for edge in edges:
@@ -563,6 +583,7 @@ def get_optimal_route(
 
         state = states.get(edge.edge_id)
         water_cm = float(state.water_depth_cm) if state else 0.0
+        advisory_flagged = edge.edge_id in flagged_edges
         pair = (
             min(edge.start_node_id, edge.end_node_id),
             max(edge.start_node_id, edge.end_node_id),
@@ -574,7 +595,7 @@ def get_optimal_route(
             (edge.end_node_id, edge.start_node_id),
         ):
             graph_edges.setdefault(origin, []).append(
-                (destination, edge.distance_meters, edge.max_speed_kmh, water_cm)
+                (destination, edge.distance_meters, edge.max_speed_kmh, water_cm, advisory_flagged)
             )
 
     path, travel_time_s = td_a_star_search(
@@ -740,6 +761,25 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 @app.get("/api/v1/auth/me", response_model=UserResponse)
 def get_me(current_user: models.User = Depends(get_current_user)):
     """Return the account behind the presented bearer token."""
+    return {
+        "user_id": current_user.user_id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "vehicle_id": current_user.vehicle_id,
+    }
+
+
+@app.patch("/api/v1/auth/me", response_model=UserResponse)
+def update_me(
+    update: SelfUpdateRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """A signed-in user edits their own display name (portal and driver profile)."""
+    current_user.name = update.name.strip()
+    db.commit()
+    db.refresh(current_user)
     return {
         "user_id": current_user.user_id,
         "name": current_user.name,
@@ -1084,12 +1124,18 @@ def create_hazard(
 ):
     import models
 
+    try:
+        geometry = geojson_to_geometry(hazard.geometry)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     new_hazard = models.HazardZone(
         name=hazard.name,
         obstruction_level=hazard.obstruction_level,
         avg_depth_cm=hazard.avg_depth_cm,
         edge_id=hazard.edge_id,
         notes=hazard.notes,
+        geometry=geometry,
         active=True,
     )
     db.add(new_hazard)
@@ -1131,6 +1177,11 @@ def update_hazard(
         raise HTTPException(status_code=404, detail="Hazard not found")
     changes = hazard.model_dump(exclude_unset=True, exclude_none=True)
     for field, value in changes.items():
+        if field == "geometry":
+            try:
+                value = geojson_to_geometry(value)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         setattr(db_hazard, field, value)
     if changes:
         audit.record(
@@ -1720,15 +1771,130 @@ def list_vehicles(
     return db.query(models.Vehicle).all()
 
 
+DISMISS_WINDOW = timedelta(hours=72)
+
+
+def _dismissed_filter(query, model, dismissed: bool):
+    """Active rows, or only the dismissed ones still inside the review window."""
+    if not dismissed:
+        return query.filter(model.dismissed_at.is_(None))
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - DISMISS_WINDOW
+    return query.filter(model.dismissed_at >= cutoff)
+
+
+def _purge_dismissed(db: Session) -> None:
+    """Permanently delete incidents dismissed longer ago than the review window.
+
+    shortcut: runs on read, there is no scheduler on serverless; fine while the
+    portal is open, move to a cron if the table must be purged unattended.
+    """
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - DISMISS_WINDOW
+    expired = models.IncidentReport.dismissed_at < cutoff
+    ids = [r[0] for r in db.query(models.IncidentReport.report_id).filter(expired).all()]
+    if ids:
+        db.query(models.IncidentReport).filter(models.IncidentReport.duplicate_of.in_(ids)).update(
+            {models.IncidentReport.duplicate_of: None}
+        )
+    db.query(models.IncidentReport).filter(expired).delete()
+    db.query(models.SOSRequest).filter(models.SOSRequest.dismissed_at < cutoff).delete()
+    db.commit()
+
+
+@app.post("/api/v1/sos/{sos_id}/dismiss", response_model=SOSResponse)
+def dismiss_sos(
+    sos_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Move an incident out of the queue for 72 h, then it is purged."""
+    sos = _set_sos_dismissed(db, sos_id, dismissed=True)
+    audit.record(db, user=_user, action_type=audit.SOS_DISMISS, payload={"sos_id": sos_id})
+    db.commit()
+    db.refresh(sos)
+    return sos
+
+
+@app.post("/api/v1/sos/{sos_id}/restore", response_model=SOSResponse)
+def restore_sos(
+    sos_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    sos = _set_sos_dismissed(db, sos_id, dismissed=False)
+    audit.record(db, user=_user, action_type=audit.SOS_RESTORE, payload={"sos_id": sos_id})
+    db.commit()
+    db.refresh(sos)
+    return sos
+
+
+def _set_sos_dismissed(db: Session, sos_id: int, *, dismissed: bool):
+    sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if dismissed and sos.status in ("assigned", "confirmed", "dispatched"):
+        raise HTTPException(
+            status_code=409, detail="This incident has a unit committed. Undo the dispatch first."
+        )
+    if not dismissed and sos.dismissed_at is None:
+        raise HTTPException(status_code=409, detail="Incident is not dismissed")
+    sos.dismissed_at = datetime.now(UTC).replace(tzinfo=None) if dismissed else None
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(sos)
+    )
+    return sos
+
+
+@app.post("/api/v1/reports/{report_id}/dismiss", response_model=ReportResponse)
+def dismiss_report(
+    report_id: UUID,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _set_report_dismissed(db, report_id, dismissed=True)
+    audit.record(
+        db, user=_user, action_type=audit.REPORT_DISMISS, payload={"report_id": str(report_id)}
+    )
+    db.commit()
+    return _report_detail(db, report_id)
+
+
+@app.post("/api/v1/reports/{report_id}/restore", response_model=ReportResponse)
+def restore_report(
+    report_id: UUID,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _set_report_dismissed(db, report_id, dismissed=False)
+    audit.record(
+        db, user=_user, action_type=audit.REPORT_RESTORE, payload={"report_id": str(report_id)}
+    )
+    db.commit()
+    return _report_detail(db, report_id)
+
+
+def _set_report_dismissed(db: Session, report_id: UUID, *, dismissed: bool) -> None:
+    report = (
+        db.query(models.IncidentReport).filter(models.IncidentReport.report_id == report_id).first()
+    )
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if not dismissed and report.dismissed_at is None:
+        raise HTTPException(status_code=409, detail="Report is not dismissed")
+    report.dismissed_at = datetime.now(UTC).replace(tzinfo=None) if dismissed else None
+
+
 @app.get("/api/v1/sos", response_model=list[SOSResponse])
 def list_sos(
     status: str | None = None,
+    dismissed: bool = False,
     _user: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     import models
 
-    query = db.query(models.SOSRequest)
+    _purge_dismissed(db)
+    query = _dismissed_filter(db.query(models.SOSRequest), models.SOSRequest, dismissed)
     if status:
         query = query.filter(models.SOSRequest.status == status)
     return query.order_by(models.SOSRequest.created_at.desc()).all()
@@ -1967,7 +2133,11 @@ def _snapshot_vehicles(db: Session) -> dict[str, Any]:
 
 def _snapshot_sos(db: Session) -> dict[str, Any]:
     rows = (
-        db.query(models.SOSRequest).order_by(models.SOSRequest.created_at.desc()).limit(100).all()
+        db.query(models.SOSRequest)
+        .filter(models.SOSRequest.dismissed_at.is_(None))
+        .order_by(models.SOSRequest.created_at.desc())
+        .limit(100)
+        .all()
     )
     return {"sos": [events.sos_payload(row) for row in rows]}
 
@@ -2473,7 +2643,35 @@ def list_sensors(
     if active_only:
         query = query.filter(models.Sensor.active)
     sensors = query.order_by(models.Sensor.sensor_id).all()
-    return sensors
+
+    # One lookup per sensor, same pattern as the nearest-sensor cross-reference
+    # above: the registry is pilot-scale, so this is simpler than a window query.
+    results: list[SensorResponse] = []
+    for sensor in sensors:
+        latest = (
+            db.query(models.SensorReading)
+            .filter(models.SensorReading.sensor_id == sensor.sensor_id)
+            .order_by(models.SensorReading.recorded_at.desc())
+            .first()
+        )
+        results.append(
+            SensorResponse(
+                sensor_id=sensor.sensor_id,
+                sensor_type=sensor.sensor_type,
+                name=sensor.name,
+                latitude=sensor.latitude,
+                longitude=sensor.longitude,
+                threshold_value=sensor.threshold_value,
+                threshold_unit=sensor.threshold_unit,
+                impact_radius_m=sensor.impact_radius_m,
+                active=bool(sensor.active),
+                simulated=bool(sensor.simulated),
+                last_reading_at=latest.recorded_at if latest else None,
+                last_value=latest.value if latest else None,
+                last_flagged=latest.breach if latest else None,
+            )
+        )
+    return results
 
 
 @app.post("/api/v1/sensors", response_model=SensorResponse, status_code=201)
@@ -2808,6 +3006,7 @@ def _report_response(
         moderated_at=report.moderated_at,
         decision_reason=report.decision_reason,
         hazard_id=report.hazard_id,
+        dismissed_at=report.dismissed_at,
     )
 
 
@@ -2991,6 +3190,7 @@ def list_reports(
         str, Query(description="PENDING, VERIFIED, REJECTED or DUPLICATE")
     ] = reports.WAITING,
     limit: Annotated[int, Query(ge=1, le=200, description="Rows to return")] = 50,
+    dismissed: bool = False,
     _user: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -3006,14 +3206,19 @@ def list_reports(
             status_code=422, detail=f"status must be one of {list(reports.STATUSES)}"
         )
 
+    _purge_dismissed(db)
     rows = _report_rows(
         db,
-        db.query(
+        _dismissed_filter(
+            db.query(
+                models.IncidentReport,
+                func.ST_Y(models.IncidentReport.geometry),
+                func.ST_X(models.IncidentReport.geometry),
+                func.octet_length(models.IncidentReport.photo_data),
+            ).filter(models.IncidentReport.status == status),
             models.IncidentReport,
-            func.ST_Y(models.IncidentReport.geometry),
-            func.ST_X(models.IncidentReport.geometry),
-            func.octet_length(models.IncidentReport.photo_data),
-        ).filter(models.IncidentReport.status == status),
+            dismissed,
+        ),
     )
     now = datetime.now(UTC).replace(tzinfo=None)
     neighbours = _neighbour_map(rows, now)
@@ -3025,6 +3230,37 @@ def list_reports(
         ],
     )
     results.sort(key=lambda item: (item.urgency_score, item.submitted_at or now), reverse=True)
+    return results[:limit]
+
+
+@app.get("/api/v1/reports/mine", response_model=list[ReportResponse])
+def list_my_reports(
+    limit: Annotated[int, Query(ge=1, le=200, description="Rows to return")] = 50,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """A driver's own report history (P3-5): every status, most recent first.
+
+    Scoped by the same salted reporter hash the moderation desk's duplicate
+    check uses (BR-011) -- the identity never leaves that one function.
+    """
+    my_hash = reports.reporter_hash(_user.user_id, settings.report_hash_salt)
+    rows = _report_rows(
+        db,
+        db.query(
+            models.IncidentReport,
+            func.ST_Y(models.IncidentReport.geometry),
+            func.ST_X(models.IncidentReport.geometry),
+            func.octet_length(models.IncidentReport.photo_data),
+        ).filter(models.IncidentReport.reporter_hash == my_hash),
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    neighbours = _neighbour_map(rows, now)
+    results = [
+        _report_response(row[0], row[1], row[2], row[3], neighbours[row[0].report_id], now)
+        for row in rows
+    ]
+    results.sort(key=lambda item: item.submitted_at or now, reverse=True)
     return results[:limit]
 
 

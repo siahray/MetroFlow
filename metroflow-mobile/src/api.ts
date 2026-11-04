@@ -118,6 +118,14 @@ export function login(email: string, password: string): Promise<AuthUser> {
   });
 }
 
+/** Update the signed-in user's own display name (P2-7). */
+export function updateMyName(name: string): Promise<AuthUser> {
+  return request<AuthUser>("/api/v1/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
 export async function register(data: {
   name: string;
   email: string;
@@ -370,6 +378,24 @@ export type ReportCreated = {
   captured_at: string | null;
   submitted_at: string | null;
 };
+
+/** One of the driver's own past field reports (P3-5). */
+export type MyReport = {
+  report_id: string;
+  depth_level: string;
+  depth_label: string;
+  status: string;
+  barangay: string | null;
+  narrative: string | null;
+  captured_at: string | null;
+  submitted_at: string | null;
+  decision_reason: string | null;
+};
+
+/** The driver's own report history, most recent first. */
+export function listMyReports(): Promise<MyReport[]> {
+  return request<MyReport[]>("/api/v1/reports/mine");
+}
 
 /**
  * Submit a field report as multipart form data (FSD-FR-065 to 067).
