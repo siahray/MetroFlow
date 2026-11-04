@@ -1234,6 +1234,109 @@ def test_get_sos_request_by_id(client):
     assert fetched.json()["status"] == "pending"
 
 
+def _make_linked_driver(client, vehicle_id: int) -> tuple[dict, str, int]:
+    """Create an EMERGENCY_DRIVER bound to `vehicle_id`; return headers, email and id."""
+    from uuid import uuid4
+
+    email = f"mission-driver-{uuid4()}@example.test"
+    created = client.post(
+        "/api/v1/users",
+        json={
+            "name": "Mission Driver",
+            "email": email,
+            "password": "mission-pass-123",
+            "role": "EMERGENCY_DRIVER",
+            "vehicle_id": vehicle_id,
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["vehicle_id"] == vehicle_id
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "mission-pass-123"})
+    assert login.status_code == 200, login.text
+    return (
+        {"Authorization": f"Bearer {login.json()['access_token']}"},
+        email,
+        created.json()["user_id"],
+    )
+
+
+def _delete_sos(sos_id: int) -> None:
+    """Remove an SOS row, which the assigned vehicle's FK would otherwise hold."""
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    with SessionLocal() as db:
+        db.execute(text("DELETE FROM sos_requests WHERE sos_id = :sid"), {"sid": sos_id})
+        db.commit()
+
+
+def test_assigned_driver_discovers_and_resolves_mission(client):
+    """FSD-FR-074: dispatch reaches the linked driver, who closes it on arrival."""
+    sos_id = None
+    vehicle_id = None
+    driver_id = None
+    outsider_email = None
+    try:
+        vehicle_id = _create_test_vehicle(client)
+        driver, _driver_email, driver_id = _make_linked_driver(client, vehicle_id)
+        outsider, outsider_email = _make_driver_headers(client)
+
+        # Nothing is dispatched yet.
+        idle = client.get(f"/api/v1/vehicles/{vehicle_id}/mission", headers=driver)
+        assert idle.status_code == 200, idle.text
+        assert idle.json() is None
+
+        sos_id = client.post(
+            "/api/v1/sos",
+            json={"latitude": 14.6060, "longitude": 120.9850, "note": "Mission test"},
+        ).json()["sos_id"]
+        assigned = client.post(f"/api/v1/sos/{sos_id}/assign", json={"vehicle_id": vehicle_id})
+        assert assigned.status_code == 200, assigned.text
+
+        mission = client.get(f"/api/v1/vehicles/{vehicle_id}/mission", headers=driver)
+        assert mission.status_code == 200, mission.text
+        assert mission.json()["sos_id"] == sos_id
+        assert mission.json()["status"] == "assigned"
+
+        # A driver may not read or close a mission on another unit.
+        denied = client.get(f"/api/v1/vehicles/{vehicle_id}/mission", headers=outsider)
+        assert denied.status_code == 403, denied.text
+        denied_resolve = client.post(f"/api/v1/sos/{sos_id}/resolve", headers=outsider)
+        assert denied_resolve.status_code == 403, denied_resolve.text
+
+        resolved = client.post(f"/api/v1/sos/{sos_id}/resolve", headers=driver)
+        assert resolved.status_code == 200, resolved.text
+        assert resolved.json()["status"] == "resolved"
+        assert latest_audit(client, action_type="SOS_RESOLVE")[0]["payload"]["sos_id"] == sos_id
+
+        # The mission is closed and the unit is back in the available pool.
+        assert client.get(f"/api/v1/vehicles/{vehicle_id}/mission", headers=driver).json() is None
+        fleet = client.get("/api/v1/vehicles")
+        row = next(v for v in fleet.json() if v["vehicle_id"] == vehicle_id)
+        assert row["status"] == "AVAILABLE"
+
+        # A resolved incident cannot be closed twice.
+        again = client.post(f"/api/v1/sos/{sos_id}/resolve", headers=driver)
+        assert again.status_code == 409, again.text
+
+        # An operator can unlink the unit again; the account keeps its history.
+        unlinked = client.patch(f"/api/v1/users/{driver_id}", json={"vehicle_id": None})
+        assert unlinked.status_code == 200, unlinked.text
+        assert unlinked.json()["vehicle_id"] is None
+    finally:
+        if sos_id is not None:
+            _delete_sos(sos_id)
+        # Audit rows are append-only, so the driver who resolved stays; unlink it
+        # from the unit so the test vehicle can be deleted.
+        if driver_id is not None:
+            client.patch(f"/api/v1/users/{driver_id}", json={"vehicle_id": None})
+        if vehicle_id is not None:
+            _delete_test_vehicle(client, vehicle_id)
+        if outsider_email is not None:
+            _cleanup_email(outsider_email)
+
+
 # ---------------------------------------------------------------------------
 # Dispatch Action Persistence & Log (FSD-FR-039 to 046)
 # ---------------------------------------------------------------------------

@@ -44,6 +44,12 @@ class User(Base):
     role = Column(
         String(20), default="LGU_DISPATCHER"
     )  # SUPER_ADMIN, LGU_DISPATCHER, EMERGENCY_DRIVER
+    vehicle_id = Column(
+        Integer,
+        ForeignKey("vehicles.vehicle_id"),
+        nullable=True,
+        comment="Rescue unit a driver account is assigned to; null for portal accounts",
+    )
     created_at = Column(DateTime, default=_utcnow)
 
 

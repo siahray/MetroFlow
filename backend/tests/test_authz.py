@@ -12,8 +12,12 @@ from fastapi import HTTPException
 from fastapi.routing import APIRoute
 
 from auth_utils import get_current_user, require_roles
-from main import app, require_admin
+from main import app, require_admin, require_super_admin
 
+# Every guard that admits a portal account and refuses a driver. A route may be
+# stricter than its neighbours — vehicle management is SUPER_ADMIN only — but it
+# must never fall through to "any authenticated caller".
+PORTAL_GUARDS = (require_admin, require_super_admin)
 # The only routes a caller may reach without a session. Everything else in
 # /api/v1 has to resolve a user first.
 PUBLIC_API_PATHS = {
@@ -91,7 +95,7 @@ def test_portal_routes_require_a_portal_role(method: str, path: str):
     )
     calls = _dependency_calls(route)
     assert get_current_user in calls
-    assert require_admin in calls
+    assert any(guard in calls for guard in PORTAL_GUARDS)
 
 
 def test_hazard_stream_is_open_to_any_authenticated_user():
@@ -99,7 +103,7 @@ def test_hazard_stream_is_open_to_any_authenticated_user():
     route = next(route for route in _api_routes() if route.path == "/api/v1/hazards/stream")
     calls = _dependency_calls(route)
     assert get_current_user in calls
-    assert require_admin not in calls
+    assert not any(guard in calls for guard in PORTAL_GUARDS)
 
 
 @pytest.mark.parametrize("role", ["LGU_DISPATCHER", "SUPER_ADMIN"])
