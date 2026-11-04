@@ -732,6 +732,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "name": user.name,
             "email": user.email,
             "role": user.role,
+            "vehicle_id": user.vehicle_id,
         },
     }
 
@@ -744,6 +745,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role,
+        "vehicle_id": current_user.vehicle_id,
     }
 
 
@@ -888,16 +890,20 @@ def create_user(
     if existing:
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
-    # Create user
-    max_id = db.query(func.max(models.User.user_id)).scalar() or 0
+    if user_req.vehicle_id is not None and db.get(models.Vehicle, user_req.vehicle_id) is None:
+        raise HTTPException(status_code=422, detail="No such vehicle")
+
+    # Create user. The id comes from the column default: hand-assigning max+1
+    # leaves the identity sequence behind, so the next driver self-registration
+    # would collide with the id this admin just used.
     new_user = models.User(
-        user_id=int(max_id) + 1,
         name=user_req.name.strip(),
         email=email,
         password_hash=bcrypt.hashpw(user_req.password.encode("utf-8"), bcrypt.gensalt()).decode(
             "utf-8"
         ),
         role=user_req.role,
+        vehicle_id=user_req.vehicle_id,
     )
     db.add(new_user)
     audit.record(
@@ -909,6 +915,7 @@ def create_user(
             "name": new_user.name,
             "email": new_user.email,
             "role": new_user.role,
+            "vehicle_id": new_user.vehicle_id,
             "actor": _user.name or _user.email,
         },
     )
@@ -939,6 +946,13 @@ def update_user(
         )
 
     changes = user_req.model_dump(exclude_unset=True, exclude_none=True)
+    # ``vehicle_id`` is the one optional field an operator must be able to clear:
+    # an explicit null unlinks the driver from the unit.
+    if "vehicle_id" in user_req.model_fields_set:
+        changes["vehicle_id"] = user_req.vehicle_id
+    unit_id = changes.get("vehicle_id")
+    if unit_id is not None and db.get(models.Vehicle, unit_id) is None:
+        raise HTTPException(status_code=422, detail="No such vehicle")
 
     # Validate role if provided
     if "role" in changes and changes["role"] not in ALLOWED_ROLES:
@@ -1042,10 +1056,9 @@ def create_sos(
 ):
     import models
 
-    # Create a simple auto-incrementing id by getting max
-    max_id = db.query(func.max(models.SOSRequest.sos_id)).scalar() or 0
+    # The id comes from the column default, not max+1: hand-assigning leaves the
+    # sequence behind and the next insert that uses it collides.
     new_sos = models.SOSRequest(
-        sos_id=int(max_id) + 1,
         latitude=sos.latitude,
         longitude=sos.longitude,
         note=sos.note,
@@ -1071,9 +1084,7 @@ def create_hazard(
 ):
     import models
 
-    max_id = db.query(func.max(models.HazardZone.hazard_id)).scalar() or 0
     new_hazard = models.HazardZone(
-        hazard_id=int(max_id) + 1,
         name=hazard.name,
         obstruction_level=hazard.obstruction_level,
         avg_depth_cm=hazard.avg_depth_cm,
@@ -1445,6 +1456,56 @@ def reject_sos(
     return db_sos
 
 
+@app.post("/api/v1/sos/{sos_id}/resolve", response_model=SOSResponse)
+def resolve_sos(
+    sos_id: int,
+    current_user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Close an incident when the dispatched unit reaches the scene (FSD-FR-046).
+
+    The assigned driver may resolve it from the app; a dispatcher may resolve
+    any incident. The vehicle returns to the available pool and the assignment
+    stays on the row as the record of who attended.
+    """
+    import models
+
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if current_user.role not in ADMIN_ROLES and (
+        db_sos.vehicle_id is None or current_user.vehicle_id != db_sos.vehicle_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="Only the assigned unit or a dispatcher can resolve this"
+        )
+    if db_sos.status not in ("assigned", "confirmed"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot resolve an incident in state '{db_sos.status}'",
+        )
+    db_sos.status = "resolved"
+    if db_sos.vehicle_id:
+        _release_vehicle(db, db_sos.vehicle_id)
+    audit.record(
+        db,
+        user=current_user,
+        action_type=audit.SOS_RESOLVE,
+        payload={
+            "sos_id": db_sos.sos_id,
+            "vehicle_id": db_sos.vehicle_id,
+            "actor": current_user.name or current_user.email,
+        },
+    )
+    db.flush()
+    events.emit(
+        db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
+    )
+    db.commit()
+    db.refresh(db_sos)
+    return db_sos
+
+
 @app.post("/api/v1/sos/{sos_id}/hold", response_model=SOSResponse)
 def hold_sos(
     sos_id: int,
@@ -1709,9 +1770,7 @@ def create_vehicle(
         raise HTTPException(
             status_code=409, detail=f"Call sign {vehicle.call_sign} is already in use"
         )
-    max_id = db.query(func.max(models.Vehicle.vehicle_id)).scalar() or 0
     new_vehicle = models.Vehicle(
-        vehicle_id=int(max_id) + 1,
         call_sign=vehicle.call_sign,
         vehicle_type=vehicle.vehicle_type,
         clearance_cm=vehicle.clearance_cm,
@@ -2019,6 +2078,33 @@ def get_sos(
     if not db_sos:
         raise HTTPException(status_code=404, detail="SOS request not found")
     return db_sos
+
+
+@app.get("/api/v1/vehicles/{vehicle_id}/mission", response_model=SOSResponse | None)
+def get_vehicle_mission(
+    vehicle_id: int,
+    current_user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """The incident this unit is currently dispatched to, if any (FSD-FR-074).
+
+    This is what the driver app polls: the dispatcher assigns a unit in the
+    portal, and the unit discovers its mission here without seeing the whole
+    SOS queue. A driver may only ask about their own unit.
+    """
+    import models
+
+    if current_user.role not in ADMIN_ROLES and current_user.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=403, detail="This account is not linked to that vehicle")
+    return (
+        db.query(models.SOSRequest)
+        .filter(
+            models.SOSRequest.vehicle_id == vehicle_id,
+            models.SOSRequest.status.in_(("assigned", "confirmed")),
+        )
+        .order_by(models.SOSRequest.created_at.desc())
+        .first()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3010,10 +3096,8 @@ def approve_report(
     latitude, longitude = point
 
     obstruction_level, avg_depth_cm = reports.hazard_for(report.depth_level)
-    max_id = db.query(func.max(models.HazardZone.hazard_id)).scalar() or 0
     now = datetime.now(UTC).replace(tzinfo=None)
     hazard = models.HazardZone(
-        hazard_id=int(max_id) + 1,
         name=f"Reported {reports.depth_label(report.depth_level).lower()}"
         + (f" — {report.barangay}" if report.barangay else ""),
         obstruction_level=obstruction_level,

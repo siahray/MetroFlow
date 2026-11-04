@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   TouchableOpacity,
@@ -18,9 +19,10 @@ import {
   WifiOff,
   Megaphone,
   LifeBuoy,
+  Navigation,
 } from 'lucide-react-native';
 
-import { listActiveHazards, type HazardInfo } from '../../api';
+import { getMission, listActiveHazards, resolveSOS, type HazardInfo, type SOSRequest } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
 import { loadCache, saveCache, useOnline } from '../../offline';
@@ -46,9 +48,12 @@ export default function HomeScreen() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [mission, setMission] = useState<SOSRequest | null>(null);
+  const [closing, setClosing] = useState(false);
   const online = useOnline();
 
   const displayName = user?.name || user?.email || 'Guest';
+  const vehicleId = user?.vehicle_id ?? null;
 
   const load = useCallback(
     () =>
@@ -67,15 +72,46 @@ export default function HomeScreen() {
     [],
   );
 
+  // The dispatcher assigns a unit in the portal; the unit polls its own mission
+  // (FSD-FR-074) because there is no driver-facing stream.
+  const loadMission = useCallback(
+    () =>
+      vehicleId === null
+        ? Promise.resolve()
+        : getMission(vehicleId)
+            .then(setMission)
+            .catch(() => {
+              // Keep whatever is on screen; the next poll or pull-to-refresh retries.
+            }),
+    [vehicleId],
+  );
+
   // Load on mount and again whenever the connection returns.
   useEffect(() => {
-    if (online) load();
-  }, [online, load]);
+    if (!online) return;
+    load();
+    void loadMission();
+    const timer = setInterval(() => void loadMission(), 10000);
+    return () => clearInterval(timer);
+  }, [online, load, loadMission]);
 
   async function handleRefresh() {
     setRefreshing(true);
-    await load();
+    await Promise.all([load(), loadMission()]);
     setRefreshing(false);
+  }
+
+  async function handleArrived() {
+    if (!mission) return;
+    setClosing(true);
+    try {
+      await resolveSOS(mission.sos_id);
+      setMission(null);
+    } catch {
+      Alert.alert('Could not close the incident', 'The server did not confirm. Try again.');
+    } finally {
+      setClosing(false);
+    }
   }
 
   const worst = (hazards ?? []).reduce<HazardInfo | null>(
@@ -169,6 +205,81 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+
+        {/* Dispatch: the incident this unit was assigned in the portal */}
+        {mission && vehicleId !== null && (
+          <View
+            style={{
+              ...card,
+              backgroundColor: colors.red50,
+              borderColor: colors.red500,
+              padding: 14,
+              gap: 10,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <LifeBuoy size={18} color={colors.red700} />
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: '800', color: colors.red700 }}>
+                Dispatched: incident #{mission.sos_id}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: colors.slate700 }}>
+              Scene at {mission.latitude.toFixed(4)}° N, {mission.longitude.toFixed(4)}° E
+            </Text>
+            {mission.note ? (
+              <Text style={{ fontSize: 11, color: colors.slate700 }} numberOfLines={2}>
+                {mission.note}
+              </Text>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Navigate to the assigned incident"
+                onPress={() =>
+                  router.push({
+                    pathname: '/route',
+                    params: { destination: `${mission.latitude},${mission.longitude}` },
+                  })
+                }
+                style={{
+                  flex: 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  backgroundColor: colors.slate900,
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                }}
+              >
+                <Navigation size={14} color={colors.white} />
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.white }}>
+                  Navigate
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Mark the incident as reached"
+                disabled={closing}
+                onPress={handleArrived}
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: colors.red500,
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  opacity: closing ? 0.6 : 1,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.red700 }}>
+                  {closing ? 'Closing…' : 'Mark arrived'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Hazard status, from the verified hazard feed */}
         <TouchableOpacity

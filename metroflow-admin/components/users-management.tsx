@@ -4,6 +4,7 @@ import { Shield, Trash2, Edit, Plus, Search, User as UserIcon, Mail, Clock } fro
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
+import { listVehicles, type Vehicle } from "@/lib/dispatch";
 import {
   createUser,
   deleteUser,
@@ -20,6 +21,7 @@ import { Skeleton } from "./skeleton";
 export function UsersManagement() {
   const { show } = useToast();
   const [users, setUsers] = useState<User[]>([]);
+  const [units, setUnits] = useState<Vehicle[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -29,6 +31,7 @@ export function UsersManagement() {
     email: "",
     password: "",
     role: "LGU_DISPATCHER",
+    vehicle_id: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -52,7 +55,7 @@ export function UsersManagement() {
       await createUser(formData);
       show("User created successfully");
       setIsCreateModalOpen(false);
-      setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER" });
+      setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER", vehicle_id: null });
       loadUsers();
     } catch (error) {
       show("Failed to create user");
@@ -70,12 +73,13 @@ export function UsersManagement() {
         name: formData.name,
         email: formData.email,
         role: formData.role,
+        vehicle_id: formData.vehicle_id ?? null,
       };
       await updateUser(editingUser.user_id, updateData);
       show("User updated successfully");
       setIsEditModalOpen(false);
       setEditingUser(null);
-      setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER" });
+      setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER", vehicle_id: null });
       loadUsers();
     } catch (error) {
       show("Failed to update user");
@@ -102,6 +106,7 @@ export function UsersManagement() {
       email: user.email,
       password: "",
       role: user.role,
+      vehicle_id: user.vehicle_id,
     });
     setIsEditModalOpen(true);
   };
@@ -120,6 +125,11 @@ export function UsersManagement() {
         () => !cancelled && setLoadError("Could not load users. Check your connection and retry."),
       )
       .finally(() => !cancelled && setLoading(false));
+    listVehicles()
+      .then((data) => !cancelled && setUnits(data))
+      .catch(() => {
+        // Without the fleet list the unit select is empty; accounts still work.
+      });
     return () => {
       cancelled = true;
     };
@@ -309,6 +319,31 @@ export function UsersManagement() {
                   <option value="EMERGENCY_DRIVER">Emergency Driver</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Rescue unit
+                </label>
+                <select
+                  value={formData.vehicle_id ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      vehicle_id: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                >
+                  <option value="">Not linked</option>
+                  {units.map((unit) => (
+                    <option key={unit.vehicle_id} value={unit.vehicle_id}>
+                      {unit.call_sign}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  A linked driver reports this unit&apos;s position and receives its dispatch.
+                </p>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -372,6 +407,31 @@ export function UsersManagement() {
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="EMERGENCY_DRIVER">Emergency Driver</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Rescue unit
+                </label>
+                <select
+                  value={formData.vehicle_id ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      vehicle_id: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                >
+                  <option value="">Not linked</option>
+                  {units.map((unit) => (
+                    <option key={unit.vehicle_id} value={unit.vehicle_id}>
+                      {unit.call_sign}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  A linked driver reports this unit&apos;s position and receives its dispatch.
+                </p>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button

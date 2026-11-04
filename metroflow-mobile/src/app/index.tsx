@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ type Mode = 'splash' | 'login' | 'register';
 
 export default function IndexScreen() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const { signIn, user, ready } = useAuth();
 
   const [mode, setMode] = useState<Mode>('splash');
   const [name, setName] = useState('');
@@ -35,6 +35,12 @@ export default function IndexScreen() {
   function goToApp() {
     router.replace('/(tabs)/home');
   }
+
+  // A saved session goes straight to the app; the login screen is only for a
+  // driver who has signed out or never signed in.
+  useEffect(() => {
+    if (ready && user) router.replace('/(tabs)/home');
+  }, [ready, user, router]);
 
   async function handleLogin() {
     if (submitting) return;

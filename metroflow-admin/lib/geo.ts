@@ -55,14 +55,21 @@ export function findNearestUnit(
   let minDistance = Number.POSITIVE_INFINITY;
 
   for (const v of vehicles) {
-    // If the vehicle doesn't have a known location, assume Manila depot (14.5995, 120.9842)
-    const vLat = v.current_location_lat ?? 14.5995;
-    const vLon = v.current_location_lon ?? 120.9842;
-    const dist = haversineDistanceKm(targetLat, targetLon, vLat, vLon);
+    // A unit that never reported a position cannot be ranked: assuming a depot
+    // would put a unit on the map that is not there.
+    if (v.current_location_lat == null || v.current_location_lon == null) continue;
+    const dist = haversineDistanceKm(
+      targetLat,
+      targetLon,
+      v.current_location_lat,
+      v.current_location_lon,
+    );
 
     if (dist < minDistance) {
       minDistance = dist;
-      const speed = v.speed_kmh && v.speed_kmh > 5 ? v.speed_kmh : 30; // fallback 30 km/h
+      // shortcut: vehicles without a reported speed use 30 km/h, so the ETA is an
+      // approximation until the fleet reports speed.
+      const speed = v.speed_kmh && v.speed_kmh > 5 ? v.speed_kmh : 30;
       const eta = Math.max(1, Math.round((dist / speed) * 60));
       best = {
         callSign: v.call_sign,

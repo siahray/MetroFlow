@@ -1,8 +1,9 @@
+import type { SOSRequest, Vehicle } from "./dispatch";
 import type { HazardZone } from "./hazards";
 import { clearSessionUser, getSessionToken } from "./session";
 
 /**
- * The hazard change feed (FSD-FR-085, FSD-FR-086).
+ * The portal's change feeds (FSD-FR-085, FSD-FR-086).
  *
  * `EventSource` cannot attach an `Authorization` header, and this API takes the
  * bearer token and nothing else — no query-string tokens, because those end up in
@@ -11,8 +12,12 @@ import { clearSessionUser, getSessionToken } from "./session";
  *
  * The server ends every stream after about 45 seconds on purpose (a serverless
  * function cannot hold the socket open indefinitely). That is not an error: this
- * reconnects and sends the last id it saw as `Last-Event-ID`, so a hazard
- * published during the gap arrives on the next connection instead of being lost.
+ * reconnects and sends the last id it saw as `Last-Event-ID`, so a change made
+ * during the gap arrives on the next connection instead of being lost.
+ *
+ * Each subscriber hands back the whole list rather than one frame: a snapshot
+ * replaces the list and a single change is merged in by id, so a caller cannot
+ * accidentally drop the rest of the fleet with one position update.
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -20,10 +25,10 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8
 /** What the server itself uses when it does not send a `retry:` hint. */
 const RECONNECT_MS = 3000;
 
-export type HazardStreamEvent = {
+export type StreamEvent = {
   /** The event id, or null for a comment or a malformed frame. */
   id: number | null;
-  /** `snapshot`, `hazard.created`, `hazard.updated` or `hazard.published`. */
+  /** `snapshot`, or a change such as `sos.updated`. */
   type: string | null;
   /** The parsed `data:` payload, as the REST endpoint would return it. */
   data: unknown;
@@ -92,8 +97,9 @@ function parseFrame(block: string): Frame | null {
  * the newest id seen so the caller can resume from it.
  */
 async function readStream(
+  path: string,
   cursor: number | null,
-  onEvent: (event: HazardStreamEvent) => void,
+  onEvent: (event: StreamEvent) => void,
   signal: AbortSignal,
 ): Promise<number | null> {
   const token = getSessionToken();
@@ -101,7 +107,7 @@ async function readStream(
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (cursor !== null) headers.set("Last-Event-ID", String(cursor));
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/hazards/stream`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     headers,
     cache: "no-store",
     signal,
@@ -111,7 +117,7 @@ async function readStream(
     clearSessionUser();
   }
   if (!response.ok || !response.body) {
-    throw new StreamError(response.status, `Hazard stream failed: ${response.status}`);
+    throw new StreamError(response.status, `${path} failed: ${response.status}`);
   }
 
   const reader = response.body.getReader();
@@ -157,20 +163,59 @@ async function readStream(
 }
 
 /**
- * Follow the hazard feed until `signal` aborts, reconnecting after each bounded
- * stream and after any transient failure.
+ * The list after one frame, or null when the frame says nothing about it.
+ *
+ * A snapshot replaces the list; a single change replaces the row with the same
+ * id, or removes it when the row no longer belongs (a resolved SOS, a withdrawn
+ * hazard). Exported so the merge can be tested without a network.
+ */
+export function mergeStreamEvent<T>(
+  rows: T[],
+  event: StreamEvent,
+  snapshotKey: string,
+  idOf: (row: T) => number,
+  keep: (row: T) => boolean,
+): T[] | null {
+  if (event.type === "snapshot") {
+    const payload = event.data as Record<string, unknown> | null;
+    const list = payload?.[snapshotKey];
+    return Array.isArray(list) ? (list as T[]).filter(keep) : [];
+  }
+  if (!event.data || typeof event.data !== "object") return null;
+  const incoming = event.data as T;
+  const next = rows.filter((row) => idOf(row) !== idOf(incoming));
+  if (keep(incoming)) next.push(incoming);
+  return next;
+}
+
+/**
+ * Follow one change feed until `signal` aborts, reconnecting after each bounded
+ * stream and after any transient failure. `onRows` sees the full list every
+ * time, so a caller cannot be left with a fleet of one after a single update.
  *
  * The promise resolves only when aborted; callers should not await it in render.
  */
-export async function subscribeToHazards(
-  onEvent: (event: HazardStreamEvent) => void,
+async function subscribe<T>(
+  path: string,
+  snapshotKey: string,
+  idOf: (row: T) => number,
+  keep: (row: T) => boolean,
+  onRows: (rows: T[]) => void,
   signal: AbortSignal,
 ): Promise<void> {
   let cursor: number | null = null;
+  let rows: T[] = [];
+
+  const apply = (event: StreamEvent) => {
+    const next = mergeStreamEvent(rows, event, snapshotKey, idOf, keep);
+    if (next === null) return;
+    rows = next;
+    onRows(rows);
+  };
 
   while (!signal.aborted) {
     try {
-      cursor = await readStream(cursor, onEvent, signal);
+      cursor = await readStream(path, cursor, apply, signal);
     } catch {
       if (signal.aborted) break;
       // A 401 already cleared the session, and a dropped connection is normal
@@ -182,19 +227,47 @@ export async function subscribeToHazards(
   }
 }
 
-/**
- * Hazards from one stream frame, or null when the frame is not about hazards.
- *
- * Kept next to the subscriber so the component does not repeat the frame
- * vocabulary and cannot drift from the API's event names.
- */
-export function hazardsFromEvent(event: HazardStreamEvent): HazardZone[] | null {
-  if (event.type === "snapshot") {
-    const payload = event.data as { hazards?: unknown } | null;
-    return Array.isArray(payload?.hazards) ? (payload.hazards as HazardZone[]) : [];
-  }
-  if (event.type?.startsWith("hazard.") && event.data && typeof event.data === "object") {
-    return [event.data as HazardZone];
-  }
-  return null;
+/** Hazard changes; withdrawn hazards leave the list. Any account may subscribe. */
+export function subscribeToHazards(
+  onRows: (rows: HazardZone[]) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  return subscribe<HazardZone>(
+    "/api/v1/hazards/stream",
+    "hazards",
+    (row) => row.hazard_id,
+    (row) => row.active !== false,
+    onRows,
+    signal,
+  );
+}
+
+/** SOS creation, assignment and closing. Closed incidents leave the queue. */
+export function subscribeToSOS(
+  onRows: (rows: SOSRequest[]) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  return subscribe<SOSRequest>(
+    "/api/v1/sos/stream",
+    "sos",
+    (row) => row.sos_id,
+    (row) => row.status.toUpperCase() !== "RESOLVED",
+    onRows,
+    signal,
+  );
+}
+
+/** Fleet status and telemetry. */
+export function subscribeToVehicles(
+  onRows: (rows: Vehicle[]) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  return subscribe<Vehicle>(
+    "/api/v1/vehicles/stream",
+    "vehicles",
+    (row) => row.vehicle_id,
+    () => true,
+    onRows,
+    signal,
+  );
 }

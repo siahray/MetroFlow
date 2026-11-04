@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,9 @@ type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 /** Location staleness limit for SOS submissions (VAL-021). */
 const SOS_LOCATION_MAX_AGE_MS = 60_000;
 
+/** Once an incident reaches one of these states, polling its status is pointless. */
+const FINAL_SOS_STATUSES = new Set(['RESOLVED', 'REJECTED']);
+
 export default function SOSScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -46,6 +49,28 @@ export default function SOSScreen() {
   const [dispatchedSOS, setDispatchedSOS] = useState<SOSRequest | null>(null);
   const [sosStatus, setSosStatus] = useState<string | null>(null);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+
+  // The SOS change feed is dispatcher-only, so a driver polls its own submission
+  // until the dispatcher's decision arrives (FSD-FR-074).
+  const trackedSOSId = dispatchedSOS?.sos_id ?? null;
+  const trackedSOSFinal = dispatchedSOS
+    ? FINAL_SOS_STATUSES.has(dispatchedSOS.status.toUpperCase())
+    : true;
+
+  useEffect(() => {
+    if (trackedSOSId === null || trackedSOSFinal) return;
+    const timer = setInterval(() => {
+      getSOS(trackedSOSId)
+        .then((updated) => {
+          setSosStatus(updated.status);
+          setDispatchedSOS(updated);
+        })
+        .catch(() => {
+          // Keep the last known status; the next poll or manual refresh retries.
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [trackedSOSId, trackedSOSFinal]);
 
   async function handleSOS() {
     if (sending || locating) return;

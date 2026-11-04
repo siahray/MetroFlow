@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { cn } from "@/lib/cn";
 import {
@@ -17,6 +17,7 @@ import { unitToForm } from "@/lib/fleet";
 import { getSessionUser, subscribeToSession } from "@/lib/session";
 import { listSOS } from "@/lib/sos-live";
 import { toUnitStatus } from "@/lib/rescue";
+import { subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
 import { UnitFormModal } from "./unit-form-modal";
@@ -50,6 +51,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
   // Only the super admin manages the fleet; everyone else sees it read-only.
   const user = useSyncExternalStore(subscribeToSession, getSessionUser, () => null);
   const canManage = user?.role === "SUPER_ADMIN";
@@ -70,9 +72,24 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         setLoadError("Could not refresh fleet data. Showing the last known state.");
       }
     };
+
     load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
+
+    // Set up SSE streams for real-time updates
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const signal = abortController.signal;
+
+    subscribeToVehicles((rows) => {
+      setVehicles(rows);
+    }, signal);
+    subscribeToSOS((rows) => {
+      setSosList(rows);
+    }, signal);
+
+    return () => {
+      abortController.abort();
+    };
   }, [reloadKey]);
 
   const missions = sosList.filter((s) => s.vehicle_id != null && ACTIVE_MISSION.has(s.status));

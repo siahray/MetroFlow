@@ -17,6 +17,15 @@ const BANNED: [RegExp, string][] = [
   [/8888-FLOW|CDMO/, "invented contact"],
   [/156\.\d+ ?MHz|Marine/i, "invented radio channel"],
   [/"(1\.2 km|35 cm|12 mins|45 cm)"/, "invented fallback value"],
+  [
+    /CIT-8821|14\.5995|Verified GPS|Geolocation verified|14 minutes ago \(High Priority\)/,
+    "invented verification or elapsed-time claim",
+  ],
+  [
+    /Water Rising|0\.2 ft|25–60 cm \(Estimated\)|75 cm \(Impassable\)|Native Mobile/,
+    "invented telemetry or fallback depth",
+  ],
+  [/Distress Beacon|GPS \(Road Node Match\)/, "invented verification claim"],
   [/\+63 ?9\d\d ?555/, "a hardcoded phone number; no phone is collected"],
   [/Urgency Score[\s\S]{0,200}8\.4/, "a hardcoded urgency score"],
 ];

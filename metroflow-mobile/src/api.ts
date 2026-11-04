@@ -89,6 +89,8 @@ export type AuthUser = {
   name: string;
   email: string;
   role: string;
+  /** The rescue unit this driver reports as; null for guests and office roles. */
+  vehicle_id: number | null;
 };
 
 export type SOSRequest = {
@@ -159,6 +161,25 @@ export function getSOS(sosId: number): Promise<SOSRequest> {
 
 export function listVehicles(): Promise<unknown[]> {
   return request<unknown[]>("/api/v1/vehicles");
+}
+
+// ---------------------------------------------------------------------------
+// Missions (FSD-FR-074)
+// ---------------------------------------------------------------------------
+
+/**
+ * The incident this unit is currently dispatched to, or null.
+ *
+ * A dispatcher assigns the unit in the portal; the app discovers its own
+ * mission here so it never needs to see the whole SOS queue.
+ */
+export function getMission(vehicleId: number): Promise<SOSRequest | null> {
+  return request<SOSRequest | null>(`/api/v1/vehicles/${vehicleId}/mission`);
+}
+
+/** Close the incident once the unit is on scene (FSD-FR-046). */
+export function resolveSOS(sosId: number): Promise<SOSRequest> {
+  return request<SOSRequest>(`/api/v1/sos/${sosId}/resolve`, { method: "POST" });
 }
 
 // ---------------------------------------------------------------------------

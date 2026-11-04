@@ -15,7 +15,15 @@ import {
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
-import { ageLabel, clockLabel, shortHash, type FieldReport, getReportPhoto, getNearestSensorReading, type NearestSensorReading } from "@/lib/reports";
+import {
+  ageLabel,
+  clockLabel,
+  shortHash,
+  type FieldReport,
+  getReportPhoto,
+  getNearestSensorReading,
+  type NearestSensorReading,
+} from "@/lib/reports";
 
 type ReportDeskProps = {
   report: FieldReport;
@@ -219,7 +227,7 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
             {exif.gps_in_pilot_area === false ? (
               <p className="mt-2 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 p-2 text-[10px] font-medium text-amber-800">
                 <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                The photo&apos;s own GPS is outside Metro Manila, so it cannot evidence this flood
+                The photo&apos;s own GPS is outside the pilot area, so it cannot evidence this flood
                 on its own.
               </p>
             ) : null}
@@ -233,9 +241,7 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
               <StatRow label="Nearby reports" value={String(report.nearby_reports)} />
               <StatRow
                 label="Possible duplicate"
-                value={
-                  duplicateTarget ? `#${duplicateTarget.slice(0, 8)}` : "none within 150 m / 15 min"
-                }
+                value={duplicateTarget ? `#${duplicateTarget.slice(0, 8)}` : "none flagged"}
               />
               <StatRow
                 label="Reporter hash"
@@ -252,7 +258,11 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
                   />
                   <StatRow
                     label="Distance"
-                    value={nearestSensor.distance_km ? `${nearestSensor.distance_km.toFixed(2)} km` : "unknown"}
+                    value={
+                      nearestSensor.distance_km
+                        ? `${nearestSensor.distance_km.toFixed(2)} km`
+                        : "unknown"
+                    }
                   />
                   <StatRow
                     label="Latest reading"
@@ -264,7 +274,11 @@ export function ReportDesk({ report, peers, busy, error, onApprove, onReject }: 
                   />
                   <StatRow
                     label="Reading time"
-                    value={nearestSensor.latest_recorded_at ? clockLabel(nearestSensor.latest_recorded_at) : "unknown"}
+                    value={
+                      nearestSensor.latest_recorded_at
+                        ? clockLabel(nearestSensor.latest_recorded_at)
+                        : "unknown"
+                    }
                   />
                   {nearestSensor.is_breach ? (
                     <p className="mt-1 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 p-1.5 text-[10px] font-medium text-amber-800">

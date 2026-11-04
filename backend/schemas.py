@@ -401,6 +401,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    vehicle_id: int | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -416,6 +417,9 @@ class UserCreateRequest(BaseModel):
         default="LGU_DISPATCHER",
         description="Role: SUPER_ADMIN, LGU_DISPATCHER, or EMERGENCY_DRIVER",
     )
+    vehicle_id: int | None = Field(
+        None, description="Rescue unit this driver account reports as (EMERGENCY_DRIVER)"
+    )
 
 
 class UserUpdateRequest(BaseModel):
@@ -426,6 +430,9 @@ class UserUpdateRequest(BaseModel):
     role: str | None = Field(
         None,
         description="Role: SUPER_ADMIN, LGU_DISPATCHER, or EMERGENCY_DRIVER",
+    )
+    vehicle_id: int | None = Field(
+        None, description="Rescue unit this driver account reports as (EMERGENCY_DRIVER)"
     )
     # Password update is a separate operation for security
 

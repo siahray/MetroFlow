@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import type { SOSRequest, Vehicle } from "@/lib/dispatch";
-import { hazardsFromEvent, subscribeToHazards } from "@/lib/hazard-stream";
+import { subscribeToHazards, subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 import type { HazardZone } from "@/lib/hazards";
 import {
   fetchNetworkState,
@@ -633,23 +633,15 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
   }, [showGraph, ready]);
 
   // --- Live overlays (FSD-FR-075, FSD-FR-076) ------------------------------
-  // Hazards arrive on the verified feed; the fleet and SOS lists are polled
-  // because their streams carry the same rows the REST endpoints already
-  // return and the map only needs a few seconds of freshness.
+  // One stream per layer, each pushing the whole list, so the map never shows a
+  // fleet of one after a single unit reports its position.
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
 
-    void subscribeToHazards((event) => {
-      const batch = hazardsFromEvent(event);
-      if (!batch) return;
-      setHazards((current) => {
-        if (event.type === "snapshot") return batch;
-        if (batch.length === 0) return current;
-        const incoming = batch[0];
-        return [...current.filter((row) => row.hazard_id !== incoming.hazard_id), incoming];
-      });
-    }, controller.signal);
+    void subscribeToHazards(setHazards, controller.signal);
+    void subscribeToVehicles(setVehicles, controller.signal);
+    void subscribeToSOS(setSosRequests, controller.signal);
 
     return () => controller.abort();
   }, [ready]);
@@ -661,9 +653,7 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
     const load = async () => {
       const [fleet, signals] = await Promise.all([
         listVehiclesLive().catch(() => [] as Vehicle[]),
-        listSOS()
-          .then((rows) => rows.filter((row) => row.status.toUpperCase() !== "RESOLVED"))
-          .catch(() => [] as SOSRequest[]),
+        listSOS().catch(() => [] as SOSRequest[]),
       ]);
       if (cancelled) return;
       setVehicles(fleet);
@@ -671,10 +661,8 @@ export function NetworkMap({ showGraph, onAction, onSummary }: NetworkMapProps) 
     };
 
     void load();
-    const timer = window.setInterval(load, 10_000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
     };
   }, [ready]);
 
