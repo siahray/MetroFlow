@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,12 +16,21 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   CheckCircle2,
+  CornerUpLeft,
+  CornerUpRight,
+  Flag,
+  Gauge,
   MapPin,
   Navigation,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldAlert,
+  Wifi,
+  WifiOff,
   X,
 } from "lucide-react-native";
 
@@ -37,7 +47,8 @@ import {
 import { useAuth } from "../auth";
 import { RouteMap } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
-import { loadCache, saveCache } from "../offline";
+import { planRouteOffline } from "../navigation/offline-route";
+import { loadCache, saveCache, useOnline } from "../offline";
 import {
   distanceToPolygonMeters,
   formatDistance,
@@ -80,6 +91,24 @@ function hazardAdvice(level: string): { label: string; action: string } {
   }
 }
 
+/** Direction icon per manoeuvre (P2-6): the turn-by-turn card shows a shape, not just text. */
+const MANOEUVRE_ICON: Record<string, typeof ArrowUp> = {
+  DEPART: ArrowUp,
+  STRAIGHT: ArrowUp,
+  TURN_LEFT: ArrowLeft,
+  TURN_RIGHT: ArrowRight,
+  SLIGHT_LEFT: CornerUpLeft,
+  SLIGHT_RIGHT: CornerUpRight,
+  U_TURN: RotateCcw,
+  ARRIVE: Flag,
+};
+
+/** Wall-clock arrival estimate from now plus the remaining travel time. */
+function formatEta(remainingMinutes: number): string {
+  const eta = new Date(Date.now() + remainingMinutes * 60_000);
+  return eta.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 function samePath(a: RoutePlan, b: RoutePlan) {
   return a.optimal_path_nodes.join(",") === b.optimal_path_nodes.join(",");
 }
@@ -91,7 +120,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
+  // Telemetry display (P3-4): the driver's own read of what is being sent.
+  const [speedKmh, setSpeedKmh] = useState<number | null>(null);
+  const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
+  const online = useOnline();
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState("");
   const [selected, setSelected] = useState<NodeFeature | null>(null);
   const [route, setRoute] = useState<RoutePlan | null>(null);
@@ -108,6 +143,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const routeRef = useRef<RoutePlan | null>(null);
   const positionRef = useRef<LatLng | null>(null);
   const networkRef = useRef<NetworkState | null>(null);
+  const hazardsRef = useRef<HazardInfo[]>([]);
   const unsafeRef = useRef(false);
   const plannedFor = useRef<number | null>(null);
   const initialDestinationHandled = useRef(false);
@@ -130,8 +166,37 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     networkRef.current = network;
   }, [network]);
   useEffect(() => {
+    hazardsRef.current = hazards;
+  }, [hazards]);
+  useEffect(() => {
     unsafeRef.current = unsafeRoute;
   }, [unsafeRoute]);
+
+  // --- Offline fallback (FSD-FR-071) ---------------------------------------
+  // The API call fails outright with no connection; a real routing refusal
+  // (404) must still surface as "no safe route" rather than retry locally.
+  const requestRoute = useCallback(
+    (params: { start_node: number; target_node: number; clearance_cm: number; ignore_hazards?: boolean }) =>
+      getRoute(params).catch((cause: unknown) => {
+        if (cause instanceof ApiError) throw cause;
+        const net = networkRef.current;
+        const plan = net
+          ? planRouteOffline(
+              net,
+              hazardsRef.current,
+              params.start_node,
+              params.target_node,
+              params.clearance_cm,
+              params.ignore_hazards ?? false,
+            )
+          : null;
+        if (!plan) {
+          throw new ApiError(404, "No safe route available under current flood conditions.");
+        }
+        return plan;
+      }),
+    [],
+  );
 
   // --- Location ------------------------------------------------------------
   useEffect(() => {
@@ -143,7 +208,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       try {
         const permission = await Location.requestForegroundPermissionsAsync();
         if (permission.status !== "granted") {
-          if (!cancelled) setLocationError("Location permission is required for navigation.");
+          if (!cancelled) {
+            setLocationPermissionDenied(true);
+            setLocationError(
+              "MetroFlow needs your location to plan a flood-safe route and warn you about nearby hazards.",
+            );
+          }
           return;
         }
         const current = await Location.getCurrentPositionAsync({
@@ -151,6 +221,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         });
         if (cancelled) return;
         setPosition({ latitude: current.coords.latitude, longitude: current.coords.longitude });
+        setLocationPermissionDenied(false);
         setLocationError(null);
 
         subscription = await Location.watchPositionAsync(
@@ -165,6 +236,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               latitude: update.coords.latitude,
               longitude: update.coords.longitude,
             });
+            setSpeedKmh(update.coords.speed != null ? Math.max(update.coords.speed * 3.6, 0) : null);
+            setGpsAccuracyM(update.coords.accuracy ?? null);
 
             // --- Telemetry sender (FSD-FR-072) --------------------------------
             // Fire-and-forget: only while actively navigating as a linked unit.
@@ -181,10 +254,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                       : null,
                   heading: update.coords.heading ?? null,
                   recorded_at: new Date(update.timestamp).toISOString(),
-                }).catch(() => {
-                  // Silent failure: telemetry is best-effort; navigation
-                  // continues unaffected even if the ping is throttled or lost.
-                });
+                })
+                  .then(() => setLastSyncAt(new Date()))
+                  .catch(() => {
+                    // Silent failure: telemetry is best-effort; navigation
+                    // continues unaffected even if the ping is throttled or lost.
+                  });
               }
             }
           },
@@ -286,7 +361,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       setError(null);
       setRefusal(false);
       try {
-        const plan = await getRoute({
+        const plan = await requestRoute({
           start_node: origin.properties.node_id,
           target_node: target.properties.node_id,
           clearance_cm: DRIVER_CLEARANCE_CM,
@@ -311,7 +386,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setPlanning(false);
       }
     },
-    [network, position],
+    [network, position, requestRoute],
   );
 
   useEffect(() => {
@@ -342,12 +417,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
     const timer = setTimeout(async () => {
       try {
-        const next = await getRoute({
+        const next = await requestRoute({
           start_node: startNode,
           target_node: current.target_node,
           clearance_cm: current.vehicle_clearance_cm,
           ignore_hazards: unsafeRef.current,
         });
+        void saveCache("route", next);
         if (samePath(current, next)) {
           // Same road, but the hazard list on the returned plan is newer.
           setRoute(next);
@@ -376,7 +452,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [hazards]);
+  }, [hazards, requestRoute]);
 
   // --- Manual refresh and alternatives (FSD-FR-062) ------------------------
   const refreshRoute = useCallback(async () => {
@@ -388,13 +464,14 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
     setRefreshing(true);
     try {
-      const next = await getRoute({
+      const next = await requestRoute({
         start_node: origin?.properties.node_id ?? current.start_node,
         target_node: current.target_node,
         clearance_cm: current.vehicle_clearance_cm,
         ignore_hazards: unsafeRef.current,
       });
       const changed = !samePath(current, next);
+      void saveCache("route", next);
       setRoute(next);
       setRefusal(false);
       if (changed) {
@@ -427,7 +504,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [requestRoute]);
 
   // --- Proximity alerts (FSD-FR-063, FSD-FR-064) ---------------------------
   useEffect(() => {
@@ -494,6 +571,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   const instruction = route?.instructions[currentStep];
   const remaining = progress ? Math.max(progress.totalM - progress.progressM, 0) : null;
+  const remainingMinutes =
+    route && progress && progress.totalM > 0
+      ? route.estimated_travel_time_minutes * (remaining ?? 0) / progress.totalM
+      : route?.estimated_travel_time_minutes ?? null;
   const stepRemaining =
     route && progress
       ? remainingOnStep(route.instructions, currentStep, progress.progressM)
@@ -673,6 +754,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           destination={destinationCoordinate}
           destinationName={selected?.properties.name ?? route?.destination_name ?? null}
           hazards={mapHazards}
+          edges={network?.edges.features}
         />
 
         {banner ? (
@@ -702,7 +784,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         {route && instruction ? (
           <View style={styles.instructionCard}>
             <View style={styles.instructionIcon}>
-              <Navigation size={20} color={colors.white} />
+              {(() => {
+                const ManoeuvreIcon = MANOEUVRE_ICON[instruction.manoeuvre] ?? Navigation;
+                return <ManoeuvreIcon size={20} color={colors.white} />;
+              })()}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.instructionText}>{instruction.text}</Text>
@@ -715,6 +800,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 {instruction.road_name ? ` • ${instruction.road_name}` : ""}
               </Text>
             </View>
+            {speedKmh !== null ? (
+              <View style={styles.speedBadge}>
+                <Text style={styles.speedBadgeValue}>{Math.round(speedKmh)}</Text>
+                <Text style={styles.speedBadgeUnit}>km/h</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -744,6 +835,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           <View style={styles.mapNotice}>
             <AlertTriangle size={18} color={colors.red600} />
             <Text style={[styles.mapNoticeText, { color: colors.red800 }]}>{locationError}</Text>
+            {locationPermissionDenied ? (
+              <TouchableOpacity onPress={() => void Linking.openSettings()} hitSlop={8}>
+                <Text style={[styles.mapNoticeText, { color: colors.blue600, fontWeight: "700" }]}>
+                  Open Settings
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -759,6 +857,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 {[
                   remaining !== null ? `${formatDistance(remaining)} remaining` : null,
                   formatDuration(route.estimated_travel_time_minutes),
+                  remainingMinutes !== null ? `ETA ${formatEta(remainingMinutes)}` : null,
                 ]
                   .filter(Boolean)
                   .join(" • ")}
@@ -792,6 +891,37 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             <View style={styles.arrivedRow}>
               <CheckCircle2 size={18} color={colors.green600} />
               <Text style={styles.arrivedText}>Arrived at your destination</Text>
+            </View>
+          ) : null}
+
+          {telemetryVehicleId !== null ? (
+            <View style={styles.telemetryStrip}>
+              <View style={styles.telemetryItem}>
+                <Gauge size={12} color={colors.slate400} />
+                <Text style={styles.telemetryText}>
+                  {speedKmh !== null ? `${Math.round(speedKmh)} km/h` : "— km/h"}
+                </Text>
+              </View>
+              <View style={styles.telemetryItem}>
+                <MapPin size={12} color={colors.slate400} />
+                <Text style={styles.telemetryText}>
+                  {gpsAccuracyM !== null ? `±${Math.round(gpsAccuracyM)} m` : "no fix"}
+                </Text>
+              </View>
+              <View style={styles.telemetryItem}>
+                {online ? (
+                  <Wifi size={12} color={colors.green600} />
+                ) : (
+                  <WifiOff size={12} color={colors.red600} />
+                )}
+                <Text style={styles.telemetryText}>
+                  {lastSyncAt
+                    ? `Synced ${lastSyncAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`
+                    : online
+                      ? "Not yet synced"
+                      : "Offline"}
+                </Text>
+              </View>
             </View>
           ) : null}
 
@@ -875,6 +1005,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   instructionText: { fontSize: 14, fontWeight: "800", color: colors.white },
+  speedBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  speedBadgeValue: { fontSize: 15, fontWeight: "800", color: colors.white },
+  speedBadgeUnit: { fontSize: 8, color: colors.slate300 },
+  telemetryStrip: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderColor: colors.slate100,
+    paddingTop: 8,
+  },
+  telemetryItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  telemetryText: { fontSize: 10, color: colors.slate500 },
   instructionMeta: { fontSize: 11, color: colors.slate300, marginTop: 2 },
   mapNotice: {
     position: "absolute",

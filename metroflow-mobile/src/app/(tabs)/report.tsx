@@ -9,12 +9,14 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import { File } from 'expo-file-system';
 import {
   Waves,
   ChevronLeft,
@@ -66,7 +68,8 @@ const PASSABILITY_LABELS: Record<Passability, string> = {
 const CAPTURE_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
   allowsEditing: false,
-  quality: 0.6,
+  // 0.6 still produced camera photos over the API's 4 MB ceiling on high-resolution phones.
+  quality: 0.4,
   exif: true,
 };
 
@@ -131,7 +134,9 @@ export default function ReportScreen() {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) {
         setLocationState('denied');
-        setLocationError('Location permission is required to pin where you saw the flood.');
+        setLocationError(
+          'MetroFlow needs your location to pin exactly where you saw the flood. Enable location access in Settings.',
+        );
         return;
       }
       const current = await Location.getCurrentPositionAsync({
@@ -213,7 +218,14 @@ export default function ReportScreen() {
       if (picked.canceled || picked.assets.length === 0) return;
 
       const asset = picked.assets[0];
-      if (asset.fileSize && asset.fileSize > PHOTO_MAX_BYTES) {
+      // The picker's fileSize is often missing for camera captures, so measure the file.
+      let size = asset.fileSize ?? 0;
+      try {
+        size = new File(asset.uri).size ?? size;
+      } catch {
+        // Keep the picker's figure.
+      }
+      if (size > PHOTO_MAX_BYTES) {
         setMsgTone('error');
         setMsg('That photo is larger than 4 MB. Retake it at a lower resolution or pick a smaller image.');
         return;
@@ -283,10 +295,15 @@ export default function ReportScreen() {
       setTimeout(() => router.replace('/(tabs)/home'), 2500);
     } catch (error) {
       if (!(error instanceof ApiError)) {
+        console.warn('report upload failed', error);
         // No connection: keep the report and send it when one returns (FSD-FR-068).
         await enqueueReport({ ...payload, narrative });
         setMsgTone('info');
-        setMsg('You are offline. The report is saved and will be sent when the connection returns.');
+        setMsg(
+          (await isOffline())
+            ? 'You are offline. The report is saved and will be sent when the connection returns.'
+            : `Could not reach the server (${error instanceof Error ? error.message : String(error)}). The report is saved and will be retried automatically.`
+        );
         setTimeout(() => router.replace('/(tabs)/home'), 2500);
       } else {
         setMsgTone('error');
@@ -472,7 +489,14 @@ export default function ReportScreen() {
                 </Text>
               )}
             </View>
-            {locationState !== 'ready' && locationState !== 'locating' ? (
+            {locationState === 'denied' ? (
+              <TouchableOpacity
+                onPress={() => void Linking.openSettings()}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.blue50, borderRadius: 10 }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.blue700 }}>Open Settings</Text>
+              </TouchableOpacity>
+            ) : locationState !== 'ready' && locationState !== 'locating' ? (
               <TouchableOpacity
                 onPress={handleRetryLocation}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.blue50, borderRadius: 10 }}

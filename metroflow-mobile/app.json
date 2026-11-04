@@ -63,6 +63,18 @@
             "enableShrinkResourcesInReleaseBuilds": false
           }
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0f172a",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#0f172a"
+          }
+        }
       ]
     ]
   }
