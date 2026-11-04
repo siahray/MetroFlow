@@ -61,6 +61,40 @@ export async function loadCache<T>(key: string): Promise<T | null> {
   }
 }
 
+export type CacheStats = {
+  /** The last road graph is stored, so a route can be planned offline. */
+  network: boolean;
+  hazards: number;
+  /** The last planned route, drawn as soon as the app opens without a network. */
+  hasRoute: boolean;
+  bytes: number;
+};
+
+/** What is actually on disk, for the Offline Data screen (FSD-FR-070). */
+export async function cacheStats(): Promise<CacheStats> {
+  try {
+    const rows = await (await db()).getAllAsync<{ key: string; bytes: number }>(
+      "SELECT key, length(CAST(value AS BLOB)) AS bytes FROM cache",
+    );
+    const keys = new Set(rows.map((row) => row.key));
+    return {
+      network: keys.has("network"),
+      hazards: keys.has("hazards") ? ((await loadCache<unknown[]>("hazards"))?.length ?? 0) : 0,
+      hasRoute: keys.has("route"),
+      bytes: rows.reduce((total, row) => total + (row.bytes ?? 0), 0),
+    };
+  } catch {
+    return { network: false, hazards: 0, hasRoute: false, bytes: 0 };
+  }
+}
+
+/** Human-readable size for the cached data; the store is small, so KB is enough. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // --- Report queue (FSD-FR-068, 069) -----------------------------------------
 
 async function readQueue(): Promise<(QueuedReport & { seq: number })[]> {
