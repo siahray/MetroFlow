@@ -265,23 +265,65 @@ class TelemetryPing(BaseModel):
     )
 
 
+# What a unit can be doing. DISPATCHED is set by the dispatch flow; an administrator may also
+# mark a unit AVAILABLE, ON_SCENE or OUT_OF_SERVICE.
+VEHICLE_STATUSES = ("AVAILABLE", "DISPATCHED", "ON_SCENE", "OUT_OF_SERVICE")
+
+
+def _normalise_vehicle_status(value: str | None) -> str | None:
+    if value is None:
+        return None
+    upper = value.strip().upper()
+    if upper not in VEHICLE_STATUSES:
+        raise ValueError(f"status must be one of {list(VEHICLE_STATUSES)}")
+    return upper
+
+
 class VehicleCreate(BaseModel):
-    call_sign: str
-    vehicle_type: str
-    clearance_cm: int | None = None
-    status: str = "available"
-    current_location_lat: float | None = None
-    current_location_lon: float | None = None
+    call_sign: str = Field(min_length=1, max_length=50)
+    vehicle_type: str = Field(min_length=1, max_length=30)
+    clearance_cm: int | None = Field(default=None, gt=0, le=300)
+    status: str = "AVAILABLE"
+    current_location_lat: float | None = Field(default=None, ge=-90, le=90)
+    current_location_lon: float | None = Field(default=None, ge=-180, le=180)
+
+    @field_validator("call_sign", "vehicle_type")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def _status(cls, value: str) -> str:
+        return _normalise_vehicle_status(value) or "AVAILABLE"
 
 
 class VehicleUpdate(BaseModel):
-    call_sign: str | None = None
-    vehicle_type: str | None = None
-    clearance_cm: int | None = None
+    call_sign: str | None = Field(default=None, min_length=1, max_length=50)
+    vehicle_type: str | None = Field(default=None, min_length=1, max_length=30)
+    clearance_cm: int | None = Field(default=None, gt=0, le=300)
     status: str | None = None
-    current_location_lat: float | None = None
-    current_location_lon: float | None = None
-    speed_kmh: float | None = None
+    current_location_lat: float | None = Field(default=None, ge=-90, le=90)
+    current_location_lon: float | None = Field(default=None, ge=-180, le=180)
+    speed_kmh: float | None = Field(default=None, ge=0, le=300)
+
+    @field_validator("call_sign", "vehicle_type")
+    @classmethod
+    def _strip(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def _status(cls, value: str | None) -> str | None:
+        return _normalise_vehicle_status(value)
 
 
 class VehicleResponse(BaseModel):

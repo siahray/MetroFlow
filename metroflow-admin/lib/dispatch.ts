@@ -67,6 +67,34 @@ export async function listVehicles(): Promise<Vehicle[]> {
   return fetchJSON<Vehicle[]>("/api/v1/vehicles");
 }
 
+/** What the API accepts for a unit (super admin only). */
+export type VehicleInput = {
+  call_sign: string;
+  vehicle_type: string;
+  clearance_cm: number;
+  status: string;
+  current_location_lat?: number;
+  current_location_lon?: number;
+};
+
+export async function createVehicle(input: VehicleInput): Promise<Vehicle> {
+  return fetchJSON<Vehicle>("/api/v1/vehicles", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function updateVehicle(
+  vehicleId: number,
+  input: Partial<VehicleInput>,
+): Promise<Vehicle> {
+  return fetchJSON<Vehicle>(`/api/v1/vehicles/${vehicleId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteVehicle(vehicleId: number): Promise<void> {
+  await fetchJSON<void>(`/api/v1/vehicles/${vehicleId}`, { method: "DELETE" });
+}
+
 export async function assignSOS(sosId: number, vehicleId: number): Promise<SOSRequest> {
   return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/assign`, {
     method: "POST",

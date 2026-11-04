@@ -8,7 +8,7 @@ import { CheckSquare } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { DispatchRadar } from "@/components/dispatch-radar";
 import { useToast } from "@/components/toast-provider";
-import { type Incident } from "@/lib/incidents";
+import { compareIncidents, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listReports, type FieldReport } from "@/lib/reports";
@@ -40,7 +40,7 @@ function RadarContent() {
     const recalculate = () => {
       const sosIncidents = sosList.map((s) => sosToIncident(s, { reports, vehicles }));
       const reportIncidents = reports.map((r) => reportToIncident(r, { vehicles }));
-      const mapped = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
+      const mapped = [...sosIncidents, ...reportIncidents].sort(compareIncidents);
       setIncidents(mapped);
     };
     recalculate();

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  compareIncidents,
   countByFilter,
   matchesQueueFilter,
   primarySource,
@@ -133,5 +134,41 @@ describe("nothing is invented about an SOS", () => {
   test("a missing barangay is said to be missing", () => {
     expect(reportToIncident(report({ barangay: null })).barangay).toBe("Barangay not given");
     expect(sosToIncident(sos(null)).barangay).toBe("Barangay not given");
+  });
+});
+
+describe("an SOS is described only by what the person sent", () => {
+  test("it has no urgency score, and no sentence is made up when there is no note", () => {
+    const result = sosToIncident(sos(null));
+    expect(result.urgency).toBeNull();
+    expect(result.narrative).toBe("");
+    expect(reportToIncident(report({ narrative: null })).narrative).toBe("");
+  });
+
+  test("a note is passed through unchanged", () => {
+    expect(sosToIncident(sos("stuck on the roof")).narrative).toBe("stuck on the roof");
+  });
+});
+
+describe("queue order", () => {
+  const make = (over: Partial<Incident>) =>
+    ({ incidentType: "report", urgency: 5, createdAt: "2026-11-03T10:00:00", ...over }) as Incident;
+
+  test("SOS signals come before reports, newest first, whatever a report's score", () => {
+    const list = [
+      make({ id: "R-high", urgency: 9.9 }),
+      make({ id: "S-old", incidentType: "sos", urgency: null, createdAt: "2026-11-03T08:00:00" }),
+      make({ id: "S-new", incidentType: "sos", urgency: null, createdAt: "2026-11-03T09:00:00" }),
+    ].sort(compareIncidents);
+    expect(list.map((i) => i.id)).toEqual(["S-new", "S-old", "R-high"]);
+  });
+
+  test("reports order by urgency, then newest", () => {
+    const list = [
+      make({ id: "low", urgency: 2 }),
+      make({ id: "high-old", urgency: 8, createdAt: "2026-11-03T08:00:00" }),
+      make({ id: "high-new", urgency: 8, createdAt: "2026-11-03T09:00:00" }),
+    ].sort(compareIncidents);
+    expect(list.map((i) => i.id)).toEqual(["high-new", "high-old", "low"]);
   });
 });

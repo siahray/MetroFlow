@@ -449,7 +449,11 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             <span>Citizen Witness Narrative</span>
           </div>
           <p className="text-xs font-medium leading-relaxed text-slate-800">
-            &ldquo;{incident.narrative}&rdquo;
+            {incident.narrative ? (
+              <>&ldquo;{incident.narrative}&rdquo;</>
+            ) : (
+              "No description was given."
+            )}
           </p>
         </div>
 

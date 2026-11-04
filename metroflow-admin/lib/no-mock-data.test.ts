@@ -26,6 +26,8 @@ const BANNED: [RegExp, string][] = [
     "invented telemetry or fallback depth",
   ],
   [/Distress Beacon|GPS \(Road Node Match\)/, "invented verification claim"],
+  [/\+63 ?9\d\d ?555/, "a hardcoded phone number; no phone is collected"],
+  [/Urgency Score[\s\S]{0,200}8\.4/, "a hardcoded urgency score"],
 ];
 
 function sourceFiles(dir: string): string[] {

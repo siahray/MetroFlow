@@ -8,7 +8,12 @@ import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
 import { IncidentQueue } from "@/components/incident-queue";
 import { useToast } from "@/components/toast-provider";
-import { matchesQueueFilter, type QueueFilter, type Incident } from "@/lib/incidents";
+import {
+  compareIncidents,
+  matchesQueueFilter,
+  type QueueFilter,
+  type Incident,
+} from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
@@ -45,7 +50,7 @@ export default function TriagePage() {
     const recalculate = () => {
       const sosIncidents = sosList.map((s) => sosToIncident(s, { reports, vehicles, hazards }));
       const reportIncidents = reports.map((r) => reportToIncident(r, { vehicles, hazards }));
-      const incidents = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
+      const incidents = [...sosIncidents, ...reportIncidents].sort(compareIncidents);
       setLiveIncidents(incidents);
     };
     recalculate();
