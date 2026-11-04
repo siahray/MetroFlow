@@ -45,6 +45,7 @@ svg text { font-family: "Helvetica Neue", Arial, sans-serif; }
 .slide.dark table th { background: #1e293b; color: #f8fafc; }
 .slide.dark td, .slide.dark th { border-color: #475569; }
 .small { font-size: 10pt; color: #475569; }
+h4 { font-size: 10pt; margin: 10pt 0 2pt; color: #0f172a; page-break-after: avoid; }
 </style>
 </head>
 <body>
@@ -66,24 +67,37 @@ svg text { font-family: "Helvetica Neue", Arial, sans-serif; }
 4. Systems Analyst / Technical Lead: Felipe, Marck Aaron V.</td></tr>
 <tr><td>Repository URL</td><td>https://github.com/siahray/MetroFlow.git</td></tr>
 <tr><td>Submission Date</td><td>November 4, 2026</td></tr>
+<tr><td>Development Model</td><td>Waterfall (sequential phases with documented exit criteria)</td></tr>
 </table>
 
 <h2>Proposal at a glance</h2>
 <p><b>Computational problem.</b> MetroFlow is a flood-response and rescue-dispatch system. Its core computation is a <i>vehicle-specific, flood-aware shortest-time path</i> on a live road graph: given a rescue vehicle's ground clearance and the current standing-water depth on every road segment, find the fastest route that never enters a segment the vehicle cannot cross.</p>
-<p><b>Core algorithm.</b> A* search with a min-heap frontier, an admissible and consistent great-circle/top-speed heuristic, a hard clearance cut-off, and a depth-dependent speed-degradation edge cost [1], [2]. This is implemented in <code>backend/routing.py</code> (<code>td_a_star_search</code>).</p>
-<p><b>Upstream input generator.</b> A hydrology engine (SCS Curve Number runoff &rarr; ponding depth) converts rainfall into the per-segment depths the router consumes [8].</p>
-<p><b>Contents.</b> Task 1 Problem Modeling &middot; Task 2 Paradigm &amp; Pseudocode &middot; Task 3 Complexity &amp; Scalability &middot; Task 4 Decoupled Architecture &amp; API Schema &middot; Task 5 Agile Backlog &amp; Benchmarks &middot; Task 6 Defense Questions &middot; References &middot; Presentation Deck (12 slides, appended).</p>
-<div class="ai">&lt;!-- AI Assistance: We used Claude (Claude Code) to read our existing repository, draft the mathematical formulation, complexity derivations, pseudocode, JSON schemas and review answers in this document, and to lay out the report. The team reviewed each formula against <code>backend/routing.py</code> and <code>backend/hydrology.py</code>. --&gt;</div>
+<p><b>Primary algorithm.</b> A* search with a min-heap frontier, an admissible and consistent great-circle/top-speed heuristic, a hard clearance cut-off, and a depth-dependent speed-degradation edge cost [1], [2]. This is implemented in <code>backend/routing.py</code> (<code>td_a_star_search</code>).</p>
+<p><b>Supporting algorithms.</b> The backend contains 18 more algorithms beside A*: the hydrology model that generates the depths, passability rules, turn-by-turn steps, a dispatch preview, a nearest-node snap, the CR-004 flood-state resolver, report urgency ranking, a duplicate-neighbour map, a sensor/report mismatch check, evidence checks, a tamper-evident audit hash chain, a rate limiter, event replay, spatial queries, an advisory upsert, JWT sessions and the seed builder. Each is numbered ALG-02 to ALG-19 and gets the same treatment as A* inside every task: its own formal specification (Task 1), strategy table and pseudocode (Task 2), complexity and scalability table with a measured result (Task 3), interface contract (Task 4), story and work-package ticket with a benchmark assertion (Task 5), and answers (Task 6). A* is ALG-01 and the graded primary algorithm.</p>
+
+<h3>Waterfall lifecycle context</h3>
+<p>MetroFlow is built under a waterfall model: each phase finishes and passes its exit criteria before the next begins, and every later artifact traces back to an earlier one (BRD &rarr; FSD &rarr; TSD &rarr; code &rarr; tests). This milestone sits as follows:</p>
+<table>
+<tr><th style="width:20%">Waterfall phase</th><th style="width:30%">Project artifact</th><th>Where it appears in this proposal</th></tr>
+<tr><td>1. Requirements</td><td>BRD, FSD (e.g. FSD-FR-057, FSD-FR-089)</td><td>Task 1: problem, inputs, constraints, objective, output certificate</td></tr>
+<tr><td>2. Design</td><td>TSD (ADR-004 A* routing; ADR-005 SCS-CN; &sect;2 Algorithms)</td><td>Tasks 2&ndash;4: algorithm choice, pseudocode, complexity, architecture, API contract</td></tr>
+<tr><td>3. Implementation</td><td><code>backend/routing.py</code>, <code>backend/hydrology.py</code></td><td>Task 5: work package DEV-ALGO-101 (engine is built; the benchmark module is the remaining item)</td></tr>
+<tr><td>4. Verification</td><td>Test cases (TSD / FSD tables), PMP Testing Management exit criteria</td><td>Task 5 benchmark assertions; Task 6 edge-case answers</td></tr>
+<tr><td>5. Acceptance</td><td>UAT scenarios, sign-off</td><td>Out of scope for Milestone 1</td></tr>
+</table>
+<p><b>Contents.</b> Task 1 Problem Modeling &middot; Task 2 Paradigm &amp; Pseudocode &middot; Task 3 Complexity &amp; Scalability &middot; Task 4 Decoupled Architecture &amp; API Schema &middot; Task 5 Work Packages &amp; Validation Plan &middot; Task 6 Defense Questions &middot; References &middot; Presentation Deck (14 slides, appended).</p>
+<div class="ai">&lt;!-- AI Assistance: We used Claude (Claude Code) to read our existing repository, draft the mathematical formulation, complexity derivations, pseudocode, JSON schemas, algorithm inventory and review answers in this document, and to lay out the report. The team reviewed each formula against <code>backend/routing.py</code>, <code>backend/hydrology.py</code>, <code>backend/reports.py</code> and <code>backend/audit.py</code>. --&gt;</div>
 </section>
 
 <!-- ======================= TASK 1 ======================= -->
 <h2>Task 1: Computational Problem Modeling &amp; Formal Mathematical Formulation</h2>
+<p class="small">Waterfall phase: Requirements. This task restates the routing requirements (FSD-FR-011 to 017, FSD-FR-089) as a mathematical problem.</p>
 
 <h3>1.1 Problem statement &amp; domain context</h3>
 <p>During typhoon-driven flooding, standing water makes road segments impassable for some vehicles and merely slow for others. A rescue unit with 28 cm of ground clearance cannot use a lane that a 70 cm truck can. Routing that ignores depth and vehicle clearance sends units into submerged streets. The operational question is therefore: <i>for a given vehicle, what is the fastest route to a victim that only uses road segments the vehicle can actually cross, and does any such route exist?</i></p>
 <p>Flood depth is a standard predictor of road-network disruption: speed falls as depth rises and vehicles stop at a depth tied to their clearance [7]. Prior work on emergency services during floods assigns depths to road links and derives reduced vehicle speeds and service areas from them [6]. MetroFlow adopts the same modelling idea, using a per-vehicle clearance threshold and a depth-dependent speed penalty, and runs it on a live, sensor- and report-updated graph. Shortest-path search under constraints is a core graph problem [1], and goal-directed A* search is the standard way to cut the explored region on road networks [2], [5].</p>
 
-<h3>1.2 Formal specification</h3>
+<h3>1.2 Flood-aware A* (ALG-01, primary): formal specification</h3>
 <p><b>Input parameters (\(I\)).</b> A directed graph \(G=(V,E)\) with \(|V|=n\), \(|E|=m\). Each node \(u\in V\) has a coordinate \(x_u=(\varphi_u,\lambda_u)\) (latitude, longitude). Each edge \(e=(u,v)\in E\) has length \(\ell_e>0\) (m), posted speed \(s_e>0\) (km/h) and live water depth \(d_e\ge 0\) (cm). A query supplies a source \(s\in V\), target \(t\in V\) and vehicle clearance \(c>0\) (cm).</p>
 <p>Depths \(d_e\) are produced by the hydrology engine: for rainfall \(P\) (mm), curve number \(CN\), \(S=\tfrac{25400}{CN}-254\) and initial abstraction \(I_a=0.2S\), the direct runoff is
 \[ Q=\begin{cases}0 & P\le I_a\\[2pt] \dfrac{(P-I_a)^2}{P-I_a+S} & P>I_a\end{cases}\]
@@ -107,8 +121,138 @@ A companion <b>decision problem</b> is: does an \(s\)&ndash;\(t\) path exist in 
 <p><b>Dispatch extension.</b> For an SOS with \(K\) candidate vehicles, each with clearance \(c_k\) and position \(s_k\), the preview solves \(K\) independent instances and ranks units by \(T^*_k\).</p>
 <div class="ai">&lt;!-- AI Assistance: Claude helped formalise the objective function and the SCS-CN statement from our code. The speed-degradation exponent 1.8 and the 0.5 m/s floor come from our existing implementation. They are modelling choices of the team, not values taken from [6] or [7]. --&gt;</div>
 
+<h3>1.3 Formal specification of the supporting algorithms</h3>
+<p>MetroFlow contains more algorithms than the A* search. Each one below gets the same four-part specification (inputs, constraints, objective, output certificate) as A*. A* is ALG-01 and remains the graded primary algorithm; ALG-02 to ALG-19 support it or sit beside it in the same backend.</p>
+<h4>ALG-02: SCS-CN runoff and ponding depth <span class="small">(<code>backend/hydrology.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>Rainfall rate \(r\) (mm/h), duration \(D\) (h), curve number \(CN\), node elevation \(z_u\) (m), ponding amplification \(\alpha\).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>\(CN>0\); \(P=rD\ge0\) (else runoff is 0); \(\alpha\) from configuration; elevations above the 10 m datum are clamped; depth in cm, rainfall in mm.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Not an optimisation: a deterministic evaluation. \(S=\tfrac{25400}{CN}-254,\ I_a=0.2S,\ Q=\tfrac{(P-I_a)^2}{P-I_a+S}\) for \(P>I_a\), else 0; \(d_u=\tfrac{Q}{10}\,\big(1+0.15(10-\min(z_u,10))\big)\,\alpha\) [8].</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>Ponding depth \(d_u\ge0\) in cm, rounded to 0.01, for every node; written to the live edge states that A* reads.</td></tr>
+</table>
+<h4>ALG-03: Passability classification and hazard blocking <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>Water depth \(d\) (cm), vehicle clearance \(c\) (cm), caution depth \(\kappa\); a verified hazard's obstruction level.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>\(c>0\); levels in {CAUTION, LEVEL_2, LEVEL_3, IMPASSABLE}.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Classification: SUBMERGED iff \(d\ge c\) (inclusive); LIGHT_FLOOD iff \(\kappa\le d<c\); else PASSABLE. A hazard blocks routing iff its level is LEVEL_2, LEVEL_3 or IMPASSABLE.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A label in {PASSABLE, LIGHT_FLOOD, SUBMERGED} and a boolean \(blocks\).</td></tr>
+</table>
+<h4>ALG-04: Turn-by-turn instruction generation <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>A path \(p_0,\dots,p_k\), hop lengths and road names, node coordinates.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Heading change \(\le20^\circ\) is straight, \(\le45^\circ\) slight, \(\ge135^\circ\) a U-turn; steps start with DEPART and end with ARRIVE.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Emit the shortest step list that hides no real turn. Bearing \(\theta=\mathrm{atan2}(\sin\Delta\lambda\cos\varphi_2,\ \cos\varphi_1\sin\varphi_2-\sin\varphi_1\cos\varphi_2\cos\Delta\lambda)\bmod360^\circ\); heading change \(\Delta=((\theta_i-\theta_{i-1}+540)\bmod360)-180\).</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>Ordered steps (maneuver, road, distance, node ids, text).</td></tr>
+</table>
+<h4>ALG-05: Dispatch preview (one search per vehicle) <span class="small">(<code>backend/main.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>An SOS location, \(K\) candidate vehicles with position \(s_k\) and clearance \(c_k\), the live graph.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Only available units; a unit without a position cannot be previewed (409); no safe route is reported as 422.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>For each vehicle solve A* from its nearest node to the SOS node; rank by \(T^*_k\) ascending.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A list of (vehicle, \(T^*_k\), route or reason) for the dispatcher.</td></tr>
+</table>
+<h4>ALG-06: Nearest-node snap <span class="small">(<code>backend/main.py (_nearest_node)</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>A coordinate \(x\) and the node set \(V\) with coordinates.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>\(V\ne\emptyset\); great-circle distance in metres.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>\(\arg\min_{u\in V}\mathrm{hav}(x,x_u)\).</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>The id of the closest road node.</td></tr>
+</table>
+<h4>ALG-07: Flood-state resolver (CR-004 priority rule) <span class="small">(<code>backend/flood_state.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>Per edge: the highest verified hazard (level, blocks?), live observations \((\text{source},\text{kind},t_{as\_of},\text{flagged})\), a NOAH class; plus \(now\), a \(raining\) flag, and a 30-minute freshness window.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Fresh iff \(-5\,\mathrm{min}\le now-t_{as\_of}\le30\,\mathrm{min}\); a live reading or NOAH never closes a road (BRULE-012, BRULE-016).</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Choose the single applicable state by priority: (1) verified hazard; (2) best fresh flagged observation, ranked OBSERVED &lt; MODELLED &lt; SIMULATED then newest; (3) satellite (not built); (4) NOAH caution (penalty 1.1 / 1.3 / 1.6) only while raining; (5) NONE.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td><code>FloodState</code>: basis, source, kind, as_of, advisory, closes_road, route_penalty, notes.</td></tr>
+</table>
+<h4>ALG-08: Report urgency scoring and ranking <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>\(k\) reports, each with depth level \(\delta\in\{\text{ANKLE},\text{KNEE},\text{IMPASSABLE}\}\), source \(\sigma\in\{\text{PHOTO},\text{SENSOR},\text{CALL}\}\), \(r\) nearby reports, age \(a\) (min).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>\(\mathrm{sev}=1,2,3\); \(\mathrm{wt}=1.0,0.9,0.8\); unknown source is weighted as CALL; \(r<0\) and \(a<0\) are treated as 0.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Order reports by descending \(U(a)=U_0e^{-a/30}\), \(U_0=\mathrm{sev}(\delta)\,\mathrm{wt}(\sigma)\,\min(1+0.25r,2)\), so \(0<U\le U_0\le6\). The time constant is 30 min (half-life \(30\ln2\approx20.8\) min; the code comment calls it a half-life \"scale\").</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>The sorted moderation queue.</td></tr>
+</table>
+<h4>ALG-09: Duplicate-neighbour map for the moderation queue <span class="small">(<code>backend/main.py (_neighbour_map)</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>\(k\) reports with latitude, longitude, status and submit time.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Neighbour = within 150 m and 15 minutes; only pending reports with a location participate.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>For each report, the count of neighbours and the nearest neighbour.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A map <code>report_id &rarr; (count, nearest id)</code>; the count feeds ALG-08 and the duplicate hint.</td></tr>
+</table>
+<h4>ALG-10: Sensor/report mismatch check and haversine distance <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>A report location and gauges \((\text{lat},\text{lon},\text{has\_reading},\text{is\_breach})\).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Only gauges within 5,000 m count; \(R=6{,}371{,}000\) m.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Decision: does the nearest in-range gauge contradict the report? Haversine \(a=\sin^2\tfrac{\Delta\varphi}{2}+\cos\varphi_1\cos\varphi_2\sin^2\tfrac{\Delta\lambda}{2},\ d=2R\,\mathrm{atan2}(\sqrt a,\sqrt{1-a})\).</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>Boolean: true iff the nearest in-range gauge has a reading and is not in breach.</td></tr>
+</table>
+<h4>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>An uploaded JPEG of \(b\) bytes, a claimed latitude/longitude, a user id and a salt.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Pilot bounds lat 14.4&ndash;14.8, lon 120.9&ndash;121.2; hazard footprint radius 30 m.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Produce evidence metadata: SHA-256 of the bytes, sniffed image type, EXIF fields (make, capture time, GPS), a plausibility flag, a square hazard polygon, and a salted reporter hash.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>Digest, MIME, EXIF dict (or empty), plausibility boolean, WKT polygon, hex reporter hash.</td></tr>
+</table>
+<h4>ALG-12: Tamper-evident audit hash chain <span class="small">(<code>backend/audit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>An ordered log \(R_1,\dots,R_L\) of attributable records.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Append-only; each record serialised canonically (sorted keys, no whitespace).</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Decision problem: is the chain intact? \(h_0=\bot,\ h_i=\mathrm{SHA\text{-}256}(\mathrm{canon}(R_i,h_{i-1}))\).</td></tr>
+<tr><td>Output certificate (\(O\))</td><td><code>{valid, checked, broken_at}</code>.</td></tr>
+</table>
+<h4>ALG-13: Windowed rate limiter <span class="small">(<code>backend/rate_limit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>A client id and route name (the bucket), the window \(W\) (s), and the limit \(\lambda\).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>\(\lambda\le0\) disables the check; the counter is atomic across serverless instances.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Count requests per bucket in the current window \(w=\lfloor t/W\rfloor W\); reject when the count exceeds \(\lambda\).</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>The count and window start; HTTP 429 when over the limit.</td></tr>
+</table>
+<h4>ALG-14: SSE event replay and framing <span class="small">(<code>backend/events.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>A channel, a resume cursor \(after\), a limit \(L_r\); \(N\) rows in the event log.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>A malformed cursor is an error, not a silent reset; events are ordered by \(event\_id\).</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Return events with \(event\_id>after\) in id order, up to \(L_r\), then format each as an SSE frame.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A list of events and <code>id/event/data</code> frames.</td></tr>
+</table>
+<h4>ALG-15: Sensor impact-radius edge marking (ST_DWithin) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>A sensor reading \((\text{id},\ v,\ \text{unit},\ t)\); the sensor's location, threshold \(\theta\) and impact radius \(\rho\) (m); the \(m\) road edges.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Unit must match the sensor; timestamp not in the future; \(v\ge0\), finite; disabled sensors rejected.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>\(breach=(v\ge\theta)\); select \(E_\rho=\{e:\ \mathrm{dist}(e,\text{sensor})\le\rho\}\) and record the reading on each edge in \(E_\rho\), flagged or not.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>The stored reading, the list of impacted edge ids, and an audit entry on breach.</td></tr>
+</table>
+<h4>ALG-16: Hazard coverage (ST_Intersects) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>Active hazards \(H\) (polygon or a direct edge id) and the \(m\) road edges (line geometry).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Only active hazards; a closure hazard may point at one edge without a polygon.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>For each hazard, the set of edges its polygon intersects, unioned with its direct edge.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A map \(hazard\_id\to\) set of edge ids; the router and the route-hazard report both read it.</td></tr>
+</table>
+<h4>ALG-17: Advisory upsert (last-writer-by-time) <span class="small">(<code>backend/main.py (_upsert_advisories)</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>\(r\) edge ids, a source, a kind, a flagged flag and the observation time \(as\_of\).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>One row per (edge, source); an older observation never overwrites a newer one.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Record the latest observation of the source on each edge.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>\(r\) upserted rows (no return value).</td></tr>
+</table>
+<h4>ALG-18: Session tokens (JWT HS256) <span class="small">(<code>backend/auth_utils.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>Claims (subject, role), a secret key, an expiry (default 24 h).</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>HS256 only; the secret comes from the environment (a development fallback is reported at start-up).</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Sign: \(\mathrm{HMAC\text{-}SHA256}(\text{header.payload},\ key)\). Verify: recompute and compare, check expiry.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A compact token, or an authentication error.</td></tr>
+</table>
+<h4>ALG-19: Seed road-network builder <span class="small">(<code>backend/network_seed.py</code>)</span></h4>
+<table><tr><th style="width:24%">Element</th><th>Specification</th></tr>
+<tr><td>Input parameters (\(I\))</td><td>The fixed spine nodes and edges, lattice rows and columns with names, coordinates and speeds.</td></tr>
+<tr><td>Boundary conditions &amp; constraints (\(C\))</td><td>Edge endpoints must exist; ids unique; elevation derived per lattice cell.</td></tr>
+<tr><td>Objective function (\(f\))</td><td>Generate the pilot graph: lattice nodes plus bidirectional horizontal and vertical edges, then validate.</td></tr>
+<tr><td>Output certificate (\(O\))</td><td>A (nodes, edges) pair; the real seed has 34 nodes and 61 edges.</td></tr>
+</table>
+
 <!-- ======================= TASK 2 ======================= -->
 <h2>Task 2: Algorithmic Paradigm Selection &amp; Logic Specification</h2>
+<p class="small">Waterfall phase: Design (TSD &sect;2 Algorithms, ADR-004). The choice below is already recorded as an accepted design decision. The template asks for one core algorithm, so A* is ALG-01; the other 18 algorithms in the system follow in 2.2 with the same schema.</p>
 
 <table>
 <tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
@@ -116,7 +260,7 @@ A companion <b>decision problem</b> is: does an \(s\)&ndash;\(t\) path exist in 
 <tr><td>Design Paradigm</td><td>Graph Algorithms &amp; Network Theory: best-first search with an admissible, consistent heuristic over a min-heap priority queue.</td></tr>
 <tr><td>Foundational References</td><td>Hart, Nilsson &amp; Raphael (A*) [2]; Dechter &amp; Pearl (optimality of A*) [3]; Dijkstra [4]; Cormen et al., Ch. 22 and 24 [1]; road-network context in Bast et al. [5].</td></tr>
 <tr><td>Baseline Alternative</td><td>Exhaustive simple-path enumeration (DFS with no pruning), then take the minimum. Secondary baseline: Dijkstra (\(h\equiv 0\)), which is correct but explores in all directions.</td></tr>
-<tr><td>Computational Justification</td><td>The number of simple \(s\)&ndash;\(t\) paths grows factorially in \(n\), so enumeration is infeasible beyond toy graphs. A* returns the same optimum in \(O(m\log n)\) and, with a consistent heuristic, settles each node at most once; the heuristic additionally steers the frontier toward \(t\), expanding fewer nodes than Dijkstra [1], [2], [3].</td></tr>
+<tr><td>Computational Justification</td><td>The number of simple \(s\)&ndash;\(t\) paths grows factorially in \(n\), so enumeration is infeasible beyond toy graphs. A* returns the same optimum in \(O(m\log n)\) and, with a consistent heuristic, settles each node at most once; the heuristic additionally steers the frontier toward \(t\), expanding fewer nodes than Dijkstra [1], [2], [3]. Measured (Section 3.5): 33&ndash;43% fewer nodes settled and identical cost on 120 of 120 queries, but about 18&ndash;52% <i>more</i> wall time in pure Python because the haversine heuristic is costly.</td></tr>
 <tr><td>Invariants &amp; Recurrence Relations</td><td>
 Bellman recurrence on the feasible graph: \(g(s)=0,\quad g(v)=\min_{(u,v)\in E_c}\big(g(u)+w_{uv}\big)\). Priority: \(f(v)=g(v)+h(v)\).<br>
 Heuristic: \(h(v)=\dfrac{\mathrm{hav}(x_v,x_t)}{v_{\max}}\), \(v_{\max}=\max_e s_e/3.6\).<br>
@@ -125,7 +269,7 @@ Heuristic: \(h(v)=\dfrac{\mathrm{hav}(x_v,x_t)}{v_{\max}}\), \(v_{\max}=\max_e s
 Loop invariant: every node in <code>settled</code> has final optimal \(g\); every heap entry has \(g\ge g_{\text{best}}\).</td></tr>
 </table>
 
-<h3>Structured pseudocode</h3>
+<h3>2.1 Flood-aware A* (ALG-01, primary): structured pseudocode</h3>
 <pre>
 TD-ASTAR(G, coords, s, t, c):                  // G: adjacency u -> [(v, len_m, speed_kmh, depth_cm)]
  1  if s not in coords or t not in coords: return (INVALID_NODE, [], inf)
@@ -152,8 +296,291 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 <p>Termination: each node is settled at most once and edges are finite, so the loop ends in at most \(m+1\) pops; line 18 is the termination certificate for the infeasible case.</p>
 <div class="ai">&lt;!-- AI Assistance: Claude produced the pseudocode by reading <code>td_a_star_search</code> and wrote the admissibility/consistency argument. The team should be able to re-derive both on the board. Note: an earlier version of our code used a hard-coded 50 km/h in <code>h</code> and was inadmissible; our regression fuzz test in <code>tests/test_routing.py</code> guards that fix. --&gt;</div>
 
+<h3>2.2 Strategy specification and pseudocode for the supporting algorithms</h3>
+<p>Each supporting algorithm completes the same Strategy Specification Schema as A*, followed by its pseudocode.</p>
+<h4>ALG-02: SCS-CN runoff and ponding depth <span class="small">(<code>backend/hydrology.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>SCS-CN runoff and ponding depth (<code>backend/hydrology.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Closed-form empirical hydrology (NRCS curve-number method) [8].</td></tr>
+<tr><td>Foundational References</td><td>USDA NRCS National Engineering Handbook Part 630, ch. 10 [8].</td></tr>
+<tr><td>Baseline Alternative</td><td>A 2-D hydrodynamic shallow-water simulation (rejected in TSD ADR-005): cost grows with grid cells times time steps and needs terrain and drainage data the pilot does not have.</td></tr>
+<tr><td>Computational Justification</td><td>\(O(1)\) per node with a handful of parameters; explainable to dispatchers; adequate as a decision aid.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>\(Q=0\) for \(P\le I_a\); \(Q\) is non-decreasing in \(P\); \(Q<P\); \(d_u\ge0\). Matches TSD test TTC-003. The factor \(\alpha\) is a tunable bridge from catchment runoff to street ponding, not derived from physics.</td></tr>
+</table>
+<pre>DEPTH-AT-NODE(r, D, CN, z, alpha):
+  P &larr; r * D;  if P &le; 0: return 0
+  S &larr; 25400 / CN - 254;  Ia &larr; 0.2 * S
+  if Ia &ge; P: return 0
+  Q &larr; (P - Ia)^2 / (P - Ia + S)
+  f &larr; 1 + 0.15 * (10 - min(z, 10))
+  return round(max(0, (Q / 10) * f * alpha), 2)</pre>
+<h4>ALG-03: Passability classification and hazard blocking <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Passability classification and hazard blocking (<code>backend/routing.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Threshold classification (rule table).</td></tr>
+<tr><td>Foundational References</td><td>Flood depth against vehicle clearance as the stopping criterion [7]; project rule BRULE-008 and TSD &sect;2.6.</td></tr>
+<tr><td>Baseline Alternative</td><td>The router and the map legend each keep their own threshold, which can drift apart.</td></tr>
+<tr><td>Computational Justification</td><td>One function defines the labels, so legend colour and routing cannot disagree. \(O(1)\).</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td><b>Caveat found while reading the code:</b> <code>td_a_star_search</code> applies the same inclusive test inline (<code>depth &ge; clearance</code>) instead of calling <code>classify_passability</code>, so the two agree by inspection, not by construction.</td></tr>
+</table>
+<pre>CLASSIFY(d, c, kappa):
+  if d &ge; c: return SUBMERGED
+  if d &ge; kappa: return LIGHT_FLOOD
+  return PASSABLE
+BLOCKS(level): return level in {LEVEL_2, LEVEL_3, IMPASSABLE}</pre>
+<h4>ALG-04: Turn-by-turn instruction generation <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Turn-by-turn instruction generation (<code>backend/routing.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Single-pass geometric classification with thresholds; no search.</td></tr>
+<tr><td>Foundational References</td><td>Great-circle bearing formulae; textbook trigonometry [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>One step per hop (\(k\) steps), announcing a turn at every block on a gently bending road.</td></tr>
+<tr><td>Computational Justification</td><td>Merging bends gives fewer, usable steps in \(O(k)\).</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Steps partition the path: their distances sum to the path length, and an interior node starts a step only if \(|\Delta|>20^\circ\).</td></tr>
+</table>
+<pre>STEPS(path, hops, coords):
+  bearings &larr; [bearing(coords[a], coords[b]) for (a, b, ...) in hops]
+  bounds &larr; [(0, DEPART)]
+  for i in 1 .. len(path)-2:
+      m &larr; classify_turn(bearings[i-1], bearings[i])
+      if m != STRAIGHT: bounds.append((i, m))
+  bounds.append((len(path)-1, ARRIVE))
+  return [step(bounds[j], bounds[j+1]) for j]       // distance = sum of hops between bounds</pre>
+<h4>ALG-05: Dispatch preview (one search per vehicle) <span class="small">(<code>backend/main.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Dispatch preview (one search per vehicle) (<code>backend/main.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Repeated single-source search (one A* run per candidate); aggregation by sorting.</td></tr>
+<tr><td>Foundational References</td><td>A* [2], [3]; sorting [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>One multi-source Dijkstra from the SOS node (equivalent only if all vehicles shared one clearance).</td></tr>
+<tr><td>Computational Justification</td><td>Clearances differ per vehicle, so each needs its own feasible subgraph \(G_{c_k}\); \(K\) is small.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Each result is the optimum for its own clearance; the ranking is by travel time only.</td></tr>
+</table>
+<pre>PREVIEW(sos, vehicles, G):
+  t &larr; nearest_node(sos);  out &larr; []
+  for v in vehicles:
+      if v.position is null: out.append((v, no-position)); continue
+      s &larr; nearest_node(v.position)
+      (path, T) &larr; TD-ASTAR(G, coords, s, t, v.clearance_cm)
+      out.append((v, T, path) if T &lt; inf else (v, no-safe-route))
+  return sort(out by T)</pre>
+<h4>ALG-06: Nearest-node snap <span class="small">(<code>backend/main.py (_nearest_node)</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Nearest-node snap (<code>backend/main.py (_nearest_node)</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Linear scan with a minimum.</td></tr>
+<tr><td>Foundational References</td><td>Nearest-neighbour search; k-d trees [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>A k-d tree or grid index: \(O(\log n)\) per query after an \(O(n\log n)\) build.</td></tr>
+<tr><td>Computational Justification</td><td>No index to build or keep in sync with a changing graph; adequate for the pilot graph of 34 nodes.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>The returned node minimises the haversine distance; ties keep the first in iteration order.</td></tr>
+</table>
+<pre>NEAREST(x, nodes):
+  best &larr; null; bd &larr; inf
+  for u in nodes:
+      d &larr; haversine(x, nodes[u])
+      if d &lt; bd: bd &larr; d; best &larr; u
+  return best</pre>
+<h4>ALG-07: Flood-state resolver (CR-004 priority rule) <span class="small">(<code>backend/flood_state.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Flood-state resolver (CR-004 priority rule) (<code>backend/flood_state.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Ordered rule list (first match wins) with a lexicographic minimum over fresh observations.</td></tr>
+<tr><td>Foundational References</td><td>CR-004 &sect;3.3 (project change request); sorting and selection [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>Average or vote across sources (lets a modelled value outvote a gauge) or newest-wins (lets a simulated sensor override a measurement).</td></tr>
+<tr><td>Computational Justification</td><td>Predictable, explainable precedence; each state carries why it was chosen.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Only a verified blocking hazard closes a road. Missing data is never reported as safe: with nothing flagged the basis is NONE and <code>has_live_data</code> says whether anything covers the edge. A stale flagged reading is ignored but recorded.</td></tr>
+</table>
+<pre>RESOLVE(e, now, raining, window):
+  if e.hazard_level: return state(VERIFIED_HAZARD, closes = e.hazard_blocks)
+  fresh &larr; [o in e.live if o.flagged and is_fresh(o.as_of, now, window)]
+  if fresh: b &larr; min(fresh, key = (kind_rank(o.kind), -o.as_of)); return state(LIVE_ADVISORY, b)
+  if e.noah_class:
+      return state(NOAH_CAUTION, penalty) if raining else state(NOAH_LAYER)
+  return state(NONE)</pre>
+<h4>ALG-08: Report urgency scoring and ranking <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Report urgency scoring and ranking (<code>backend/reports.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Weighted scoring with exponential decay, then comparison sort.</td></tr>
+<tr><td>Foundational References</td><td>Comparison sorting [1]; TSD &sect;2.8.</td></tr>
+<tr><td>Baseline Alternative</td><td>First-in-first-out, or severity alone: ignores evidence strength, corroboration and staleness.</td></tr>
+<tr><td>Computational Justification</td><td>An old impassable report no longer outranks a fresh, well-corroborated one; corroboration saturates at 2&times; so a crowd cannot inflate a score.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>\(U\) is non-decreasing in severity, source weight and \(r\) (to the cap) and strictly decreasing in age; the queue scores live, because order between reports of different age changes over time.</td></tr>
+</table>
+<pre>RANK(reports, now):
+  for r in reports:
+      U0 &larr; sev[r.level] * wt[r.source] * min(1 + 0.25 * max(r.neighbours, 0), 2.0)
+      r.U &larr; U0 * exp(-max(age_minutes(r, now), 0) / 30)
+  return sort(reports by U descending)</pre>
+<h4>ALG-09: Duplicate-neighbour map for the moderation queue <span class="small">(<code>backend/main.py (_neighbour_map)</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Duplicate-neighbour map for the moderation queue (<code>backend/main.py (_neighbour_map)</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>All-pairs comparison with a distance and time filter.</td></tr>
+<tr><td>Foundational References</td><td>Spatial bucketing / grid hashing [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>Bucket reports into 150 m grid cells and compare only adjacent cells: expected \(O(k)\).</td></tr>
+<tr><td>Computational Justification</td><td>Simple and correct; acceptable only because the queue page is capped at 200 rows.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Symmetry: haversine and the time window are symmetric, so \(a\) counts \(b\) iff \(b\) counts \(a\); a report never counts itself.</td></tr>
+</table>
+<pre>NEIGHBOURS(rows, now):
+  pending &larr; [r in rows if r.status == PENDING and r.has_location]
+  for r in rows:
+      if r not in pending: result[r] &larr; (0, null); continue
+      cnt &larr; 0; nearest &larr; null
+      for o in pending, o != r:
+          if |o.time - r.time| &gt; 15 min: continue
+          d &larr; haversine(r, o);  if d &gt; 150: continue
+          cnt &larr; cnt + 1;  update nearest by d
+      result[r] &larr; (cnt, nearest)</pre>
+<h4>ALG-10: Sensor/report mismatch check and haversine distance <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Sensor/report mismatch check and haversine distance (<code>backend/reports.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Linear nearest-neighbour scan plus a closed-form great-circle distance.</td></tr>
+<tr><td>Foundational References</td><td>Great-circle distance is a metric (triangle inequality), the basis of the A* heuristic's consistency [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>Flag on <i>any</i> contradicting gauge (a distant gauge could override a close one); a k-d tree gives \(O(\log g)\) after an \(O(g\log g)\) build [1].</td></tr>
+<tr><td>Computational Justification</td><td>\(g\) is small (tens of gauges), so the scan is cheaper than an index.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>The selected gauge minimises distance (strict <code>&lt;</code>, first wins on ties). Absence of data is not a contradiction: no coordinates, no gauge in range, or no reading all return false.</td></tr>
+</table>
+<pre>MISMATCH(lat, lon, gauges):
+  if lat or lon is null: return false
+  nearest &larr; null
+  for (glat, glon, has, breach) in gauges:
+      d &larr; haversine(lat, lon, glat, glon)
+      if d &le; 5000 and (nearest is null or d &lt; nearest.d): nearest &larr; (d, has, breach)
+  return nearest is not null and nearest.has and not nearest.breach</pre>
+<h4>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Evidence checks: digest, image type, EXIF, polygon, reporter hash (<code>backend/reports.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Hashing plus a bounded binary-format parser (TIFF image-file directories).</td></tr>
+<tr><td>Foundational References</td><td>SHA-256 [16]; JPEG/EXIF segment layout.</td></tr>
+<tr><td>Baseline Alternative</td><td>A full image library: heavier dependency than the few tags needed.</td></tr>
+<tr><td>Computational Justification</td><td>Reads only the APP1 segment and stops at the start-of-scan marker, so cost does not depend on image size.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>A digest change means the bytes changed; the parser never raises: any error degrades to \"no EXIF\"; the reporter hash is salted so identity never leaves the function.</td></tr>
+</table>
+<pre>READ-EXIF(data):
+  if not starts_with(data, FFD8): return {}
+  pos &larr; 2
+  while pos + 4 &le; len(data):
+      if data[pos] != 0xFF: return {}
+      marker &larr; data[pos+1];  if marker == 0xDA: break      // start of scan
+      len &larr; u16(data[pos+2:]);  if len &lt; 2: return {}
+      if marker == 0xE1 and segment starts with "Exif": return parse_tiff(segment)
+      pos &larr; pos + 2 + len
+  return {}           // any IndexError / ValueError also returns {}</pre>
+<h4>ALG-12: Tamper-evident audit hash chain <span class="small">(<code>backend/audit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Tamper-evident audit hash chain (<code>backend/audit.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Hash chain over a collision-resistant hash.</td></tr>
+<tr><td>Foundational References</td><td>SHA-256 [16].</td></tr>
+<tr><td>Baseline Alternative</td><td>Per-record checksum with no link to neighbours (detects an edit but not a delete or reorder), or a trusted full copy (\(O(L)\) extra storage).</td></tr>
+<tr><td>Computational Justification</td><td>Editing \(R_j\) changes \(h_j\) and every later hash, so the first mismatch is at \(j\).</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>If every stored \(h_i\) equals its recomputation, no record or its order has changed since writing (assuming collision resistance). <b>Limit:</b> a writer who can rewrite the table can recompute the whole chain, and truncating the newest entries is not detectable without an external anchor.</td></tr>
+</table>
+<pre>VERIFY-CHAIN(entries):                    // ascending log_id
+  prev &larr; null
+  for i, e in enumerate(entries):
+      body &larr; parse_json(e.payload)       // failure: return (false, i, e.log_id)
+      exp  &larr; SHA256(canon(e.user_id, e.action_type, body, e.created_at, prev))
+      if exp != e.hash_signature: return (false, i, e.log_id)
+      prev &larr; e.hash_signature
+  return (true, len(entries), null)</pre>
+<h4>ALG-13: Windowed rate limiter <span class="small">(<code>backend/rate_limit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Windowed rate limiter (<code>backend/rate_limit.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Fixed-window counter held in the database (single atomic upsert).</td></tr>
+<tr><td>Foundational References</td><td>TSD LIM-006 (project limit); PostgreSQL <code>INSERT ... ON CONFLICT</code> semantics.</td></tr>
+<tr><td>Baseline Alternative</td><td>Sliding-window log (\(O(\text{requests})\) memory) or token bucket.</td></tr>
+<tr><td>Computational Justification</td><td>No read-then-write race and no per-instance state, which matters on serverless hosting.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Limit: a fixed window permits up to about \(2\lambda\) requests across a window boundary.</td></tr>
+</table>
+<pre>CONSUME(bucket, W, now):
+  w &larr; floor(now / W) * W
+  count &larr; SQL: INSERT (bucket, w, 1) ON CONFLICT (bucket, w)
+                     DO UPDATE SET count = count + 1 RETURNING count
+  return (count, w)       // caller rejects if count &gt; limit</pre>
+<h4>ALG-14: SSE event replay and framing <span class="small">(<code>backend/events.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>SSE event replay and framing (<code>backend/events.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Indexed range scan on an append-only log.</td></tr>
+<tr><td>Foundational References</td><td>SSE wire format; PostgreSQL B-tree range scans.</td></tr>
+<tr><td>Baseline Alternative</td><td>Redis pub/sub or Postgres LISTEN/NOTIFY (not available behind the hosted pooler, ADR-024).</td></tr>
+<tr><td>Computational Justification</td><td>Reconnecting clients resume exactly where they stopped; a rolled-back change leaves no event.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Event ids are monotonic; a committed change always has its event in the same transaction.</td></tr>
+</table>
+<pre>REPLAY(channel, after, limit):
+  return SELECT * FROM event_log
+         WHERE channel = :channel AND event_id &gt; :after
+         ORDER BY event_id LIMIT :limit          // uses index (channel, event_id)
+FRAME(id, type, payload): "id: id\nevent: type\ndata: " + json(payload) + "\n\n" </pre>
+<h4>ALG-15: Sensor impact-radius edge marking (ST_DWithin) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Sensor impact-radius edge marking (ST_DWithin) (<code>backend/main.py + PostGIS</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Spatial range query delegated to the database (PostGIS).</td></tr>
+<tr><td>Foundational References</td><td>PostGIS <code>ST_DWithin</code> [14].</td></tr>
+<tr><td>Baseline Alternative</td><td>Scan all \(m\) edges and compute haversine in application code: \(O(m)\).</td></tr>
+<tr><td>Computational Justification</td><td>With a usable spatial index the query is \(O(\log m+r)\); the database also handles geography (metre) distances.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td><b>Finding:</b> the query casts the geometry column to <code>geography</code>, which the existing geometry GiST index cannot serve, so it is a sequential scan: \(O(m)\), not \(O(\log m+r)\).</td></tr>
+</table>
+<pre>READING(sensor, v, t):
+  breach &larr; v &ge; sensor.threshold
+  E &larr; SELECT edge_id FROM road_edges
+       WHERE ST_DWithin(geom::geography, sensor.geom::geography, sensor.impact_radius_m)
+  upsert advisory (edge, SENSOR:id, kind, breach, t) for e in E        // ALG-17
+  if breach: audit.record(SENSOR_BREACH, ..., E)</pre>
+<h4>ALG-16: Hazard coverage (ST_Intersects) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Hazard coverage (ST_Intersects) (<code>backend/main.py + PostGIS</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Spatial join using the geometry index.</td></tr>
+<tr><td>Foundational References</td><td>PostGIS <code>ST_Intersects</code> [14]; TSD &sect;2.6.</td></tr>
+<tr><td>Baseline Alternative</td><td>Test every hazard against every edge: \(O(hm)\).</td></tr>
+<tr><td>Computational Justification</td><td>A GiST index on the edge geometry makes each hazard \(O(\log m+r)\); one mapping keeps router and report consistent about what blocks.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>Router and route report use the same mapping, so \"blocked\" has one definition.</td></tr>
+</table>
+<pre>COVERAGE():
+  H &larr; SELECT * FROM hazard_zones WHERE active
+  for (h, e) in SELECT h.id, e.id FROM hazard_zones h JOIN road_edges e
+                ON ST_Intersects(e.geom, h.geometry) WHERE h.active:
+      covered[h].add(e)
+  for h in H where h.edge_id: covered[h].add(h.edge_id)
+  return H, covered</pre>
+<h4>ALG-17: Advisory upsert (last-writer-by-time) <span class="small">(<code>backend/main.py (_upsert_advisories)</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Advisory upsert (last-writer-by-time) (<code>backend/main.py (_upsert_advisories)</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Bulk <code>INSERT ... ON CONFLICT DO UPDATE ... WHERE as_of &le; new.as_of</code>.</td></tr>
+<tr><td>Foundational References</td><td>PostgreSQL upsert semantics; CR-004.</td></tr>
+<tr><td>Baseline Alternative</td><td>Read each row, compare in application code, then write: \(2r\) round trips and a race between instances.</td></tr>
+<tr><td>Computational Justification</td><td>One statement, atomic, \(O(r)\) regardless of the table size.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td><code>as_of</code> is monotone per (edge, source): the stored value never moves backwards in time.</td></tr>
+</table>
+<pre>UPSERT(edge_ids, source, kind, flagged, as_of):
+  if edge_ids is empty: return
+  INSERT INTO edge_advisories (edge_id, source, kind, flagged, as_of) VALUES ...
+  ON CONFLICT (edge_id, source) DO UPDATE SET kind, flagged, as_of, updated_at
+  WHERE edge_advisories.as_of &le; excluded.as_of</pre>
+<h4>ALG-18: Session tokens (JWT HS256) <span class="small">(<code>backend/auth_utils.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Session tokens (JWT HS256) (<code>backend/auth_utils.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Symmetric message authentication through a library.</td></tr>
+<tr><td>Foundational References</td><td>JSON Web Token, RFC 7519 [17]; SHA-256 [16].</td></tr>
+<tr><td>Baseline Alternative</td><td>Server-side sessions (state in the database on every request).</td></tr>
+<tr><td>Computational Justification</td><td>Stateless verification, suitable for serverless hosting (ADR-021).</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>A token verifies only if it was signed with the key and has not expired. Not our own cryptography.</td></tr>
+</table>
+<pre>SIGN(claims, key, ttl):  payload &larr; claims + {exp: now + ttl};  return HS256(payload, key)
+VERIFY(token, key):     decode with algorithms=[HS256]; on any error raise 401</pre>
+<h4>ALG-19: Seed road-network builder <span class="small">(<code>backend/network_seed.py</code>)</span></h4>
+<table><tr><th style="width:24%">Schema Field</th><th>Team Engineering Details</th></tr>
+<tr><td>Algorithm Name</td><td>Seed road-network builder (<code>backend/network_seed.py</code>)</td></tr>
+<tr><td>Design Paradigm</td><td>Deterministic generation of a grid graph.</td></tr>
+<tr><td>Foundational References</td><td>Graph representation [1].</td></tr>
+<tr><td>Baseline Alternative</td><td>Importing a real road extract (needed for city scale, out of scope for the pilot).</td></tr>
+<tr><td>Computational Justification</td><td>Reproducible demo data for tests and the pilot.</td></tr>
+<tr><td>Invariants &amp; Recurrence Relations</td><td>After <code>validate</code>: every edge references existing nodes; ids are unique.</td></tr>
+</table>
+<pre>BUILD():
+  nodes &larr; spine nodes;  edges &larr; spine edges
+  for each (row, col): nodes.append(lattice_node(row, col))
+  for each row, col &lt; last: edges += both directions between (row,col) and (row,col+1)
+  for each col, row &lt; last: edges += both directions between (row,col) and (row+1,col)
+  return nodes, edges</pre>
+
 <!-- ======================= TASK 3 ======================= -->
 <h2>Task 3: Theoretical Asymptotic Analysis &amp; Scalability Profiling</h2>
+<p class="small">Waterfall phase: Design. The analysis is done before verification, so that the benchmarks in 3.5 and 3.6 have a prediction to be checked against.</p>
 
 <h3>3.1 Worst-case time \(O(\cdot)\)</h3>
 <ol>
@@ -168,7 +595,7 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 
 <h3>3.2 Best- and average-case time \(\Omega(\cdot)\), \(E[\cdot]\)</h3>
 <p><b>Best case.</b> If \(h\) is near-perfect (a near-straight, uniform-speed corridor), the search only settles nodes on the path of length \(k\): \(\Omega(k\log n)\) plus the \(O(n+m)\) initialisation done by the current code.</p>
-<p><b>Average case.</b> City road graphs are sparse (\(m=\Theta(n)\), degree about 3&ndash;4) and near-planar. A goal-directed search settles only a region around the straight line \(s\to t\), typically far fewer than \(n\) nodes. This is expected behaviour [5] and is what Task 5's benchmark measures; we do not claim a closed-form bound for it. Heavy flooding lowers \(v_e\) while \(v_{\max}\) is unchanged, which weakens \(h\) and moves the average case toward Dijkstra's.</p>
+<p><b>Average case.</b> City road graphs are sparse (\(m=\Theta(n)\), degree about 3&ndash;4) and near-planar. A goal-directed search settles only a region around the straight line \(s\to t\), fewer than \(n\) nodes. Measured on a synthetic grid (Section 3.5): 33&ndash;43% fewer nodes than Dijkstra, and median runtime growing 3.5&times; and 4.3&times; for each 4&times; increase in nodes. This is a modest saving, not the corridor-only behaviour sometimes quoted for A* [5], because random speeds and flooding weaken the heuristic. We do not claim a closed-form bound. Heavy flooding lowers \(v_e\) while \(v_{\max}\) is unchanged, which weakens \(h\) and moves the average case toward Dijkstra's.</p>
 
 <h3>3.3 Auxiliary space \(S(\cdot)\)</h3>
 <p><code>g</code>, <code>parent</code>, <code>settled</code>: \(O(n)\) each. Heap: lazy deletion allows stale duplicates, so up to \(m+1\) entries. No recursion (iterative loop, path rebuilt iteratively). Total \(S=O(n+m)\). The graph itself is \(O(n+m)\) input, not auxiliary.</p>
@@ -176,13 +603,225 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 <h3>3.4 Big Data (3 V's) evaluation</h3>
 <table>
 <tr><th style="width:12%">Dimension</th><th style="width:30%">Engineering Parameter</th><th>System Scalability Impact &amp; Mitigation Strategy</th></tr>
-<tr><td>Volume</td><td>Pilot: a seeded district graph (<code>backend/network_seed.py</code>). Projected: a metro-scale graph, order \(10^5\) nodes and \(4\times10^5\) directed edges (a planning figure, to be replaced by the real extract).</td><td>Python dict adjacency at that size is tens to low hundreds of MB. Mitigation: cache the static topology in the worker and refresh only the live depth overlay; load by bounding box (PostGIS <code>ST_DWithin</code> [14]) around \(s\) and \(t\) instead of the whole city; use compact arrays (CSR) if memory binds.</td></tr>
+<tr><td>Volume</td><td>Pilot: the seeded graph in <code>backend/network_seed.py</code>, which has only 34 nodes and 61 edges. Projected: a metro-scale graph, order \(10^5\) nodes and \(4\times10^5\) directed edges (a planning figure, to be replaced by the real extract).</td><td>Python dict adjacency at that size is tens to low hundreds of MB. Mitigation: cache the static topology in the worker and refresh only the live depth overlay; load by bounding box (PostGIS <code>ST_DWithin</code> [14]) around \(s\) and \(t\) instead of the whole city; use compact arrays (CSR) if memory binds.</td></tr>
 <tr><td>Velocity</td><td>Burst arrival during a typhoon: an SOS triggers \(K\) vehicle previews (one search each). Target: a few to tens of queries/s, with depth updates arriving from sensors and reports.</td><td>Searches are CPU-bound and independent. Run them in a worker pool (async queue) so request threads stay free; return a job id when a batch would exceed the request time budget. Searches read an immutable snapshot of the depth state, so concurrent writers cannot change costs mid-query.</td></tr>
 <tr><td>Variety</td><td>Heterogeneous inputs: GeoJSON/PostGIS geometry, sensor readings, citizen reports, hazard polygons, rainfall values.</td><td>Normalise at the gateway into the one in-engine form (<code>depth_cm</code>, <code>speed_kmh</code>, <code>length_m</code>), validate with Pydantic, and keep unit conversion in a single place. The engine sees only numbers and node ids.</td></tr>
 </table>
 
+<h3>3.5 Measured results for A* (empirical check of 3.1&ndash;3.3)</h3>
+<p>The benchmark harness is <code>backend/benchmarks/bench_algorithms.py</code> (run <code>python -m benchmarks.bench_algorithms</code> from <code>backend/</code>). Timings are wall-clock medians and 95th percentiles of 3&ndash;7 runs on the development machine (macOS, Python 3.15.0, one process, fixed random seed). Inputs are synthetic: a square road grid with random speeds (30&ndash;60 km/h) and depths (0&ndash;40 cm). They are developer-machine numbers from one run, not CI numbers. The database-bound cases ran against a <i>throwaway</i> local PostGIS 15 / 3.3 container (linux/amd64 emulated on an ARM laptop, JIT off), created for the run and deleted afterwards; the hosted Supabase database was never touched, and the timings exclude network latency. The CI assertion given for each algorithm is roughly 5&times; the measured value and is not yet enforced in CI.</p>
+<table>
+<tr><th>Nodes</th><th>Edges</th><th>A* median / p95 (ms)</th><th>Dijkstra median / p95 (ms)</th><th>Mean nodes settled: A* vs Dijkstra</th><th>Cost mismatches vs Dijkstra</th></tr>
+<tr><td>1,024</td><td>3,968</td><td>0.97 / 2.26</td><td>0.64 / 1.21</td><td>358 vs 530</td><td>0 of 40</td></tr>
+<tr><td>5,041</td><td>19,880</td><td>3.42 / 10.36</td><td>2.68 / 6.62</td><td>1,339 vs 2,184</td><td>0 of 40</td></tr>
+<tr><td>19,881</td><td>78,960</td><td>14.56 / 45.67</td><td>12.33 / 28.35</td><td>5,461 vs 9,540</td><td>0 of 40</td></tr>
+</table>
+<p><b>What the data supports.</b> (1) <i>Optimality:</i> A* returned the same cost as the Dijkstra oracle on all 120 queries. (2) <i>Fewer expansions:</i> A* settled 33%, 39% and 43% fewer nodes than Dijkstra at the three sizes and never more on any query. (3) <i>Growth:</i> A* median time grew 3.5&times; and 4.3&times; for 4&times; more nodes, close to linear on this sparse grid and well below the \(O(m\log n)\) worst case. (4) The earlier 250 ms budget at N = 5,000 is met easily (p95 10.4 ms), so the CI assertion is tightened to p95 &lt; 50 ms.</p>
+<p><b>What the data does not support.</b> A* was 18&ndash;52% <i>slower</i> in wall time than Dijkstra (52% at 1,024 nodes, 18% at 19,881) even though it settled fewer nodes. In pure Python the haversine call made for every heuristic evaluation costs more than the saved expansions, and the heuristic is weak when flooding slows edges well below the top speed. The accurate claim is <i>fewer expansions, same optimal cost</i>. A cheaper admissible bound (for example a precomputed equirectangular lower bound) or a compiled implementation would be needed to turn the saving into speed; this has not been tried.</p>
+<h3>3.6 Complexity and scalability of the supporting algorithms</h3>
+<p>Each supporting algorithm gets the same derivation rows as A* (worst case, best/average case, auxiliary space) plus the three Big Data dimensions, a measured result and its CI assertion.</p>
+<h4>ALG-02: SCS-CN runoff and ponding depth <span class="small">(<code>backend/hydrology.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>A fixed number of arithmetic operations: \(O(1)\) per node, \(O(n)\) for all \(n\) nodes. No loop or recursion inside the formula.</td></tr>
+<tr><td>Average / best case</td><td>Same as worst case (data-independent).</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\) extra; \(O(n)\) to hold the resulting depths.</td></tr>
+<tr><td>Volume</td><td>Order \(10^5\) nodes: one pass, 60 ms.</td></tr>
+<tr><td>Velocity</td><td>Recomputed when a simulation is triggered or a rainfall input changes; independent per node, so it parallelises by node chunks.</td></tr>
+<tr><td>Variety</td><td>Rainfall arrives as a request value or (CR-004) gauge readings; normalise to mm/h before the call.</td></tr>
+<tr><td><b>Measured</b></td><td>6.0 ms for 10,000 nodes; 60.1 ms for 100,000 (10.0&times; for 10&times;: linear).</td></tr>
+<tr><td>CI assertion</td><td>100,000 nodes in &lt; 300 ms; \(Q(P)\) monotone over a sweep of \(P\).</td></tr>
+</table>
+<h4>ALG-03: Passability classification and hazard blocking <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(1)\) time and space per edge or hazard.</td></tr>
+<tr><td>Average / best case</td><td>Same.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\).</td></tr>
+<tr><td>Volume</td><td>Applied to every edge of the graph (\(O(m)\) in total) when a state is rendered.</td></tr>
+<tr><td>Velocity</td><td>Stateless, so any number of requests in parallel.</td></tr>
+<tr><td>Variety</td><td>Input is a number and a string enum; the enum is validated at the gateway.</td></tr>
+<tr><td><b>Measured</b></td><td>0.23 &micro;s per classification plus block check (227 ms for 10<sup>6</sup> pairs).</td></tr>
+<tr><td>CI assertion</td><td>For every \(d\) in a sweep, <code>classify(d, c) == SUBMERGED</code> iff A* excludes that edge (closes the caveat).</td></tr>
+</table>
+<h4>ALG-04: Turn-by-turn instruction generation <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(k\) bearings, one boundary scan, and distance sums that add each hop once: \(O(k)\) time, \(O(k)\) space.</td></tr>
+<tr><td>Average / best case</td><td>Same (data-independent).</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(k)\) for bearings and steps.</td></tr>
+<tr><td>Volume</td><td>Paths are short (tens to thousands of nodes); 10,000 nodes take 6 ms.</td></tr>
+<tr><td>Velocity</td><td>Computed per route response; stateless.</td></tr>
+<tr><td>Variety</td><td>Input is the A* path plus road names; missing coordinates fall back to DEPART + ARRIVE.</td></tr>
+<tr><td><b>Measured</b></td><td>0.064 / 0.545 / 6.11 ms at 100 / 1,000 / 10,000 nodes (8.5&times;, 11.2&times;: linear).</td></tr>
+<tr><td>CI assertion</td><td>10,000-node path in &lt; 30 ms; step distances sum to path length.</td></tr>
+</table>
+<h4>ALG-05: Dispatch preview (one search per vehicle) <span class="small">(<code>backend/main.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(K\) searches plus \(K\) node snaps plus a sort: \(O\big(K(m\log n+n)+K\log K\big)\) (the snap is \(O(n)\), ALG-06).</td></tr>
+<tr><td>Average / best case</td><td>\(K\times\) the A* average.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(n+m)\) per search, reused across vehicles; \(O(K)\) results.</td></tr>
+<tr><td>Volume</td><td>\(K\) is the fleet size (tens); graph order \(10^5\) nodes.</td></tr>
+<tr><td>Velocity</td><td>Burst when an SOS arrives; the \(K\) searches are independent, so they run in parallel workers.</td></tr>
+<tr><td>Variety</td><td>Vehicle positions (telemetry), clearances, SOS coordinates: normalised to node ids before the engine.</td></tr>
+<tr><td><b>Measured</b></td><td>38.8 ms for \(K=10\) at 5,041 nodes (3.9 ms per vehicle, sequential).</td></tr>
+<tr><td>CI assertion</td><td>\(K=10\), \(N=5{,}041\) &lt; 200 ms.</td></tr>
+</table>
+<h4>ALG-06: Nearest-node snap <span class="small">(<code>backend/main.py (_nearest_node)</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(n\) haversine evaluations: \(O(n)\) time, \(O(1)\) space.</td></tr>
+<tr><td>Average / best case</td><td>Same (no early exit).</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\).</td></tr>
+<tr><td>Volume</td><td>At \(10^5\) nodes a snap costs 50 ms, the slowest step of a dispatch preview; a grid or k-d tree would remove it.</td></tr>
+<tr><td>Velocity</td><td>Called once per unit and per SOS; stateless.</td></tr>
+<tr><td>Variety</td><td>Input is a latitude/longitude pair; validated at the gateway.</td></tr>
+<tr><td><b>Measured</b></td><td>5.05 ms per call at 10,000 nodes; 50.3 ms at 100,000 (linear). Raises <code>ValueError</code> on an empty node set.</td></tr>
+<tr><td>CI assertion</td><td>10,000 nodes &lt; 25 ms.</td></tr>
+</table>
+<h4>ALG-07: Flood-state resolver (CR-004 priority rule) <span class="small">(<code>backend/flood_state.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>Per edge: one filter and one minimum over \(o\) observations, \(O(o)\); for \(m\) edges \(O(m\bar o)\), with \(\bar o\) small.</td></tr>
+<tr><td>Average / best case</td><td>\(\bar o\le3\) in practice, so near-linear in \(m\).</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\) extra per edge; pure function with no database or clock access.</td></tr>
+<tr><td>Volume</td><td>Order \(10^5\) edges: 280 ms per full pass.</td></tr>
+<tr><td>Velocity</td><td>Computed on request for the edges in view; edges are independent, so shard by edge id.</td></tr>
+<tr><td>Variety</td><td>Heterogeneous sources (gauge, modelled river value, simulated sensor, NOAH class) are normalised into <code>Observation</code> before the call.</td></tr>
+<tr><td><b>Measured</b></td><td>20.4 ms for 10,000 edges; 279.6 ms for 100,000 (13.7&times; for 10&times;).</td></tr>
+<tr><td>CI assertion</td><td>100,000 edges &lt; 1.5 s; no result has <code>closes_road</code> true unless a blocking verified hazard was supplied.</td></tr>
+</table>
+<h4>ALG-08: Report urgency scoring and ranking <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>Scoring is \(O(1)\) per report; a comparison sort needs \(\Omega(k\log k)\) and Timsort achieves \(O(k\log k)\) [1]. Total \(O(k\log k)\).</td></tr>
+<tr><td>Average / best case</td><td>Same; near-linear when the list is already partly ordered.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(k)\).</td></tr>
+<tr><td>Volume</td><td>The page cap is 200 rows; 100,000 reports score and sort in 101 ms.</td></tr>
+<tr><td>Velocity</td><td>Re-scored on every queue read because the decay depends on the clock.</td></tr>
+<tr><td>Variety</td><td>Reports arrive from photos, gauges and calls; weights normalise the source.</td></tr>
+<tr><td><b>Measured</b></td><td>9.8 ms for 10,000 reports; 101.1 ms for 100,000 (10.3&times; for 10&times;).</td></tr>
+<tr><td>CI assertion</td><td>100,000 reports &lt; 500 ms; stable order for equal scores.</td></tr>
+</table>
+<h4>ALG-09: Duplicate-neighbour map for the moderation queue <span class="small">(<code>backend/main.py (_neighbour_map)</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>Nested loop over pending reports: \(\Theta(k^2)\) haversine checks.</td></tr>
+<tr><td>Average / best case</td><td>Same order; the time filter skips some distance computations but not the pair visits.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(k)\).</td></tr>
+<tr><td>Volume</td><td>Cost: 34 ms at the 200-row page cap, 8.7 s at 3,200 reports, so a city-wide backlog would need the grid.</td></tr>
+<tr><td>Velocity</td><td>Recomputed on each queue read; cache per queue version if reads are frequent.</td></tr>
+<tr><td>Variety</td><td>Locations may be missing (call-in reports): those rows are skipped.</td></tr>
+<tr><td><b>Measured</b></td><td>33.8 / 536 / 8,733 ms at 200 / 800 / 3,200 reports (15.8&times;, 16.3&times; per 4&times;: quadratic, as derived).</td></tr>
+<tr><td>CI assertion</td><td>200 reports &lt; 150 ms; symmetric counts.</td></tr>
+</table>
+<h4>ALG-10: Sensor/report mismatch check and haversine distance <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(g\) haversines, each \(O(1)\): \(O(g)\) time per report, \(O(1)\) space.</td></tr>
+<tr><td>Average / best case</td><td>Same (no early exit).</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\).</td></tr>
+<tr><td>Volume</td><td>1,000 gauges cost 0.41 ms per report.</td></tr>
+<tr><td>Velocity</td><td>Per report read; stateless.</td></tr>
+<tr><td>Variety</td><td>Gauge readings and report coordinates normalised to decimal degrees.</td></tr>
+<tr><td><b>Measured</b></td><td>Haversine 0.42 &micro;s per call; mismatch check 4.2 / 41.7 / 411 &micro;s at 10 / 100 / 1,000 gauges (linear).</td></tr>
+<tr><td>CI assertion</td><td>1,000 gauges &lt; 2 ms per call; haversine of a point with itself is 0.</td></tr>
+</table>
+<h4>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>Digest \(O(b)\); MIME sniff \(O(1)\); EXIF \(O(e)\) in the number of directory entries (bounded by \(b\)); polygon, plausibility and reporter hash \(O(1)\).</td></tr>
+<tr><td>Average / best case</td><td>EXIF stops at the first image-data marker, so it does not grow with image size.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(b)\) for the held upload; parser \(O(1)\) extra.</td></tr>
+<tr><td>Volume</td><td>Uploads are megabytes; 5 MB digests in 2.2 ms.</td></tr>
+<tr><td>Velocity</td><td>Per upload; CPU-light, so safe inside the request but bounded by an upload size limit.</td></tr>
+<tr><td>Variety</td><td>Camera JPEGs of differing EXIF layouts (big/little endian, optional tags).</td></tr>
+<tr><td><b>Measured</b></td><td>SHA-256 0.45 ms / 1 MB, 2.19 ms / 5 MB (linear). Real EXIF JPEG parsed in about 12 &micro;s at 0, 1 and 5 MB bodies. Truncated EXIF returned <code>{}</code>. Polygon + plausibility 2.9 &micro;s; reporter hash 0.47 &micro;s.</td></tr>
+<tr><td>CI assertion</td><td>5 MB digest &lt; 50 ms; EXIF parse &lt; 1 ms; truncated EXIF returns <code>{}</code>.</td></tr>
+</table>
+<h4>ALG-12: Tamper-evident audit hash chain <span class="small">(<code>backend/audit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>Append: one hash of \(|R_i|\) bytes plus a lookup of the newest hash, \(O(|R_i|)\). Verify: \(L\) hashes, \(O(L\bar{|R|})\) time.</td></tr>
+<tr><td>Average / best case</td><td>Same (data-independent).</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\) extra if streamed; the current code takes a list, \(O(L)\).</td></tr>
+<tr><td>Volume</td><td>100,000 entries verify in 467 ms.</td></tr>
+<tr><td>Velocity</td><td>Appends are serialised by the chain (each needs the previous hash), so write rate is bounded by one row at a time; verification is on demand.</td></tr>
+<tr><td>Variety</td><td>Payloads are arbitrary JSON; canonical serialisation makes the hash independent of key order.</td></tr>
+<tr><td><b>Measured</b></td><td>4.9 / 46.2 / 467.5 ms at 1k / 10k / 100k entries (9.5&times;, 10.1&times;: linear); a one-entry edit was reported at exactly that entry.</td></tr>
+<tr><td>CI assertion</td><td>100,000 entries &lt; 2.5 s; tampering reported at the modified <code>log_id</code>.</td></tr>
+</table>
+<h4>ALG-13: Windowed rate limiter <span class="small">(<code>backend/rate_limit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(1)\) computation plus one database round trip.</td></tr>
+<tr><td>Average / best case</td><td>Same.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>One row per (bucket, window); old rows pruned at start-up.</td></tr>
+<tr><td>Volume</td><td>Rows grow with distinct clients times windows; pruned.</td></tr>
+<tr><td>Velocity</td><td>One write per protected request, so it adds database load proportional to traffic.</td></tr>
+<tr><td>Variety</td><td>Client identity comes from forwarding headers (platform-overwritten on Vercel).</td></tr>
+<tr><td><b>Measured</b></td><td>0.96 ms median, 1.39 ms p95 per call on a local database (hosted adds network latency).</td></tr>
+<tr><td>CI assertion</td><td>p95 &lt; 10 ms locally.</td></tr>
+</table>
+<h4>ALG-14: SSE event replay and framing <span class="small">(<code>backend/events.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(\log N+r)\) for \(r\) returned rows with the (channel, event_id) index; framing \(O(|\text{payload}|)\) per event.</td></tr>
+<tr><td>Average / best case</td><td>Same.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(r)\) per replay.</td></tr>
+<tr><td>Volume</td><td>Log grows without bound unless pruned; cost stays flat (see below).</td></tr>
+<tr><td>Velocity</td><td>One relay per connected client tails the table; load scales with clients.</td></tr>
+<tr><td>Variety</td><td>Payloads are JSON for hazards, vehicles and SOS requests.</td></tr>
+<tr><td><b>Measured</b></td><td>1.1&ndash;1.2 ms for 100 events at 10k, 100k and 500k log rows, for both a tail read and a read from the start (flat in \(N\)). Framing 2.2 &micro;s per event.</td></tr>
+<tr><td>CI assertion</td><td>p95 &lt; 20 ms at 500,000 rows.</td></tr>
+</table>
+<h4>ALG-15: Sensor impact-radius edge marking (ST_DWithin) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>As deployed (sequential scan): \(O(m)\) distance checks per reading. With a matching spatial index: \(O(\log m+r)\) expected.</td></tr>
+<tr><td>Average / best case</td><td>Linear in \(m\) as deployed.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(r)\) result.</td></tr>
+<tr><td>Volume</td><td>118.5 ms per reading at 50,000 edges; at \(10^5\) edges roughly 240 ms.</td></tr>
+<tr><td>Velocity</td><td>Gateway readings arrive per sensor per interval; each pays the full scan.</td></tr>
+<tr><td>Variety</td><td>Sensor values in m or mm/h; geography casts give metre radii.</td></tr>
+<tr><td><b>Measured</b></td><td>4.6 / 26.3 / 118.5 ms at 1k / 10k / 50k edges (96 edges returned). In a controlled run on 50k edges, hand-written SQL with a matching functional index <code>gist((geom::geography))</code> took 72 ms against 188 ms for the scan, but the ORM-generated query showed no gain with that index in the harness and the cause was not investigated. No schema change was made.</td></tr>
+<tr><td>CI assertion</td><td>p95 &lt; 150 ms at 10,000 edges (measured 30 ms).</td></tr>
+</table>
+<h4>ALG-16: Hazard coverage (ST_Intersects) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(h\log m+r)\) with the geometry index; \(O(hm)\) without.</td></tr>
+<tr><td>Average / best case</td><td>Flat in \(m\) for small polygons.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(r)\).</td></tr>
+<tr><td>Volume</td><td>2.4&ndash;3.3 ms at 50,000 edges with 20 hazards.</td></tr>
+<tr><td>Velocity</td><td>Read on each route request; cache per hazard version if needed.</td></tr>
+<tr><td>Variety</td><td>Polygon hazards and edge-pointer closures are unioned.</td></tr>
+<tr><td><b>Measured</b></td><td>2.4&ndash;3.3 ms at 1k, 10k and 50k edges (flat in \(m\), as derived).</td></tr>
+<tr><td>CI assertion</td><td>&lt; 25 ms at 50,000 edges.</td></tr>
+</table>
+<h4>ALG-17: Advisory upsert (last-writer-by-time) <span class="small">(<code>backend/main.py (_upsert_advisories)</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(r)\) row operations (each an indexed upsert, \(O(\log m)\)); independent of the total table size.</td></tr>
+<tr><td>Average / best case</td><td>Same.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(r)\) parameters.</td></tr>
+<tr><td>Volume</td><td>11 ms for 96 edges; grows with \(r\) only.</td></tr>
+<tr><td>Velocity</td><td>One call per sensor reading.</td></tr>
+<tr><td>Variety</td><td>Source strings identify gauges, models or simulated sensors.</td></tr>
+<tr><td><b>Measured</b></td><td>About 11 ms for 96 edges at 1k, 10k and 50k edges (independent of table size).</td></tr>
+<tr><td>CI assertion</td><td>&lt; 60 ms for 100 edges.</td></tr>
+</table>
+<h4>ALG-18: Session tokens (JWT HS256) <span class="small">(<code>backend/auth_utils.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(|\text{claims}|)\), effectively constant.</td></tr>
+<tr><td>Average / best case</td><td>Same.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(1)\).</td></tr>
+<tr><td>Volume</td><td>Not data-dependent.</td></tr>
+<tr><td>Velocity</td><td>One verify per authenticated request: 22 &micro;s.</td></tr>
+<tr><td>Variety</td><td>Claims are small JSON.</td></tr>
+<tr><td><b>Measured</b></td><td>15.4 &micro;s sign, 22.5 &micro;s verify per token.</td></tr>
+<tr><td>CI assertion</td><td>verify &lt; 100 &micro;s.</td></tr>
+</table>
+<h4>ALG-19: Seed road-network builder <span class="small">(<code>backend/network_seed.py</code>)</span></h4>
+<table><tr><th style="width:24%">Measure</th><th>Derivation and measurement</th></tr>
+<tr><td>Worst-case time \(O(\cdot)\)</td><td>\(O(n+m)\) time and space.</td></tr>
+<tr><td>Average / best case</td><td>Same.</td></tr>
+<tr><td>Auxiliary space \(S(\cdot)\)</td><td>\(O(n+m)\).</td></tr>
+<tr><td>Volume</td><td>Pilot: 34 nodes, 61 edges; a city extract would be \(10^5\) nodes and needs a loader.</td></tr>
+<tr><td>Velocity</td><td>Run once at seeding.</td></tr>
+<tr><td>Variety</td><td>Hard-coded names and coordinates.</td></tr>
+<tr><td><b>Measured</b></td><td>0.17 ms for the real seed. City-scale generation was not measured.</td></tr>
+<tr><td>CI assertion</td><td>seed build &lt; 50 ms; <code>validate</code> passes.</td></tr>
+</table>
+
 <!-- ======================= TASK 4 ======================= -->
 <h2>Task 4: Decoupled Software Architecture &amp; Service-Layer Integration</h2>
+<p class="small">Waterfall phase: Design (TSD architecture and API sections). Any change to the contract below would go through a change request (CR), not an ad-hoc edit.</p>
 
 <h3>4.1 Component diagram</h3>
 <div id="arch-report"></div>
@@ -219,22 +858,156 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 </pre>
 <p><b>Errors</b> use RFC 9457 <code>application/problem+json</code> [9] with HTTP semantics per RFC 9110 [10]: <code>422</code> invalid body, <code>404</code> / status <code>NO_SAFE_ROUTE</code> when no passable route exists, <code>401/403</code> auth, <code>429</code> rate limit, <code>504</code> <code>TIMEOUT</code>.</p>
 
+<h3>4.3 Interface contracts for the supporting algorithms</h3>
+<p>All supporting algorithms sit behind the same boundaries as in the component diagram above: the gateway owns authentication, validation and persistence; pure computation lives in the engine. Each contract below names its layer, its interface, and the request and response shapes.</p>
+<h4>ALG-02: SCS-CN runoff and ponding depth <span class="small">(<code>backend/hydrology.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway-triggered computation (admin only), result persisted to <code>live_edge_states</code>.</td></tr>
+<tr><td>Interface</td><td><code>POST /api/v1/simulation/rain?rainfall_mm_hr=40&amp;clearance_cm=28</code></td></tr>
+<tr><td>Request</td><td>Query parameters: <code>rainfall_mm_hr</code> 0&ndash;250 (required), <code>clearance_cm</code> 0 &lt; x &le; 200; admin only; duration comes from configuration.</td></tr>
+<tr><td>Response</td><td>{ network GeoJSON with per-edge depth_cm and passability }  // same shape the map renders</td></tr>
+</table>
+<h4>ALG-03: Passability classification and hazard blocking <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Pure functions in the engine; the gateway uses the labels in responses.</td></tr>
+<tr><td>Interface</td><td>Embedded in <code>GET /api/v1/network/state</code> and <code>GET /api/v1/routing/navigate</code> responses.</td></tr>
+<tr><td>Request</td><td><code>clearance_cm</code> query parameter, 0 &lt; x &le; 200.</td></tr>
+<tr><td>Response</td><td>"passability": "PASSABLE | LIGHT_FLOOD | SUBMERGED" per segment</td></tr>
+</table>
+<h4>ALG-04: Turn-by-turn instruction generation <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway post-processing of the engine's path.</td></tr>
+<tr><td>Interface</td><td>Part of <code>GET /api/v1/routing/navigate</code></td></tr>
+<tr><td>Request</td><td><code>start_node</code>, <code>target_node</code>, <code>clearance_cm</code>.</td></tr>
+<tr><td>Response</td><td>"instructions": [ { "manoeuvre": "TURN_LEFT", "road_name": "...", "distance_m": 410.0, "text": "Turn left onto ..." } ]</td></tr>
+</table>
+<h4>ALG-05: Dispatch preview (one search per vehicle) <span class="small">(<code>backend/main.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway orchestration calling the isolated engine \(K\) times.</td></tr>
+<tr><td>Interface</td><td><code>GET /api/v1/dispatch/{sos_id}/preview?vehicle_id=7</code></td></tr>
+<tr><td>Request</td><td><code>sos_id</code> in the path; optional <code>vehicle_id</code>.</td></tr>
+<tr><td>Response</td><td>{ "units": [ { "vehicle_id": 7, "travel_time_s": 412.6, "route": { ... }, "detail": null } ] }  // 409 no position, 422 no safe route</td></tr>
+</table>
+<h4>ALG-06: Nearest-node snap <span class="small">(<code>backend/main.py (_nearest_node)</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway helper before the engine call.</td></tr>
+<tr><td>Interface</td><td>Internal; used by the dispatch preview and telemetry handling.</td></tr>
+<tr><td>Request</td><td>latitude, longitude.</td></tr>
+<tr><td>Response</td><td>node_id (integer).</td></tr>
+</table>
+<h4>ALG-07: Flood-state resolver (CR-004 priority rule) <span class="small">(<code>backend/flood_state.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Pure core function; the gateway loads inputs from <code>edge_advisories</code>, hazards and NOAH data.</td></tr>
+<tr><td>Interface</td><td><code>GET /api/v1/flood-state</code></td></tr>
+<tr><td>Request</td><td>Optional bounding area; authenticated.</td></tr>
+<tr><td>Response</td><td>{ "generated_at": "...", "raining": true, "fresh_window_minutes": 30, "edges": [ { "edge_id": 12, "basis": "LIVE_ADVISORY", "source": "SENSOR:RIVER-01", "advisory": true, "closes_road": false } ] }</td></tr>
+</table>
+<h4>ALG-08: Report urgency scoring and ranking <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway computation over rows already loaded from the database.</td></tr>
+<tr><td>Interface</td><td><code>GET /api/v1/reports?status=PENDING&amp;limit=50</code></td></tr>
+<tr><td>Request</td><td><code>status</code>, <code>limit</code> 1&ndash;200.</td></tr>
+<tr><td>Response</td><td>[ { "report_id": "uuid", "depth_level": "KNEE", "source": "PHOTO", "urgency": 3.41, "duplicate_count": 2 } ]</td></tr>
+</table>
+<h4>ALG-09: Duplicate-neighbour map for the moderation queue <span class="small">(<code>backend/main.py (_neighbour_map)</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway computation over rows already in memory.</td></tr>
+<tr><td>Interface</td><td>Part of <code>GET /api/v1/reports</code></td></tr>
+<tr><td>Request</td><td>As ALG-08.</td></tr>
+<tr><td>Response</td><td>"duplicate_count": 2, "nearest_duplicate_id": "uuid"</td></tr>
+</table>
+<h4>ALG-10: Sensor/report mismatch check and haversine distance <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway computation; gauges loaded from the database.</td></tr>
+<tr><td>Interface</td><td><code>GET /api/v1/reports/{report_id}/nearest-sensor</code> and a flag on each report</td></tr>
+<tr><td>Request</td><td><code>report_id</code>; admin only.</td></tr>
+<tr><td>Response</td><td>"sensor_mismatch": true</td></tr>
+</table>
+<h4>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway, inside the report intake path.</td></tr>
+<tr><td>Interface</td><td><code>POST /api/v1/reports</code> (multipart upload)</td></tr>
+<tr><td>Request</td><td>Form fields: <code>photo</code> (JPEG), <code>latitude</code>, <code>longitude</code>, <code>depth_level</code>, optional <code>narrative</code>, <code>barangay</code>, <code>captured_at</code>, <code>source</code>; size and type limits enforced.</td></tr>
+<tr><td>Response</td><td>{ "photo_sha256": "...", "exif": { "captured_at": "...", "gps_in_pilot_area": true }, "location_plausible": true }</td></tr>
+</table>
+<h4>ALG-12: Tamper-evident audit hash chain <span class="small">(<code>backend/audit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway, in the same transaction as the audited action.</td></tr>
+<tr><td>Interface</td><td><code>GET /api/v1/audit/verify</code></td></tr>
+<tr><td>Request</td><td>Admin only.</td></tr>
+<tr><td>Response</td><td>{ "valid": true, "checked": 1542, "broken_at": null }</td></tr>
+</table>
+<h4>ALG-13: Windowed rate limiter <span class="small">(<code>backend/rate_limit.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway dependency on selected routes.</td></tr>
+<tr><td>Interface</td><td>FastAPI dependency <code>rate_limit(name, limit, window)</code></td></tr>
+<tr><td>Request</td><td>Request headers (client id).</td></tr>
+<tr><td>Response</td><td><code>429</code> problem document when exceeded.</td></tr>
+</table>
+<h4>ALG-14: SSE event replay and framing <span class="small">(<code>backend/events.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway streaming endpoints.</td></tr>
+<tr><td>Interface</td><td><code>GET /api/v1/hazards/stream</code>, <code>/vehicles/stream</code>, <code>/sos/stream</code></td></tr>
+<tr><td>Request</td><td><code>Last-Event-ID</code> header or <code>after</code> query parameter.</td></tr>
+<tr><td>Response</td><td><code>text/event-stream</code> frames: <code>id: 42 / event: hazard.published / data: {...}</code></td></tr>
+</table>
+<h4>ALG-15: Sensor impact-radius edge marking (ST_DWithin) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway (admin or sensor-gateway credential) with the spatial query in the database.</td></tr>
+<tr><td>Interface</td><td><code>POST /api/v1/sensors/readings</code></td></tr>
+<tr><td>Request</td><td>{ "sensor_id": "RIVER-01", "value": 4.2, "unit": "m", "recorded_at": "2026-11-04T10:00:00Z" }</td></tr>
+<tr><td>Response</td><td>201 { "reading_id": 91, "breach": true, "value": 4.2 }  // 404 unknown sensor, 409 disabled, 422 unit or future timestamp</td></tr>
+</table>
+<h4>ALG-16: Hazard coverage (ST_Intersects) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway query feeding the engine's blocked-edge set.</td></tr>
+<tr><td>Interface</td><td>Internal to <code>GET /api/v1/routing/navigate</code> and <code>GET /api/v1/hazards</code></td></tr>
+<tr><td>Request</td><td>None beyond the route query.</td></tr>
+<tr><td>Response</td><td>"hazards_on_route": [ { "hazard_id": 3, "obstruction_level": "LEVEL_2" } ]</td></tr>
+</table>
+<h4>ALG-17: Advisory upsert (last-writer-by-time) <span class="small">(<code>backend/main.py (_upsert_advisories)</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway persistence step inside the reading transaction.</td></tr>
+<tr><td>Interface</td><td>Internal to <code>POST /api/v1/sensors/readings</code></td></tr>
+<tr><td>Request</td><td>edge ids, source, kind, flagged, as_of.</td></tr>
+<tr><td>Response</td><td>None (rows committed with the reading).</td></tr>
+</table>
+<h4>ALG-18: Session tokens (JWT HS256) <span class="small">(<code>backend/auth_utils.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Gateway authentication.</td></tr>
+<tr><td>Interface</td><td><code>POST /api/v1/auth/login</code> issues the token; every protected route verifies it.</td></tr>
+<tr><td>Request</td><td>{ "email": "...", "password": "..." }</td></tr>
+<tr><td>Response</td><td>{ "access_token": "...", "token_type": "bearer" }</td></tr>
+</table>
+<h4>ALG-19: Seed road-network builder <span class="small">(<code>backend/network_seed.py</code>)</span></h4>
+<table><tr><th style="width:24%">Contract field</th><th>Specification</th></tr>
+<tr><td>Layer / service boundary</td><td>Offline seeding script and start-up seed.</td></tr>
+<tr><td>Interface</td><td><code>python -m network_seed</code></td></tr>
+<tr><td>Request</td><td>Optional dry-run flag.</td></tr>
+<tr><td>Response</td><td>Counts of nodes and edges inserted.</td></tr>
+</table>
+
 <!-- ======================= TASK 5 ======================= -->
-<h2>Task 5: Agile Implementation Backlog &amp; Empirical Validation Plan</h2>
+<h2>Task 5: Implementation Work Packages &amp; Empirical Validation Plan</h2>
+<p><b>Waterfall framing.</b> The template calls this task an "Agile backlog" and asks for user stories. MetroFlow is built under waterfall, so we keep the required story wording but treat each story as a <i>requirement statement traced to the FSD/TSD</i>, and the ticket as a <i>work package</i> with a Verification-phase exit test. There are no sprints: scope is fixed by the approved FSD/TSD, and any change goes through a change request (the project's CR-001 to CR-004 process) rather than backlog re-prioritisation.</p>
+<table>
+<tr><th style="width:22%">Item</th><th style="width:30%">Traces to</th><th>Phase gate</th></tr>
+<tr><td>Story 1 (dispatcher)</td><td>FSD-FR-089 (assign a unit and preview the flood-safe route); TSD ADR-004; VAL-022</td><td>Design approved; Verification test below</td></tr>
+<tr><td>Story 2 (driver)</td><td>FSD-FR-057 (turn-by-turn instructions); TSD &sect;2.6 hazard-blocking rule; TC-024</td><td>Design approved; Verification test below</td></tr>
+<tr><td>DEV-ALGO-101</td><td>Both stories; PMP Testing Management: "hydrology and routing edge cases covered"</td><td>Implementation (engine built) &rarr; Verification (benchmark added) &rarr; Acceptance</td></tr>
+</table>
 
-<p><b>Process note.</b> MetroFlow follows a waterfall lifecycle (BRD &rarr; FSD &rarr; TSD &rarr; implementation &rarr; verification). The user stories and ticket below use the format this milestone requires, but they are <i>not</i> sprint items: each is a work-package statement traced to an existing requirement. Story 1 traces to FSD-FR-089 (rescue route preview, per-vehicle) and TSD ADR-004 (A* routing); Story 2 to FSD-FR-057 (turn-by-turn routing) and the hazard-blocking rule in TSD &sect;2.6. DEV-ALGO-101 is verified in the TSD's test-case phase, not a sprint review.</p>
-
-<h3>5.1 User stories</h3>
+<h3>5.1 User stories (requirement statements)</h3>
 <ol>
 <li><b>As a</b> dispatcher, <b>I want</b> the system to run the flood-aware A* search from every available rescue vehicle to a victim's SOS location using each vehicle's own clearance, <b>so that</b> I can assign the unit with the lowest safe travel time and never send a unit into water it cannot cross.</li>
 <li><b>As a</b> rescue driver, <b>I want</b> the route calculation to re-run on the latest water depths and hazards, and tell me clearly when no safe route exists, <b>so that</b> I am rerouted around newly flooded streets instead of being routed into one.</li>
 </ol>
 
-<h3>5.2 Implementation &amp; benchmarking ticket</h3>
+<h3>5.2 Implementation work package &amp; benchmarking ticket</h3>
 <table>
 <tr><th style="width:26%">Implementation Field</th><th>Specification Detail</th></tr>
 <tr><td>Ticket ID</td><td>DEV-ALGO-101</td></tr>
-<tr><td>Module / Service</td><td><code>backend/routing.py</code> (engine), <code>backend/tests/test_routing.py</code> and a new <code>backend/tests/test_routing_benchmark.py</code> (benchmark); API wiring in <code>backend/main.py</code>.</td></tr>
+<tr><td>Module / Service</td><td><code>backend/routing.py</code> (engine), <code>backend/tests/test_routing.py</code> (correctness) and <code>backend/benchmarks/bench_algorithms.py</code> (benchmark harness for every algorithm, written and run including the database-bound ones; CI wiring remains); API wiring in <code>backend/main.py</code>.</td></tr>
 <tr><td>Associated Algorithm</td><td>Clearance-constrained, depth-penalized A* with min-heap (<code>td_a_star_search</code>).</td></tr>
 <tr><td>Edge-Case &amp; Security Defenses</td>
 <td>
@@ -255,23 +1028,226 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 5. Relax out-edges: apply the clearance cut-off, depth penalty and speed floor; push improved neighbours.<br>
 6. Reconstruct the path; return the certificate with metrics (nodes settled, runtime).<br>
 7. Add a Dijkstra reference implementation in tests for the optimality check.<br>
-8. Add the benchmark test and wire it into CI.
+8. Add the benchmark test and wire it into the CI gate, which runs in the Verification phase.
 </td></tr>
 <tr><td>Automated Benchmarking Assertion</td>
 <td>
-&bull; <code>assert astar_cost == pytest.approx(dijkstra_cost)</code> on 10,000 random graphs/queries (optimality; extends the existing fuzz guard).<br>
-&bull; <code>assert p95_runtime_ms &lt; 250</code> on a synthetic grid graph with N = 5,000 nodes (about 20,000 edges), 100 random queries.<br>
-&bull; <code>assert nodes_settled_astar &lt;= nodes_settled_dijkstra</code> on the same queries (heuristic never hurts).<br>
-&bull; <code>assert route is None</code> (empty path, <code>inf</code>) when every edge on the only path has depth &ge; clearance.
+Measured on the development machine, then set at about 5&times; the measured value for CI (Sections 3.5 and 3.6):<br>
+&bull; <code>assert astar_cost == pytest.approx(dijkstra_cost)</code> on random grid queries: <b>0 mismatches in 120 of 120</b> measured.<br>
+&bull; <code>assert p95_runtime_ms &lt; 50</code> on a grid with N = 5,041 nodes (19,880 edges): measured p95 10.4 ms (median 3.4 ms). The earlier 250 ms target was too loose to catch regressions.<br>
+&bull; <code>assert nodes_settled_astar &lt;= nodes_settled_dijkstra</code>: <b>true on all 120 queries</b>, 33&ndash;43% fewer on average. (Wall time is <i>not</i> asserted to beat Dijkstra: it does not.)<br>
+&bull; <code>assert route is None</code> (empty path, <code>inf</code>) when every edge on the only path has depth &ge; clearance.<br>
+&bull; Supporting algorithms (each ticket in 5.3 has its own assertion): SCS-CN over 100,000 nodes &lt; 300 ms; urgency scoring and sort of 100,000 reports &lt; 500 ms; audit-chain verify of 100,000 entries &lt; 2.5 s with tampering reported at the modified <code>log_id</code>; 10,000-node turn-by-turn &lt; 30 ms; 1,000-gauge mismatch check &lt; 2 ms per call; flood-state resolver over 100,000 edges &lt; 1.5 s; duplicate-neighbour map of 200 reports &lt; 150 ms; nearest-node snap over 10,000 nodes &lt; 25 ms; rate-limit upsert p95 &lt; 10 ms and SSE replay p95 &lt; 20 ms at 500,000 rows (local database); impact-radius query p95 &lt; 150 ms at 10,000 edges; a test that <code>classify_passability</code> and the A* clearance cut-off never disagree.
 </td></tr>
 </table>
-<p class="small">The 250 ms / N = 5,000 threshold is a target we set, not yet a measured result. The CI job will fail the build if it is exceeded, and we will record the measured value in the repository.</p>
+<p class="small">The thresholds come from one run on one machine and are not yet enforced in CI; wiring them into the Verification gate is the remaining part of this work package. This follows the project's testing exit criteria (unit tests pass, routing edge cases covered) before the work package is accepted.</p>
+
+<h3>5.3 User stories and work packages for the supporting algorithms</h3>
+<p>As in 5.1&ndash;5.2, each story is a requirement statement traced to the FSD/TSD, and each ticket is a work package whose exit test is its benchmark assertion. The code for each already exists; the remaining item for every ticket is wiring its assertion into the CI gate.</p>
+<h4>ALG-02: SCS-CN runoff and ponding depth <span class="small">(<code>backend/hydrology.py</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> the system to convert a rainfall input into street flood depths on every road, <b>so that</b> the route search and the map start from current water levels.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-102</td></tr>
+<tr><td>Module / Service</td><td><code>backend/hydrology.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-02: SCS-CN runoff and ponding depth</td></tr>
+<tr><td>Traces to</td><td>BR-002 / FSD-FR-006 to 010; TSD ADR-005; test TTC-003.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>\(P\le0\) or \(P\le I_a\) &rarr; 0; elevation clamp; result clamped at 0; admin-only trigger and per-minute rate limit at the gateway.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Compute \(P\), \(S\), \(I_a\). 2. Return 0 when \(I_a\ge P\). 3. Compute \(Q\). 4. Apply the elevation factor and \(\alpha\). 5. Write depth to each node's edges.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(100_000 nodes) &lt; 300 ms</code> (measured 60 ms); <code>assert Q(P1) &lt;= Q(P2)</code> for \(P1&lt;P2\); <code>assert Q(0) == 0</code>.</td></tr>
+</table>
+<h4>ALG-03: Passability classification and hazard blocking <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<p><b>As a</b> driver, <b>I want</b> each road segment labelled passable, light flood or submerged for my vehicle's clearance, <b>so that</b> the map colours and the route always agree.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-103</td></tr>
+<tr><td>Module / Service</td><td><code>backend/routing.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-03: Passability classification and hazard blocking</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-011 to 017 (routing and map); BRULE-008; TSD &sect;2.6.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Inclusive threshold at \(d=c\); unknown obstruction level does not block; clearance bound validated at the API.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Implement the two rules in one module. 2. Have the router and the map call them (or assert equivalence). 3. Add a sweep test across \(d\) and \(c\).</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(10**6 calls) &lt; 1.5 s</code> (measured 0.23 s); sweep equivalence between <code>classify</code> and the A* cut-off.</td></tr>
+</table>
+<h4>ALG-04: Turn-by-turn instruction generation <span class="small">(<code>backend/routing.py</code>)</span></h4>
+<p><b>As a</b> rescue driver, <b>I want</b> spoken turn-by-turn steps that skip trivial bends, <b>so that</b> I can follow the route without watching the map.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-104</td></tr>
+<tr><td>Module / Service</td><td><code>backend/routing.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-04: Turn-by-turn instruction generation</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-057; test TC-024.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Empty path &rarr; no steps; single node &rarr; ARRIVE only; missing coordinate &rarr; DEPART + ARRIVE.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Compute hop bearings. 2. Classify heading changes. 3. Merge straight runs. 4. Sum distances per step. 5. Render text.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(10_000 nodes) &lt; 30 ms</code> (measured 6.1 ms); <code>assert sum(step.distance) == path_length</code>.</td></tr>
+</table>
+<h4>ALG-05: Dispatch preview (one search per vehicle) <span class="small">(<code>backend/main.py</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> a route preview for each available unit using its own clearance, <b>so that</b> I can assign the unit with the lowest safe travel time.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-105</td></tr>
+<tr><td>Module / Service</td><td><code>backend/main.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-05: Dispatch preview (one search per vehicle)</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-089; test VAL-022; TSD ADR-004.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Missing vehicle position &rarr; 409; no safe route &rarr; 422; unavailable unit cannot be assigned (BRULE-011).</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Snap SOS and each unit to nodes. 2. Run A* per unit with its clearance. 3. Collect results and reasons. 4. Sort by time.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(K=10, N=5041) &lt; 200 ms</code> (measured 39 ms); each result equals the Dijkstra oracle for that clearance.</td></tr>
+</table>
+<h4>ALG-06: Nearest-node snap <span class="small">(<code>backend/main.py (_nearest_node)</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> a unit's GPS position and an SOS location snapped to the nearest road node, <b>so that</b> the route search can start and end on the graph.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-106</td></tr>
+<tr><td>Module / Service</td><td><code>backend/main.py (_nearest_node)</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-06: Nearest-node snap</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-089 (a unit joins the graph by snapping).</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Empty node set raises; coordinates validated by the API.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Iterate nodes. 2. Keep the minimum haversine. 3. Return its id. 4. (Planned) replace with an indexed lookup at city scale.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(10_000 nodes) &lt; 25 ms</code> (measured 5 ms); result equals a brute-force oracle.</td></tr>
+</table>
+<h4>ALG-07: Flood-state resolver (CR-004 priority rule) <span class="small">(<code>backend/flood_state.py</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> each road segment to show which source flagged it and how fresh that source is, <b>so that</b> I can judge advisories without mistaking a model for a measurement.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-107</td></tr>
+<tr><td>Module / Service</td><td><code>backend/flood_state.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-07: Flood-state resolver (CR-004 priority rule)</td></tr>
+<tr><td>Traces to</td><td>CR-004 &sect;3.3; BRULE-012, BRULE-016.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Future timestamps beyond 5 min are ignored; stale flagged readings are noted; unknown NOAH class gets penalty 1.0; no data is NONE, not safe.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Apply the verified-hazard rule. 2. Filter fresh flagged observations and take the best. 3. Apply NOAH only when raining. 4. Else return NONE with coverage flags.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(100_000 edges) &lt; 1.5 s</code> (measured 0.28 s); property test: <code>closes_road</code> implies a blocking verified hazard. Status: implemented and served; routing does not read it yet.</td></tr>
+</table>
+<h4>ALG-08: Report urgency scoring and ranking <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<p><b>As a</b> moderator, <b>I want</b> pending reports ranked by severity, source reliability, corroboration and freshness, <b>so that</b> the most urgent evidence is reviewed first.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-108</td></tr>
+<tr><td>Module / Service</td><td><code>backend/reports.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-08: Report urgency scoring and ranking</td></tr>
+<tr><td>Traces to</td><td>TSD &sect;2.8; moderation desk requirements (FSD ID to confirm).</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Unknown source falls back to CALL; negative age or neighbour count is clamped; an unknown depth level raises (callers pass the validated enum).</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Look up severity and source weight. 2. Apply the corroboration cap. 3. Decay by age. 4. Sort descending.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(100_000) &lt; 500 ms</code> (measured 101 ms); <code>assert U(a2) &lt; U(a1)</code> for \(a2&gt;a1\).</td></tr>
+</table>
+<h4>ALG-09: Duplicate-neighbour map for the moderation queue <span class="small">(<code>backend/main.py (_neighbour_map)</code>)</span></h4>
+<p><b>As a</b> moderator, <b>I want</b> reports near each other in space and time flagged as likely duplicates, <b>so that</b> I can approve one marker instead of several.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-109</td></tr>
+<tr><td>Module / Service</td><td><code>backend/main.py (_neighbour_map)</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-09: Duplicate-neighbour map for the moderation queue</td></tr>
+<tr><td>Traces to</td><td>Duplicate hint on the moderation queue (FSD ID to confirm).</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Reports without a location or not pending get (0, none); the page cap of 200 bounds the \(O(k^2)\) cost.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Collect pending located reports. 2. Compare each pair within the time window. 3. Count within 150 m and track the nearest. 4. (Planned) grid bucketing.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(200 reports) &lt; 150 ms</code> (measured 34 ms); <code>assert symmetric(counts)</code>.</td></tr>
+</table>
+<h4>ALG-10: Sensor/report mismatch check and haversine distance <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<p><b>As a</b> moderator, <b>I want</b> a report flagged when the nearest rain gauge shows no breach, <b>so that</b> I look harder at claims that sensors contradict.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-110</td></tr>
+<tr><td>Module / Service</td><td><code>backend/reports.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-10: Sensor/report mismatch check and haversine distance</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-026, FSD-FR-079.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>No coordinates, no gauge in range, or a gauge without a reading: false (absence of data is not a contradiction).</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Filter gauges within 5 km. 2. Keep the nearest. 3. Compare reading and breach state.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(g=1000) &lt; 2 ms</code> (measured 0.41 ms); <code>assert haversine(p, p) == 0</code>.</td></tr>
+</table>
+<h4>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash <span class="small">(<code>backend/reports.py</code>)</span></h4>
+<p><b>As a</b> moderator, <b>I want</b> each photo's integrity hash, capture time and camera position extracted automatically, <b>so that</b> I can check the photo matches where and when the report claims.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-111</td></tr>
+<tr><td>Module / Service</td><td><code>backend/reports.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-078 (EXIF); BR-011 (reporter privacy).</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Oversize or wrong-type upload rejected; malformed EXIF returns empty; GPS outside the pilot area flagged, not rejected.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Sniff the type. 2. Hash the bytes. 3. Parse APP1/TIFF tags. 4. Check bounds. 5. Build the polygon on approval.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(digest 5 MB) &lt; 50 ms</code> (measured 2.2 ms); <code>assert read_exif(truncated) == {}</code>.</td></tr>
+</table>
+<h4>ALG-12: Tamper-evident audit hash chain <span class="small">(<code>backend/audit.py</code>)</span></h4>
+<p><b>As an</b> administrator, <b>I want</b> to verify that the audit log has not been edited or reordered, <b>so that</b> dispatch and user-management actions stay attributable.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-112</td></tr>
+<tr><td>Module / Service</td><td><code>backend/audit.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-12: Tamper-evident audit hash chain</td></tr>
+<tr><td>Traces to</td><td>Audit log requirement (FSD ID to confirm); FSD-FR-048/049 audited actions.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Unparseable payload counts as broken at that entry; first record has no predecessor; empty log is valid.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Canonicalise the record. 2. Hash with the previous hash. 3. Store. 4. On verify, recompute in order and compare.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(100_000) &lt; 2.5 s</code> (measured 0.47 s); <code>assert broken_at == tampered.log_id</code>.</td></tr>
+</table>
+<h4>ALG-13: Windowed rate limiter <span class="small">(<code>backend/rate_limit.py</code>)</span></h4>
+<p><b>As an</b> operator, <b>I want</b> login, registration, SOS and report endpoints rate limited per client, <b>so that</b> abuse cannot overwhelm the service.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-113</td></tr>
+<tr><td>Module / Service</td><td><code>backend/rate_limit.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-13: Windowed rate limiter</td></tr>
+<tr><td>Traces to</td><td>TSD LIM-006.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Limit \(\le0\) disables; header spoofing is a documented limit behind non-replacing proxies.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Derive the bucket. 2. Run the atomic upsert. 3. Compare with the limit. 4. Return 429 when over.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert p95(consume) &lt; 10 ms</code> (measured 1.4 ms local); test: the (\(\lambda+1\))th call in a window is rejected.</td></tr>
+</table>
+<h4>ALG-14: SSE event replay and framing <span class="small">(<code>backend/events.py</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> the map to resume live updates after a dropped connection without missing or repeating events, <b>so that</b> the radar always matches reality.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-114</td></tr>
+<tr><td>Module / Service</td><td><code>backend/events.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-14: SSE event replay and framing</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-086, BR-018; ADR-024.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Malformed cursor &rarr; error; fresh subscribers get a snapshot; limit caps each replay.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Append an event in the same transaction as the change. 2. On connect, replay after the cursor. 3. Then tail new ids. 4. Frame and send.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert p95(replay) &lt; 20 ms</code> at 500k rows (measured 2.5 ms p95); test: reconnect with a cursor returns no duplicates.</td></tr>
+</table>
+<h4>ALG-15: Sensor impact-radius edge marking (ST_DWithin) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> a river-gauge breach to flag the roads within its impact radius as advisory, <b>so that</b> I see which streets may be affected before confirming a hazard.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-115</td></tr>
+<tr><td>Module / Service</td><td><code>backend/main.py + PostGIS</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-15: Sensor impact-radius edge marking (ST_DWithin)</td></tr>
+<tr><td>Traces to</td><td>FSD-FR-090, FSD-FR-091; BRULE-012.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Unit mismatch, disabled sensor, future timestamp and NaN/inf values rejected; a breach is advisory until a dispatcher confirms.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Validate the reading. 2. Compare to the threshold. 3. Query edges in radius. 4. Upsert advisories. 5. Audit on breach.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert p95(query) &lt; 150 ms</code> at 10,000 edges (measured 30 ms); <code>assert plan uses an index</code> (currently fails: sequential scan).</td></tr>
+</table>
+<h4>ALG-16: Hazard coverage (ST_Intersects) <span class="small">(<code>backend/main.py + PostGIS</code>)</span></h4>
+<p><b>As a</b> driver, <b>I want</b> routes to avoid verified hazards and list those near my route, <b>so that</b> I am never sent through a closed road.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-116</td></tr>
+<tr><td>Module / Service</td><td><code>backend/main.py + PostGIS</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-16: Hazard coverage (ST_Intersects)</td></tr>
+<tr><td>Traces to</td><td>TSD &sect;2.6; BRULE-008.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Inactive hazards ignored; closures without geometry still reroute; ignore_hazards only for the explicit unsafe alternative.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Load active hazards. 2. Spatial-join to edges. 3. Union direct edge ids. 4. Pass blocking edges to the engine.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(50_000 edges, 20 hazards) &lt; 25 ms</code> (measured 3 ms).</td></tr>
+</table>
+<h4>ALG-17: Advisory upsert (last-writer-by-time) <span class="small">(<code>backend/main.py (_upsert_advisories)</code>)</span></h4>
+<p><b>As a</b> dispatcher, <b>I want</b> the newest reading from each gauge recorded on the roads it covers without older readings overwriting it, <b>so that</b> advisories reflect the latest data.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-117</td></tr>
+<tr><td>Module / Service</td><td><code>backend/main.py (_upsert_advisories)</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-17: Advisory upsert (last-writer-by-time)</td></tr>
+<tr><td>Traces to</td><td>CR-004; FSD-FR-091.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Empty edge list returns immediately; out-of-order readings do not overwrite newer ones.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Build one multi-row insert. 2. Conflict on (edge, source). 3. Update only when the new time is not older.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(100 edges) &lt; 60 ms</code> (measured 11 ms); test: an older <code>as_of</code> leaves the row unchanged.</td></tr>
+</table>
+<h4>ALG-18: Session tokens (JWT HS256) <span class="small">(<code>backend/auth_utils.py</code>)</span></h4>
+<p><b>As a</b> user, <b>I want</b> to sign in once and have my session verified on each request, <b>so that</b> the service stays stateless and my role is enforced.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-118</td></tr>
+<tr><td>Module / Service</td><td><code>backend/auth_utils.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-18: Session tokens (JWT HS256)</td></tr>
+<tr><td>Traces to</td><td>TSD ADR-021.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Expired, tampered or wrongly-algorithmed tokens return 401; the secret is never committed.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Verify credentials. 2. Sign claims with an expiry. 3. Verify on every request. 4. Enforce roles.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(verify) &lt; 100 &micro;s</code> (measured 22 &micro;s); test: a tampered token is rejected.</td></tr>
+</table>
+<h4>ALG-19: Seed road-network builder <span class="small">(<code>backend/network_seed.py</code>)</span></h4>
+<p><b>As a</b> developer, <b>I want</b> a reproducible seed graph, <b>so that</b> tests and demos run on the same network.</p>
+<table><tr><th style="width:24%">Implementation Field</th><th>Specification Detail</th></tr>
+<tr><td>Ticket ID</td><td>DEV-ALGO-119</td></tr>
+<tr><td>Module / Service</td><td><code>backend/network_seed.py</code></td></tr>
+<tr><td>Associated Algorithm</td><td>ALG-19: Seed road-network builder</td></tr>
+<tr><td>Traces to</td><td>TSD seed section; ALGORITHMS_DEMO.md walkthrough.</td></tr>
+<tr><td>Edge-Case &amp; Security Defenses</td><td>Validation rejects dangling edges and duplicate ids.</td></tr>
+<tr><td>Concrete Implementation Steps</td><td>1. Build lattice nodes. 2. Add edges in both directions. 3. Validate. 4. Apply to the database.</td></tr>
+<tr><td>Automated Benchmarking Assertion</td><td><code>assert t(build) &lt; 50 ms</code> (measured 0.17 ms); <code>assert validate(nodes, edges)</code>.</td></tr>
+</table>
 
 <!-- ======================= TASK 6 ======================= -->
 <h2>Task 6: Academic Review Questions &amp; Defense Checkpoints</h2>
 
 <h3>Q1. Why must heavy algorithmic processing be decoupled from database ORMs and web request threads?</h3>
-<p>(a) <b>Responsiveness:</b> a CPU-bound search holds a worker thread for its whole run; with a bounded thread pool, \(K\) concurrent searches starve unrelated requests (login, map reads) [12]. Moving them to a worker pool behind a queue [15] bounds request latency and allows independent scaling. (b) <b>Testability and correctness:</b> a pure function over plain numbers can be unit-tested and fuzzed against a reference (Dijkstra) without a database; ORM lazy loading inside the loop would add a hidden query per edge, turning \(O(m\log n)\) compute into \(O(m)\) database round-trips. (c) <b>Consistency:</b> the engine should read an immutable snapshot so concurrent depth writes cannot change costs mid-search, which would break the optimality argument. (d) <b>Replaceability:</b> the same engine can be called by the dispatch preview, the driver app and batch jobs.</p>
+<p>(a) <b>Responsiveness:</b> a CPU-bound search holds a worker thread for its whole run; with a bounded thread pool, \(K\) concurrent searches starve unrelated requests (login, map reads) [12]. Moving them to a worker pool behind a queue [15] bounds request latency and allows independent scaling. (b) <b>Testability and correctness:</b> a pure function over plain numbers can be unit-tested and fuzzed against a reference (Dijkstra) without a database; ORM lazy loading inside the loop would add a hidden query per edge, turning \(O(m\log n)\) compute into \(O(m)\) database round-trips. (c) <b>Consistency:</b> the engine should read an immutable snapshot so concurrent depth writes cannot change costs mid-search, which would break the optimality argument. (d) <b>Replaceability:</b> the same engine can be called by the dispatch preview, the driver app and batch jobs. In a waterfall plan this also keeps the design stable: the contract in Task 4 is fixed at the Design gate, so the engine can be re-implemented without reopening the API.</p>
 
 <h3>Q2. If the algorithm has exponential worst-case complexity, what keeps it viable?</h3>
 <p>Our core engine is not exponential: it is \(O(m\log n)\) (Task 3). The exponential algorithm is the <i>baseline</i> (path enumeration). Had we extended the problem to a <i>multi-criteria</i> or <i>capacity-constrained</i> variant, which is NP-hard, we would use pruning by the admissible bound \(f\) [2], [3], dominance pruning, and an \(\varepsilon\)-bounded weighted A* (\(f=g+(1+\varepsilon)h\)) that guarantees a cost within \((1+\varepsilon)\) of optimal, plus the per-request <code>time_limit_ms</code> returning the best route found with <code>truncated=true</code>.</p>
@@ -280,13 +1256,39 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 <p>An exact algorithm guarantees the optimal answer and a checkable certificate, at a cost that may grow quickly. A heuristic or approximate algorithm trades a bounded or unbounded loss in quality for speed [1]. Our A* is <b>exact</b> because \(h\) is admissible and consistent [2], [3]; "heuristic" describes how it is guided, not that its answer is approximate. In a rescue setting a wrong (non-optimal) route has a safety cost, so we keep the exact search and use an approximate variant only as a time-limited fallback. The hydrology model, by contrast, is an approximation (SCS-CN, a decision aid, not a hydrodynamic model) [8], and we label it as such.</p>
 
 <h3>Q4. Empirical benchmarking vs. asymptotic analysis?</h3>
-<p>Asymptotic analysis is done <i>before</i> implementation, on a model of computation, and states how cost grows with \(n,m\) while ignoring constants, hardware and the interpreter [1]. Empirical profiling is done <i>after</i> implementation, on real code and data, and measures constants, cache and Python overhead, and the average case that theory cannot give in closed form. We use both: Task 3 predicts \(O(m\log n)\); the CI benchmark (Task 5) checks the growth trend (runtime vs. \(N\)) and enforces an absolute budget. Neither replaces the other: a good bound with a slow constant can still miss the 250 ms target, and a fast run on one dataset proves nothing about the worst case.</p>
+<p>Asymptotic analysis is done <i>before</i> implementation, in the Design phase, on a model of computation, and states how cost grows with \(n,m\) while ignoring constants, hardware and the interpreter [1]. Empirical profiling is done <i>after</i> implementation, in the Verification phase, on real code and data, and measures constants, cache and Python overhead, and the average case that theory cannot give in closed form. We use both: Task 3 predicts \(O(m\log n)\); the benchmark harness (Tasks 3 and 5) checks the growth trend (runtime vs. \(N\)) and enforces an absolute budget (p95 &lt; 50 ms at N = 5,041). Neither replaces the other: a good bound with a slow constant can still miss a latency budget (our A* settles fewer nodes than Dijkstra yet runs slower in Python), and a fast run on one dataset proves nothing about the worst case.</p>
 
 <h3>Q5. Cold start / data sparsity (if ML or preference matrices are used)?</h3>
 <p>The routing engine uses no learned model or user-preference matrix, so the classic cold-start problem does not apply. The analogous risk is <b>sparse live data</b>: few sensors and reports at launch, so many edges have no measured depth. Mitigation: default unknown edges to the hydrology engine's modelled depth [8], treat sensor and verified-report values as overrides, and surface edges without recent data as lower-confidence rather than silently safe. If we later add a learned depth predictor, we would seed it from the physical model and historic flood records.</p>
 
 <h3>Q6. How are edge-case inputs handled without crashing the service?</h3>
 <p>Every degenerate input has a defined return value rather than an exception: unknown nodes &rarr; <code>INVALID_NODE</code>; <code>s = t</code> &rarr; zero-length path; <b>disconnected subgraphs</b> or fully flooded corridors &rarr; the frontier empties and the search returns <code>NO_SAFE_ROUTE</code> (the termination certificate in line 18); <b>cycles</b> are harmless because <code>settled</code> makes every node expand once [1]; the speed floor removes division by zero. No singular-matrix case arises, as the engine uses no linear algebra. Inputs are validated at the gateway (Pydantic, bounded ranges) and errors are returned as RFC 9457 problem documents [9], so a bad request cannot take down the worker.</p>
+
+<h3>6.7 Answers by algorithm (Q2, Q3, Q5, Q6)</h3>
+<p>Q1 and Q4 apply to the whole system. For the others, each algorithm answers separately:</p>
+<table style="font-size:8.8pt"><tr><th style="width:17%">Algorithm</th><th style="width:15%">Q2: exponential blow-up?</th><th style="width:20%">Q3: exact or approximate?</th><th style="width:20%">Q5: cold start / sparse data</th><th>Q6: edge cases</th></tr>
+<tr><td>ALG-01: Flood-aware A*</td><td>No: \(O(m\log n)\); baseline is exponential</td><td><b>Exact</b> (admissible, consistent heuristic)</td><td>Defaults to modelled depth when edges lack readings</td><td>Defined statuses; unreachable target returns NO_SAFE_ROUTE</td></tr>
+<tr><td>ALG-02: SCS-CN runoff and ponding depth</td><td>Not exponential: \(O(1)\) per node.</td><td>A closed-form <b>approximation</b> of flooding (a decision aid), labelled as such.</td><td>No learning. Sparse gauges are handled by using this modelled depth as the default (Q5).</td><td>Zero or negative rain returns 0; no division by zero (\(CN>0\)).</td></tr>
+<tr><td>ALG-03: Passability classification and hazard blocking</td><td>Not exponential: \(O(1)\).</td><td><b>Exact</b> rule evaluation.</td><td>No data dependence.</td><td>Depth equal to clearance is submerged; unknown level is non-blocking, never an exception.</td></tr>
+<tr><td>ALG-04: Turn-by-turn instruction generation</td><td>Not exponential: \(O(k)\).</td><td><b>Exact</b> given the thresholds.</td><td>No data dependence.</td><td>Empty or one-node path and missing coordinates return a defined fallback.</td></tr>
+<tr><td>ALG-05: Dispatch preview (one search per vehicle)</td><td>Polynomial: \(K\times O(m\log n)\).</td><td><b>Exact</b> per vehicle.</td><td>No learning; a unit without telemetry is reported, not guessed.</td><td>Missing position, no route and unavailable unit return defined statuses.</td></tr>
+<tr><td>ALG-06: Nearest-node snap</td><td>Polynomial; no blow-up. Index recommended for scale.</td><td><b>Exact</b>.</td><td>No data dependence.</td><td>Empty graph raises <code>ValueError</code>; the gateway checks nodes exist first.</td></tr>
+<tr><td>ALG-07: Flood-state resolver (CR-004 priority rule)</td><td>Polynomial: \(O(m\bar o)\).</td><td><b>Exact</b> rule evaluation over inputs that are themselves estimates.</td><td>Sparse coverage is explicit: NONE with <code>has_live_data=false</code>, never "safe".</td><td>Stale, future-dated and missing inputs have defined outcomes; pure function cannot crash on I/O.</td></tr>
+<tr><td>ALG-08: Report urgency scoring and ranking</td><td>No blow-up: \(O(k\log k)\).</td><td><b>Exact</b> ordering under a hand-set scoring model (the weights are judgement, not learned).</td><td>No learning: weights are fixed, so there is no cold start; a new source type defaults to CALL.</td><td>Clamped inputs; empty queue returns empty.</td></tr>
+<tr><td>ALG-09: Duplicate-neighbour map for the moderation queue</td><td>Polynomial but quadratic; mitigated by the 200-row cap and, if needed, by grid bucketing.</td><td><b>Exact</b> neighbour counts.</td><td>No learning; sparse data simply gives counts of zero.</td><td>Missing coordinates and non-pending rows are skipped without error.</td></tr>
+<tr><td>ALG-10: Sensor/report mismatch check and haversine distance</td><td>No blow-up: \(O(g)\).</td><td><b>Exact</b>; the answer is advisory.</td><td>Sparse gauges: out-of-range or reading-less gauges produce no flag.</td><td>All degenerate cases return false.</td></tr>
+<tr><td>ALG-11: Evidence checks: digest, image type, EXIF, polygon, reporter hash</td><td>No blow-up: linear in bytes or metadata entries.</td><td><b>Exact</b> parsing; the plausibility flag is advisory.</td><td>Photos without EXIF still work: the checks are optional evidence.</td><td>Truncated, non-JPEG or corrupt data returns "no EXIF" instead of rejecting the report.</td></tr>
+<tr><td>ALG-12: Tamper-evident audit hash chain</td><td>No blow-up: \(O(L)\).</td><td><b>Exact</b> detection of in-place edits (not of full-database compromise).</td><td>No learning.</td><td>Corrupt payloads and empty logs return defined results.</td></tr>
+<tr><td>ALG-13: Windowed rate limiter</td><td>No blow-up.</td><td><b>Exact</b> count within a window; boundary burst is a known approximation.</td><td>Not applicable.</td><td>Database error handling: the limiter must not take the endpoint down (see module).</td></tr>
+<tr><td>ALG-14: SSE event replay and framing</td><td>No blow-up.</td><td><b>Exact</b> ordered delivery.</td><td>No learning.</td><td>Bad cursors are rejected; empty replays return nothing.</td></tr>
+<tr><td>ALG-15: Sensor impact-radius edge marking (ST_DWithin)</td><td>No blow-up, but linear in \(m\) as deployed; add the functional index.</td><td><b>Exact</b> radius selection.</td><td>Sparse sensors: edges outside every radius have no live data and are reported as such (ALG-07).</td><td>Invalid readings are rejected with 4xx before any write.</td></tr>
+<tr><td>ALG-16: Hazard coverage (ST_Intersects)</td><td>No blow-up with the index.</td><td><b>Exact</b> geometric intersection.</td><td>No hazards means an empty mapping, not an error.</td><td>Hazards without polygons are handled through the edge pointer.</td></tr>
+<tr><td>ALG-17: Advisory upsert (last-writer-by-time)</td><td>No blow-up.</td><td><b>Exact</b>.</td><td>No learning.</td><td>Empty input and stale input are no-ops.</td></tr>
+<tr><td>ALG-18: Session tokens (JWT HS256)</td><td>No blow-up.</td><td><b>Exact</b> verification.</td><td>No learning.</td><td>Any decode error returns 401, not a crash.</td></tr>
+<tr><td>ALG-19: Seed road-network builder</td><td>No blow-up.</td><td><b>Exact</b>, deterministic.</td><td>Not applicable.</td><td>Dangling or duplicate entries fail validation at seeding, not at runtime.</td></tr>
+</table>
+
+<div class="ai">&lt;!-- AI Assistance: Claude wrote the benchmark harness (<code>backend/benchmarks/bench_algorithms.py</code>), ran it (including on a throwaway local PostGIS), and drafted the per-algorithm sections of Tasks 1&ndash;6 from the code and the measured output. All timings are from one run on one machine, the complexity entries are our own reading of the code, and statements marked "FSD ID to confirm" need checking against the FSD. The team should rerun the harness before citing numbers and check any algorithm it wants to defend. --&gt;</div>
 
 <!-- ======================= REFERENCES ======================= -->
 <h2 class="pb">References</h2>
@@ -306,6 +1308,8 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 <li>Python Software Foundation, "heapq &mdash; Heap queue algorithm," <i>The Python Standard Library</i>, Python 3 docs. [Online]. Available: https://docs.python.org/3/library/heapq.html (accessed Nov. 2026).</li>
 <li>PostGIS Project, "PostGIS manual: ST_DWithin." [Online]. Available: https://postgis.net/docs/ST_DWithin.html (accessed Nov. 2026).</li>
 <li>Celery Project, "Celery: Distributed task queue," documentation. [Online]. Available: https://docs.celeryq.dev (accessed Nov. 2026). (Proposed worker queue; not yet deployed.)</li>
+<li>National Institute of Standards and Technology, "Secure Hash Standard (SHS)," FIPS PUB 180-4, Aug. 2015. (Pre-2021 standard.)</li>
+<li>M. Jones, J. Bradley, and N. Sakimura, "JSON Web Token (JWT)," IETF, RFC 7519, May 2015. (Pre-2021 standard.)</li>
 </ol>
 
 <!-- ======================= DECK ======================= -->
@@ -318,6 +1322,7 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 <tr><th style="width:24%">Project</th><td>MetroFlow</td></tr>
 <tr><th>Team</th><td>F4 &middot; Section III-CCSAD</td></tr>
 <tr><th>Members &amp; roles</th><td>Lapating, Khent U. (Lead Algorithm Architect) &middot; De Vera, Josiah Ray S. (Backend / Systems) &middot; Vergara, John Gabriel D. (Data / QA) &middot; Felipe, Marck Aaron V. (Systems Analyst / Tech Lead)</td></tr>
+<tr><th>Model</th><td>Waterfall</td></tr>
 <tr><th>Repository</th><td>https://github.com/siahray/MetroFlow.git</td></tr>
 </table>
 <div class="num">1</div>
@@ -335,6 +1340,20 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 </section>
 
 <section class="slide">
+<h2>Waterfall lifecycle</h2>
+<table>
+<tr><th style="width:20%">Phase</th><th style="width:34%">Artifact</th><th>This milestone</th></tr>
+<tr><td>1. Requirements</td><td>BRD, FSD</td><td>Task 1: formal problem</td></tr>
+<tr><td>2. Design</td><td>TSD (ADR-004 A*)</td><td>Tasks 2&ndash;4: algorithm, complexity, architecture, API</td></tr>
+<tr><td>3. Implementation</td><td><code>routing.py</code>, <code>hydrology.py</code></td><td>DEV-ALGO-101 work package</td></tr>
+<tr><td>4. Verification</td><td>Test cases, CI gates</td><td>Benchmark and edge-case assertions</td></tr>
+<tr><td>5. Acceptance</td><td>UAT, sign-off</td><td>After Milestone 1</td></tr>
+</table>
+<p class="small">Each phase passes its exit criteria before the next begins; changes go through change requests.</p>
+<div class="num">3</div>
+</section>
+
+<section class="slide">
 <h2>Mathematical formulation</h2>
 <div class="cols"><div>
 <ul>
@@ -347,7 +1366,7 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 \[ \min_{P:\,s\to t\ \text{in}\ G_c} \sum_{e\in P}\frac{\ell_e}{v_e} \]
 <p class="small">Depths from SCS-CN runoff [8].</p>
 </div></div>
-<div class="num">3</div>
+<div class="num">4</div>
 </section>
 
 <section class="slide">
@@ -359,7 +1378,7 @@ RECONSTRUCT(parent, s, t): follow parent[] from t back to s; reverse.
 <tr><td>Recurrence</td><td>\(g(v)=\min_{(u,v)\in E_c}(g(u)+w_{uv})\), \(f=g+h\)</td></tr>
 <tr><td>Heuristic</td><td>\(h(v)=\mathrm{hav}(v,t)/v_{\max}\): <b>admissible and consistent</b> &rArr; exact, each node settled once [3]</td></tr>
 </table>
-<div class="num">4</div>
+<div class="num">5</div>
 </section>
 
 <section class="slide">
@@ -379,21 +1398,21 @@ while PQ not empty:
         if g2 &lt; g[v]: g[v]=g2; parent[v]=u; push(PQ,(g2+h(v), g2, v))
 return NO_SAFE_ROUTE
 </pre>
-<div class="num">5</div>
+<div class="num">6</div>
 </section>
 
 <section class="slide">
 <h2>Complexity</h2>
 <table>
-<tr><th style="width:26%">Measure</th><th>Result</th></tr>
-<tr><td>Worst-case time</td><td>\(O(m\log n)\): \(\le m+1\) heap ops, \(\log m\le2\log n\) [1]</td></tr>
-<tr><td>Best case</td><td>\(\Omega(k\log n)\) when \(h\) is near-perfect (path length \(k\))</td></tr>
-<tr><td>Average</td><td>Sparse planar graph: settles a corridor, not all of \(V\); measured in CI</td></tr>
-<tr><td>Space</td><td>\(O(n+m)\): \(g\), parent, settled \(O(n)\); lazy heap \(\le m+1\)</td></tr>
-<tr><td>Baseline</td><td>\(O(n!)\) enumeration</td></tr>
+<tr><th style="width:24%">Measure</th><th>Derived</th><th>Measured (5,041 nodes)</th></tr>
+<tr><td>Worst-case time</td><td>\(O(m\log n)\): \(\le m+1\) heap ops [1]</td><td>median 3.4 ms, p95 10.4 ms</td></tr>
+<tr><td>Best / average</td><td>\(\Omega(k\log n)\); sparse graph settles a region</td><td>33&ndash;43% fewer nodes than Dijkstra</td></tr>
+<tr><td>Growth</td><td>near-linear on sparse grids</td><td>3.5&times;, 4.3&times; per 4&times; nodes</td></tr>
+<tr><td>Space</td><td>\(O(n+m)\)</td><td>&mdash;</td></tr>
+<tr><td>Optimality</td><td>exact (admissible, consistent)</td><td>0 mismatches in 120 queries</td></tr>
 </table>
-<p class="small">Master theorem not applicable: iterative, no divide-and-conquer recurrence.</p>
-<div class="num">6</div>
+<p class="small">Honest finding: A* settles fewer nodes but is 18&ndash;52% slower than Dijkstra in wall time (costly haversine in Python). Master theorem n/a.</p>
+<div class="num">7</div>
 </section>
 
 <section class="slide">
@@ -404,13 +1423,13 @@ return NO_SAFE_ROUTE
 <tr><td>Velocity</td><td>Typhoon bursts; \(K\) searches per SOS</td><td>Worker pool + job queue; immutable depth snapshot</td></tr>
 <tr><td>Variety</td><td>GeoJSON, sensors, reports, hazards</td><td>Normalise to <code>cm</code>, <code>km/h</code>, <code>m</code> at gateway; Pydantic validation</td></tr>
 </table>
-<div class="num">7</div>
+<div class="num">8</div>
 </section>
 
 <section class="slide">
 <h2>Decoupled architecture</h2>
 <div id="arch-slide"></div>
-<div class="num">8</div>
+<div class="num">9</div>
 </section>
 
 <section class="slide">
@@ -437,18 +1456,53 @@ return NO_SAFE_ROUTE
                "optimal": true } }
 </pre></div></div>
 <p class="small">OpenAPI 3.1 [11]; errors as RFC 9457 problem+json [9]; HTTP semantics per RFC 9110 [10].</p>
-<div class="num">9</div>
+<div class="num">10</div>
 </section>
 
 <section class="slide">
-<h2>Agile backlog &amp; benchmarks</h2>
+<h2>Work packages &amp; verification plan</h2>
 <ul>
-<li><b>Story 1:</b> Dispatcher runs per-vehicle searches to assign the lowest safe travel time.</li>
-<li><b>Story 2:</b> Driver is rerouted on latest depths, or told there is no safe route.</li>
+<li><b>Story 1</b> (FSD-FR-089): dispatcher runs per-vehicle searches to assign the lowest safe travel time.</li>
+<li><b>Story 2</b> (FSD-FR-057): driver is rerouted on latest depths, or told there is no safe route.</li>
 <li><b>DEV-ALGO-101</b> (<code>backend/routing.py</code>): edge cases &ndash; unknown node, <code>s=t</code>, disconnected, depth = clearance, bad speed.</li>
-<li><b>CI assertions:</b> A* cost = Dijkstra cost on 10,000 random cases; p95 &lt; 250 ms at N = 5,000 (target); A* settles &le; Dijkstra.</li>
+<li><b>Verification gate</b> (harness written and run; CI wiring pending): A* cost = Dijkstra on every query; p95 &lt; 50 ms at N = 5,041 (measured 10.4 ms); settled &le; Dijkstra.</li>
+<li>Scope fixed at the Design gate; changes via change request, not re-prioritisation.</li>
 </ul>
-<div class="num">10</div>
+<div class="num">11</div>
+</section>
+
+<section class="slide">
+<h2>Algorithm inventory</h2>
+<div class="cols" style="gap:16pt">
+<div>
+<table style="font-size:9pt">
+<tr><th>In-process algorithm</th><th>Derived</th><th>Measured</th></tr>
+<tr><td><b>Flood-aware A* (primary)</b></td><td>\(O(m\log n)\)</td><td>3.4 ms @ 5k nodes</td></tr>
+<tr><td>SCS-CN + ponding [8]</td><td>\(O(1)\)/node</td><td>60 ms @ 100k</td></tr>
+<tr><td>Passability + hazard block</td><td>\(O(1)\)</td><td>0.23 &micro;s</td></tr>
+<tr><td>Urgency score + sort</td><td>\(O(k\log k)\)</td><td>101 ms @ 100k</td></tr>
+<tr><td>SHA-256 audit chain [16]</td><td>\(O(L)\)</td><td>467 ms @ 100k</td></tr>
+<tr><td>Turn-by-turn</td><td>\(O(k)\)</td><td>6.1 ms @ 10k</td></tr>
+<tr><td>Sensor/report mismatch</td><td>\(O(g)\)</td><td>411 &micro;s @ 1k gauges</td></tr>
+<tr><td>Duplicate-neighbour map</td><td>\(O(k^2)\)</td><td>34 ms @ 200; 8.7 s @ 3.2k</td></tr>
+<tr><td>Nearest-node snap</td><td>\(O(n)\)</td><td>50 ms @ 100k</td></tr>
+<tr><td>Flood-state resolver (CR-004)</td><td>\(O(\bar o)\)/edge</td><td>280 ms @ 100k edges</td></tr>
+<tr><td>Evidence: digest, EXIF, polygon</td><td>\(O(b)\); EXIF \(O(e)\)</td><td>2.2 ms/5 MB; 12 &micro;s</td></tr>
+<tr><td>Dispatch preview, K=10</td><td>\(K\times\)A*</td><td>39 ms @ 5k nodes</td></tr>
+</table></div>
+<div>
+<table style="font-size:9pt">
+<tr><th>Database-bound (local PostGIS)</th><th>Derived</th><th>Measured</th></tr>
+<tr><td>Rate-limit upsert</td><td>\(O(1)\)</td><td>0.96 ms/call</td></tr>
+<tr><td>SSE replay</td><td>\(O(\log N + r)\)</td><td>1.1 ms, flat to 500k rows</td></tr>
+<tr><td><code>ST_Intersects</code> hazards</td><td>\(O(h\log m)\)</td><td>2.4&ndash;3.3 ms, flat</td></tr>
+<tr><td>Advisory upsert</td><td>\(O(r)\)</td><td>11 ms / 96 edges</td></tr>
+<tr><td><b><code>ST_DWithin</code> radius</b></td><td>claimed \(O(\log m)\)</td><td><b>118 ms @ 50k: seq scan, \(O(m)\)</b></td></tr>
+<tr><td>JWT, SSE frame, seed build</td><td>\(O(1)\)&ndash;\(O(n)\)</td><td>22 &micro;s; 2 &micro;s; 0.17 ms</td></tr>
+</table>
+<p class="small" style="margin-top:8pt"><b>Findings:</b> the impact-radius query ignores the spatial index; the duplicate map is quadratic (safe only at the 200-row page cap); A* settles 33&ndash;43% fewer nodes but runs 18&ndash;52% slower in Python. CR-004's resolver is implemented; routing doesn't read it yet. All 19 algorithms: Tasks 1&ndash;6. Dev-machine timings.</p>
+</div></div>
+<div class="num">12</div>
 </section>
 
 <section class="slide">
@@ -456,11 +1510,11 @@ return NO_SAFE_ROUTE
 <ul>
 <li><b>Why decouple?</b> CPU-bound search starves request threads; pure function is fuzz-testable; immutable snapshot keeps optimality valid.</li>
 <li><b>Exact vs heuristic:</b> our A* is exact (admissible + consistent); weighted A* only as a time-limited fallback.</li>
-<li><b>Theory vs benchmark:</b> Big-O predicts growth; CI measures constants and the average case.</li>
+<li><b>Theory vs benchmark:</b> Big-O at Design predicts growth; CI at Verification measures constants and the average case.</li>
 <li><b>Sparse data, not cold start:</b> default to modelled depth [8]; mark stale edges low-confidence.</li>
 <li><b>Edge cases:</b> defined statuses, never exceptions; cycles harmless via <code>settled</code>.</li>
 </ul>
-<div class="num">11</div>
+<div class="num">13</div>
 </section>
 
 <section class="slide">
@@ -481,8 +1535,10 @@ return NO_SAFE_ROUTE
 <li>Python <code>heapq</code> documentation.</li>
 <li>PostGIS manual, ST_DWithin.</li>
 <li>Celery documentation.</li>
+<li>NIST FIPS 180-4, Secure Hash Standard, 2015.</li>
+<li>RFC 7519, JSON Web Token, 2015.</li>
 </ol>
-<div class="num">12</div>
+<div class="num">14</div>
 </section>
 
 </div>
