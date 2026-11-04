@@ -222,31 +222,40 @@ def build_instructions(
 # ---------------------------------------------------------------------------
 
 
+# A fresh, flagged sensor advisory never closes a road (BRULE-012), but it is a
+# live signal the router should still prefer around when a safe alternative
+# exists. A fixed time multiplier does that without touching the hard
+# clearance block below, which only ever looks at simulated water depth.
+ADVISORY_PENALTY = 1.5
+
+
 def _max_graph_speed_kmh(
-    graph_edges: dict[int, list[tuple[int, float, float, float]]],
+    graph_edges: dict[int, list[tuple[int, float, float, float, bool]]],
 ) -> float:
     """Fastest permitted speed anywhere in the graph (km/h)."""
-    speeds = [speed for adjacency in graph_edges.values() for (_, _, speed, _) in adjacency]
+    speeds = [speed for adjacency in graph_edges.values() for (_, _, speed, _, _) in adjacency]
     return max(speeds) if speeds else 50.0
 
 
 def td_a_star_search(
     graph_nodes: dict[int, tuple[float, float]],  # node_id -> (lat, lon)
     graph_edges: dict[
-        int, list[tuple[int, float, float, float]]
-    ],  # u -> [(v, length_m, speed_kmh, water_depth_cm)]
+        int, list[tuple[int, float, float, float, bool]]
+    ],  # u -> [(v, length_m, speed_kmh, water_depth_cm, advisory_flagged)]
     start_node: int,
     target_node: int,
     vehicle_clearance_cm: float = 30.0,
 ) -> tuple[list[int], float]:
     """
     Time-Dependent A* Pathfinding Engine with Min-Heap Priority Queue.
-    Incorporate dynamic water depth penalties Omega(d_e) and vehicle clearance
-    thresholds.
+    Incorporate dynamic water depth penalties Omega(d_e), vehicle clearance
+    thresholds, and a soft penalty for edges under a flagged sensor advisory.
 
     Time Complexity: O(E log V)  -- guaranteed by the settled set below.
     Optimality:    guaranteed -- the heuristic divides by the fastest speed in
-                   the graph, so it never overestimates remaining travel time.
+                   the graph, so it never overestimates remaining travel time;
+                   the advisory penalty only ever raises a cost, never lowers
+                   one, so the bound still holds.
     """
     if start_node not in graph_nodes or target_node not in graph_nodes:
         return [], float("inf")
@@ -296,7 +305,9 @@ def td_a_star_search(
             path.append(start_node)
             return path[::-1], g_score[target_node]
 
-        for neighbor, length_m, speed_kmh, water_depth_cm in graph_edges.get(current, []):
+        for neighbor, length_m, speed_kmh, water_depth_cm, advisory_flagged in graph_edges.get(
+            current, []
+        ):
             # Passability threshold: infinite penalty if water exceeds clearance.
             if water_depth_cm >= vehicle_clearance_cm:
                 continue
@@ -306,6 +317,8 @@ def td_a_star_search(
             effective_speed_m_s = max((speed_kmh / 3.6) / water_penalty, 0.5)
 
             traversal_time_s = length_m / effective_speed_m_s
+            if advisory_flagged:
+                traversal_time_s *= ADVISORY_PENALTY
             tentative_g = current_g + traversal_time_s
 
             if tentative_g < g_score.get(neighbor, float("inf")):

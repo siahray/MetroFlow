@@ -117,7 +117,10 @@ class HazardZone(Base):
     # SMALLINT matches the deployed column: depths are centimetres and never
     # leave the 32k range. Widening it here would make ``alembic check`` drift.
     avg_depth_cm = Column(SmallInteger, nullable=True, comment="Average water depth in centimeters")
-    geometry = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=True)
+    # Generic so a hazard can be an area (Polygon, FSD-FR-082) or a closure
+    # line (LineString, FSD-FR-083); migration a9c1f4e7d823 widened it from
+    # POLYGON-only.
+    geometry = Column(Geometry(geometry_type="GEOMETRY", srid=4326), nullable=True)
     edge_id = Column(
         Integer,
         ForeignKey("road_edges.edge_id"),
@@ -177,6 +180,23 @@ class Sensor(Base):
     )  # Disabled sensors reject readings
     simulated = Column(Boolean, default=False, nullable=True)  # True for pilot-generated values
 
+    @property
+    def latitude(self) -> float | None:
+        """Read back from ``geom`` for the registry view and map layer (FSD-FR-091)."""
+        if self.geom is None:
+            return None
+        from geoalchemy2.shape import to_shape
+
+        return to_shape(self.geom).y
+
+    @property
+    def longitude(self) -> float | None:
+        if self.geom is None:
+            return None
+        from geoalchemy2.shape import to_shape
+
+        return to_shape(self.geom).x
+
 
 class SensorReading(Base):
     __tablename__ = "sensor_readings"
@@ -235,6 +255,9 @@ class SOSRequest(Base):
     )
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    dismissed_at = Column(
+        DateTime, nullable=True, index=True, comment="Set when dismissed; purged after 72 h"
+    )
 
 
 class RateLimitCounter(Base):
@@ -320,6 +343,9 @@ class IncidentReport(Base):
         ForeignKey("hazard_zones.hazard_id"),
         nullable=True,
         comment="Verified hazard created by approval",
+    )
+    dismissed_at = Column(
+        DateTime, nullable=True, index=True, comment="Set when dismissed; purged after 72 h"
     )
 
 

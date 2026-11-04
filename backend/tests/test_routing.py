@@ -15,6 +15,7 @@ import random
 import pytest
 
 from routing import (
+    ADVISORY_PENALTY,
     ARRIVE,
     DEPART,
     LIGHT_FLOOD,
@@ -56,9 +57,9 @@ CLEARANCE = 30.0
 def build_graph(depths, bidirectional=True):
     graph = {}
     for (u, v, length, speed), depth in zip(EDGES, depths, strict=False):
-        graph.setdefault(u, []).append((v, length, speed, depth))
+        graph.setdefault(u, []).append((v, length, speed, depth, False))
         if bidirectional:
-            graph.setdefault(v, []).append((u, length, speed, depth))
+            graph.setdefault(v, []).append((u, length, speed, depth, False))
     return graph
 
 
@@ -76,12 +77,15 @@ def dijkstra(graph, start, target, clearance=CLEARANCE):
         if node == target:
             return cost
 
-        for neighbour, length, speed, depth in graph.get(node, []):
+        for neighbour, length, speed, depth, advisory_flagged in graph.get(node, []):
             if depth >= clearance:
                 continue
             penalty = 1.0 + math.pow(depth / 10.0, 1.8)
             effective_speed = max((speed / 3.6) / penalty, 0.5)
-            candidate = cost + length / effective_speed
+            hop_time = length / effective_speed
+            if advisory_flagged:
+                hop_time *= ADVISORY_PENALTY
+            candidate = cost + hop_time
             if candidate < distances.get(neighbour, math.inf):
                 distances[neighbour] = candidate
                 heapq.heappush(pq, (candidate, neighbour))
@@ -98,10 +102,11 @@ def path_cost(graph, path, clearance=CLEARANCE):
             None,
         )
         assert hop is not None, f"path uses non-existent edge {u}->{v}"
-        _, length, speed, depth = hop
+        _, length, speed, depth, advisory_flagged = hop
         assert depth < clearance, f"path uses impassable edge {u}->{v}"
         penalty = 1.0 + math.pow(depth / 10.0, 1.8)
-        total += length / max((speed / 3.6) / penalty, 0.5)
+        hop_time = length / max((speed / 3.6) / penalty, 0.5)
+        total += hop_time * ADVISORY_PENALTY if advisory_flagged else hop_time
     return total
 
 
@@ -185,6 +190,42 @@ def test_submerged_edge_is_never_traversed():
     graph = build_graph([40.0, 40.0, 40.0, 0.0])
     path, _ = td_a_star_search(NODES, graph, 1, 4, CLEARANCE)
     assert path == [1, 4]
+
+
+def test_advisory_penalty_prefers_the_unflagged_detour_but_never_blocks():
+    """BRULE-012: a flagged sensor advisory never closes a road, only discourages it."""
+    nodes = {1: (14.6000, 121.0000), 2: (14.6000, 121.0090), 3: (14.6010, 121.0045)}
+
+    def haversine(a, b):
+        R = 6371000.0
+        lat1, lon1 = math.radians(a[0]), math.radians(a[1])
+        lat2, lon2 = math.radians(b[0]), math.radians(b[1])
+        dlat, dlon = lat2 - lat1, lon2 - lon1
+        h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        return R * 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h))
+
+    d12 = haversine(nodes[1], nodes[2])
+    d13 = haversine(nodes[1], nodes[3])
+    d32 = haversine(nodes[3], nodes[2])
+
+    # The direct 1-2 edge is shorter, but flagged; the detour via 3 is longer but clean.
+    flagged = {
+        1: [(2, d12, 40.0, 0.0, True), (3, d13, 40.0, 0.0, False)],
+        2: [(1, d12, 40.0, 0.0, True)],
+        3: [(1, d13, 40.0, 0.0, False), (2, d32, 40.0, 0.0, False)],
+    }
+    path, _ = td_a_star_search(nodes, flagged, 1, 2, CLEARANCE)
+    assert path == [1, 3, 2], "a flagged edge should be routed around when a clean detour exists"
+
+    unflagged = {k: [(v[0], v[1], v[2], v[3], False) for v in vs] for k, vs in flagged.items()}
+    path, _ = td_a_star_search(nodes, unflagged, 1, 2, CLEARANCE)
+    assert path == [1, 2], "with nothing flagged, the shorter direct edge should win"
+
+    only_flagged = {1: [(2, d12, 40.0, 0.0, True)], 2: [(1, d12, 40.0, 0.0, True)]}
+    path, seconds = td_a_star_search(nodes, only_flagged, 1, 2, CLEARANCE)
+    assert path == [1, 2] and seconds < math.inf, (
+        "a flagged edge with no alternative must still route"
+    )
 
 
 def test_unreachable_returns_empty_path():
