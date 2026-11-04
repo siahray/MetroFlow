@@ -27,11 +27,16 @@ issues its own HS256 session tokens; see `docs/TSD.md` ADR-021.
 ### Database
 - **Provider:** Supabase (PostgreSQL + PostGIS)
 - **Project:** https://supabase.com/dashboard/project/rswlxrriqwndohibwizb
-- **Migration Status:** Complete (as of 2 Nov 2026)
+- **Migration Status:** reaches the hosted database only through the
+  `Supabase - Apply migrations` GitHub Action, which runs after Backend CI
+  passes on `main` (and fails loudly, rather than skipping silently, if CI is
+  red — H-2 in `BACKLOG.md`). Check `alembic current` against `alembic heads`
+  (`backend/migrations/versions/`) for what is actually applied; do not treat
+  this file as that record.
   - Base tables: `road_nodes`, `road_edges`, `users`, `audit_logs`, `live_edge_states`
-  - New tables: `hazard_zones`, `vehicles`, `sos_requests`, `sensors`, `sensor_readings`
-  - RLS: Enabled on all tables
-  - Privileges: Restricted to `postgres` and `service_role` roles
+  - Other tables: `hazard_zones`, `vehicles`, `sos_requests`, `sensors`, `sensor_readings`, `incident_reports`, `event_log`, `rate_limit_counters`
+  - RLS: enforced by `test_every_public_table_has_row_level_security` (backend/tests/test_api_integration.py), which fails CI if any public table loses it
+  - Privileges: Restricted to `postgres` and `service_role` roles (LIM-023: the API itself still connects as `postgres`, which bypasses RLS — see `BACKLOG.md` S-1)
 
 ### Migration Scripts
 Location: `supabase-migrations/`
@@ -118,7 +123,7 @@ Location: `supabase-migrations/`
 - None
 
 ### 📋 Backlog Items Not Yet Started
-- Offline operation (FR-068-071) - Conflicts with scope resolution (would require re-evaluating scope)
+- None. Offline operation (FR-068-071) is implemented (`metroflow-mobile/src/offline.ts`): ordered report queue with pending banner and sync-on-reconnect, and SQLite caching of the road graph/hazards/last route rendered when offline. Basemap tile download stays a placeholder — out of scope per the section above.
 
 ## Scope Constraints (per UI/UX Design Audit)
 
