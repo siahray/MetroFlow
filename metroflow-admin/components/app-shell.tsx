@@ -9,7 +9,12 @@ import { Sidebar, type NavItem } from "./sidebar";
 import { listReports } from "@/lib/reports";
 import { listSOS } from "@/lib/sos-live";
 import { listVehicles } from "@/lib/dispatch";
-import { clearSessionUser, getSessionUser, subscribeToSession } from "@/lib/session";
+import {
+  clearSessionUser,
+  getSessionUser,
+  startSessionWatch,
+  subscribeToSession,
+} from "@/lib/session";
 
 type AppShellProps = {
   activeItem: NavItem;
@@ -40,9 +45,15 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
   const [fleetCount, setFleetCount] = useState(0);
   const [reportCount, setReportCount] = useState(0);
 
+  // Read the store instead of the rendered value: during hydration the server
+  // snapshot is `null`, so trusting `user` here signs a valid session out on
+  // every refresh, before the browser cache is read.
   useEffect(() => {
-    if (!user) router.replace("/login");
+    if (getSessionUser() === null) router.replace("/login");
   }, [user, router]);
+
+  // Sign out after 15 minutes without operator input.
+  useEffect(() => startSessionWatch(), []);
 
   useEffect(() => {
     const load = async () => {

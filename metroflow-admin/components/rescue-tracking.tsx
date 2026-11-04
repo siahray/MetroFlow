@@ -8,8 +8,7 @@ import { cn } from "@/lib/cn";
 import { listVehicles, type SOSRequest, type Vehicle } from "@/lib/dispatch";
 import { listSOS } from "@/lib/sos-live";
 import { toUnitStatus } from "@/lib/rescue";
-import { subscribeToVehicles, vehiclesFromEvent } from "@/lib/vehicle-stream";
-import { subscribeToSOS, sosFromEvent } from "@/lib/sos-stream";
+import { subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
 
@@ -43,15 +42,11 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const vehiclesRef = useRef<Vehicle[]>([]);
-  const sosListRef = useRef<SOSRequest[]>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
         const [vehicleData, sosData] = await Promise.all([listVehicles(), listSOS()]);
-        vehiclesRef.current = vehicleData;
-        sosListRef.current = sosData;
         setVehicles(vehicleData);
         setSosList(sosData);
         setLoadError(null);
@@ -68,22 +63,11 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
     abortControllerRef.current = abortController;
     const signal = abortController.signal;
 
-    // Subscribe to vehicle stream
-    subscribeToVehicles((event) => {
-      const vehicleList = vehiclesFromEvent(event);
-      if (vehicleList) {
-        vehiclesRef.current = vehicleList;
-        setVehicles(vehicleList);
-      }
+    subscribeToVehicles((rows) => {
+      setVehicles(rows);
     }, signal);
-
-    // Subscribe to SOS stream
-    subscribeToSOS((event) => {
-      const sosData = sosFromEvent(event);
-      if (sosData) {
-        sosListRef.current = sosData;
-        setSosList(sosData);
-      }
+    subscribeToSOS((rows) => {
+      setSosList(rows);
     }, signal);
 
     return () => {

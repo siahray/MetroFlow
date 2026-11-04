@@ -13,8 +13,7 @@ import { listSOS } from "@/lib/sos-live";
 import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listReports, type FieldReport } from "@/lib/reports";
 import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
-import { subscribeToSOS, sosFromEvent } from "@/lib/sos-stream";
-import { subscribeToVehicles, vehiclesFromEvent } from "@/lib/vehicle-stream";
+import { subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 
 function RadarContent() {
   const router = useRouter();
@@ -23,12 +22,12 @@ function RadarContent() {
   const { show } = useToast();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [sosList, setSosList] = useState<SOSRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [reports, setReports] = useState<FieldReport[]>([]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const sosListRef = useRef<SOSRequest[]>([]);
   const selectedIdRef = useRef<string>("");
 
   // Keep selectedId ref in sync
@@ -39,13 +38,13 @@ function RadarContent() {
   // Recalculate incidents when any dependency changes
   useEffect(() => {
     const recalculate = () => {
-      const sosIncidents = sosListRef.current.map((s) => sosToIncident(s, { reports, vehicles }));
+      const sosIncidents = sosList.map((s) => sosToIncident(s, { reports, vehicles }));
       const reportIncidents = reports.map((r) => reportToIncident(r, { vehicles }));
       const mapped = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
       setIncidents(mapped);
     };
     recalculate();
-  }, [reports, vehicles]);
+  }, [sosList, reports, vehicles]);
 
   useEffect(() => {
     // Initial load to get snapshot data
@@ -56,7 +55,7 @@ function RadarContent() {
           listReports().catch(() => []),
           listVehicles().catch(() => []),
         ]);
-        sosListRef.current = sosList;
+        setSosList(sosList);
         setVehicles(vehicleList);
         setReports(reportList);
         // Auto-select first incident on initial load
@@ -103,21 +102,8 @@ function RadarContent() {
     abortControllerRef.current = abortController;
     const signal = abortController.signal;
 
-    // Subscribe to SOS stream
-    subscribeToSOS((event) => {
-      const sosList = sosFromEvent(event);
-      if (sosList) {
-        sosListRef.current = sosList;
-      }
-    }, signal);
-
-    // Subscribe to vehicle stream
-    subscribeToVehicles((event) => {
-      const vehicleList = vehiclesFromEvent(event);
-      if (vehicleList) {
-        setVehicles(vehicleList);
-      }
-    }, signal);
+    subscribeToSOS(setSosList, signal);
+    subscribeToVehicles(setVehicles, signal);
 
     return () => {
       abortController.abort();

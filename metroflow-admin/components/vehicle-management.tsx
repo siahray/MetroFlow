@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { listVehicles, type Vehicle, type VehicleCreate } from "@/lib/dispatch";
+import { getSessionToken } from "@/lib/session";
 import { useToast } from "./toast-provider";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
@@ -45,7 +46,7 @@ export function VehicleManagement() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getSessionToken()}`,
         },
         body: JSON.stringify(formData),
       });
@@ -77,7 +78,7 @@ export function VehicleManagement() {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${getSessionToken()}`,
           },
           body: JSON.stringify(formData),
         },
@@ -108,7 +109,7 @@ export function VehicleManagement() {
         {
           method: "DELETE",
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${getSessionToken()}`,
           },
         },
       );
@@ -303,7 +304,7 @@ export function VehicleManagement() {
                 <input
                   type="number"
                   required
-                  value={formData.clearance_cm}
+                  value={formData.clearance_cm ?? ""}
                   onChange={(e) =>
                     setFormData({ ...formData, clearance_cm: parseInt(e.target.value) })
                   }
@@ -391,7 +392,7 @@ export function VehicleManagement() {
                 <input
                   type="number"
                   required
-                  value={formData.clearance_cm}
+                  value={formData.clearance_cm ?? ""}
                   onChange={(e) =>
                     setFormData({ ...formData, clearance_cm: parseInt(e.target.value) })
                   }

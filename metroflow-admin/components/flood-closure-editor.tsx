@@ -4,7 +4,7 @@ import { Check, MapPin, Navigation } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { NetworkMap } from "./network-map";
-import { hazardsFromEvent, subscribeToHazards } from "@/lib/hazard-stream";
+import { subscribeToHazards } from "@/lib/live-stream";
 import { createHazard, publishHazard, type HazardZone } from "@/lib/hazards";
 import { fetchNetworkState, type NetworkSummary } from "@/lib/network";
 
@@ -63,26 +63,9 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   // whatever happened while this tab was disconnected.
   useEffect(() => {
     const controller = new AbortController();
-    const hazardsById = new Map<number, HazardZone>();
-
-    void subscribeToHazards((event) => {
-      const incoming = hazardsFromEvent(event);
-      if (incoming === null) return;
-      if (event.type === "snapshot") hazardsById.clear();
-
-      for (const hazard of incoming) {
-        // The snapshot only carries active hazards, so a later update saying
-        // "withdrawn" has to remove the row rather than leave a stale entry.
-        if (event.type !== "snapshot" && hazard.active === false) {
-          hazardsById.delete(hazard.hazard_id);
-        } else {
-          hazardsById.set(hazard.hazard_id, hazard);
-        }
-      }
-
-      setHazards(Array.from(hazardsById.values()).sort((a, b) => b.hazard_id - a.hazard_id));
+    void subscribeToHazards((rows) => {
+      setHazards([...rows].sort((a, b) => b.hazard_id - a.hazard_id));
     }, controller.signal);
-
     return () => controller.abort();
   }, []);
 

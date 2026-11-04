@@ -10,6 +10,13 @@ export type SOSRequest = {
   created_at: string | null;
 };
 
+export type VehicleCreate = {
+  call_sign: string;
+  vehicle_type: string;
+  clearance_cm: number | null;
+  status: string;
+};
+
 export type Vehicle = {
   vehicle_id: number;
   call_sign: string;

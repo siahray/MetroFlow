@@ -5,6 +5,8 @@ export type User = {
   name: string;
   email: string;
   role: "SUPER_ADMIN" | "LGU_DISPATCHER" | "EMERGENCY_DRIVER";
+  /** The rescue unit a driver account reports as; null for portal accounts. */
+  vehicle_id: number | null;
   created_at: string | null;
 };
 
@@ -13,12 +15,14 @@ export type UserCreate = {
   email: string;
   password: string;
   role: "SUPER_ADMIN" | "LGU_DISPATCHER" | "EMERGENCY_DRIVER";
+  vehicle_id?: number | null;
 };
 
 export type UserUpdate = {
   name?: string;
   email?: string;
   role?: "SUPER_ADMIN" | "LGU_DISPATCHER" | "EMERGENCY_DRIVER";
+  vehicle_id?: number | null;
 };
 
 export async function listUsers(): Promise<User[]> {

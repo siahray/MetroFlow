@@ -14,15 +14,14 @@ import { sosToIncident, reportToIncident } from "@/lib/sos-to-incidents";
 import { listVehicles, type Vehicle, type SOSRequest } from "@/lib/dispatch";
 import { listHazards, type HazardZone } from "@/lib/hazards";
 import { listReports, type FieldReport } from "@/lib/reports";
-import { subscribeToSOS, sosFromEvent } from "@/lib/sos-stream";
-import { subscribeToVehicles, vehiclesFromEvent } from "@/lib/vehicle-stream";
-import { subscribeToHazards, hazardsFromEvent } from "@/lib/hazard-stream";
+import { subscribeToHazards, subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 
 export default function TriagePage() {
   const router = useRouter();
   const { show } = useToast();
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [query, setQuery] = useState("");
+  const [sosList, setSosList] = useState<SOSRequest[]>([]);
   const [liveIncidents, setLiveIncidents] = useState<Incident[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [hazards, setHazards] = useState<HazardZone[]>([]);
@@ -34,7 +33,6 @@ export default function TriagePage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const sosListRef = useRef<SOSRequest[]>([]);
   const selectedIdRef = useRef<string>("");
 
   // Keep selectedId ref in sync
@@ -45,15 +43,13 @@ export default function TriagePage() {
   // Recalculate incidents when any dependency changes
   useEffect(() => {
     const recalculate = () => {
-      const sosIncidents = sosListRef.current.map((s) =>
-        sosToIncident(s, { reports, vehicles, hazards }),
-      );
+      const sosIncidents = sosList.map((s) => sosToIncident(s, { reports, vehicles, hazards }));
       const reportIncidents = reports.map((r) => reportToIncident(r, { vehicles, hazards }));
       const incidents = [...sosIncidents, ...reportIncidents].sort((a, b) => b.urgency - a.urgency);
       setLiveIncidents(incidents);
     };
     recalculate();
-  }, [reports, vehicles, hazards]);
+  }, [sosList, reports, vehicles, hazards]);
 
   useEffect(() => {
     // Initial load to get snapshot data
@@ -66,7 +62,7 @@ export default function TriagePage() {
           listHazards().catch(() => []),
         ]);
         setError(null);
-        sosListRef.current = sosList;
+        setSosList(sosList);
         setVehicles(vehicleList);
         setHazards(hazardList);
         setReports(reportList);
@@ -112,28 +108,13 @@ export default function TriagePage() {
     const signal = abortController.signal;
 
     // Subscribe to SOS stream
-    subscribeToSOS((event) => {
-      const sosList = sosFromEvent(event);
-      if (sosList) {
-        sosListRef.current = sosList;
-      }
-    }, signal);
+    subscribeToSOS(setSosList, signal);
 
     // Subscribe to vehicle stream
-    subscribeToVehicles((event) => {
-      const vehicleList = vehiclesFromEvent(event);
-      if (vehicleList) {
-        setVehicles(vehicleList);
-      }
-    }, signal);
+    subscribeToVehicles(setVehicles, signal);
 
     // Subscribe to hazard stream
-    subscribeToHazards((event) => {
-      const hazardList = hazardsFromEvent(event);
-      if (hazardList) {
-        setHazards(hazardList);
-      }
-    }, signal);
+    subscribeToHazards(setHazards, signal);
 
     return () => {
       abortController.abort();

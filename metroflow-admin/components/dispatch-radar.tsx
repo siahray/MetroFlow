@@ -297,11 +297,11 @@ export function DispatchRadar({
                   </span>
                 ) : (
                   <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                    <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> Distress Beacon
+                    <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> SOS Signal
                   </span>
                 )}
                 <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                  <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS (Road Node Match)
+                  <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> Coordinates reported
                 </span>
                 {incident.submersionRange && (
                   <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
@@ -327,7 +327,7 @@ export function DispatchRadar({
                 <span className="font-bold text-slate-900">
                   {incident.nearestUnit
                     ? `Recommended: ${incident.nearestUnit.callSign}`
-                    : "Recommended: Assign nearest vehicle"}
+                    : "Nearest unit: not reported"}
                 </span>
                 {incident.nearestUnit ? (
                   <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">

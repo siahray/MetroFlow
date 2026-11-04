@@ -3,7 +3,6 @@
 import {
   AlertTriangle,
   Camera,
-  Check,
   CheckCircle,
   ChevronRight,
   Clock,
@@ -14,7 +13,6 @@ import {
   MessageSquare,
   Radar,
   Send,
-  TrendingUp,
   TriangleAlert,
   User,
   Waves,
@@ -423,16 +421,10 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             <div>
               <div className="text-[10px] text-slate-500 uppercase">Reporter Identification</div>
               <div className="text-xs font-bold text-slate-800">{rawReporter}</div>
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
-                <CheckCircle className="h-3 w-3" /> Verified Citizen ID #CIT-8821
-              </div>
             </div>
             <div>
               <div className="text-[10px] text-slate-500 uppercase">Date &amp; Elapsed Time</div>
               <div className="text-xs font-semibold text-slate-800">{incident.reportedAt}</div>
-              <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                <Clock className="h-3 w-3" /> 14 minutes ago (High Priority)
-              </div>
             </div>
           </div>
           <div className="flex items-start justify-between rounded-lg border border-slate-200 bg-white p-2.5">
@@ -441,11 +433,11 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
               <div className="font-mono text-[11px] text-slate-500">
                 {incident.latitude != null && incident.longitude != null
                   ? `${incident.latitude.toFixed(4)}° N, ${incident.longitude.toFixed(4)}° E`
-                  : "14.5995° N, 120.9842° E"}
+                  : "Coordinates not reported"}
               </div>
             </div>
             <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-              {incident.incidentType === "sos" ? "Distress Beacon" : "Field Report"}
+              {incident.incidentType === "sos" ? "SOS Signal" : "Field Report"}
             </span>
           </div>
         </div>
@@ -490,12 +482,14 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
               </span>
             ) : (
               <span className="inline-flex items-center rounded border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> Distress Beacon (No Photo)
+                <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> No photo attached
               </span>
             )}
-            <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-              <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> GPS Verified
-            </span>
+            {incident.latitude != null && incident.longitude != null ? (
+              <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> Coordinates reported
+              </span>
+            ) : null}
             {incident.submersionRange && (
               <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
                 <Waves className="mr-1.5 h-3 w-3 text-amber-600" /> {incident.submersionRange}
@@ -569,7 +563,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                     <Waves className="h-6 w-6" />
                   </div>
                   <p className="font-mono text-[11px] font-semibold text-slate-300">
-                    Beacon Ground Telemetry
+                    No photo attached
                   </p>
                   <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">
                     Submersion: {incident.submersionRange || incident.level}
@@ -615,11 +609,8 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
               <div className="flex justify-between">
                 <span>Submersion Range:</span>
                 <span className="font-bold text-amber-700">
-                  {incident.submersionRange || "25–60 cm (Estimated)"}
+                  {incident.submersionRange || "Not reported"}
                 </span>
-              </div>
-              <div className="flex items-center gap-1 font-semibold text-emerald-600 pt-0.5">
-                <Check className="h-3 w-3" /> Geolocation verified on road graph
               </div>
             </div>
           </div>
@@ -649,14 +640,8 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                 <div className="mt-1 font-mono text-[10px] font-semibold text-slate-600">
                   {incident.latitude != null && incident.longitude != null
                     ? `${incident.latitude.toFixed(4)}° N, ${incident.longitude.toFixed(4)}° E`
-                    : "Coordinates Locked"}
+                    : "Coordinates not reported"}
                 </div>
-              </div>
-
-              {/* Rising water badge indicator (FSD-FR-035) */}
-              <div className="absolute top-2 right-2 flex items-center gap-1 rounded bg-rose-700 px-2 py-0.5 text-[9px] font-bold text-white shadow-xs">
-                <TrendingUp className="h-2.5 w-2.5" />
-                <span>Water Rising</span>
               </div>
             </div>
 
@@ -669,19 +654,11 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                     ? `${incident.nearestUnit.callSign} (${incident.nearestUnit.distanceKm} km • ~${incident.nearestUnit.etaMinutes} min)`
                     : selectedUnit
                       ? `${selectedUnit.callSign} (${selectedUnit.type})`
-                      : "No unit in immediate sector"}
-                </span>
-              </div>
-              {/* Rising-water indicator (FSD-FR-035) */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 font-medium">Water Dynamics:</span>
-                <span className="inline-flex items-center gap-1 font-bold text-rose-600">
-                  <TrendingUp className="h-3 w-3" />
-                  Rising (+0.2 ft / 10m telemetry)
+                      : "No unit available"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-600 font-medium">Estimated Depth:</span>
+                <span className="text-slate-600 font-medium">Reported Depth:</span>
                 <span className="font-bold text-slate-800">
                   {incident.waterDepthCm
                     ? `${incident.waterDepthCm} cm (${incident.submersionRange})`
@@ -731,7 +708,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase">Submersion Range</div>
                   <div className="font-bold text-amber-400">
-                    {incident.submersionRange || "Estimated Depth"}
+                    {incident.submersionRange || "Not reported"}
                   </div>
                 </div>
                 <div>
@@ -739,7 +716,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                   <div className="font-bold text-white truncate">
                     {incident.exif?.camera_make || incident.exif?.camera_model
                       ? `${incident.exif.camera_make ?? ""} ${incident.exif.camera_model ?? ""}`.trim()
-                      : "Native Mobile"}
+                      : "Not recorded"}
                   </div>
                 </div>
                 <div>
@@ -751,11 +728,11 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-500 uppercase">GPS Verification</div>
+                  <div className="text-[10px] text-slate-500 uppercase">Coordinates</div>
                   <div className="font-bold text-emerald-400">
                     {incident.latitude != null
                       ? `${incident.latitude.toFixed(4)}, ${incident.longitude?.toFixed(4)}`
-                      : "Verified GPS"}
+                      : "Not reported"}
                   </div>
                 </div>
               </div>
@@ -1057,7 +1034,9 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                   </div>
                   <div>
                     <strong>Reported Submersion:</strong>{" "}
-                    <span className="font-mono font-bold text-sky-700">75 cm (Impassable)</span>
+                    <span className="font-mono font-bold text-sky-700">
+                      {incident.submersionRange || "Not reported"}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -1073,9 +1052,6 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             {/* Step 2 Content */}
             {modalStep === 2 ? (
               <div className="space-y-4">
-                <div className="text-xs font-semibold text-slate-700 uppercase">
-                  Select Available Rescue Unit:
-                </div>
                 <div className="text-xs font-semibold text-slate-700 uppercase">
                   Select Available Rescue Unit:
                 </div>
