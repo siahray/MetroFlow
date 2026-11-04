@@ -37,9 +37,12 @@ concurrency:
 jobs:
   migrate:
     name: Apply migrations to Supabase
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    # Always runs (H-2): a red Backend CI used to make GitHub skip this job
+    # silently, with no failure notification, which once let the hosted
+    # database lag for days (the sensor tables were missing in production
+    # until applied by hand). A red CI now fails this job loudly instead, in
+    # the "Check whether Backend CI passed" step below, so it shows up as a
+    # red run with the normal GitHub failure notification.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -53,6 +56,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Check whether Backend CI passed
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success'
+        run: |
+          echo "::error title=Supabase migration NOT applied::Backend CI concluded '${{ github.event.workflow_run.conclusion }}' on main (${{ github.event.workflow_run.html_url }}). A schema that fails the contract tests must never reach the hosted database, so this run stops here instead of silently skipping. Fix CI, then either push a fixing commit or re-run this workflow manually (workflow_dispatch) to apply any pending migrations."
+          exit 1
 
       - name: Check whether the database URL is configured
         id: gate
