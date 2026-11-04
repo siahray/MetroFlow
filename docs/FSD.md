@@ -220,7 +220,7 @@ provider fallback. Existing identifiers are unchanged.
 | PostgreSQL + PostGIS  | BR-001  | FSD-FR-001, FSD-FR-053 | System of record for the road graph and live state      |
 | Supabase (hosted)     | BR-011  | FSD-FR-051             | Managed Postgres with row-level security                |
 | API auth module       | BR-009  | FSD-FR-018 to 023      | Sign-in, HS256 session tokens and role lookup           |
-| OpenWeather           | BR-002  | FSD-FR-006, 007        | Optional rainfall input with manual fallback (planned)  |
+| OpenWeather           | BR-002  | FSD-FR-006, 007        | No provider is integrated: rainfall is entered manually and labelled (TC-046) |
 | OpenTopography        | BR-001  | FSD-FR-001             | Offline elevation model for derived terrain             |
 | Copernicus            | BR-017  | FSD-FR-090             | Offline imagery and land cover for validation           |
 | Browser               | BR-010  | FSD-FR-018 to 049      | Dispatch portal runtime                                 |
@@ -321,7 +321,7 @@ provider fallback. Existing identifiers are unchanged.
 | BR-009 | FSD-FR-018 to 023, FSD-FR-048                    | TC-011, TC-012, TC-020                                 |
 | BR-010 | FSD-FR-050 to 052                                | TC-021                                                 |
 | BR-011 | FSD-FR-023, FSD-FR-051                           | TC-021                                                 |
-| BR-012 | FSD-FR-049                                       | — (planned)                                            |
+| BR-012 | FSD-FR-049                                       | — (covered by the export tests in `test_api_integration.py`) |
 | BR-013 | FSD-FR-054 to 064, FSD-FR-072, FSD-FR-085 to 086 | TC-022, TC-023, TC-024, TC-025, TC-026, TC-031, TC-038 |
 | BR-014 | FSD-FR-065 to 081                                | TC-027, TC-028, TC-034, TC-035, TC-036, TC-037         |
 | BR-015 | FSD-FR-073, FSD-FR-074, FSD-FR-087               | TC-032                                                 |
@@ -348,17 +348,17 @@ statement; the FSD identifiers above remain stable as items move.
 | Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me`, route-level enforcement and one attributable audit row per privileged action |
 | Driver navigation        | FSD-FR-054 to 064 | Implemented | Turn-by-turn guidance, road names, GPS instruction tracking, hazard-aware routing, proximity alerts, and SSE auto-rerouting |
 | Field reporting          | FSD-FR-065 to 067 | Implemented | Driver report intake with camera/gallery photo, EXIF retention, live GPS with accuracy fallback, depth selector and multipart submission |
-| Offline operation        | FSD-FR-068 to 071 | Implemented | Reports queue on a network failure with a pending banner and sync in order, once (`client_id` idempotency); graph, hazards and last route are cached in on-device SQLite (`expo-sqlite`) and shown offline. Planning a *new* route offline now runs a client-side port of the same time-dependent A* (`navigation/offline-route.ts`), with the same hazard-blocking rule. Basemap tiles stay out of scope (LIM-017); the Offline Maps screen is still a placeholder |
-| Telemetry and SOS        | FSD-FR-072 to 074 | Implemented | POST /vehicles/{id}/telemetry (5 s throttle); SOS uses real GPS (VAL-021); status display on SOS screen (FSD-FR-074) |
+| Offline operation        | FSD-FR-068 to 071 | Implemented | Reports queue on a network failure with a pending banner and sync in order, once (`client_id` idempotency); graph, hazards and last route are cached in on-device SQLite (`expo-sqlite`) and shown offline. Planning a *new* route offline now runs a client-side port of the same time-dependent A* (`navigation/offline-route.ts`), with the same hazard-blocking rule. Basemap tiles stay out of scope (LIM-017); the Offline Data screen reports what is actually cached — road graph, hazard count, last route and size on disk |
+| Telemetry and SOS        | FSD-FR-072 to 074 | Implemented | POST /vehicles/{id}/telemetry throttles at 5 s server-side; the driver app posts a batch every 5 s while navigation is active and the account is linked to a unit, and shows the driver what it sent; SOS uses real GPS (VAL-021) and shows its status (FSD-FR-074) |
 | Live operational map     | FSD-FR-075, 076   | Implemented | MapLibre renders live network and A* route with toggleable overlays for verified hazards, fleet units and active SOS signals |
 | Moderation and evidence  | FSD-FR-077 to 081 | Implemented | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; nearest rain-gauge cross-reference (FR-079) shown in the report desk |
 | Hazard authoring         | FSD-FR-082 to 086 | Implemented | The API creates, updates and publishes hazards, and streams changes at `/api/v1/hazards/stream`. The portal publishes a hazard on a chosen **road segment** (levels CAUTION, LEVEL_2, LEVEL_3, IMPASSABLE) or draws it directly on the map as a flood polygon (FR-082) or a closure line (FR-083); `hazard_zones.geometry` is a generic PostGIS geometry column for either shape. `PATCH /hazards/{id}` with `active=false` withdraws a hazard (FR-085), exposed as a button in the portal |
-| Distress and dispatch    | FSD-FR-087 to 089 | Implemented | Incident list, assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
+| Distress and dispatch    | FSD-FR-087 to 089 | Implemented | A distress incident comes from an app SOS or from the triage screen's call-in entry (FR-087), and both reach the same queue, the map and the SSE feed; assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
 | User management          | FSD-FR-048         | Implemented | CRUD endpoints for users with audit trail; admin UI with search, role badges, create/edit modals, delete confirmation; security: role validation, email uniqueness, self-protection, last admin protection |
 | Fleet management         | FSD-FR-075, 076    | Implemented | A super admin adds, edits and removes rescue units from the Fleet screen (a dispatcher sees it read-only); call signs are unique, a unit on a live dispatch cannot be removed, and every change is audited |
 | Export                   | FSD-FR-049         | Implemented | CSV export for audit logs and incidents; admin UI with one-click export buttons and toast notifications |
 | Sensor ingestion         | FSD-FR-090, 091   | Implemented | POST /api/v1/sensors/readings with threshold breach detection; sensor registry CRUD; every reading is written to the road edges in the sensor's radius (`edge_advisories`) and a breach flags them as an advisory, read through `GET /api/v1/flood-state` with source, kind and "as of" time (CR-004 resolver: verified hazard, then fresh live observation, then NOAH fallback); an advisory never closes a road (BRULE-012). The portal has a sensor registry page (`/sensors`, CRUD) and a map layer on the live network map, colour-coded by breach state. Routing (`td_a_star_search`) now applies a soft time penalty to a flagged, fresh advisory edge, so it is preferred around but never blocked, matching BRULE-012 |
-| Portal and driver app UI | FSD-FR-054 to 089 | Partial     | The portal is template-derived; the driver app covers map, route, report, SOS and profile shells |
+| Portal and driver app UI | FSD-FR-054 to 089 | Implemented | The portal covers the queue, docket, dispatch, moderation, hazards, fleet, users, sensors, exports and the live map; the driver app covers route guidance, reporting, offline operation, SOS, report history and profile. Component and end-to-end tests are still missing (BACKLOG Q-1) |
 
 ## Actors
 
@@ -366,12 +366,12 @@ statement; the FSD identifiers above remain stable as items move.
 | ------- | ------------------ | -------------------------------------- | -------------------------------------- |
 | ACT-001 | Dispatcher         | Verifies reports and commits resources | Portal behind `/login`; `LGU_DISPATCHER` or `SUPER_ADMIN` token required |
 | ACT-002 | MDRRMC commander   | Oversees operations across barangays   | Not distinguished from dispatcher      |
-| ACT-003 | Field responder    | Consumes route guidance                | None (planned driver app, CR-001)      |
-| ACT-004 | Citizen reporter   | Submits reports                        | None (planned report API, CR-001)      |
+| ACT-003 | Field responder    | Consumes route guidance                | Expo driver app; `EMERGENCY_DRIVER` token for `/sos`, reports and telemetry while linked to a unit |
+| ACT-004 | Citizen reporter   | Submits reports                        | Same app and account type: the report screen posts a depth, photo and GPS fix (FR-065 to 067) |
 | ACT-005 | Administrator      | Manages users and configuration        | Portal behind `/login`; `SUPER_ADMIN` token required |
 | ACT-006 | Integration client | Calls the API programmatically         | Bearer token from `/auth/login`; role decides the routes |
 | ACT-007 | Driver/commuter    | Navigates, reports and requests rescue | Expo app; driver account token for `/sos` |
-| ACT-008 | Rescue commander   | Approves dispatch and rescue routes    | None (planned, CR-001)                 |
+| ACT-008 | Rescue commander   | Approves dispatch and rescue routes    | Not a distinct role: the fleet and dispatch screens run on `LGU_DISPATCHER` / `SUPER_ADMIN` |
 | ACT-009 | Sensor gateway     | Posts river and rain gauge readings    | POST /api/v1/sensors/readings; authenticated user token required |
 
 ## Use Cases
@@ -557,5 +557,4 @@ Requirements: FSD-FR-090, FSD-FR-091.
 - CCTV. The only camera is the reporter's own phone; evidence is the submitted photo.
 - Production SMS, telephony or carrier delivery for SOS.
 - Offline basemap tiles; offline mode renders the cached road graph.
-- Administrative screens (FSD-FR-048) and exports (FSD-FR-049) remain planned.
 - Multi-tenant operation and public information portal.
