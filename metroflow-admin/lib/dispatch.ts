@@ -8,6 +8,7 @@ export type SOSRequest = {
   vehicle_id: number | null;
   status: string;
   created_at: string | null;
+  dismissed_at?: string | null;
 };
 
 export type VehicleCreate = {

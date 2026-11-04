@@ -7,6 +7,8 @@ import { CheckSquare } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { DispatchRadar } from "@/components/dispatch-radar";
+import { ErrorNotice } from "@/components/error-notice";
+import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast-provider";
 import { compareIncidents, type Incident } from "@/lib/incidents";
 import { listSOS } from "@/lib/sos-live";
@@ -26,6 +28,9 @@ function RadarContent() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [reports, setReports] = useState<FieldReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const selectedIdRef = useRef<string>("");
@@ -49,42 +54,48 @@ function RadarContent() {
   useEffect(() => {
     // Initial load to get snapshot data
     const load = async () => {
-      try {
-        const [sosList, reportList, vehicleList] = await Promise.all([
-          listSOS().catch(() => []),
-          listReports().catch(() => []),
-          listVehicles().catch(() => []),
-        ]);
-        setSosList(sosList);
-        setVehicles(vehicleList);
-        setReports(reportList);
-        // Auto-select first incident on initial load
-        const currentSelectedId = selectedIdRef.current;
-        if (
-          requestedId &&
-          (sosList.some((s) => `SOS-${s.sos_id}` === requestedId) ||
-            reportList.some((r) => r.report_id === requestedId))
-        ) {
-          setSelectedId(requestedId);
-        } else if (
-          sosList.length > 0 &&
-          !sosList.some((s) => `SOS-${s.sos_id}` === currentSelectedId)
-        ) {
-          setSelectedId(`SOS-${sosList[0].sos_id}`);
-        } else if (
-          reportList.length > 0 &&
-          !reportList.some((r) => r.report_id === currentSelectedId)
-        ) {
-          setSelectedId(reportList[0].report_id);
-        } else if (sosList.length === 0 && reportList.length === 0) {
-          setSelectedId("");
-        }
-      } catch {
-        // keep fallback
+      setLoading(true);
+      const results = await Promise.allSettled([listSOS(), listReports(), listVehicles()]);
+      const [sosResult, reportResult, vehicleResult] = results;
+      // Degrade per field: a vehicle-list failure should not blank out a working
+      // SOS queue. Only report the error banner when every source failed.
+      if (results.every((r) => r.status === "rejected")) {
+        setLoadError("Could not load the dispatch queue. Check your connection and retry.");
+        setLoading(false);
+        return;
       }
+      setLoadError(null);
+      const sosList = sosResult.status === "fulfilled" ? sosResult.value : [];
+      const reportList = reportResult.status === "fulfilled" ? reportResult.value : [];
+      const vehicleList = vehicleResult.status === "fulfilled" ? vehicleResult.value : [];
+      setSosList(sosList);
+      setVehicles(vehicleList);
+      setReports(reportList);
+      // Auto-select first incident on initial load
+      const currentSelectedId = selectedIdRef.current;
+      if (
+        requestedId &&
+        (sosList.some((s) => `SOS-${s.sos_id}` === requestedId) ||
+          reportList.some((r) => r.report_id === requestedId))
+      ) {
+        setSelectedId(requestedId);
+      } else if (
+        sosList.length > 0 &&
+        !sosList.some((s) => `SOS-${s.sos_id}` === currentSelectedId)
+      ) {
+        setSelectedId(`SOS-${sosList[0].sos_id}`);
+      } else if (
+        reportList.length > 0 &&
+        !reportList.some((r) => r.report_id === currentSelectedId)
+      ) {
+        setSelectedId(reportList[0].report_id);
+      } else if (sosList.length === 0 && reportList.length === 0) {
+        setSelectedId("");
+      }
+      setLoading(false);
     };
 
-    load();
+    void load();
 
     // Poll reports periodically (no SSE endpoint for reports yet)
     const loadReports = async () => {
@@ -109,7 +120,7 @@ function RadarContent() {
       abortController.abort();
       clearInterval(reportInterval);
     };
-  }, [requestedId]);
+  }, [requestedId, reloadTick]);
 
   const selected = incidents.find((i) => i.id === selectedId) || incidents[0] || null;
   const activeId = selected?.id ?? "";
@@ -125,7 +136,14 @@ function RadarContent() {
 
   return (
     <AppShell activeItem="radar" title="Emergency Dispatch Radar">
-      {selected ? (
+      {loadError ? (
+        <ErrorNotice message={loadError} onRetry={() => setReloadTick((t) => t + 1)} />
+      ) : loading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-64 rounded-lg" />
+          <Skeleton className="h-96 w-full rounded-xl" />
+        </div>
+      ) : selected ? (
         <div className="space-y-4">
           {incidents.length > 1 && (
             <div className="flex items-center gap-2 overflow-x-auto pb-1">

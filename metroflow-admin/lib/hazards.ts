@@ -26,6 +26,7 @@ export async function createHazard(data: {
   avg_depth_cm?: number;
   edge_id?: number | null;
   notes?: string | null;
+  geometry?: { type: "Polygon" | "LineString"; coordinates: number[][] | number[][][] } | null;
 }): Promise<HazardZone> {
   return fetchJSON<HazardZone>("/api/v1/hazards", {
     method: "POST",
@@ -37,6 +38,11 @@ export async function publishHazard(hazardId: number): Promise<HazardZone> {
   return fetchJSON<HazardZone>(`/api/v1/hazards/${hazardId}/publish`, {
     method: "POST",
   });
+}
+
+/** FSD-FR-085: deactivate a hazard so it drops off the driver map and routing. */
+export async function withdrawHazard(hazardId: number): Promise<HazardZone> {
+  return updateHazard(hazardId, { active: false });
 }
 
 export async function updateHazard(

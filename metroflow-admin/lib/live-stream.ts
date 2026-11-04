@@ -242,7 +242,7 @@ export function subscribeToHazards(
   );
 }
 
-/** SOS creation, assignment and closing. Closed incidents leave the queue. */
+/** SOS creation, assignment and closing. Closed and dismissed incidents leave the queue. */
 export function subscribeToSOS(
   onRows: (rows: SOSRequest[]) => void,
   signal: AbortSignal,
@@ -251,7 +251,7 @@ export function subscribeToSOS(
     "/api/v1/sos/stream",
     "sos",
     (row) => row.sos_id,
-    (row) => row.status.toUpperCase() !== "RESOLVED",
+    (row) => row.status.toUpperCase() !== "RESOLVED" && !row.dismissed_at,
     onRows,
     signal,
   );

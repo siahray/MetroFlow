@@ -18,6 +18,8 @@ export type Incident = {
   createdAt: string | null;
   reporter: string;
   reportedAt: string;
+  /** Set only for incidents shown in the Dismissed tab. */
+  dismissedAt?: string | null;
   narrative: string;
   location: string;
   barangay: string;

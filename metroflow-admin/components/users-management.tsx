@@ -3,6 +3,7 @@
 import { Shield, Trash2, Edit, Plus, Search, User as UserIcon, Mail, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
 import {
@@ -57,8 +58,8 @@ export function UsersManagement() {
       setIsCreateModalOpen(false);
       setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER", vehicle_id: null });
       loadUsers();
-    } catch (error) {
-      show("Failed to create user");
+    } catch (cause) {
+      show(cause instanceof ApiError ? cause.message : "Failed to create user");
     } finally {
       setIsSubmitting(false);
     }
@@ -81,8 +82,8 @@ export function UsersManagement() {
       setEditingUser(null);
       setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER", vehicle_id: null });
       loadUsers();
-    } catch (error) {
-      show("Failed to update user");
+    } catch (cause) {
+      show(cause instanceof ApiError ? cause.message : "Failed to update user");
     } finally {
       setIsSubmitting(false);
     }
@@ -94,8 +95,8 @@ export function UsersManagement() {
       await deleteUser(userId);
       show("User deleted successfully");
       loadUsers();
-    } catch (error) {
-      show("Failed to delete user");
+    } catch (cause) {
+      show(cause instanceof ApiError ? cause.message : "Failed to delete user");
     }
   };
 
@@ -267,13 +268,19 @@ export function UsersManagement() {
 
       {/* Create Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <h3 className="text-base font-bold text-slate-900">Create New User</h3>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Name</label>
+                <label
+                  htmlFor="user-create-name"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Name
+                </label>
                 <input
+                  id="user-create-name"
                   type="text"
                   required
                   value={formData.name}
@@ -282,8 +289,14 @@ export function UsersManagement() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                <label
+                  htmlFor="user-create-email"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Email
+                </label>
                 <input
+                  id="user-create-email"
                   type="email"
                   required
                   value={formData.email}
@@ -292,8 +305,14 @@ export function UsersManagement() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                <label
+                  htmlFor="user-create-password"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Password
+                </label>
                 <input
+                  id="user-create-password"
                   type="password"
                   required
                   minLength={8}
@@ -303,8 +322,14 @@ export function UsersManagement() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Role</label>
+                <label
+                  htmlFor="user-create-role"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Role
+                </label>
                 <select
+                  id="user-create-role"
                   value={formData.role}
                   onChange={(e) =>
                     setFormData({
@@ -320,10 +345,14 @@ export function UsersManagement() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label
+                  htmlFor="user-create-vehicle"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
                   Rescue unit
                 </label>
                 <select
+                  id="user-create-vehicle"
                   value={formData.vehicle_id ?? ""}
                   onChange={(e) =>
                     setFormData({
@@ -367,13 +396,19 @@ export function UsersManagement() {
 
       {/* Edit Modal */}
       {isEditModalOpen && editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <h3 className="text-base font-bold text-slate-900">Edit User</h3>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Name</label>
+                <label
+                  htmlFor="user-edit-name"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Name
+                </label>
                 <input
+                  id="user-edit-name"
                   type="text"
                   required
                   value={formData.name}
@@ -382,8 +417,14 @@ export function UsersManagement() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                <label
+                  htmlFor="user-edit-email"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Email
+                </label>
                 <input
+                  id="user-edit-email"
                   type="email"
                   required
                   value={formData.email}
@@ -392,8 +433,14 @@ export function UsersManagement() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Role</label>
+                <label
+                  htmlFor="user-edit-role"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
+                  Role
+                </label>
                 <select
+                  id="user-edit-role"
                   value={formData.role}
                   onChange={(e) =>
                     setFormData({
@@ -409,10 +456,14 @@ export function UsersManagement() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label
+                  htmlFor="user-edit-vehicle"
+                  className="block text-xs font-semibold text-slate-700 mb-1"
+                >
                   Rescue unit
                 </label>
                 <select
+                  id="user-edit-vehicle"
                   value={formData.vehicle_id ?? ""}
                   onChange={(e) =>
                     setFormData({

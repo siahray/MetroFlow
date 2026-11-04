@@ -326,10 +326,14 @@ export function DispatchRadar({
             {/* Note Input Accordion */}
             {noteOpen && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                <label className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="radar-triage-note"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Add Operational Triage Note
                 </label>
                 <textarea
+                  id="radar-triage-note"
                   rows={2}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
@@ -416,8 +420,8 @@ export function DispatchRadar({
 
       {/* Mandatory Reason Modal for Radar */}
       {actionModalOpen && activeAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {activeAction === "reject"
@@ -435,10 +439,14 @@ export function DispatchRadar({
 
             {activeAction === "escalate" && (
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="radar-escalation-agency"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Target Escalation Agency
                 </label>
                 <select
+                  id="radar-escalation-agency"
                   value={actionAgency}
                   onChange={(e) => setActionAgency(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
@@ -451,10 +459,14 @@ export function DispatchRadar({
             )}
 
             <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-700">
+              <label
+                htmlFor="radar-action-reason"
+                className="block text-xs font-bold text-slate-700"
+              >
                 Mandatory Operational Reason (FSD-FR-044)
               </label>
               <textarea
+                id="radar-action-reason"
                 autoFocus
                 rows={3}
                 value={actionReason}

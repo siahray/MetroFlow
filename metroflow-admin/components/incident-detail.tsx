@@ -676,11 +676,11 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
         {/* Original Evidence Lightbox Modal (FSD-FR-038) */}
         {lightboxOpen && photoUrl && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
             onClick={() => setLightboxOpen(false)}
           >
             <div
-              className="relative max-h-[90vh] max-w-4xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+              className="relative max-h-[90vh] max-w-4xl animate-modal-in overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-white">
@@ -866,8 +866,8 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
 
       {/* FSD-FR-044: MANDATORY ACTION REASON MODAL */}
       {actionModalOpen && activeAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900">
                 {activeAction === "reject"
@@ -887,10 +887,14 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
 
             {activeAction === "escalate" && (
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700">
+                <label
+                  htmlFor="incident-escalation-agency"
+                  className="block text-xs font-bold text-slate-700"
+                >
                   Target Escalation Agency
                 </label>
                 <select
+                  id="incident-escalation-agency"
                   value={actionAgency}
                   onChange={(e) => setActionAgency(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
@@ -904,10 +908,14 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             )}
 
             <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-700">
+              <label
+                htmlFor="incident-action-reason"
+                className="block text-xs font-bold text-slate-700"
+              >
                 Mandatory Operational Reason (FSD-FR-044)
               </label>
               <textarea
+                id="incident-action-reason"
                 autoFocus
                 rows={3}
                 value={actionReason}
@@ -951,8 +959,8 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
 
       {/* 3-STEP DISPATCH MODAL */}
       {dispatchModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl animate-modal-in space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
