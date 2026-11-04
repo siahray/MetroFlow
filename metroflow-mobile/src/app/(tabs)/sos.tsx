@@ -31,11 +31,13 @@ import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
 import { colors } from '../../theme';
-import { subscribeToSOS } from '../../navigation/sos-stream';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
 /** Location staleness limit for SOS submissions (VAL-021). */
 const SOS_LOCATION_MAX_AGE_MS = 60_000;
+
+/** Once an incident reaches one of these states, polling its status is pointless. */
+const FINAL_SOS_STATUSES = new Set(['RESOLVED', 'REJECTED']);
 
 export default function SOSScreen() {
   const router = useRouter();
@@ -48,31 +50,27 @@ export default function SOSScreen() {
   const [sosStatus, setSosStatus] = useState<string | null>(null);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
 
-  // Subscribe to SOS stream for real-time status updates
+  // The SOS change feed is dispatcher-only, so a driver polls its own submission
+  // until the dispatcher's decision arrives (FSD-FR-074).
+  const trackedSOSId = dispatchedSOS?.sos_id ?? null;
+  const trackedSOSFinal = dispatchedSOS
+    ? FINAL_SOS_STATUSES.has(dispatchedSOS.status.toUpperCase())
+    : true;
+
   useEffect(() => {
-    if (!dispatchedSOS) return;
-
-    const unsubscribe = subscribeToSOS({
-      onSnapshot: (sosList) => {
-        const mySOS = sosList.find((s) => s.sos_id === dispatchedSOS.sos_id);
-        if (mySOS) {
-          setSosStatus(mySOS.status);
-          setDispatchedSOS(mySOS);
-        }
-      },
-      onSOS: (event, sos) => {
-        if (sos.sos_id === dispatchedSOS.sos_id) {
-          setSosStatus(sos.status);
-          setDispatchedSOS(sos);
-        }
-      },
-      onError: (error) => {
-        console.error('SOS stream error:', error);
-      },
-    });
-
-    return unsubscribe;
-  }, [dispatchedSOS]);
+    if (trackedSOSId === null || trackedSOSFinal) return;
+    const timer = setInterval(() => {
+      getSOS(trackedSOSId)
+        .then((updated) => {
+          setSosStatus(updated.status);
+          setDispatchedSOS(updated);
+        })
+        .catch(() => {
+          // Keep the last known status; the next poll or manual refresh retries.
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [trackedSOSId, trackedSOSFinal]);
 
   async function handleSOS() {
     if (sending || locating) return;

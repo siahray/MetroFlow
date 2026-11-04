@@ -116,16 +116,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const alertedHazards = useRef<Set<number>>(new Set());
   // Telemetry: track the wall-clock time of the last successful ping so we
   // respect the server-side 5-second throttle without duplicating its logic
-  // (FSD-FR-072, VAL-020).  Vehicle identity is not yet stored in the JWT
-  // (pilot gap); the sender is wired but skipped until vehicleId is available.
+  // (FSD-FR-072, VAL-020). The unit comes from the signed-in driver's account.
   const lastTelemetrySentMs = useRef<number>(0);
-  // NOTE: vehicle_id is not yet surfaced in the auth token (pilot scope).
-  // Set TELEMETRY_VEHICLE_ID via EXPO_PUBLIC_TELEMETRY_VEHICLE_ID to enable
-  // live telemetry from a specific vehicle (FSD-FR-072).
-  const TELEMETRY_VEHICLE_ID: number | null = process.env
-    .EXPO_PUBLIC_TELEMETRY_VEHICLE_ID
-    ? Number(process.env.EXPO_PUBLIC_TELEMETRY_VEHICLE_ID)
-    : null;
+  const telemetryVehicleId = user?.vehicle_id ?? null;
 
   useEffect(() => {
     routeRef.current = route;
@@ -174,13 +167,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             });
 
             // --- Telemetry sender (FSD-FR-072) --------------------------------
-            // Fire-and-forget: only while actively navigating and only when a
-            // vehicle id is configured (pilot constraint).
-            if (TELEMETRY_VEHICLE_ID !== null && routeRef.current !== null) {
+            // Fire-and-forget: only while actively navigating as a linked unit.
+            if (telemetryVehicleId !== null && routeRef.current !== null) {
               const nowMs = Date.now();
               if (nowMs - lastTelemetrySentMs.current >= 5000) {
                 lastTelemetrySentMs.current = nowMs;
-                postTelemetry(TELEMETRY_VEHICLE_ID, {
+                postTelemetry(telemetryVehicleId, {
                   latitude: update.coords.latitude,
                   longitude: update.coords.longitude,
                   speed_kmh:
@@ -206,7 +198,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       cancelled = true;
       subscription?.remove();
     };
-  }, [user]);
+  }, [user, telemetryVehicleId]);
 
   // --- Road network --------------------------------------------------------
   useEffect(() => {
@@ -262,10 +254,15 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   useEffect(() => {
     if (!network || !destinationParam || initialDestinationHandled.current) return;
     initialDestinationHandled.current = true;
-    const needle = destinationParam.toLowerCase();
-    const match = network.nodes.features.find((node) =>
-      (node.properties.name ?? "").toLowerCase().includes(needle),
-    );
+    // A dispatch mission carries coordinates ("lat,lon"); snap them to the
+    // nearest road node. Anything else is a place-name search.
+    const [lat, lon] = destinationParam.split(",").map(Number);
+    const match =
+      destinationParam.includes(",") && Number.isFinite(lat) && Number.isFinite(lon)
+        ? nearestNode(network.nodes.features, { latitude: lat, longitude: lon })
+        : network.nodes.features.find((node) =>
+            (node.properties.name ?? "").toLowerCase().includes(destinationParam.toLowerCase()),
+          );
     // Opening the screen from a saved destination seeds the search box once.
     setDestinationQuery(match?.properties.name ?? destinationParam);
     if (match) {
