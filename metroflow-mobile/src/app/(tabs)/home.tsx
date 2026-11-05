@@ -9,10 +9,10 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import * as Location from 'expo-location';
 import {
   Waves,
-  AlertTriangle,
   ChevronRight,
   Search,
   ShieldCheck,
@@ -20,21 +20,50 @@ import {
   Megaphone,
   LifeBuoy,
   Navigation,
+  Gauge,
+  Truck,
+  Bike,
+  Car,
+  CarFront,
+  Pencil,
 } from 'lucide-react-native';
 
-import { getMission, listActiveHazards, resolveSOS, type HazardInfo, type SOSRequest } from '../../api';
+import {
+  getMission,
+  listActiveHazards,
+  listVehicles,
+  resolveSOS,
+  type HazardInfo,
+  type SOSRequest,
+  type Vehicle,
+} from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
+import { QuickPicks } from '../../components/QuickPicks';
 import { loadCache, saveCache, useOnline } from '../../offline';
+import { loadMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
 import { colors } from '../../theme';
+import type { LatLng } from '../../navigation/geo';
 
-const LEVEL_LABEL: Record<string, string> = {
-  CAUTION: 'Caution',
-  LEVEL_2: 'Level 2',
-  LEVEL_3: 'Level 3',
-  IMPASSABLE: 'Impassable',
+const VEHICLE_STATUS_COLOR: Record<string, string> = {
+  AVAILABLE: colors.green700,
+  DISPATCHED: colors.red700,
+  EN_ROUTE: colors.red700,
+  MAINTENANCE: colors.amber800,
 };
-const LEVEL_RANK: Record<string, number> = { CAUTION: 1, LEVEL_2: 2, LEVEL_3: 3, IMPASSABLE: 4 };
+
+const MY_VEHICLE_ICON: Record<VehicleType, typeof Car> = {
+  motorcycle: Bike,
+  sedan: Car,
+  suv: CarFront,
+  truck: Truck,
+};
+const MY_VEHICLE_LABEL: Record<VehicleType, string> = {
+  motorcycle: 'Motorcycle',
+  sedan: 'Sedan',
+  suv: 'SUV / Van',
+  truck: 'Truck',
+};
 
 function clock(date: Date) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -50,10 +79,41 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [mission, setMission] = useState<SOSRequest | null>(null);
   const [closing, setClosing] = useState(false);
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [myVehicle, setMyVehicle] = useState<MyVehicle | null>(null);
+  const [position, setPosition] = useState<LatLng | null>(null);
   const online = useOnline();
 
   const displayName = user?.name || user?.email || 'Guest';
   const vehicleId = user?.vehicle_id ?? null;
+  const clearanceCm = vehicle?.clearance_cm ?? myVehicle?.clearanceCm ?? 28;
+
+  // The fleet rescue unit this emergency driver reports as — not the public driver's own vehicle.
+  useEffect(() => {
+    if (vehicleId === null) return;
+    listVehicles()
+      .then((list) => setVehicle(list.find((v) => v.vehicle_id === vehicleId) ?? null))
+      .catch(() => setVehicle(null));
+  }, [vehicleId]);
+
+  // The public driver's own vehicle, configured in Profile — reload whenever Home regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      void loadMyVehicle().then(setMyVehicle);
+    }, []),
+  );
+
+  // A one-shot fix is enough for Quick Picks' distance/route check.
+  useEffect(() => {
+    void (async () => {
+      const permission = await Location.requestForegroundPermissionsAsync().catch(() => null);
+      if (!permission?.granted) return;
+      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(
+        () => null,
+      );
+      if (current) setPosition({ latitude: current.coords.latitude, longitude: current.coords.longitude });
+    })();
+  }, []);
 
   const load = useCallback(
     () =>
@@ -114,13 +174,6 @@ export default function HomeScreen() {
     }
   }
 
-  const worst = (hazards ?? []).reduce<HazardInfo | null>(
-    (top, h) =>
-      !top || (LEVEL_RANK[h.obstruction_level] ?? 0) > (LEVEL_RANK[top.obstruction_level] ?? 0)
-        ? h
-        : top,
-    null,
-  );
   const impassable = (hazards ?? []).filter((h) => h.obstruction_level === 'IMPASSABLE').length;
 
   const card = {
@@ -171,7 +224,7 @@ export default function HomeScreen() {
 
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.slate50 }}
-        contentContainerStyle={{ padding: 16, gap: 14 }}
+        contentContainerStyle={{ padding: 16, gap: 14, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
@@ -281,56 +334,80 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Hazard status, from the verified hazard feed */}
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Open the live map"
-          onPress={() => router.push('/(tabs)/map')}
-          activeOpacity={0.88}
-          style={{
-            ...card,
-            backgroundColor: worst ? colors.red50 : colors.white,
-            borderColor: worst ? colors.red500 : colors.slate200,
-            padding: 14,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              backgroundColor: worst ? colors.red700 : colors.slate100,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+        {/* The fleet rescue unit this emergency driver reports as (FSD-FR-048) */}
+        {vehicleId !== null && vehicle ? (
+          <View style={{ ...card, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: colors.slate100,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Truck size={20} color={colors.slate900} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.slate900 }}>
+                {vehicle.call_sign} · {vehicle.vehicle_type}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <Gauge size={11} color={colors.slate500} />
+                <Text style={{ fontSize: 11, color: colors.slate500 }}>
+                  Clearance {vehicle.clearance_cm ?? '—'} cm
+                  {vehicle.speed_kmh !== null ? ` · ${Math.round(vehicle.speed_kmh)} km/h` : ''}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: '800',
+                color: VEHICLE_STATUS_COLOR[vehicle.status] ?? colors.slate600,
+              }}
+            >
+              {vehicle.status.replace('_', ' ')}
+            </Text>
+          </View>
+        ) : (
+          // Public driver's own vehicle, configured in Profile — drives clearance-aware routing.
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Edit my vehicle in Profile"
+            onPress={() => router.push('/(tabs)/profile')}
+            style={{ ...card, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}
           >
-            <AlertTriangle size={18} color={worst ? colors.white : colors.slate500} />
-          </View>
-          <View style={{ flex: 1 }}>
-            {hazards === null ? (
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.slate700 }}>
-                Hazard feed unavailable
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: colors.slate100,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {React.createElement(MY_VEHICLE_ICON[myVehicle?.type ?? 'sedan'], {
+                size: 18,
+                color: colors.slate900,
+              })}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: colors.slate900 }}>
+                {MY_VEHICLE_LABEL[myVehicle?.type ?? 'sedan']}
               </Text>
-            ) : worst ? (
-              <>
-                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.red700 }}>
-                  {hazards.length} active hazard{hazards.length === 1 ? '' : 's'}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <Gauge size={11} color={colors.slate500} />
+                <Text style={{ fontSize: 11, color: colors.slate500 }}>
+                  Clearance {myVehicle?.clearanceCm ?? 28} cm
                 </Text>
-                <Text style={{ fontSize: 11, color: colors.slate700, marginTop: 2 }} numberOfLines={1}>
-                  Worst: {worst.name} ({LEVEL_LABEL[worst.obstruction_level] ?? worst.obstruction_level})
-                </Text>
-              </>
-            ) : (
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.slate700 }}>
-                No active hazards reported
-              </Text>
-            )}
-          </View>
-          <ChevronRight size={16} color={colors.slate400} />
-        </TouchableOpacity>
+              </View>
+            </View>
+            <Pencil size={14} color={colors.slate400} />
+          </TouchableOpacity>
+        )}
 
         {/* Route planning */}
         <TouchableOpacity
@@ -374,6 +451,8 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <QuickPicks clearanceCm={clearanceCm} position={position} />
 
         {/* Counts come from the same feed; nothing here is simulated */}
         <View style={{ ...card, padding: 14 }}>

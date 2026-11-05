@@ -167,8 +167,19 @@ export function getSOS(sosId: number): Promise<SOSRequest> {
   return request<SOSRequest>(`/api/v1/sos/${sosId}`);
 }
 
-export function listVehicles(): Promise<unknown[]> {
-  return request<unknown[]>("/api/v1/vehicles");
+export type Vehicle = {
+  vehicle_id: number;
+  call_sign: string;
+  vehicle_type: string;
+  clearance_cm: number | null;
+  status: string;
+  current_location_lat: number | null;
+  current_location_lon: number | null;
+  speed_kmh: number | null;
+};
+
+export function listVehicles(): Promise<Vehicle[]> {
+  return request<Vehicle[]>("/api/v1/vehicles");
 }
 
 // ---------------------------------------------------------------------------
