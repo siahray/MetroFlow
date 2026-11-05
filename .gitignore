@@ -44,3 +44,8 @@ Thumbs.db
 # --- Vercel CLI -------------------------------------------------------------
 # `vercel link` writes project metadata per directory; it is machine-local.
 .vercel/
+
+# --- Agent worktrees --------------------------------------------------------
+# Local checkouts created by coding agents; never part of the tree.
+.claude/worktrees/
+
