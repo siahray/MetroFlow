@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import * as Location from "expo-location";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -49,6 +49,7 @@ import { RouteMap } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
 import { loadCache, saveCache, useOnline } from "../offline";
+import { loadMyVehicle } from "../myVehicle";
 import {
   distanceToPolygonMeters,
   formatDistance,
@@ -64,7 +65,6 @@ import {
 } from "../navigation/geo";
 
 import { colors } from '../theme';
-const DRIVER_CLEARANCE_CM = 28;
 
 type Banner = {
   title: string;
@@ -120,6 +120,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
+  // The driver's own vehicle, configured in Profile — reload on each visit.
+  const [clearanceCm, setClearanceCm] = useState(28);
+  useFocusEffect(
+    useCallback(() => {
+      void loadMyVehicle().then((v) => setClearanceCm(v.clearanceCm));
+    }, []),
+  );
   // Telemetry display (P3-4): the driver's own read of what is being sent.
   const [speedKmh, setSpeedKmh] = useState<number | null>(null);
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
@@ -279,7 +286,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    getNetworkState(DRIVER_CLEARANCE_CM)
+    getNetworkState(clearanceCm)
       .then((state) => {
         void saveCache("network", state);
         if (!cancelled) setNetwork(state);
@@ -301,7 +308,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, clearanceCm]);
 
   // --- Live verified hazards (FSD-FR-059) ---------------------------------
   useEffect(() => {
@@ -364,7 +371,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         const plan = await requestRoute({
           start_node: origin.properties.node_id,
           target_node: target.properties.node_id,
-          clearance_cm: DRIVER_CLEARANCE_CM,
+          clearance_cm: clearanceCm,
           ignore_hazards: unsafe,
         });
         void saveCache("route", plan);
@@ -386,7 +393,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setPlanning(false);
       }
     },
-    [network, position, requestRoute],
+    [network, position, requestRoute, clearanceCm],
   );
 
   useEffect(() => {
@@ -636,7 +643,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Navigation</Text>
           <Text style={styles.headerSubtitle}>
-            {DRIVER_CLEARANCE_CM} cm clearance • live hazards
+            {clearanceCm} cm clearance • live hazards
           </Text>
         </View>
         {streamError ? <AlertTriangle size={16} color={colors.red600} /> : null}
@@ -696,7 +703,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               <Text style={styles.refusalTitle}>No safe route</Text>
               <Text style={styles.refusalBody}>
                 Every verified route to {selected.properties.name ?? "this destination"} is blocked
-                for your {DRIVER_CLEARANCE_CM} cm clearance.
+                for your {clearanceCm} cm clearance.
               </Text>
               <View style={styles.panelButtons}>
                 <TouchableOpacity

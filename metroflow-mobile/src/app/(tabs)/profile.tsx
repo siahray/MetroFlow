@@ -11,10 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Mail,
   Car,
+  CarFront,
+  Bike,
+  Truck,
   Map,
   ChevronRight,
   LogOut,
@@ -27,14 +30,58 @@ import {
 } from 'lucide-react-native';
 import { updateMyName } from '../../api';
 import { useAuth } from '../../auth';
+import { loadMyVehicle, saveMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
 
 import { colors } from '../../theme';
+
+const VEHICLE_TYPE_ICON: Record<VehicleType, typeof Car> = {
+  motorcycle: Bike,
+  sedan: Car,
+  suv: CarFront,
+  truck: Truck,
+};
+const VEHICLE_TYPE_LABEL: Record<VehicleType, string> = {
+  motorcycle: 'Motorcycle',
+  sedan: 'Sedan',
+  suv: 'SUV / Van',
+  truck: 'Truck',
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(user?.name ?? '');
   const [savingName, setSavingName] = useState(false);
+
+  const [vehicle, setVehicle] = useState<MyVehicle | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState(false);
+  const [clearanceDraft, setClearanceDraft] = useState('');
+
+  useEffect(() => {
+    void loadMyVehicle().then(setVehicle);
+  }, []);
+
+  async function handlePickType(type: VehicleType) {
+    const next = { type, clearanceCm: vehicle?.clearanceCm ?? 28 };
+    setVehicle(next);
+    await saveMyVehicle(next);
+  }
+
+  function handleEditClearance() {
+    setClearanceDraft(String(vehicle?.clearanceCm ?? 28));
+    setEditingVehicle(true);
+  }
+
+  async function handleSaveClearance() {
+    const parsed = Math.round(Number(clearanceDraft));
+    if (Number.isFinite(parsed) && parsed > 0 && vehicle) {
+      const next = { ...vehicle, clearanceCm: parsed };
+      setVehicle(next);
+      await saveMyVehicle(next);
+    }
+    setEditingVehicle(false);
+  }
 
   async function handleSaveName() {
     const trimmed = nameDraft.trim();
@@ -117,7 +164,7 @@ export default function ProfileScreen() {
           {/* Stats row */}
           <View style={{ flexDirection: 'row', width: '100%', marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderColor: colors.slate100, gap: 0 }}>
             {[
-              { label: 'Clearance', value: '28 cm', icon: Gauge, color: colors.slate900 },
+              { label: 'Clearance', value: `${vehicle?.clearanceCm ?? 28} cm`, icon: Gauge, color: colors.slate900 },
               { label: 'Account', value: user ? 'Signed in' : 'Guest', icon: ShieldCheck, color: user ? colors.green600 : colors.slate500 },
             ].map((stat, i) => {
               const Icon = stat.icon;
@@ -147,14 +194,62 @@ export default function ProfileScreen() {
                 <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>{user?.email || '—'}</Text>
               </View>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderColor: colors.slate50, gap: 10 }}>
-              <View style={{ width: 32, height: 32, backgroundColor: colors.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                <Car size={15} color={colors.slate500} />
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderColor: colors.slate50, gap: 10 }}>
+              <Text style={{ fontSize: 10, color: colors.slate400 }}>My vehicle (for flood-aware routing)</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(Object.keys(VEHICLE_TYPE_ICON) as VehicleType[]).map((type) => {
+                  const Icon = VEHICLE_TYPE_ICON[type];
+                  const selected = vehicle?.type === type;
+                  return (
+                    <TouchableOpacity
+                      key={type}
+                      accessibilityRole="button"
+                      accessibilityLabel={VEHICLE_TYPE_LABEL[type]}
+                      onPress={() => void handlePickType(type)}
+                      style={{
+                        flex: 1,
+                        alignItems: 'center',
+                        gap: 4,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        backgroundColor: selected ? colors.slate900 : colors.slate100,
+                      }}
+                    >
+                      <Icon size={16} color={selected ? colors.white : colors.slate600} />
+                      <Text style={{ fontSize: 9, fontWeight: '700', color: selected ? colors.white : colors.slate600 }}>
+                        {VEHICLE_TYPE_LABEL[type]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 10, color: colors.slate400 }}>Routing clearance</Text>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>28 cm (pilot default)</Text>
-              </View>
+              {editingVehicle ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput
+                    value={clearanceDraft}
+                    onChangeText={setClearanceDraft}
+                    keyboardType="number-pad"
+                    autoFocus
+                    style={{ flex: 1, fontSize: 13, fontWeight: '600', color: colors.slate900, borderWidth: 1, borderColor: colors.slate300, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}
+                  />
+                  <Text style={{ fontSize: 12, color: colors.slate500 }}>cm</Text>
+                  <TouchableOpacity onPress={() => void handleSaveClearance()} hitSlop={8}>
+                    <Check size={20} color={colors.green600} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit routing clearance"
+                  onPress={handleEditClearance}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>
+                    Ground clearance: {vehicle?.clearanceCm ?? 28} cm
+                  </Text>
+                  <Pencil size={12} color={colors.slate400} />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
