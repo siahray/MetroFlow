@@ -168,6 +168,13 @@ cd metroflow-admin
 npm run dev
 ```
 
+### Admin UI tests
+```bash
+cd metroflow-admin
+bun test lib          # unit tests over lib/
+bun run test:e2e      # Playwright portal smoke; build + serve on :3100, API stubbed
+```
+
 ### Driver App
 ```bash
 cd metroflow-mobile

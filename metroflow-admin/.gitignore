@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+# Playwright artefacts from `bun run test:e2e`
+/test-results/
+/playwright-report/
+/.playwright/
 
 # next.js
 /.next/
