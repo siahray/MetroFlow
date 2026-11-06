@@ -1,6 +1,6 @@
 # MetroFlow - Consolidated Backlog
 
-**Revised:** 4 November 2026 · **Baseline:** `feat/real-time-sse` at PR #65 (all four checks green)
+**Revised:** 7 November 2026 · **Baseline:** `main` at `f869d98` (PR #68 merged, all checks green)
 **Method:** cross-checked FSD status table, TSD §7, PM plan, PROGRESS_REPORT, FEATURES_AND_DELIVERABLES,
 UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Items marked *(unverified)* were not run.
 
@@ -26,12 +26,8 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | **F-7** Offline screen showed "None / 0 MB" | Closed: `offline.ts::cacheStats()` reads the on-device SQLite cache and `offline.tsx` reports the road graph, hazard count, last route and bytes used — the placeholder counter and the disabled "Download Region" button are gone |
 | **FSD-FR-087** dispatcher entry | Closed: the triage screen has a "Log a call-in distress signal" modal (lat/long/note) posting to `POST /api/v1/sos`; the incident arrives through the same SSE stream and is selected in the queue |
 
-## 0. Do first
-
-| # | Item | Why |
-|---|------|-----|
-| H-3 | Branch and worktree cleanup. Delete merged branches (`pr/*`, `fix/*`, `docs/backlog-*`, `feat/driver-navigation`, `feat/loading-states-and-error-boundaries`, `feat/moderation-desk`, `feat/network-map`, `feat/report-intake*`, `feat/ui-polish-backlog`). Remove the worktrees `../MetroFlow-docs` and `.claude/worktrees/docs-sync`. Drop the stale lint-staged `stash@{0}` (its content was merged in #46). Decide on `backup/local-main-oct27`, `feat/scope-resolution-frontend-slice`, `worktree-docs-sync`. `feat/driver-navigation` shows 24 "unpushed" commits that `git cherry` reports as already in `main`. | Noise; caused confusion twice |
-| H-4 | Local dev database is stale (old 4-node graph, leftover rows), so `pytest -m integration` against it fails misleadingly. Recreate it, or run integration tests on a throwaway DB (`CREATE DATABASE metroflow_ci`, `alembic upgrade head`, test, drop). Document the recipe in `backend/README`. | Wasted debugging time |
+| **H-3** Branch and worktree cleanup | Done. Every branch was verified against `origin/main` (not the stale local `main`, which was 43 commits behind) before deletion: the 29 branches merged into `origin/main` were removed, plus `feat/driver-navigation` and `feat/nearest-sensor-cross-reference` (their PRs had merged but `git cherry` no longer recognised the patches) and the two agreed snapshots — 33 local branches in total. 6 merged remote branches deleted, and `git worktree remove` retried after the branch deletions freed both trees, so only the main worktree remains. The stale lint-staged stash was dropped after confirming its added lines are in `main` (the handful that diff are lines later refactored away). `backup/local-main-oct27` and `feat/scope-resolution-frontend-slice` were 27–31 Oct snapshots (a `plan/` folder, old driver screens, `supabase/config.toml`) superseded by `main`. Kept: `chore/eas-android-build` and its `stash@{0}` — one real unmerged commit (`3009ed4`, EAS preview profile + Android package id) that still needs a decision |
+| **H-4** Stale local dev database | Done. `backend/README.md` (new) documents the local stack (`docker compose up -d postgres`), unit vs integration runs, the `tests/conftest.py` local-DB guard and its `METROFLOW_ALLOW_REMOTE_TEST_DB` override, and the throwaway recipe: create `metroflow_ci`, `alembic upgrade head`, `pytest -m integration`, drop. Verified end to end from an empty database: migrations apply, `alembic check` reports no drift, 80 tests pass in 20 s, drop succeeds. The dev database itself was two migrations behind (`b3f6a2c9e415` → `e9b4c2d7a106`) and is now at head; the suite still leaves rows behind after a clean run, so the throwaway recipe is the documented way to keep them out of a database worth keeping (see Q-5) |
 
 ## 1. Documentation drift (code is ahead of the docs)
 
@@ -63,7 +59,7 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | Q-2 | **Offline device test (TC-029/030) not yet run.** Needs a native rebuild (`expo-sqlite` config plugin), airplane mode, submit, reconnect, check it syncs once. | Run before claiming FR-068 to 071 |
 | Q-3 | Mobile CI runs `tsc` only, no lint. 2 lint warnings remain in the driver app; admin has ~6 unused-var warnings. | Add `expo lint` to `mobile.yml` |
 | Q-4 | Offline-latency and hazard-publish latency tests (release checklist). | PM plan |
-| Q-5 | Make integration tests clean up after a failed run (a failed test leaves rows that break the next run). | Part of H-4 |
+| Q-5 | Integration tests still leave rows behind after a clean run (about 14 SOS requests, 2 hazards, 3 users on a fresh database). They no longer break the next run, and H-4 documents the throwaway-database recipe, so this is now about tidy-up rather than misleading failures. | Not urgent after H-4 |
 
 ## 4. Security / operations (TSD §7)
 
@@ -95,9 +91,9 @@ aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primar
 ## 6. Suggested order
 
 1. **Q-2** device test of offline; fix what breaks.
-2. **D-1..D-9** documentation sync in one PR (includes **H-3** branch cleanup and **H-4** recipe).
+2. **D-1..D-9** documentation sync in one PR (**H-3** and **H-4** are already done).
 3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), one offline-queue test (open).
-4. **F-2, F-6** to close out telemetry and the queued-photo gap honestly.
+4. **F-4, F-5** to close the functional gaps left in the portal.
 5. **U-1, U-2, U-4**, then defer the rest of section 5 until after pilot feedback.
 6. **S-1, S-4** before any real users.
 
