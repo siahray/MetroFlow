@@ -59,7 +59,7 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 
 | # | Item | Notes |
 |---|------|-------|
-| Q-1 | **No portal component/E2E tests and no driver-app tests.** The backend has 259 tests and the portal has 50 unit tests over `lib/`, but nothing renders a component and nothing runs end to end. PM plan promises Playwright (online and offline). | LIM-009. Biggest verification gap for the defence |
+| Q-1 | **Portal smoke now runs end to end; component and driver-app tests still missing.** `metroflow-admin/e2e/` has a Playwright smoke (the sign-in gate, a rejected password, the triage queue rendering a live incident, a stored session reopening triage) with the API stubbed in the browser, so it needs no database, hosted API or dispatcher password; Web CI grew a `Portal smoke (Playwright)` job. Still open: no React component tests, no driver-app tests, and no *offline* Playwright run. | LIM-009. Offline-queue test still outstanding |
 | Q-2 | **Offline device test (TC-029/030) not yet run.** Needs a native rebuild (`expo-sqlite` config plugin), airplane mode, submit, reconnect, check it syncs once. | Run before claiming FR-068 to 071 |
 | Q-3 | Mobile CI runs `tsc` only, no lint. 2 lint warnings remain in the driver app; admin has ~6 unused-var warnings. | Add `expo lint` to `mobile.yml` |
 | Q-4 | Offline-latency and hazard-publish latency tests (release checklist). | PM plan |
@@ -96,7 +96,7 @@ aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primar
 
 1. **Q-2** device test of offline; fix what breaks.
 2. **D-1..D-9** documentation sync in one PR (includes **H-3** branch cleanup and **H-4** recipe).
-3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers, one Playwright smoke (login, triage), one offline-queue test.
+3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), one offline-queue test (open).
 4. **F-2, F-6** to close out telemetry and the queued-photo gap honestly.
 5. **U-1, U-2, U-4**, then defer the rest of section 5 until after pilot feedback.
 6. **S-1, S-4** before any real users.

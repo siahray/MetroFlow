@@ -331,17 +331,19 @@ concerns go to the adviser immediately.
 | Unit                   | pytest (`-m "not integration"`)            |
 | Contract / integration | pytest (`-m integration`) against PostGIS  |
 | Web lint and types     | ESLint, `next build`                       |
-| Web unit               | Bun test (planned)                         |
+| Web unit               | Bun test (`bun test lib`)                  |
 | Driver unit            | Bun test (planned)                         |
-| Browser E2E            | Playwright (planned; online and offline contexts) |
+| Browser E2E            | Playwright (online; portal smoke in Web CI) |
 | Security               | OWASP ZAP API scan, CodeQL (when licensed) |
 | Migration              | Alembic                                    |
 | Exploratory            | Scripted browser session                   |
 
 This table is the agreed test strategy. Present in the repository today: pytest
-suites, ESLint and `next build`, `tsc --noEmit` for the driver app, Alembic,
-the ZAP API scan workflow and CodeQL. `Bun test` and Playwright are planned and
-tracked by TSD LIM-009.
+suites, ESLint and `next build`, `tsc --noEmit` for the driver app, `bun test`
+over `metroflow-admin/lib`, a Playwright smoke over the portal (`metroflow-admin/e2e`,
+API stubbed in the browser), Alembic, the ZAP API scan workflow and CodeQL.
+Still planned: Playwright for the driver app and the offline context, and
+component tests — tracked by TSD LIM-009.
 
 ## Success Metrics
 

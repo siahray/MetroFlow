@@ -138,7 +138,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Realtime        | SSE + Redis pub/sub                           | Redis 7                                    |
 | Auth            | API-issued HS256 JWT; bcrypt password hashes  | PyJWT 2.15, passlib/bcrypt                 |
 | Evidence        | Pillow, python-multipart                      | current at implementation                  |
-| Tests           | pytest, Ruff, ESLint, `tsc --noEmit`, framework builds | In CI today; Playwright and `bun test` are planned (LIM-009) |
+| Tests           | pytest, Ruff, ESLint, `tsc --noEmit`, `bun test`, Playwright | In CI today; Playwright covers the portal smoke only (LIM-009) |
 
 ### External data services
 
@@ -1007,7 +1007,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
 | LIM-007 | No map in the baseline portal                      | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-008 | Baseline audit log is schema-only                  | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-009 | No browser end-to-end tests in baseline            | UI regressions caught manually                   | Playwright planned for Web and Mobile CI; not present yet                                                    |
+| LIM-009 | Browser end-to-end coverage is a portal smoke only | UI regressions outside sign-in and triage caught manually; no component or driver-app tests | Playwright (`metroflow-admin/e2e/`) runs in Web CI: sign-in gate, rejected password, triage queue, stored session. Not yet covered: React component tests, driver-app tests, an offline Playwright run |
 | LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
 | LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
 | LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | Define RPO/RTO and test restore                                                                              |
