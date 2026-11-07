@@ -134,6 +134,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const online = useOnline();
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
+  // Bumped by the Retry action so the one-shot location effect runs again.
+  const [locationAttempt, setLocationAttempt] = useState(0);
   const [destinationQuery, setDestinationQuery] = useState("");
   const [selected, setSelected] = useState<NodeFeature | null>(null);
   const [route, setRoute] = useState<RoutePlan | null>(null);
@@ -280,7 +282,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       cancelled = true;
       subscription?.remove();
     };
-  }, [user, telemetryVehicleId]);
+  }, [user, telemetryVehicleId, locationAttempt]);
 
   // --- Road network --------------------------------------------------------
   useEffect(() => {
@@ -848,7 +850,19 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   Open Settings
                 </Text>
               </TouchableOpacity>
-            ) : null}
+            ) : (
+              <TouchableOpacity
+                onPress={() => {
+                  setLocationError(null);
+                  setLocationAttempt((attempt) => attempt + 1);
+                }}
+                hitSlop={8}
+              >
+                <Text style={[styles.mapNoticeText, { color: colors.blue600, fontWeight: "700" }]}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : null}
       </View>
