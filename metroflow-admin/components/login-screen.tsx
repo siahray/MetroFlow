@@ -84,7 +84,7 @@ export function LoginScreen({
             <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
               LGU Dispatch & Triage System
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Sign in to access operational dispatch controls
             </p>
           </div>
@@ -124,7 +124,7 @@ export function LoginScreen({
                 <button
                   type="button"
                   onClick={() => show("Ask a MetroFlow administrator to reset your password.")}
-                  className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
+                  className="text-xs font-medium text-sky-700 hover:text-sky-800 hover:underline"
                 >
                   Forgot password?
                 </button>
@@ -181,7 +181,7 @@ export function LoginScreen({
           </form>
 
           <div className="space-y-2 border-t border-slate-100 pt-4 text-center">
-            <span className="inline-block text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+            <span className="inline-block text-[10px] font-bold tracking-widest text-slate-500 uppercase">
               Restricted access
             </span>
             <div className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -192,9 +192,9 @@ export function LoginScreen({
         </div>
       </div>
 
-      <div className="space-y-1 py-2 text-center text-xs text-slate-500">
+      <div className="space-y-1 py-2 text-center text-xs text-slate-600">
         <p>MetroFlow: flood-aware mobility and rescue dispatch</p>
-        <p className="text-slate-400">An academic project. Not an official government system.</p>
+        <p>An academic project. Not an official government system.</p>
       </div>
     </div>
   );

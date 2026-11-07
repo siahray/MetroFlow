@@ -87,7 +87,7 @@ export function IncidentQueue({
               {loading ? "..." : incidents.length}
             </span>
           </div>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500">
             Sort by: <strong className="font-semibold text-slate-700">Urgency Score</strong>
           </span>
         </div>

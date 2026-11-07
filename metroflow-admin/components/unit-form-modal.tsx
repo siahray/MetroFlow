@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import type { VehicleInput } from "@/lib/dispatch";
 import {
@@ -12,6 +12,8 @@ import {
   type UnitFormErrors,
   type UnitFormValues,
 } from "@/lib/fleet";
+
+import { useDialogFocus } from "./use-dialog-focus";
 
 type UnitFormModalProps = {
   title: string;
@@ -37,13 +39,7 @@ export function UnitFormModal({
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const first = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    first.current?.focus();
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && !saving && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, saving]);
+  useDialogFocus(first, onClose, saving);
 
   const set = (key: keyof UnitFormValues) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }));

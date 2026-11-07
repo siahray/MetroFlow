@@ -77,13 +77,31 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 
 Done: loading/empty/error states for the queue, users, rescue, sensors, radar and hazards screens (fleet, moderation and
 export already had them); modal open transitions; offline banner (portal and driver app);
-aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primary; Call-911 removed.
+aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primary; Call-911 removed. (This is what U-1
+described; the table below already started at U-2.)
+
+**U-2 done:** `metroflow-admin/e2e/a11y.spec.ts` runs axe-core (`@axe-core/playwright`, WCAG 2.1 A/AA) scans of `/login` and
+`/triage` on every Web CI run, plus a keyboard test of the call-in dialog (focus lands on the first field, Tab and Shift+Tab
+wrap inside `role="dialog"`, Escape closes it and focus returns to the trigger). The scans, not guesswork, found the contrast
+failures that were fixed: `text-slate-400` on white -> `slate-500`, the "Forgot password?" link `sky-600` -> `sky-700`, the
+active sidebar item `bg-sky-600` -> `bg-sky-700` (white text was 4.1:1 on it), the sidebar station line lightened on dark, and
+the triage KPI trend labels `emerald-600`/`sky-600` -> `700`. Both portal dialogs now share
+`components/use-dialog-focus.ts` instead of duplicating the effect, and its close callbacks are ref-backed so the queue's SSE
+refresh cannot pull focus out of a field mid-typing. Still open, and honest about it: axe checks markup and colour only - it
+does not prove a screen reader can complete a dispatch, and it cannot judge focus order across the multi-panel screens.
+
+**U-4 done, mostly already implemented:** the splash screen (P1-4) is configured - `app.json` loads the `expo-splash-screen`
+plugin, and `src/app/_layout.tsx` holds the native splash until the session is known, then fades it over 300 ms. The error
+copy (P1-5) already branches on the cause: `sos.tsx` separates permission-denied from a stale GPS fix, `report.tsx` has
+offline/validation copy with a Retry, `route.tsx` separates permission-denied from an unreadable fix, `profile.tsx` covers a
+failed save. The only gap was that the route screen said "Check GPS and retry" while offering no Retry; it now re-runs the
+location read.
 
 | # | Item | Size |
 |---|------|------|
-| U-2 | Accessibility pass beyond buttons: form labels, focus order, contrast (emerald-500 on white fails), screen-reader test | M |
+| U-2 | ~~Accessibility pass beyond buttons: form labels, focus order, contrast, screen-reader test~~ **Done — axe scan in CI, contrast fixes, shared dialog focus trap** | M |
 | U-3 | Adopt `theme.ts` for font sizes and spacing; finish moving hex into tokens in the admin Tailwind config | S |
-| U-4 | P1-4 custom splash screen; P1-5 context-specific error messages (GPS denied, network) in the driver app | S |
+| U-4 | ~~P1-4 custom splash screen; P1-5 context-specific error messages (GPS denied, network) in the driver app~~ **Done — already implemented; added the missing GPS Retry** | S |
 | U-5 | P2-1/2/3 brand palette, typography scale, motion | M |
 | U-6 | P2-6 turn-by-turn icons and ETA; P2-7 profile settings; P3-4 telemetry display; P3-5 report history | M each |
 | U-7 | P3-1 keyboard shortcuts; P3-2 advanced filters; P3-3 bulk actions; P3-6 dark mode; P2-4 charts | L, defer |
@@ -94,7 +112,7 @@ aria-labels on icon-only buttons; colour tokens (`theme.ts`); `slate-900` primar
 2. **D-1..D-9** documentation sync in one PR (**H-3** and **H-4** are already done).
 3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), one offline-queue test (open).
 4. **F-4, F-5** to close the functional gaps left in the portal.
-5. **U-1, U-2, U-4**, then defer the rest of section 5 until after pilot feedback.
+5. **U-1, U-2, U-4** - done. The rest of section 5 (U-3, U-5..U-7) is deferred until after pilot feedback.
 6. **S-1, S-4** before any real users.
 
 ## Out of scope (unchanged)

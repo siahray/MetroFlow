@@ -280,7 +280,7 @@ export default function TriagePage() {
       label: "Dispatched SOS",
       value: String(assignedCount),
       detail: assignedCount === 1 ? "1 unit responding" : `${assignedCount} units responding`,
-      trend: { text: "Active", className: "text-emerald-600" },
+      trend: { text: "Active", className: "text-emerald-700" },
       icon: CircleCheck,
       iconClassName: "border-emerald-100 bg-emerald-50 text-emerald-600",
     },
@@ -288,7 +288,7 @@ export default function TriagePage() {
       label: "Fleet Readiness",
       value: `${availableVehiclesCount}/${totalVehiclesCount}`,
       detail: `${availableVehiclesCount} units ready for callout`,
-      trend: { text: "Standby", className: "text-sky-600" },
+      trend: { text: "Standby", className: "text-sky-700" },
       icon: Truck,
       iconClassName: "border-sky-100 bg-sky-50 text-sky-600",
     },
@@ -314,7 +314,7 @@ export default function TriagePage() {
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-bold text-slate-900">{pendingCount}</span>
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">Awaiting dispatch review</p>
+            <p className="mt-1 text-[11px] text-slate-500">Awaiting dispatch review</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600">
             <Siren className="h-5 w-5" />
@@ -343,7 +343,7 @@ export default function TriagePage() {
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">{card.detail}</p>
+                <p className="mt-1 text-[11px] text-slate-500">{card.detail}</p>
               </div>
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-lg border ${card.iconClassName}`}

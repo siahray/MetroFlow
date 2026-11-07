@@ -130,7 +130,7 @@ export function Sidebar({
                 className={cn(
                   "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
                   active
-                    ? "bg-sky-600 font-semibold text-white shadow-sm"
+                    ? "bg-sky-700 font-semibold text-white shadow-sm"
                     : "text-slate-400 hover:bg-slate-800/70 hover:text-white",
                 )}
               >
@@ -169,7 +169,7 @@ export function Sidebar({
           <Shield className="h-3.5 w-3.5 text-sky-400" />
         </div>
         <p className="font-medium text-slate-300">{user?.name || user?.email || "Signed in"}</p>
-        <p className="font-mono text-[10px] text-slate-500">
+        <p className="font-mono text-[10px] text-slate-400">
           {user?.role === "SUPER_ADMIN" ? "Super Admin" : "Dispatcher"}
         </p>
         <button

@@ -1,10 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import type { SOSRequest } from "@/lib/dispatch";
 import { CALL_IN_DEFAULT, createSOS, parseCallIn, type CallInForm } from "@/lib/sos-call";
+import { useDialogFocus } from "./use-dialog-focus";
 
 type LogSOSModalProps = {
   /** Called with the created incident; the caller closes and selects it. */
@@ -25,13 +26,7 @@ export function LogSOSModal({ onLogged, onClose }: LogSOSModalProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const first = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    first.current?.focus();
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && !saving && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, saving]);
+  useDialogFocus(first, onClose, saving);
 
   const set = (key: keyof CallInForm) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }));

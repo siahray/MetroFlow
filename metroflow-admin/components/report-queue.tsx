@@ -68,7 +68,7 @@ export function ReportQueue({
               {reports.length}
             </span>
           </div>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500">
             Sort by: <strong className="font-semibold text-slate-700">Live urgency</strong>
           </span>
         </div>
