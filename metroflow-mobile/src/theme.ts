@@ -26,3 +26,30 @@ export const colors = {
   amber100: "#fef3c7",
   amber800: "#92400e",
 } as const;
+
+/**
+ * The type scale. Existing screens still carry their own StyleSheet numbers, so
+ * this is the one place to retune sizes (BACKLOG U-5 does that pass); new or
+ * edited styles should take a step from here instead of a new literal.
+ */
+export const fontSize = {
+  micro: 10, // timestamps, badges
+  caption: 11, // helper and meta text
+  body: 12, // default body
+  label: 13, // buttons, field labels
+  subtitle: 15, // section headings
+  title: 18, // screen titles
+  display: 22, // numeric readouts
+} as const;
+
+/** Spacing on a 4pt grid, for the same reason: one place to retune. */
+export const space = {
+  hair: 2,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+} as const;

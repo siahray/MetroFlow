@@ -100,9 +100,9 @@ location read.
 | # | Item | Size |
 |---|------|------|
 | U-2 | ~~Accessibility pass beyond buttons: form labels, focus order, contrast, screen-reader test~~ **Done — axe scan in CI, contrast fixes, shared dialog focus trap** | M |
-| U-3 | Adopt `theme.ts` for font sizes and spacing; finish moving hex into tokens in the admin Tailwind config | S |
+| U-3 | ~~Adopt `theme.ts` for font sizes and spacing; finish moving hex into tokens in the admin Tailwind config~~ **Done — every portal hex now lives in `MAP_COLORS` (`lib/network.ts`), guarded by `lib/no-raw-colors.test.ts`; `theme.ts` gained the type and spacing scales** | S |
 | U-4 | ~~P1-4 custom splash screen; P1-5 context-specific error messages (GPS denied, network) in the driver app~~ **Done — already implemented; added the missing GPS Retry** | S |
-| U-5 | P2-1/2/3 brand palette, typography scale, motion | M |
+| U-5 | P2-1/2/3 brand palette, typography scale, motion — this is where the 219 hardcoded mobile `fontSize` values and 384 spacing values get swept onto the new `theme.ts` scale (snapping them now would mean doing it twice) | M |
 | U-6 | P2-6 turn-by-turn icons and ETA; P2-7 profile settings; P3-4 telemetry display; P3-5 report history | M each |
 | U-7 | P3-1 keyboard shortcuts; P3-2 advanced filters; P3-3 bulk actions; P3-6 dark mode; P2-4 charts | L, defer |
 
