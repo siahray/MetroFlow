@@ -122,6 +122,40 @@ export const STATUS_LABELS: Record<PassabilityStatus, string> = {
   SUBMERGED: "Submerged",
 };
 
+/**
+ * The colours the canvas paints with. MapLibre paint specs and the popup's DOM
+ * styles need literal strings, so these cannot be Tailwind classes; keeping
+ * them here means the overlays, the draft shape and the popup cannot drift
+ * apart. Hues follow the driver app's obstruction language, not brand tokens.
+ */
+export const MAP_COLORS = {
+  /** Text and node outlines. */
+  ink: "#0f172a",
+  /** Secondary popup text. */
+  inkMuted: "#475569",
+  /** Label halos and node fill. */
+  paper: "#ffffff",
+  /** Casing under the road lines. */
+  casing: "#f8fafc",
+  /** Planned route halo, and a healthy sensor. */
+  accent: "#0ea5e9",
+  /** Planned route line and endpoints. */
+  route: "#0369a1",
+  /** Hazards, worst first; `alert` also carries the SOS dots. */
+  hazardImpassable: "#7f1d1d",
+  hazardSevere: "#b91c1c",
+  alert: "#dc2626",
+  /** Default hazard, a breached sensor, and the draft shape. */
+  warning: "#f59e0b",
+  /** Fleet unit and its label. */
+  unit: "#2563eb",
+  unitLabel: "#1e3a8a",
+  sosLabel: "#991b1b",
+  /** Sensor label ink; a disabled sensor is `sensorOff`. */
+  sensorLabel: "#0c4a6e",
+  sensorOff: "#94a3b8",
+} as const;
+
 function numberParam(value: number): string {
   return Number.isFinite(value) ? String(value) : "0";
 }

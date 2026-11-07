@@ -20,6 +20,7 @@ import {
   fetchNetworkState,
   fetchRoute,
   formatDepthCm,
+  MAP_COLORS,
   runRainfallSimulation,
   STATUS_COLORS,
   STATUS_LABELS,
@@ -73,13 +74,13 @@ const OVERLAY_LABELS: Record<OverlayKey, string> = {
 function hazardColor(level: string): string {
   switch (level.toUpperCase()) {
     case "IMPASSABLE":
-      return "#7f1d1d";
+      return MAP_COLORS.hazardImpassable;
     case "LEVEL_3":
-      return "#b91c1c";
+      return MAP_COLORS.hazardSevere;
     case "LEVEL_2":
-      return "#dc2626";
+      return MAP_COLORS.alert;
     default:
-      return "#f59e0b";
+      return MAP_COLORS.warning;
   }
 }
 
@@ -178,7 +179,11 @@ function sensorCollection(sensors: Sensor[]) {
           geometry: { type: "Point" as const, coordinates: [sensor.longitude, sensor.latitude] },
           properties: {
             label: sensor.sensor_id,
-            color: !sensor.active ? "#94a3b8" : sensor.last_flagged ? "#f59e0b" : "#0ea5e9",
+            color: !sensor.active
+              ? MAP_COLORS.sensorOff
+              : sensor.last_flagged
+                ? MAP_COLORS.warning
+                : MAP_COLORS.accent,
           },
         },
       ];
@@ -227,7 +232,7 @@ function buildPopupContent(props: EdgeProperties): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.style.fontSize = "12px";
   wrapper.style.lineHeight = "1.45";
-  wrapper.style.color = "#0f172a";
+  wrapper.style.color = MAP_COLORS.ink;
 
   const title = document.createElement("div");
   title.style.fontWeight = "700";
@@ -238,13 +243,13 @@ function buildPopupContent(props: EdgeProperties): HTMLElement {
 
   const status = document.createElement("div");
   status.style.fontWeight = "700";
-  status.style.color = STATUS_COLORS[props.status] ?? "#0f172a";
+  status.style.color = STATUS_COLORS[props.status] ?? MAP_COLORS.ink;
   status.textContent = `${STATUS_LABELS[props.status] ?? props.status} · ${formatDepthCm(
     props.water_depth_cm,
   )}`;
 
   const meta = document.createElement("div");
-  meta.style.color = "#475569";
+  meta.style.color = MAP_COLORS.inkMuted;
   meta.textContent = `Edge #${props.edge_id} · ${Math.round(props.distance_m)} m · ${Math.round(
     props.avg_speed_kmh,
   )} km/h`;
@@ -334,7 +339,11 @@ export function NetworkMap({
           type: "line",
           source: "network-edges",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#f8fafc", "line-width": 6.5, "line-opacity": 0.9 },
+          paint: {
+            "line-color": MAP_COLORS.casing,
+            "line-width": 6.5,
+            "line-opacity": 0.9,
+          },
         });
 
         map.addLayer({
@@ -369,7 +378,11 @@ export function NetworkMap({
           type: "line",
           source: "network-route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#0ea5e9", "line-width": 10, "line-opacity": 0.22 },
+          paint: {
+            "line-color": MAP_COLORS.accent,
+            "line-width": 10,
+            "line-opacity": 0.22,
+          },
         });
         map.addLayer({
           id: "network-route-line",
@@ -377,7 +390,7 @@ export function NetworkMap({
           source: "network-route",
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#0369a1",
+            "line-color": MAP_COLORS.route,
             "line-width": 4.5,
             "line-dasharray": [1.6, 1],
           },
@@ -388,9 +401,9 @@ export function NetworkMap({
           source: "network-route-ends",
           paint: {
             "circle-radius": 5,
-            "circle-color": "#0369a1",
+            "circle-color": MAP_COLORS.route,
             "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
+            "circle-stroke-color": MAP_COLORS.paper,
           },
         });
 
@@ -439,8 +452,8 @@ export function NetworkMap({
             "text-max-width": 9,
           },
           paint: {
-            "text-color": "#7f1d1d",
-            "text-halo-color": "#ffffff",
+            "text-color": MAP_COLORS.hazardImpassable,
+            "text-halo-color": MAP_COLORS.paper,
             "text-halo-width": 1.8,
           },
         });
@@ -451,9 +464,9 @@ export function NetworkMap({
           source: "network-nodes",
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 15, 4],
-            "circle-color": "#ffffff",
+            "circle-color": MAP_COLORS.paper,
             "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#0f172a",
+            "circle-stroke-color": MAP_COLORS.ink,
           },
         });
         map.addLayer({
@@ -470,8 +483,8 @@ export function NetworkMap({
             "text-ignore-placement": false,
           },
           paint: {
-            "text-color": "#0f172a",
-            "text-halo-color": "#ffffff",
+            "text-color": MAP_COLORS.ink,
+            "text-halo-color": MAP_COLORS.paper,
             "text-halo-width": 1.6,
           },
         });
@@ -482,9 +495,9 @@ export function NetworkMap({
           source: "map-fleet",
           paint: {
             "circle-radius": 6,
-            "circle-color": "#2563eb",
+            "circle-color": MAP_COLORS.unit,
             "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
+            "circle-stroke-color": MAP_COLORS.paper,
           },
         });
         map.addLayer({
@@ -500,8 +513,8 @@ export function NetworkMap({
             "text-allow-overlap": false,
           },
           paint: {
-            "text-color": "#1e3a8a",
-            "text-halo-color": "#ffffff",
+            "text-color": MAP_COLORS.unitLabel,
+            "text-halo-color": MAP_COLORS.paper,
             "text-halo-width": 1.6,
           },
         });
@@ -512,9 +525,9 @@ export function NetworkMap({
           source: "map-sos",
           paint: {
             "circle-radius": 8,
-            "circle-color": "#dc2626",
+            "circle-color": MAP_COLORS.alert,
             "circle-stroke-width": 2.5,
-            "circle-stroke-color": "#ffffff",
+            "circle-stroke-color": MAP_COLORS.paper,
           },
         });
         map.addLayer({
@@ -530,8 +543,8 @@ export function NetworkMap({
             "text-allow-overlap": false,
           },
           paint: {
-            "text-color": "#991b1b",
-            "text-halo-color": "#ffffff",
+            "text-color": MAP_COLORS.sosLabel,
+            "text-halo-color": MAP_COLORS.paper,
             "text-halo-width": 1.6,
           },
         });
@@ -544,7 +557,7 @@ export function NetworkMap({
             "circle-radius": 6,
             "circle-color": ["get", "color"],
             "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
+            "circle-stroke-color": MAP_COLORS.paper,
           },
         });
         map.addLayer({
@@ -560,8 +573,8 @@ export function NetworkMap({
             "text-allow-overlap": false,
           },
           paint: {
-            "text-color": "#0c4a6e",
-            "text-halo-color": "#ffffff",
+            "text-color": MAP_COLORS.sensorLabel,
+            "text-halo-color": MAP_COLORS.paper,
             "text-halo-width": 1.6,
           },
         });
@@ -572,7 +585,11 @@ export function NetworkMap({
           type: "line",
           source: "draw-draft",
           filter: ["==", ["geometry-type"], "LineString"],
-          paint: { "line-color": "#f59e0b", "line-width": 2.5, "line-dasharray": [2, 1.5] },
+          paint: {
+            "line-color": MAP_COLORS.warning,
+            "line-width": 2.5,
+            "line-dasharray": [2, 1.5],
+          },
         });
         map.addLayer({
           id: "draw-draft-points",
@@ -581,9 +598,9 @@ export function NetworkMap({
           filter: ["==", ["geometry-type"], "Point"],
           paint: {
             "circle-radius": 5,
-            "circle-color": "#f59e0b",
+            "circle-color": MAP_COLORS.warning,
             "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
+            "circle-stroke-color": MAP_COLORS.paper,
           },
         });
 
