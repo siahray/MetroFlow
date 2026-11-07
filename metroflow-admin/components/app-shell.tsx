@@ -110,7 +110,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
         {/* Top Operations Header */}
         <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 z-20">
           <div className="flex items-center gap-3 text-xs">
-            <span className="text-slate-400">Operations HQ</span>
+            <span className="text-slate-500">Operations HQ</span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
             <span className="font-semibold text-slate-800">{title}</span>
           </div>
@@ -127,7 +127,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
               </div>
               <div>
                 <div className="leading-tight font-semibold text-slate-800">{officerName}</div>
-                <div className="text-[10px] text-slate-400">{officerRole}</div>
+                <div className="text-[10px] text-slate-500">{officerRole}</div>
               </div>
             </div>
           </div>
