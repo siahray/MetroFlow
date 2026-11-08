@@ -225,6 +225,7 @@ photograph is stored in the row because this deployment has no object store).
 | ----------------- | --------------------- | -------------------------------------------------------- |
 | `report_id`       | uuid                  | Primary key                                              |
 | `reporter_hash`   | varchar(64)           | Salted hash of the reporting account; never raw identity |
+| `client_id`       | uuid                  | Device-generated id, unique; makes an offline replay idempotent |
 | `source`          | varchar(20)           | `PHOTO`, `SENSOR` or `CALL`                              |
 | `geometry`        | geometry(Point, 4326) | Reported location                                        |
 | `barangay`        | varchar(120)          | Reporting area                                           |
@@ -243,9 +244,11 @@ photograph is stored in the row because this deployment has no object store).
 | `moderated_at`    | timestamp             | Decision time                                            |
 | `decision_reason` | text                  | Required for reject and duplicate                        |
 | `hazard_id`       | integer               | FK → `hazard_zones.hazard_id`, nullable                  |
+| `dismissed_at`    | timestamp             | Set when dismissed; the row is purged after 72 hours     |
 
 Indexes: GiST on `geometry` (created by GeoAlchemy2 for the column); btree on
-`reporter_hash`, `depth_level`, `status` and `submitted_at`. The queue cannot be
+`reporter_hash`, `client_id`, `depth_level`, `status`, `submitted_at` and
+`dismissed_at`. The queue cannot be
 ordered in SQL because recency decay is applied when the row is read, so the
 moderation list sorts in the API over the pending set rather than claiming an
 index it does not use.
@@ -414,7 +417,9 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/audit/export`            | GET    | BR-012 / FSD-FR-049        |
 | `/api/v1/incidents/export`        | GET    | BR-012 / FSD-FR-049        |
 
-The sensor registry CRUD endpoints and user management endpoints are implemented; the CR-001 plan remains for additional sensor features and offline capabilities. The
+The sensor registry, user management, exports, moderation actions, offline queue
+and on-device cache are implemented. What remains from CR-001 is real hardware
+ingestion behind the existing endpoints, and basemap tiles (LIM-017). The
 routing endpoint is also extended with coordinate inputs, hazard exclusion and
 turn instructions.
 
@@ -994,6 +999,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-021 | Session tokens are issued by the API (PyJWT + bcrypt)     | Supabase Auth (ADR-016), shared passcode | No Supabase Auth project is provisioned, both clients already call `/auth/login`, and bcrypt keeps dispatcher and driver accounts in the one table the API authorises against. Revisit when managed identity exists | Accepted 27 Oct 2026; supersedes ADR-016 |
 | ADR-022 | Portal basemap is the keyless Carto Positron style        | Mapbox raster (ADR-019), OSM raster  | One public style URL needs no token, so a clone runs the map without onboarding an account; the desaturated basemap keeps the network status colours the only saturated layer, and the style URL stays a constant if a licensed provider is adopted later | Accepted 29 Oct 2026; refines ADR-019 |
 | ADR-023 | Report evidence lives in the report row                   | Local evidence volume behind a storage interface (ADR-017), Supabase Storage | The hosted API runs on Vercel, where the filesystem is ephemeral and no object store is provisioned, so an object key would point at nothing after a cold start. Bytes are capped at 4 MB, type-sniffed, hashed in the row and served only through an authenticated endpoint; moving to ADR-017's volume means changing one intake branch and one read endpoint | Accepted 30 Oct 2026; diverges from ADR-017 for the hosted pilot |
+| ADR-024 | Offline state is on-device SQLite, replays keyed by `client_id` | In-memory queue, raster tile cache | The queue, road graph, hazards and last route must survive an app restart, and `expo-sqlite` is already the app's storage; a device-generated `client_id` makes a report replay after a lost response return the original row instead of a duplicate. Tile storage and licensing stay out of scope (ADR-018, LIM-017) | Accepted 8 Nov 2026 |
 
 ## 7. Known Limitations
 

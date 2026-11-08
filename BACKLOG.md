@@ -1,6 +1,6 @@
 # MetroFlow - Consolidated Backlog
 
-**Revised:** 7 November 2026 · **Baseline:** `main` at `f869d98` (PR #68 merged, all checks green)
+**Revised:** 8 November 2026 · **Baseline:** `main` at `baf4b2d` (PR #71 merged, all checks green)
 **Method:** cross-checked FSD status table, TSD §7, PM plan, PROGRESS_REPORT, FEATURES_AND_DELIVERABLES,
 UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Items marked *(unverified)* were not run.
 
@@ -11,7 +11,7 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 | Offline report queue, SQLite cache, `client_id` idempotency | Merged (#44, #45). Migration applied to Supabase |
 | Portal loading/error/offline states; broken `incident-queue.tsx` on `main` | Merged (#46). Web CI is green again |
 | Sensor bug fixes (`fix/sensor-geography`) | Merged (#43) |
-| Hosted DB migrated to head; sensor tables created (they were missing in production) | Done. Head is `f3b7d9a1c562` |
+| Hosted DB migrated to head; sensor tables created (they were missing in production) | Done. Head is `e9b4c2d7a106` |
 | RLS enabled on `sensors`, `sensor_readings` | Merged (#48), applied live |
 | Two failing API contract tests (test bugs: shared node, missing body, self-delete order) | Merged (#49). Backend CI was green on `main` at the time — **since broken again by PR #64, see H-5** |
 | Backlog document and refresh | Merged (#47, #50) |
@@ -31,16 +31,15 @@ UI_POLISH_BACKLOG, CI workflows, branches, the hosted database and the code. Ite
 
 ## 1. Documentation drift (code is ahead of the docs)
 
-| # | Doc | Problem |
-|---|-----|---------|
-| D-1 | `FEATURES_AND_DELIVERABLES.md` | Lists offline (FR-068 to 071) as "Planned (Scope Conflict)" and FR-079 as missing. Both are built. |
-| D-2 | `docs/api.md` | No entry for `nearest-sensor`, `/users`, exports (`/audit/export`, `/incidents/export`) or the `client_id` form field. Check each of the 50 routes against `main.py`. |
-| D-3 | `PROGRESS_REPORT.md` | Dated 2 Nov; omits offline queue, SQLite cache, `client_id`, RLS fix. |
-| D-5 | `docs/PROJ_MANAGEMENT_PLAN.md` | I-005 ("CR-001 increment is planned") is outdated; release checklist (lines ~458-467) is all unchecked; Bun test and Playwright still "planned". |
-| D-6 | `docs/TSD.md` | Add an ADR/limitation note: on-device SQLite for graph, hazards and queue (distinct from the out-of-scope tile cache); `client_id` idempotency; LIM-017 stays. |
-| D-7 | `AGENTS.md` | Wrong in four places: "Migration Status: Complete" (see H-2); says offline is "Conflicts with scope resolution" and "Marked Offline Maps … no SQLite" (offline is built); says "RLS: Enabled on all tables" (not true until H-2 lands); "Next Steps" are stale. |
-| D-8 | `docs/design/*BASELINE.md` | "Missing from UI 2" notes are stale (hold, duplicate, plausibility, decision summary all exist). Mark as a spec; tick what is built. |
-| D-9 | `UI_UX_AUDIT_SCOPE_RESOLUTION.md` | Referenced by the FEATURES doc but not in the repo. Restore or remove the reference. |
+Done in the 8 November docs sync. `FEATURES_AND_DELIVERABLES.md` counts offline
+(FR-068 to 071) and the nearest-gauge cross-reference (FR-079) as implemented;
+`docs/api.md` documents every route, `client_id` and the report action set;
+`PROGRESS_REPORT.md` carries an 8 November update; the PM plan closes I-005 and
+ticks the release checks that are provable; `TSD.md` gains ADR-024 (on-device
+SQLite and `client_id`) and the two report columns it was missing; both design
+baselines carry an 8 November status note with corrected traceability; and
+`AGENTS.md` no longer calls offline a placeholder. No open items remain in this
+section.
 
 ## 2. Functional gaps
 
@@ -109,7 +108,7 @@ location read.
 ## 6. Suggested order
 
 1. **Q-2** device test of offline; fix what breaks.
-2. **D-1..D-9** documentation sync in one PR (**H-3** and **H-4** are already done).
+2. **D-1..D-9** documentation sync in one PR (done; **H-3** and **H-4** were done first).
 3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), one offline-queue test (open).
 4. **F-4, F-5** to close the functional gaps left in the portal.
 5. **U-1, U-2, U-4** - done. The rest of section 5 (U-3, U-5..U-7) is deferred until after pilot feedback.

@@ -14,7 +14,7 @@
 | Behaviour ref  | [FSD](../FSD.md)                                     |
 | Architecture   | [TSD](../TSD.md)                                     |
 | Change record  | [CR-001](../CR-001.md)                               |
-| Implementation | Not started; no UI code is approved by this document |
+| Implementation | Implemented through CR-001; see the 8 November 2026 status note below |
 
 This baseline turns the supplied HTML/CSS into a design specification for the
 modelled LGU admin site. It does not approve implementation, cost, schedule or
@@ -29,6 +29,14 @@ covered separately in [DRIVER_APP_BASELINE.md](DRIVER_APP_BASELINE.md).
 > publish and fleet endpoints have since been implemented. [api.md](../api.md)
 > §9 is the authoritative list of what exists, and [FSD.md](../FSD.md)
 > §Implementation Status records how far each screen is wired.
+
+> **Implementation status (8 November 2026).** The report-verification desk now
+> has the hold action, the duplicate target, location plausibility, the
+> flood-safe nearest-unit ranking and the dispatch route preview that this
+> baseline marked as missing from UI 2. The decision summary is partial: the
+> reason and moderator are stored and audited, and the operations log is shown,
+> but there is no single decision/audit block. The cells below are corrected
+> where the current portal has moved past the note.
 
 The supplied UIs are the **visual source of truth**. The FSD remains the
 **behavioural source of truth**. Where the two disagree, the FSD behaviour wins
@@ -351,7 +359,7 @@ while authoring is a map task.
 | Evidence chips           | `EvidenceSummary`        | FSD-FR-034–035, 078–079 | Evidence links               | Chips must reflect real attachments                |
 | Photo verification       | `EvidencePhoto`          | FSD-FR-034, 038, 078    | `photo_path`, `photo_sha256` | Authenticated viewer; no Unsplash                  |
 | Photo metadata           | `EvidenceMetadata`       | FSD-FR-034, 078         | `exif`, `captured_at`        | Separate EXIF present from model confidence        |
-| Location plausibility    | `LocationPlausibility`   | FSD-FR-078              | Claimed vs EXIF vs sensor    | Missing; add pass/fail/unknown with distance       |
+| Location plausibility    | `LocationPlausibility`   | FSD-FR-078              | Claimed vs EXIF vs sensor    | Built: inside/outside pilot area; distance not shown |
 | Photo depth estimate     | `DepthEstimate`          | FSD-FR-034              | `depth_level`, estimate      | Show a range in cm, plus the depth label           |
 | Geo-anchor map           | `IncidentMap`            | FSD-FR-035, 075, 088    | Geometry, units              | Replace static image with MapLibre                 |
 | Nearest unit summary     | `NearestUnitSummary`     | FSD-FR-088              | Ranked units                 | Show flood-safe ETA, not only straight distance    |
@@ -360,9 +368,9 @@ while authoring is a map task.
 | Escalate action          | `EscalateDialog`         | FSD-FR-040              | Escalation target and reason | FSD names BFP or Coast Guard, not PNP              |
 | Reject action            | `RejectReportDialog`     | FSD-FR-039, 081         | Reason code and text         | Reason required; record decision                   |
 | Approve and dispatch     | `ApproveDispatchFlow`    | FSD-FR-042, 080, 045    | Hazard payload, unit, route  | Approve/publish then dispatch; two audited actions |
-| Hold action              | `HoldReportAction`       | FSD-FR-041              | Status transition            | Missing from UI 2                                  |
-| Duplicate action         | `MarkDuplicateDialog`    | FSD-FR-081              | `duplicate_of`, reason       | Missing from UI 2                                  |
-| Decision summary         | `DecisionSummary`        | FSD-FR-043–044, 047     | Audit record                 | Missing; show actor, reason and timestamp          |
+| Hold action              | `HoldReportAction`       | FSD-FR-041              | Status transition            | Built: required reason; the report stays pending |
+| Duplicate action         | `MarkDuplicateDialog`    | FSD-FR-081              | `duplicate_of`, reason       | Built: the reject dialog records `duplicate_of` |
+| Decision summary         | `DecisionSummary`        | FSD-FR-043–044, 047     | Audit record                 | Partial: reason and moderator stored and audited; no decision block |
 
 ### Published hazard alert components
 
@@ -477,7 +485,7 @@ but the map implementation is MapLibre, not inline SVG.
 | Source                 | Label               | —        | `PHOTO`, `CCTV`, `SENSOR` or `CALL`                           | "Citizen Mobile App v2.4" is not a source enum   |
 | Received at            | Timestamp           | —        | ISO timestamp in PHT; relative age                            | UI 2 says 2025; use the real record              |
 | Reporter name          | Text                | —        | Authorised roles only                                         | Keep; apply PII rules                            |
-| Reporter contact       | Masked text         | —        | Mask by default; reveal is role-gated and audited             | UI 2 exposes the full phone number               |
+| Reporter contact       | Masked text         | —        | Mask by default; reveal is role-gated and audited             | Portal masks by default                          |
 | Reporter ID            | Masked text         | —        | Never display the raw identifier                              | Show "Verified citizen" rather than the ID       |
 | Barangay               | Text                | —        | From report record                                            | Keep                                             |
 | Sector                 | Label               | —        | Derived from a configured boundary, not free text             | "Sector 4B" has no schema source                 |
@@ -490,17 +498,17 @@ but the map implementation is MapLibre, not inline SVG.
 | Camera / orientation   | Text                | —        | From EXIF; may be absent                                      | Show "Unknown" when absent                       |
 | EXIF status            | Badge               | —        | Present / absent / stripped, not "verified"                   | Rename to avoid claiming authenticity            |
 | Depth estimate         | Text                | —        | Canonical depth level plus centimetre range                   | Remove feet; `NFR-017` requires centimetres      |
-| Location plausibility  | Badge               | —        | Compare claimed point, EXIF point and sensor location         | Missing from UI 2                                |
-| Sensor references      | List                | —        | Sensor id, type, value, unit, timestamp, threshold            | Keep; label simulated gauges                     |
-| CCTV references        | List                | —        | Demo registry only; show "demo" and availability              | Keep the "0 available" state; label the registry |
+| Location plausibility  | Badge               | —        | Compare claimed point, EXIF point and sensor location         | Built: inside/outside pilot area; distance not shown |
+| Sensor references      | List                | —        | Sensor id, type, value, unit, timestamp, threshold            | Nearest gauge with value, unit and time; simulated flag not shown |
+| CCTV references        | List                | —        | Demo registry only; show "demo" and availability              | Removed: CCTV is out of scope                    |
 | Operations log         | Chronological list  | —        | Actor, role, time, entry; newest visible                      | Keep; connect to audit                           |
-| Internal note          | Textarea            | Yes      | Non-empty; 1–1,000 characters                                 | UI 2 has only an Add Note button                 |
-| Escalation target      | Select + reason     | Yes      | BFP or Coast Guard                                            | UI 2 says PNP / BFP; PNP is not in the FSD       |
-| Rejection reason       | Select + text       | Yes      | Reason required; recorded in the audit trail                  | UI 2 has no reason capture                       |
-| Duplicate of           | Report selector     | Yes      | Must reference an existing report                             | Missing from UI 2                                |
-| Nearest unit           | Ranked summary      | —        | Flood-safe travel time first; distance secondary              | UI 2 shows only "4.2 km"                         |
-| Dispatch route preview | Map overlay         | —        | Route avoids active hazards; confirmation required            | Missing from UI 2                                |
-| Decision summary       | Audit block         | —        | Actor, action, reason, timestamp, integrity hash              | Missing from UI 2                                |
+| Internal note          | Textarea            | Yes      | Non-empty; 1–1,000 characters                                 | Built: inline note; the API caps it at 500 characters |
+| Escalation target      | Select + reason     | Yes      | BFP or Coast Guard                                            | Built: agency and required reason                |
+| Rejection reason       | Select + text       | Yes      | Reason required; recorded in the audit trail                  | Built: required reason                           |
+| Duplicate of           | Report selector     | Yes      | Must reference an existing report                             | Built: the reject dialog records the target      |
+| Nearest unit           | Ranked summary      | —        | Flood-safe travel time first; distance secondary              | Built: ranked by flood-safe ETA, with distance   |
+| Dispatch route preview | Map overlay         | —        | Route avoids active hazards; confirmation required            | Built: previewed by the API before confirm       |
+| Decision summary       | Audit block         | —        | Actor, action, reason, timestamp, integrity hash              | Partial: reason and moderator stored and audited |
 
 ### Published hazard alert fields
 
@@ -1079,32 +1087,32 @@ UI 4 adds these issues:
 
 | FSD reference  | Capability                      | UI coverage                                                   | Baseline action                                      |
 | -------------- | ------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
-| FSD-FR-018–023 | Login and session               | None                                                          | Reuse prototype; apply tokens and Supabase Auth      |
-| FSD-FR-024–031 | Queue, filters, search          | None                                                          | Reuse prototype; add to navigation                   |
-| FSD-FR-032–038 | Incident detail and evidence    | Partial: UI 2 docket, narrative, evidence                     | Add location plausibility and original file viewer   |
-| FSD-FR-039–046 | Triage actions and log          | Partial: reject, escalate, approve                            | Add reason, hold, duplicate, confirmation and undo   |
-| FSD-FR-047     | Override and decision audit     | None                                                          | Administration and audit view                        |
-| FSD-FR-048     | User and role management        | None                                                          | Conditional screen                                   |
-| FSD-FR-049     | Export records                  | None                                                          | Conditional screen                                   |
-| FSD-FR-075     | Live map layers                 | Partial: editor SVG; UI 2/3 static images; UI 4 simulated map | Replace all with MapLibre and real layers            |
-| FSD-FR-076     | Fleet status                    | Partial: UI 4 unit detail; no fleet list                      | Add fleet list and active task; keep UI 4 detail     |
+| FSD-FR-018–023 | Login and session               | Implemented: API sign-in, session token, 401 returns to `/login` | Keep; API-issued tokens (ADR-021)                  |
+| FSD-FR-024–031 | Queue, filters, search          | Implemented: `/triage` queue, filters, search and dismiss     | Keep                                                 |
+| FSD-FR-032–038 | Incident detail and evidence    | Implemented: docket, narrative, evidence viewer, original file, plausibility, operations log | Keep                                |
+| FSD-FR-039–046 | Triage actions and log          | Implemented: reject, hold, escalate, notes, approve, confirmation, undo, resolve | Keep                                |
+| FSD-FR-047     | Override and decision audit     | Partial: hash-chained writes and CSV export; no audit view    | Add an audit view                                    |
+| FSD-FR-048     | User and role management        | Implemented: `/users` CRUD with role guards                   | Keep                                                 |
+| FSD-FR-049     | Export records                  | Implemented: `/export` audit and incident CSV                 | Keep                                                 |
+| FSD-FR-075     | Live map layers                 | Implemented: MapLibre live network, hazard, fleet, SOS and sensor layers | Keep                                      |
+| FSD-FR-076     | Fleet status                    | Implemented: `/fleet` list and unit detail                    | Keep                                                 |
 | FSD-FR-077     | Moderation queue                | Implemented: queue and selection flow on `/moderation`        | Keep; add decided-report history when audit view lands |
 | FSD-FR-078     | Evidence, EXIF, plausibility    | Partial: evidence viewer, EXIF, camera GPS and claimed-point plausibility on `/moderation` | Add claimed-vs-EXIF distance check |
-| FSD-FR-079     | CCTV and gauge cross-reference  | Partial: UI 2 chip; UI 3 CCTV image                           | Add nearest rain gauge, demo labels and release rule |
+| FSD-FR-079     | Nearest gauge cross-reference   | Implemented: nearest rain gauge in the report desk; CCTV is out of scope | Keep                                       |
 | FSD-FR-080     | Approve and publish             | Implemented: approve publishes a hazard behind a confirmation step | Keep; show the resulting hazard on the map |
 | FSD-FR-081     | Reject or duplicate with reason | Implemented: required reason and duplicate target             | Keep |
-| FSD-FR-082     | Draw flood polygon              | Partial: toolbar and static polygon                           | Real polygon draw, edit and validation               |
-| FSD-FR-083     | Draw closure line               | Partial: static dashed line                                   | Real line draw snapped to road edges                 |
-| FSD-FR-084     | Obstruction level               | Partial: three wrong options                                  | Use `CAUTION`, `LEVEL_2`, `LEVEL_3`, `IMPASSABLE`    |
-| FSD-FR-085     | Publish, update, withdraw       | Partial: UI 1 Save; UI 3 live bulletin                        | Split draft, publish and withdraw; add expiry        |
-| FSD-FR-086     | SSE updates                     | Partial: UI 3/4 static live labels                            | Subscribe, reconcile and show stale state            |
-| FSD-FR-087     | Distress incident               | Partial: UI 4 beacon; header count                            | Dispatch queue, distress creation and map markers    |
-| FSD-FR-088     | Rank available units            | Partial: UI 4 ETA and distance                                | Add ranked list; replace distance-only ranking       |
-| FSD-FR-089     | Assign and preview route        | Partial: UI 4 route visual; no confirmation                   | Add candidate selection, preview and confirmation    |
-| FSD-FR-090     | Sensor ingestion                | Partial: UI 2 chip; UI 3 list                                 | Add sensor id, time, threshold and simulated flag    |
-| FSD-FR-091     | Advisory roads                  | Partial: threshold text; UI 3 road chips                      | Advisory layer and road impact                       |
-| FSD-FR-092     | Role enforcement                | None                                                          | Route guards and API enforcement                     |
-| FSD-FR-093     | Immutable audit                 | None                                                          | Audit writes and audit view                          |
+| FSD-FR-082     | Draw flood polygon              | Implemented: polygon draw, validation and publish             | Keep                                                 |
+| FSD-FR-083     | Draw closure line               | Implemented: line draw and withdraw; not snapped to a road edge | Snap to the nearest edge                           |
+| FSD-FR-084     | Obstruction level               | Implemented: `CAUTION`, `LEVEL_2`, `LEVEL_3`, `IMPASSABLE`    | Keep                                                 |
+| FSD-FR-085     | Publish, update, withdraw       | Implemented: create, update, publish and withdraw             | Keep; add expiry                                     |
+| FSD-FR-086     | SSE updates                     | Implemented: hazard, SOS and fleet streams reconcile live state | Keep                                               |
+| FSD-FR-087     | Distress incident               | Implemented: SOS intake, dispatcher call-in and map markers   | Keep                                                 |
+| FSD-FR-088     | Rank available units            | Implemented: flood-safe ETA ranking                           | Keep                                                 |
+| FSD-FR-089     | Assign and preview route        | Implemented: candidate selection, API preview and confirmation | Keep                                                |
+| FSD-FR-090     | Sensor ingestion                | Partial: registry CRUD and readings; simulated flag not shown | Show the simulated flag                              |
+| FSD-FR-091     | Advisory roads                  | Partial: impact-radius advisories and routing penalty; no flood-state view | Add the flood-state view                 |
+| FSD-FR-092     | Role enforcement                | Implemented: portal guards and API role checks                | Keep                                                 |
+| FSD-FR-093     | Immutable audit                 | Partial: hash-chained writes and verification; no audit view  | Add an audit view                                    |
 | Not in FSD     | Civic broadcasts                | Partial: UI 3 public alert                                    | Scope decision; add requirements or drop the screen  |
 | Not in FSD     | Evacuation centers              | Partial: UI 3/4 cards                                         | Scope decision; add requirements or drop the card    |
 | Not in FSD     | Crew, comms and air escalation  | Partial: UI 4 crew, stream and actions                        | Scope decision; add requirements or remove           |

@@ -260,7 +260,7 @@ Rules:
 | I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Open (CR-001) |
 | I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround    |
 | I-004 | Issue      | CCTV is out of scope and gauges may be simulated                  | Business Analyst | Low    | Accepted      |
-| I-005 | Issue      | CR-001 increment is planned, not implemented                      | PM               | High   | Open          |
+| I-005 | Issue      | CR-001 increment is planned, not implemented                      | PM               | High   | Closed 8 Nov 2026 — endpoints and offline operation are implemented and hosted |
 | D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open          |
 | D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open          |
 | D-003 | Dependency | Client confirms the pilot corridor                                | Business Analyst | High   | Open          |
@@ -458,15 +458,22 @@ Confidence in next:   <high/medium/low + reason>
 ### Appendix F — Closure and handover
 
 - [ ] All `Must` functional requirements accepted (FSD), including BR-013 to BR-018.
-- [ ] CI green on `main`; ZAP clean at High/Medium.
-- [ ] Hosted database at head, or the limitation documented.
-- [ ] Token enforcement on every privileged route; role violations return 403 and change nothing.
+- [x] CI green on `main` (Backend, Web, Mobile, CodeQL).
+- [ ] ZAP clean at High/Medium.
+- [x] Hosted database at head, or the limitation documented.
+- [x] Token enforcement on every privileged route; role violations return 403 and change nothing.
 - [ ] Offline E2E and hazard publish latency tests pass.
 - [ ] Simulated sensors labelled in the product; no CCTV claim.
 - [ ] Document set approved, including CR-001.
 - [ ] Repository access granted per institutional rule.
 - [ ] Handover session delivered to «Client Representative».
 - [ ] Known limitations communicated in writing (TSD §7).
+
+The sensor registry stores a `simulated` flag and `/flood-state` labels such a
+reading `SIMULATED`, but the portal does not display the flag yet; the CCTV
+claim is gone from the product. The offline queue and its SQLite cache are
+implemented (F-7, FR-068 to 071); what is missing for that line is the measured
+end-to-end run on a device with airplane mode (BACKLOG Q-2, Q-4).
 
 Post-implementation review, one month after handover or after the first rain
 event: were the benefits realised, did the system hold up, and what was missing?

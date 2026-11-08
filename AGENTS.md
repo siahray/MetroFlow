@@ -43,7 +43,7 @@ Location: `supabase-migrations/`
 - `add_new_tables.sql` - Main migration for new tables
 - Verification scripts: `check_alembic.sql`, `check_rls.sql`, `check_indexes.sql`
 
-## Implementation Status (2 Nov 2026)
+## Implementation Status (8 Nov 2026)
 
 ### ✅ Completed
 1. **Database Schema**
@@ -52,7 +52,7 @@ Location: `supabase-migrations/`
    - Created `sos_requests` table with coordinates and optional note
    - Created `sensors` table with threshold, impact radius, location
    - Created `sensor_readings` table with breach detection
-   - Enabled RLS on all tables
+   - RLS enabled on every public table and guarded by a CI test
    - Revoked privileges from anon/authenticated roles
 
 2. **Backend API** (`backend/`)
@@ -83,6 +83,11 @@ Location: `supabase-migrations/`
    - **Dispatch Action Log Persistence (FSD-FR-039 to 046):**
      - Per-incident log endpoints (`GET /api/v1/sos/{sos_id}/log`, `GET /api/v1/reports/{report_id}/log`)
      - Removed in-memory log state from radar, triage, and dashboard
+   - **Moderation and dispatch actions (CR-001):**
+     - Report/SOS `hold`, `reject`, `escalate`, `notes`, `dismiss`, `restore`; SOS `resolve`; dispatch `undo`
+     - `GET /api/v1/reports/mine` (driver history) and `GET /api/v1/vehicles/{id}/mission` (unit poll)
+     - `GET /api/v1/{hazards,vehicles,sos}/stream` SSE feeds
+     - `client_id` on report creation makes an offline replay idempotent
    - **Rescue Route Preview (FSD-FR-089):**
      - Added optional `vehicle_id` query parameter to dispatch preview endpoint
      - Returns 409 for missing vehicle position, 422 for no safe route
@@ -110,7 +115,7 @@ Location: `supabase-migrations/`
    - "Continue as Guest" button already implemented
    - Updated profile screen to display clearance as `28 cm` instead of `280 mm`
    - Removed emergency phone field from profile screen
-   - Marked Offline Maps screen as visual placeholder (no SQLite/download logic)
+   - Offline screen reports the real on-device cache (graph, hazards, last route); basemap tiles stay out of scope
    - Removed "Call 911" references from SOS and Report screens
    - **iOS Parser Error Fix:**
      - Updated Expo SDK packages to fix React Native EventEmitter parsing error
@@ -123,7 +128,7 @@ Location: `supabase-migrations/`
 - None
 
 ### 📋 Backlog Items Not Yet Started
-- None. Offline operation (FR-068-071) is implemented (`metroflow-mobile/src/offline.ts`): ordered report queue with pending banner and sync-on-reconnect, and SQLite caching of the road graph/hazards/last route rendered when offline. Basemap tile download stays a placeholder — out of scope per the section above.
+- None. Offline operation (FR-068-071) is implemented (`metroflow-mobile/src/offline.ts`): ordered report queue with pending banner and sync-on-reconnect, SQLite caching of the road graph/hazards/last route, and `navigation/offline-route.ts` planning a route over that cache when offline. Replays carry a `client_id` so a lost response cannot duplicate a report. Basemap tile download stays out of scope per the section above.
 
 ## Scope Constraints (per UI/UX Design Audit)
 
