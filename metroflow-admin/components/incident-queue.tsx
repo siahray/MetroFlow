@@ -152,7 +152,7 @@ export function IncidentQueue({
         {error ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
             <AlertCircle className="h-8 w-8 text-rose-500" />
-            <p className="text-xs text-slate-600">Failed to load queue</p>
+            <p className="text-xs text-slate-600">{error}</p>
             {onRetry && (
               <button
                 type="button"

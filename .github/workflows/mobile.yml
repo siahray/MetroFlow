@@ -39,3 +39,8 @@ jobs:
 
       - name: Typecheck
         run: bunx tsc --noEmit
+
+      # Pure modules only (the offline queue policy and the offline route
+      # planner); anything that needs React Native is covered by the device run.
+      - name: Unit tests
+        run: bun test src

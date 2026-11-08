@@ -54,7 +54,7 @@ section.
 
 | # | Item | Notes |
 |---|------|-------|
-| Q-1 | **Portal smoke now runs end to end; component and driver-app tests still missing.** `metroflow-admin/e2e/` has a Playwright smoke (the sign-in gate, a rejected password, the triage queue rendering a live incident, a stored session reopening triage) with the API stubbed in the browser, so it needs no database, hosted API or dispatcher password; Web CI grew a `Portal smoke (Playwright)` job. Still open: no React component tests, no driver-app tests, and no *offline* Playwright run. | LIM-009. Offline-queue test still outstanding |
+| Q-1 | **Automated coverage is in place; only React component tests are still missing.** `metroflow-admin/e2e/` has Playwright specs for the sign-in gate, a rejected password, the triage queue rendering a live incident, a stored session reopening triage, axe scans and the dialog focus trap, plus an offline run (the shell's offline banner appears on a dropped connection and clears on reconnect; a load that fails while offline names the cause, and its retry recovers). The API is stubbed in the browser, so none of it needs a database, hosted API or dispatcher password. The driver app has Bun tests over its two pure modules — the offline queue policy (`src/offline-queue.test.ts`: oldest-first, a transient failure keeps order, a permanent 4xx drops and continues, 401/429 stay queued) and the offline route planner (`src/navigation/offline-route.test.ts`: clearance vs depth, hazard detour, `ignore_hazards`, no safe route) — and Mobile CI runs them. Still open: no React component tests (no jsdom/testing-library configured), and the queue's SQL/photo handling is only covered by the Q-2 device run. | LIM-009 |
 | Q-2 | **Offline device test (TC-029/030) not yet run.** Needs a native rebuild (`expo-sqlite` config plugin), airplane mode, submit, reconnect, check it syncs once. | Run before claiming FR-068 to 071 |
 | Q-3 | Mobile CI runs `tsc` only, no lint. 2 lint warnings remain in the driver app; admin has ~6 unused-var warnings. | Add `expo lint` to `mobile.yml` |
 | Q-4 | Offline-latency and hazard-publish latency tests (release checklist). | PM plan |
@@ -109,7 +109,7 @@ location read.
 
 1. **Q-2** device test of offline; fix what breaks.
 2. **D-1..D-9** documentation sync in one PR (done; **H-3** and **H-4** were done first).
-3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), one offline-queue test (open).
+3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), the offline Playwright run and the driver-app queue/route tests (done; React component tests still open).
 4. **F-4, F-5** to close the functional gaps left in the portal.
 5. **U-1, U-2, U-4** - done. The rest of section 5 (U-3, U-5..U-7) is deferred until after pilot feedback.
 6. **S-1, S-4** before any real users.

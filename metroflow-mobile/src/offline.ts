@@ -4,7 +4,8 @@ import * as SQLite from "expo-sqlite";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 
-import { ApiError, submitReport, type ReportDepth, type ReportPhoto } from "./api";
+import { submitReport, type ReportDepth, type ReportPhoto } from "./api";
+import { drainQueue } from "./offline-queue";
 
 // Offline operation (FSD-FR-068 to 071): an ordered report queue and a local
 // copy of the graph, hazards and last route.
@@ -169,24 +170,18 @@ export async function flushReports(): Promise<void> {
   if (flushing) return;
   flushing = true;
   try {
-    for (let queue = await readQueue(); queue.length > 0; queue = await readQueue()) {
-      const next = queue[0];
-      try {
-        // A photo the OS removed must not block the queue: send the report without it.
+    await drainQueue<QueuedReport & { seq: number }>({
+      peek: async () => (await readQueue())[0] ?? null,
+      // A photo the OS removed must not block the queue: send the report without it.
+      send: async (next) => {
         await submitReport(next.photo && !photoExists(next.photo) ? { ...next, photo: null } : next);
-      } catch (cause) {
-        const permanent =
-          cause instanceof ApiError &&
-          cause.status >= 400 &&
-          cause.status < 500 &&
-          cause.status !== 401 &&
-          cause.status !== 429;
-        if (!permanent) return;
-      }
-      await (await db()).runAsync("DELETE FROM report_queue WHERE seq = ?", next.seq);
-      discardPhoto(next.photo);
-      notify();
-    }
+      },
+      remove: async (next) => {
+        await (await db()).runAsync("DELETE FROM report_queue WHERE seq = ?", next.seq);
+        discardPhoto(next.photo);
+        notify();
+      },
+    });
   } finally {
     flushing = false;
   }
