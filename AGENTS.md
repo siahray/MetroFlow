@@ -177,7 +177,13 @@ npm run dev
 ```bash
 cd metroflow-admin
 bun test lib          # unit tests over lib/
-bun run test:e2e      # Playwright portal smoke; build + serve on :3100, API stubbed
+bun run test:e2e      # Playwright portal suite; build + serve on :3100, API stubbed
+```
+
+### Driver App tests
+```bash
+cd metroflow-mobile
+bun test src          # pure modules only: offline queue policy, offline route planner
 ```
 
 ### Driver App

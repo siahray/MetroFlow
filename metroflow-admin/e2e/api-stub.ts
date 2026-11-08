@@ -75,7 +75,10 @@ export async function seedSession(page: Page): Promise<void> {
 }
 
 /** Answer every API call the triage screen makes. `loginStatus` drives the sign-in test. */
-export async function stubApi(page: Page, options: { loginStatus?: number } = {}): Promise<void> {
+export async function stubApi(
+  page: Page,
+  options: { loginStatus?: number; fail?: () => boolean } = {},
+): Promise<void> {
   const loginStatus = options.loginStatus ?? 200;
 
   await page.route("**/api/v1/**", async (route) => {
@@ -97,6 +100,10 @@ export async function stubApi(page: Page, options: { loginStatus?: number } = {}
         body: ": e2e\n\n",
       });
     }
+
+    // `fail` simulates a dead connection for the offline test; the streams above
+    // are still answered so the page does not spin on a retry loop.
+    if (options.fail?.()) return route.abort("internetdisconnected");
 
     if (path === "/api/v1/sos") {
       return json(route, url.searchParams.get("dismissed") === "true" ? [] : [sosRow]);

@@ -183,9 +183,9 @@ Since the 2 November report:
 | Evidence cross-reference (FR-079) | `GET /api/v1/reports/{id}/nearest-sensor` returns the closest active rain gauge, latest reading, distance and breach state; the moderation desk shows it beside the evidence |
 | Moderation and dispatch actions | Report hold, escalate, notes, log, dismiss and restore; SOS reject, hold, escalate, resolve, notes, log, dismiss, restore and dispatch undo; driver report history (`/reports/mine`) and unit mission poll (`/vehicles/{id}/mission`) |
 | Database security | RLS on every public table is now a CI gate (`test_every_public_table_has_row_level_security`); the hosted database is at head (`e9b4c2d7a106`) |
-| Tests | 80 backend unit/contract tests, 52 Bun unit tests over `metroflow-admin/lib`, and a Playwright portal smoke (sign-in gate, rejected password, triage queue, stored session) in Web CI |
+| Tests | 80 backend unit/contract tests, 52 Bun unit tests over `metroflow-admin/lib`, 15 Bun tests over the driver app's offline queue and offline route planner, and a Playwright portal suite (sign-in gate, rejected password, triage queue, stored session, axe scans, dialog focus trap, offline banner and offline retry) in Web CI |
 | Accessibility | axe scan of `/login` and `/triage` in CI, contrast fixes, and a shared dialog focus trap (`use-dialog-focus.ts`) |
 | Design tokens | Every portal hex now lives in `MAP_COLORS` (`lib/network.ts`), guarded by a source-scanning test; the driver app has `fontSize` and `space` scales in `theme.ts` |
 | CI | Backend CI, Web CI (lint, unit, build, portal smoke), Mobile CI and CodeQL are green on `main` |
 
-The remaining gap is test depth, not features: no React component tests, no driver-app tests, no offline browser run, and no measured offline/latency acceptance run (BACKLOG Q-1, Q-2, Q-4).
+The remaining gap is test depth, not features: no React component tests, and no measured offline/latency acceptance run on a device (BACKLOG Q-1, Q-2, Q-4).
