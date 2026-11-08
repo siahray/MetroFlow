@@ -26,11 +26,13 @@ import {
   ArrowRight,
   ShieldCheck,
   RefreshCw,
+  WifiOff,
 } from 'lucide-react-native';
 import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
+import { isOffline, useOnline } from '../../offline';
 import { colors } from '../../theme';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
@@ -39,6 +41,12 @@ const SOS_LOCATION_MAX_AGE_MS = 60_000;
 
 /** Once an incident reaches one of these states, polling its status is pointless. */
 const FINAL_SOS_STATUSES = new Set(['RESOLVED', 'REJECTED']);
+
+// Unlike a flood report, an SOS is not queued for later: dispatch has to receive
+// it now, so an offline attempt gets an honest message instead of a timeout.
+const OFFLINE_TITLE = 'No connection';
+const OFFLINE_MESSAGE =
+  'A rescue request needs a live link to dispatch and cannot be sent later. Move to an area with signal and try again. If this is life-threatening, contact local emergency services.';
 
 export default function SOSScreen() {
   const router = useRouter();
@@ -50,6 +58,7 @@ export default function SOSScreen() {
   const [dispatchedSOS, setDispatchedSOS] = useState<SOSRequest | null>(null);
   const [sosStatus, setSosStatus] = useState<string | null>(null);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+  const online = useOnline();
 
   // The SOS change feed is dispatcher-only, so a driver polls its own submission
   // until the dispatcher's decision arrives (FSD-FR-074).
@@ -75,6 +84,11 @@ export default function SOSScreen() {
 
   async function handleSOS() {
     if (sending || locating) return;
+
+    if (await isOffline()) {
+      Alert.alert(OFFLINE_TITLE, OFFLINE_MESSAGE);
+      return;
+    }
 
     // --- Acquire fresh GPS fix (FSD-FR-073, VAL-021) -------------------------
     setLocating(true);
@@ -138,15 +152,26 @@ export default function SOSScreen() {
       const apiError = error instanceof ApiError ? error : null;
       const needsSignIn = apiError?.status === 401;
       const throttled = apiError?.status === 429;
+      // A failure with no status and no link is the connection dropping mid-request.
+      // Guarded: a NetInfo failure must not replace the original error.
+      const dropped = !apiError && (await isOffline().catch(() => false));
 
-      Alert.alert(
-        needsSignIn ? 'Sign in required' : throttled ? 'SOS limit reached' : 'Dispatch Alert',
-        needsSignIn
-          ? 'Please sign in or continue to submit priority rescue requests.'
-          : throttled
-          ? `${apiError?.message ?? 'Rate limited.'} If this is life-threatening, contact local emergency services.`
-          : 'Priority signal failed. If this is life-threatening, contact local emergency services.'
-      );
+      const title = dropped
+        ? OFFLINE_TITLE
+        : needsSignIn
+        ? 'Sign in required'
+        : throttled
+        ? 'SOS limit reached'
+        : 'Dispatch Alert';
+      const message = dropped
+        ? OFFLINE_MESSAGE
+        : needsSignIn
+        ? 'Please sign in or continue to submit priority rescue requests.'
+        : throttled
+        ? `${apiError?.message ?? 'Rate limited.'} If this is life-threatening, contact local emergency services.`
+        : 'Priority signal failed. If this is life-threatening, contact local emergency services.';
+
+      Alert.alert(title, message);
     } finally {
       setSending(false);
     }
@@ -399,6 +424,29 @@ export default function SOSScreen() {
             </View>
           ) : (
             <>
+              {/* Offline indicator: the CTA below cannot reach dispatch. */}
+              {!online && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    marginBottom: 10,
+                    borderRadius: 12,
+                    backgroundColor: colors.amber100,
+                  }}
+                >
+                  <WifiOff size={14} color={colors.amber800} />
+                  <Text
+                    style={{ flex: 1, fontSize: 12, fontWeight: '700', color: colors.amber800 }}
+                  >
+                    Offline: a rescue request needs a live connection.
+                  </Text>
+                </View>
+              )}
+
               {/* Primary SOS CTA */}
               <TouchableOpacity
                 onPress={handleSOS}

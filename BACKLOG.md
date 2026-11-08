@@ -46,9 +46,9 @@ section.
 | # | Item | Ref | Size |
 |---|------|-----|------|
 | F-2 | Queued report photos are stored as file paths; the OS may purge them. Copy into app document storage on enqueue. | FR-068 | S |
-| F-3 | Connectivity is inferred from failed requests; add NetInfo for a real online/offline indicator. | FR-068 | S |
-| F-4 | Dispatch timeline lacks `COMPLETE` / `CANCELLED` milestones (baseline doc). *(unverified)* | FR-087-089 | S |
-| F-5 | `/dashboard` is a thin page and `components/dashboard.tsx` duplicates triage logic. Build or delete. | UI backlog P1-1, FR-024 | M |
+| F-3 | ~~Connectivity is inferred from failed requests; add NetInfo for a real online/offline indicator.~~ **Done — `offline.ts` drives `useOnline()`/`isOffline()` from NetInfo and home, route and report already used it; the SOS screen now does too (pre-flight check, no misleading timeout, offline banner above the CTA)** | FR-068 | S |
+| F-4 | **No mission timeline exists in the portal at all** — the baseline gap is against the UI 4 prototype, so `COMPLETE`/`CANCELLED` is not a missing state but a missing feature. Decide the data source first (`dispatch_tasks` has no event table: derive milestones from timestamps + audit, or add a dispatch event table and `GET /api/v1/dispatch/{id}/events`), then build the timeline. | FR-087-089 | M/L |
+| F-5 | ~~`/dashboard` is a thin page and `components/dashboard.tsx` duplicates triage logic. Build or delete.~~ **Done — deleted: `/dashboard` is a five-line redirect to `/triage`, `components/dashboard.tsx` is gone and the sidebar has no dashboard link** | UI backlog P1-1, FR-024 | — |
 
 ## 3. Quality, tests, CI
 
@@ -56,7 +56,7 @@ section.
 |---|------|-------|
 | Q-1 | **Automated coverage is in place; only React component tests are still missing.** `metroflow-admin/e2e/` has Playwright specs for the sign-in gate, a rejected password, the triage queue rendering a live incident, a stored session reopening triage, axe scans and the dialog focus trap, plus an offline run (the shell's offline banner appears on a dropped connection and clears on reconnect; a load that fails while offline names the cause, and its retry recovers). The API is stubbed in the browser, so none of it needs a database, hosted API or dispatcher password. The driver app has Bun tests over its two pure modules — the offline queue policy (`src/offline-queue.test.ts`: oldest-first, a transient failure keeps order, a permanent 4xx drops and continues, 401/429 stay queued) and the offline route planner (`src/navigation/offline-route.test.ts`: clearance vs depth, hazard detour, `ignore_hazards`, no safe route) — and Mobile CI runs them. Still open: no React component tests (no jsdom/testing-library configured), and the queue's SQL/photo handling is only covered by the Q-2 device run. | LIM-009 |
 | Q-2 | **Offline device test (TC-029/030) not yet run.** Needs a native rebuild (`expo-sqlite` config plugin), airplane mode, submit, reconnect, check it syncs once. | Run before claiming FR-068 to 071 |
-| Q-3 | Mobile CI runs `tsc` only, no lint. 2 lint warnings remain in the driver app; admin has ~6 unused-var warnings. | Add `expo lint` to `mobile.yml` |
+| Q-3 | ~~Mobile CI runs `tsc` only, no lint. 2 lint warnings remain in the driver app; admin has ~6 unused-var warnings.~~ **Done — `bun run lint` (`expo lint`) is a Mobile CI step; both apps' lint suites are clean, so the warnings this entry described are gone** | — |
 | Q-4 | Offline-latency and hazard-publish latency tests (release checklist). | PM plan |
 | Q-5 | Integration tests still leave rows behind after a clean run (about 14 SOS requests, 2 hazards, 3 users on a fresh database). They no longer break the next run, and H-4 documents the throwaway-database recipe, so this is now about tidy-up rather than misleading failures. | Not urgent after H-4 |
 
@@ -110,7 +110,7 @@ location read.
 1. **Q-2** device test of offline; fix what breaks.
 2. **D-1..D-9** documentation sync in one PR (done; **H-3** and **H-4** were done first).
 3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), the offline Playwright run and the driver-app queue/route tests (done; React component tests still open).
-4. **F-4, F-5** to close the functional gaps left in the portal.
+4. **F-4** to close the functional gap left in the portal: there is no mission timeline yet, so settle the data source first. **F-5** is done (the dashboard page is a redirect).
 5. **U-1, U-2, U-4** - done. The rest of section 5 (U-3, U-5..U-7) is deferred until after pilot feedback.
 6. **S-1, S-4** before any real users.
 
