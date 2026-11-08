@@ -3,9 +3,9 @@
 | Field                     | Value                                                                    |
 | ------------------------- | ------------------------------------------------------------------------ |
 | Document ID               | MF-API-001                                                               |
-| Version                   | 1.3                                                                      |
+| Version                   | 1.4                                                                      |
 | Status                    | Matches `main` after route enforcement; §9 is the approved CR-001 contract |
-| Date                      | 27 October 2026                                                          |
+| Date                      | 8 November 2026                                                          |
 | Base URL (local)          | `http://localhost:8000`                                                  |
 | Base URL (hosted)         | `https://metroflow-api-siahrays-projects.vercel.app`                     |
 | Machine-readable contract | `GET /openapi.json`                                                      |
@@ -17,10 +17,10 @@ The API computes flood depth over a road graph and returns clearance-aware
 routes. Responses are JSON; geometry is GeoJSON.
 
 Sections 2–8 document the core API. Section 9 documents the endpoints added by
-[CR-001](CR-001.md), which is approved and implemented in this branch for auth,
-SOS, hazards, vehicles and dispatch; the remaining CR-001 endpoints are listed
-as absent in §9.7. The generated `/openapi.json` is always authoritative for
-what is running.
+[CR-001](CR-001.md), which is approved and implemented for auth, SOS and
+dispatch, reports and moderation, hazards, fleet, sensors, users, exports and
+streams; §9.7a lists the one route still absent. The generated
+`/openapi.json` is always authoritative for what is running.
 
 | Method | Path                       | Purpose                                                  |
 | ------ | -------------------------- | -------------------------------------------------------- |
@@ -683,6 +683,15 @@ header.
 | `POST` | `/api/v1/sos/{sos_id}/assign`      | `vehicle_id`           | `sos`    | BR-016 / FSD-FR-088–089  |
 | `GET`  | `/api/v1/dispatch/{sos_id}/preview` | —                    | `{ sos_id, units[] }` | BR-016 / FSD-FR-088–089 |
 | `POST` | `/api/v1/dispatch/{sos_id}/confirm` | `note?`               | `sos`    | BR-016 / FSD-FR-089      |
+| `POST` | `/api/v1/dispatch/{sos_id}/undo`    | —                     | `sos`    | BR-016 / FSD-FR-045      |
+| `POST` | `/api/v1/sos/{sos_id}/reject`       | `reason`              | `sos`    | BR-015 / FSD-FR-039, 044 |
+| `POST` | `/api/v1/sos/{sos_id}/hold`         | `reason`              | `sos`    | BR-015 / FSD-FR-041, 044 |
+| `POST` | `/api/v1/sos/{sos_id}/escalate`     | `agency?`, `reason`   | `sos`    | BR-015 / FSD-FR-040, 044 |
+| `POST` | `/api/v1/sos/{sos_id}/resolve`      | —                     | `sos`    | BR-015 / FSD-FR-046      |
+| `POST` | `/api/v1/sos/{sos_id}/notes`        | `note`                | `sos`    | BR-015 / FSD-FR-037, 043 |
+| `GET`  | `/api/v1/sos/{sos_id}/log`          | —                     | `log[]`  | FSD-FR-036, 043          |
+| `POST` | `/api/v1/sos/{sos_id}/dismiss`      | —                     | `sos`    | FSD-FR-024               |
+| `POST` | `/api/v1/sos/{sos_id}/restore`      | —                     | `sos`    | FSD-FR-024               |
 
 A new SOS is created with `status = "pending"`. Assignment sets the vehicle and
 moves the status to `"assigned"`, returning `404` when either the SOS or the
@@ -696,6 +705,19 @@ back with a `detail` message and no ETA; it is still assignable. Assignment
 enforces BRULE-011: a unit that is not `AVAILABLE` is refused with `409`, an
 accepted assignment sets it to `DISPATCHED`, and undo or reject returns it to
 `AVAILABLE`.
+
+`undo` reverts a `confirmed` dispatch only — back to `pending` with the unit
+released — and answers `409` in any other state. `reject` and `hold` require a
+`reason` of at least three characters and are refused with `409` once the
+incident is `confirmed` or `dispatched`; `escalate` records the agency (default
+`BFP`) and reason. `resolve` closes an `assigned` or `confirmed` incident: the
+assigned driver may resolve their own unit's incident, a dispatcher any. Each of
+these appends its reason to the incident note, writes an audit row, emits
+`sos.updated` on the SOS stream and returns the updated incident. `notes`
+appends an internal log entry instead of changing the state. `dismiss` hides an
+incident from the queue for 72 hours; after that the row is purged, so `restore`
+only works inside the window. `GET /sos/{id}/log` returns the same chronological
+`log[]` shape as §9.5.
 
 ### 9.3 Hazards
 
@@ -720,6 +742,7 @@ rows as `GET /api/v1/hazards?active=true`.
 | `POST`  | `/api/v1/vehicles`              | `call_sign`, `vehicle_type`, `clearance_cm`, `status?`, `current_location_lat?` + `current_location_lon?` | `vehicle`   | BR-016 / FSD-FR-075     |
 | `PATCH` | `/api/v1/vehicles/{vehicle_id}` | any of the above, plus `speed_kmh`                         | `vehicle`   | BR-016 / FSD-FR-076     |
 | `DELETE` | `/api/v1/vehicles/{vehicle_id}` | —                                                          | `204`       | BR-016 / FSD-FR-075     |
+| `GET`  | `/api/v1/vehicles/{vehicle_id}/mission` | —                                                    | `sos` or `null` | BR-015 / FSD-FR-074 |
 
 Adding, editing and removing units is **super admin only** (`403` for a dispatcher); every change is
 audited (`VEHICLE_CREATE`, `VEHICLE_UPDATE`, `VEHICLE_DELETE`) and, for stream clients, emitted as
@@ -732,22 +755,42 @@ or rename is `409`. `DELETE` is `409` while the unit is on a live dispatch (an i
 
 Clearance is in centimetres and speed in km/h, matching §2 and the driver UI.
 
+`GET /vehicles/{id}/mission` is what the driver app polls: it returns the
+incident the unit is currently dispatched to, or `null` when it is free. A
+driver may only ask about their own unit (`403` otherwise); a dispatcher may ask
+about any. This is how a unit discovers a portal assignment without seeing the
+whole SOS queue.
+
 ### 9.5 Field reports and moderation
 
 | Method | Path                                 | Body / query                                                  | Response   | Reference               |
 | ------ | ------------------------------------ | ------------------------------------------------------------- | ---------- | ----------------------- |
-| `POST` | `/api/v1/reports`                    | multipart: `depth_level`, `latitude`, `longitude`, `narrative?`, `barangay?`, `captured_at?`, `source?`, `photo?` | `report` `201` | BR-014 / FSD-FR-065–067 |
+| `POST` | `/api/v1/reports`                    | multipart: `depth_level`, `latitude`, `longitude`, `narrative?`, `barangay?`, `captured_at?`, `source?`, `client_id?`, `photo?` | `report` `201` | BR-014 / FSD-FR-065–067 |
 | `GET`  | `/api/v1/reports`                    | `status?` (default `PENDING`), `limit?` (1–200, default 50)   | `report[]` | BR-014 / FSD-FR-077     |
 | `GET`  | `/api/v1/reports/{id}`               | —                                                             | `report`   | BR-014 / FSD-FR-078–079 |
 | `GET`  | `/api/v1/reports/{id}/photo`         | —                                                             | image      | BR-014 / FSD-FR-078     |
 | `POST` | `/api/v1/reports/{id}/approve`       | `notes?`                                                      | `report`   | BR-014 / FSD-FR-080     |
 | `POST` | `/api/v1/reports/{id}/reject`        | `reason`, `duplicate_of?`                                     | `report`   | BR-014 / FSD-FR-081     |
+| `POST` | `/api/v1/reports/{id}/hold`          | `reason`                                                      | `report`   | FSD-FR-041, 044         |
+| `POST` | `/api/v1/reports/{id}/escalate`      | `agency?` (default `BFP`), `reason`                           | `report`   | FSD-FR-040, 044         |
+| `POST` | `/api/v1/reports/{id}/notes`         | `note`                                                        | `report`   | FSD-FR-037, 043         |
+| `GET`  | `/api/v1/reports/{id}/log`           | —                                                             | `log[]`    | FSD-FR-036, 043         |
+| `POST` | `/api/v1/reports/{id}/dismiss`       | —                                                             | `report`   | FSD-FR-077              |
+| `POST` | `/api/v1/reports/{id}/restore`       | —                                                             | `report`   | FSD-FR-077              |
+| `GET`  | `/api/v1/reports/mine`               | `limit?` (1–200, default 50)                                  | `report[]` | FSD-FR-065              |
 
 Submission is multipart because the evidence is a file; send the fields as form
 parts and `photo` as the file part. Any authenticated account may report — a
 driver is the witness — while the queue and the decisions are portal roles only.
 The reporter is stored as a salted hash of the account, never as an id (BR-011),
 so the desk can see that two reports came from one device without learning whose.
+
+`client_id` (a UUID the device generates per report) makes an offline replay
+idempotent: if the first attempt actually landed but its response was lost, the
+retry returns that existing report with `201` semantics instead of creating a
+duplicate. The lookup is scoped to the same reporter hash, so one account cannot
+probe another's report by guessing an id. The column is unique; omitting the
+field keeps the old behaviour.
 
 `depth_level` is `ANKLE`, `KNEE` or `IMPASSABLE`, and `source` is `PHOTO`,
 `SENSOR` or `CALL` (default `PHOTO` with evidence, otherwise `CALL`).
@@ -811,12 +854,24 @@ Supplying `duplicate_of` records `status = "DUPLICATE"` instead of `"REJECTED"`;
 both keep the evidence and the reason. A report that has already been decided
 returns `409`, so a decision cannot be silently overwritten.
 
+`hold` and `escalate` record the reason and the acting moderator and write an
+audit row, but deliberately leave `status` alone: the report stays in the
+pending queue for a later decision rather than becoming terminal. `notes`
+appends an internal log entry, and `GET /reports/{id}/log` returns those entries
+as `log[]` (`time`, `action_type`, `actor_name`, `text`, `kind`) in
+chronological order. `dismiss` hides a report from the queue for 72 hours and
+then purges it; `restore` reverses that inside the window. `GET /reports/mine`
+is the driver's own history — every status, newest first, scoped by the same
+salted reporter hash (BR-011).
+
 ### 9.6 Audit trail
 
 | Method | Path                    | Body / query                                        | Response   | Reference               |
 | ------ | ----------------------- | --------------------------------------------------- | ---------- | ----------------------- |
 | `GET`  | `/api/v1/audit`         | `action_type?`, `user_id?`, `limit?` (1–200, default 50) | `audit[]` | BR-008 / FSD-FR-047–049 |
 | `GET`  | `/api/v1/audit/verify`  | —                                                   | `valid`, `checked`, `broken_at` | BR-008 / FSD-FR-047 |
+| `GET`  | `/api/v1/audit/export`  | `action_type?`, `user_id?`                          | CSV         | FSD-FR-049              |
+| `GET`  | `/api/v1/incidents/export` | `status?`                                        | CSV         | FSD-FR-049              |
 
 One row is written by every privileged action: hazard create, update and publish,
 report approval and rejection, SOS assignment, dispatch confirmation, vehicle
@@ -843,6 +898,29 @@ which is the row an edit or a deletion disturbed. It reports `valid: false` with
 
 Actor identity is a `user_id`; join it against `/api/v1/auth/me` or the users
 table for a name. `payload` is returned as an object, not as the stored string.
+
+Both exports are admin only and answer `text/csv` with a
+`Content-Disposition: attachment` filename. The audit export takes the same
+`action_type` and `user_id` filters as `GET /audit`; the incident export takes
+`status` (case-insensitive). They stream the whole filtered set, so they do not
+share the 200-row ceiling of the JSON list routes.
+
+### 9.6a Users (FSD-FR-048)
+
+| Method   | Path                    | Body                                                        | Response       | Reference               |
+| -------- | ----------------------- | ----------------------------------------------------------- | -------------- | ----------------------- |
+| `GET`    | `/api/v1/users`         | —                                                           | `user[]`       | BR-009 / FSD-FR-048     |
+| `POST`   | `/api/v1/users`         | `name`, `email`, `password` (min 8), `role?`, `vehicle_id?` | `user` (`201`) | BR-009 / FSD-FR-048     |
+| `PATCH`  | `/api/v1/users/{user_id}` | any of `name`, `email`, `role`, `vehicle_id`              | `user`         | BR-009 / FSD-FR-048     |
+| `DELETE` | `/api/v1/users/{user_id}` | —                                                         | `204`          | BR-009 / FSD-FR-048     |
+
+Admin only (`SUPER_ADMIN` or `LGU_DISPATCHER`). `role` is `SUPER_ADMIN`,
+`LGU_DISPATCHER` or `EMERGENCY_DRIVER`; `vehicle_id` must reference an existing
+unit and can be cleared with an explicit `null` on `PATCH`. Emails are unique
+ignoring case (`409`). You cannot modify or delete your own account through
+these routes (`403`), and the last administrator cannot be deleted (`409`).
+Every change writes `USER_CREATE`, `USER_UPDATE` or `USER_DELETE`. Password
+updates are not exposed here.
 
 ### 9.7 Sensors, telemetry and streams
 

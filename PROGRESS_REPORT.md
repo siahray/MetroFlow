@@ -1,7 +1,7 @@
 # MetroFlow - Progress Report
 
 **Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System
-**Date:** November 2, 2026
+**Date:** November 8, 2026
 **Branch:** `main`
 **Status:** Deployed — portal on Vercel, API as a Vercel Python function, Supabase hosted
 
@@ -85,7 +85,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 | `/api/v1/sos/{id}/escalate` | POST | Escalate SOS to BFP / Coast Guard (FSD-FR-040, 044) |
 | `/api/v1/sos/{id}/notes` | POST | Append operational note to SOS log (FSD-FR-037, 043) |
 | `/api/v1/sos/{id}/log` | GET | Chronological persistent operations log (FSD-FR-036, 043) |
-| `/api/v1/dispatch/{id}/undo` | POST | Revert dispatch within 5s undo window (FSD-FR-045) |
+| `/api/v1/dispatch/{id}/undo` | POST | Revert a `confirmed` dispatch and release the unit (FSD-FR-045) |
 | `/api/v1/hazards` | POST | Create hazard zone (cm) |
 | `/api/v1/hazards` | GET | List hazard zones |
 | `/api/v1/hazards/{id}` | PATCH | Update hazard zone |
@@ -134,7 +134,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 - **Profile:** displays clearance in cm
 - **Telemetry:** sends throttled (>= 5s) position, speed and heading updates during active navigation (`route.tsx`) to `/api/v1/vehicles/{id}/telemetry` (FSD-FR-072)
 - **SOS:** submits to the backend `/api/v1/sos` with real GPS fix (<60s freshness required, VAL-021) and displays post-submission status tracking and refresh (FSD-FR-073 to 074)
-- **Offline Maps:** visual placeholder only (no SQLite/download per pilot scope)
+- **Offline operation:** the app queues unsent reports with a pending banner and drains them oldest-first on reconnect; each report carries a device-generated `client_id`, so a replay after a lost response returns the original report instead of creating a duplicate. The road graph, active hazards and last route are cached in on-device SQLite (`expo-sqlite`) and rendered offline, and `navigation/offline-route.ts` plans a new route over that cached graph with the same hazard-blocking rule. Basemap tile download stays out of scope (TSD LIM-017)
 - **`AuthProvider`** mounted in the root layout
 
 ---
@@ -169,3 +169,23 @@ The mobile app has no `package-lock.json`; Bun is its package manager (TSD LIM-0
 - **Units:** All depths/clearance in cm, speeds in km/h
 - **PII:** Phone numbers masked by default, no vulnerable person counts, no specific crew names
 - **Single source:** Supabase via backend API only
+
+---
+
+## 8. Update — 8 November 2026
+
+Since the 2 November report:
+
+| Area | Change |
+|---|---|
+| Offline (FR-068 to 071) | Ordered report queue with a visible pending banner and sync on reconnect; SQLite cache of the road graph, hazards and last route; client-side time-dependent A* plans a new route offline. Basemap tiles remain out of scope (LIM-017) |
+| Report replay safety | `POST /api/v1/reports` accepts a device-generated `client_id`; a replay after a lost response returns the original report instead of duplicating it. Column is unique and the lookup is scoped to the reporter hash |
+| Evidence cross-reference (FR-079) | `GET /api/v1/reports/{id}/nearest-sensor` returns the closest active rain gauge, latest reading, distance and breach state; the moderation desk shows it beside the evidence |
+| Moderation and dispatch actions | Report hold, escalate, notes, log, dismiss and restore; SOS reject, hold, escalate, resolve, notes, log, dismiss, restore and dispatch undo; driver report history (`/reports/mine`) and unit mission poll (`/vehicles/{id}/mission`) |
+| Database security | RLS on every public table is now a CI gate (`test_every_public_table_has_row_level_security`); the hosted database is at head (`e9b4c2d7a106`) |
+| Tests | 80 backend unit/contract tests, 52 Bun unit tests over `metroflow-admin/lib`, and a Playwright portal smoke (sign-in gate, rejected password, triage queue, stored session) in Web CI |
+| Accessibility | axe scan of `/login` and `/triage` in CI, contrast fixes, and a shared dialog focus trap (`use-dialog-focus.ts`) |
+| Design tokens | Every portal hex now lives in `MAP_COLORS` (`lib/network.ts`), guarded by a source-scanning test; the driver app has `fontSize` and `space` scales in `theme.ts` |
+| CI | Backend CI, Web CI (lint, unit, build, portal smoke), Mobile CI and CodeQL are green on `main` |
+
+The remaining gap is test depth, not features: no React component tests, no driver-app tests, no offline browser run, and no measured offline/latency acceptance run (BACKLOG Q-1, Q-2, Q-4).

@@ -1,6 +1,6 @@
 # MetroFlow - Required Features and Deliverables
 
-**As of:** November 2, 2026
+**As of:** November 8, 2026
 **Documentation Source:** FSD.md, TSD.md, PROGRESS_REPORT.md
 
 ---
@@ -124,7 +124,7 @@
 - **Reject action** - Reject with required reason
 - **Duplicate marking** - Mark as duplicate with required reason
 - **Audit logging** - All moderation actions audited
-- **Missing:** Nearest-gauge cross-reference (FR-079)
+- **Nearest-gauge cross-reference** - `GET /api/v1/reports/{id}/nearest-sensor` returns the closest active rain gauge, its latest reading, distance and breach state (FSD-FR-079); the report desk shows it beside the evidence
 
 ### 13. Hazard Authoring (FSD-FR-082 to FR-086)
 - **Polygon drawing** - Draw flood polygon with at least three vertices
@@ -155,7 +155,7 @@
 - **Test coverage** - Integration tests for sensor reading rejection and CRUD operations
 
 ### 16. Portal & Driver App UI (FSD-FR-054 to FR-089)
-- **Portal pages** - /login, /triage, /dashboard, /radar, /fleet, /hazards, /users, /export
+- **Portal pages** - /login, /triage, /dashboard, /radar, /fleet, /hazards, /moderation, /sensors, /users, /export
 - **Real sign-in** - Against API, token in sessionStorage, 401 returns to /login
 - **Live data** - SOS, reports, vehicles, hazards load live from API
 - **Incident detail drawer** - Links evidence photos with EXIF, submersion ranges, nearest-unit ETA, water dynamics
@@ -168,8 +168,15 @@
 - **Driver navigation screen** - Destination search, route queries, turn-by-turn, GPS advance, proximity alerts, SSE rerouting
 - **Guest mode** - Browse app, but SOS/report requires sign-in
 - **Profile** - Display clearance in cm
-- **Offline Maps** - Visual placeholder only (no SQLite/download per pilot scope)
+- **Offline screen** - Reports what is actually cached on the device: road graph, hazard count, last route and size on disk. Basemap tiles stay out of scope (TSD LIM-017)
 - **AuthProvider** - Mounted in root layout
+
+### 17. Offline Operation (FSD-FR-068 to FR-071)
+- **Offline report queue** - Unsent reports are queued in order with a visible pending banner; a photo is copied next to the queue so an OS purge cannot lose it
+- **Ordered sync** - On reconnect the queue drains oldest-first, and a `client_id` sent with each report makes a replay after a lost response return the original report instead of a duplicate
+- **Local cache** - The road graph, active hazards and the most recent route are cached in on-device SQLite (`expo-sqlite`) and rendered when the network is unavailable
+- **Offline routing** - A client-side port of the same time-dependent A* plans a new route over the cached graph with the same hazard-blocking rule (BRULE-008)
+- **Out of scope** - Basemap tile download (TSD LIM-017)
 
 ---
 
@@ -181,30 +188,11 @@
 - **Missing:** Some UI polish and advanced features (portal is template-derived, driver app covers shells)
 - **Status:** Partial (portal is template-derived; driver app covers map, route, report, SOS and profile shells)
 
-### 2. Moderation and Evidence (FSD-FR-077 to FR-081)
-- **Status:** Implemented
-- **Missing:** Nearest-gauge cross-reference (FR-079) - Cross-reference nearest rain gauge reading for selected report
-
----
-
-## 📋 Planned / Not Started
-
-### 1. Offline Operation (FSD-FR-068 to FR-071)
-- **Status:** Planned (Scope Conflict)
-- **Description:** The offline screen is a labelled visual placeholder
-- **Conflict:** Conflicts with scope resolution (UI_UX_AUDIT_SCOPE_RESOLUTION.md states "Offline Maps is a visual placeholder only; no SQLite tile caching or map downloads")
-- **Features:**
-  - Persist unsent reports in offline queue with visible pending state
-  - Synchronize offline queue in submission order when connectivity returns
-  - Cache road graph, active hazards, closures, and most recent route locally
-  - Render and navigate cached graph while network unavailable
-- **Decision Required:** Re-evaluate scope with stakeholders
-
 ---
 
 ## 🎯 Scope Constraints (Out of Scope)
 
-The following features are explicitly out of scope per UI/UX Design Audit:
+The following features are explicitly out of scope per the approved project scope (`AGENTS.md`, `BACKLOG.md`):
 
 - Public App Store/Play Store releases (use emulator or tethered device)
 - Civic Broadcasts table and features
@@ -222,12 +210,10 @@ The following features are explicitly out of scope per UI/UX Design Audit:
 
 | Category | Status | Count |
 |----------|--------|-------|
-| Fully Implemented | ✅ | 16 major feature groups |
-| Partially Implemented | 🔄 | 2 feature groups |
-| Planned / Not Started | 📋 | 1 feature group (scope conflict) |
+| Fully Implemented | ✅ | 17 major feature groups |
+| Partially Implemented | 🔄 | 1 feature group |
 | Out of Scope | ❌ | 8 feature groups |
 
 **Total FSD Requirements:** 93 (FSD-FR-001 to FSD-FR-093)
-**Fully Implemented:** ~85%
-**Partially Implemented:** ~10%
-**Planned/Scope Conflict:** ~5%
+**Fully Implemented:** ~94% (17 of 18 in-scope feature groups)
+**Partially Implemented:** ~6% (portal/driver-app polish)

@@ -14,7 +14,7 @@
 | Behaviour ref  | [FSD](../FSD.md)                                                      |
 | Architecture   | [TSD](../TSD.md) — ADR-014, ADR-021 and proposed ADR-022              |
 | Change record  | [CR-001](../CR-001.md); CR-002 and CR-003 proposed                    |
-| Implementation | Prototype only; production implementation is not approved by this doc |
+| Implementation | Implemented through CR-001; see the 8 November 2026 status note below |
 
 This baseline turns the supplied driver HTML/CSS into a design specification for
 the native Expo driver app. It does not approve implementation, cost, schedule or
@@ -40,6 +40,15 @@ gap is recorded below.
 > publish and fleet endpoints have since been implemented. [api.md](../api.md)
 > §9 is the authoritative list of what exists, and [FSD.md](../FSD.md)
 > §Implementation Status records how far each screen is wired.
+
+> **Implementation status (8 November 2026).** The prototype boundary described
+> below has been superseded. Authentication, route queries, telemetry, SOS,
+> field reporting, the offline queue and the on-device SQLite cache of the road
+> graph, hazards and last route are implemented, and
+> `src/navigation/offline-route.ts` plans a new route over that cached graph
+> when the network is gone. The `/offline` screen reports what is actually
+> cached instead of simulating a download. Basemap tile download and native
+> telephony remain out of scope (LIM-017, LIM-018).
 
 ## 1. Source Inventory
 
