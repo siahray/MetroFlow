@@ -1,13 +1,13 @@
 fastapi>=0.162.0
 uvicorn[standard]>=0.54.0
-sqlalchemy>=2.1.6
+sqlalchemy>=2.1.8
 alembic>=1.20.1
 psycopg2-binary>=2.9.13
-geoalchemy2>=0.20.0
+geoalchemy2>=0.21.0
 # Hazard geometry is converted to GeoJSON for the driver app with
 # geoalchemy2.shape.to_shape, which needs Shapely installed.
 shapely>=2.2.0
-pydantic>=2.14.2
+pydantic>=2.14.3
 pydantic-settings>=2.16.2
 # Loads backend/.env for the non-prefixed variables (DATABASE_URL, REDIS_URL).
 python-dotenv>=1.2.4
@@ -18,4 +18,4 @@ PyJWT>=2.15.1
 bcrypt>=5.0.0
 # Required by FastAPI for the multipart body on POST /api/v1/reports (a photo
 # plus its fields cannot be sent as JSON).
-python-multipart>=0.0.32
+python-multipart>=0.0.33
