@@ -964,7 +964,7 @@ hard-coded.
 | Complete mission     | `POST /api/v1/dispatch/{id}/complete`  | `[TBD]` |
 | Cancel mission       | `POST /api/v1/dispatch/{id}/cancel`    | `[TBD]` |
 | Request support      | `POST /api/v1/sos` or reassignment     | `[TBD]` |
-| Mission timeline     | `GET /api/v1/dispatch/{id}/events`     | `[TBD]` |
+| Mission timeline     | `GET /api/v1/dispatch/{id}/events`     | Done (9 Nov 2026) |
 | Comms history        | `GET /api/v1/dispatch/{id}/messages`   | `[TBD]` |
 | Send comms message   | `POST /api/v1/dispatch/{id}/messages`  | `[TBD]` |
 | Radio link           | No contract                            | Demo    |

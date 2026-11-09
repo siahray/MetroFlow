@@ -148,6 +148,30 @@ export async function addSOSNote(sosId: number, note: string): Promise<SOSReques
   });
 }
 
+export type DispatchEvent = {
+  event_id: number;
+  sos_id: number;
+  event_type:
+    | "created"
+    | "assigned"
+    | "dispatched"
+    | "en_route"
+    | "arrived"
+    | "completed"
+    | "cancelled"
+    | string;
+  actor: string | null;
+  vehicle_id: number | null;
+  call_sign: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+/** Mission milestone timeline for one dispatch (FSD-FR-087 to 089). */
+export async function getDispatchEvents(sosId: number): Promise<DispatchEvent[]> {
+  return fetchJSON<DispatchEvent[]>(`/api/v1/dispatch/${sosId}/events`);
+}
+
 export async function getSOSLog(sosId: number): Promise<IncidentLogItem[]> {
   return fetchJSON<IncidentLogItem[]>(`/api/v1/sos/${sosId}/log`);
 }

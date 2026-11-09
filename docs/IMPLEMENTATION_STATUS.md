@@ -17,7 +17,7 @@ charter dates) are excluded entirely — they were never engineering work.
 ## Overall
 
 ```
-████████████░░░░░░░░ 61%  (30.5 / 50 weighted items)
+████████████░░░░░░░░ 71%  (35.5 / 50 weighted items)
 ```
 
 ---
@@ -60,13 +60,18 @@ list) — that table is stale, see §6.
 ## 3. Functional gaps — `BACKLOG.md` §2
 
 ```
-██████████░░░░░░░░░░ 50%  (2 / 4)
+████████████████████ 100%  (4 / 4)
 ```
 
 - [x] F-3 — real online/offline indicator (NetInfo-driven)
 - [x] F-5 — dashboard/triage duplication removed
-- [ ] F-2 — queued report photos are file paths the OS may purge; copy into app document storage (S)
-- [ ] F-4 — no mission timeline in the portal; needs a data-source decision (derive from timestamps+audit, or add a `dispatch_tasks` event table) before building (M/L)
+- [x] F-2 — queued report photos are copied into app document storage on
+  enqueue (`persistPhoto`/`discardPhoto`/`photoExists` in `offline.ts`);
+  verified 9 Nov 2026 — the tracker entry was stale
+- [x] F-4 — mission timeline built on a real `dispatch_events` table
+  (created/assigned/dispatched/en_route/arrived/completed/cancelled),
+  `POST /api/v1/sos/{id}/arrive` on-scene milestone, driver two-step
+  arrive→close, and `MissionTimeline` on the portal incident docket
 
 ## 4. Security / operations — `BACKLOG.md` §4
 

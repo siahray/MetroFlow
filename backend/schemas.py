@@ -709,6 +709,19 @@ class ReportNoteRequest(BaseModel):
     note: str = Field(min_length=1, max_length=500)
 
 
+class DispatchEventItem(BaseModel):
+    """One mission milestone for the portal timeline (FSD-FR-087 to 089)."""
+
+    event_id: int
+    sos_id: int
+    event_type: str
+    actor: str | None
+    vehicle_id: int | None
+    call_sign: str | None
+    note: str | None
+    created_at: datetime
+
+
 class IncidentLogItem(BaseModel):
     """One attributable operations log entry (FSD-FR-036, FSD-FR-043)."""
 

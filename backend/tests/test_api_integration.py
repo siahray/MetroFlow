@@ -1332,10 +1332,37 @@ def test_assigned_driver_discovers_and_resolves_mission(client):
         denied_resolve = client.post(f"/api/v1/sos/{sos_id}/resolve", headers=outsider)
         assert denied_resolve.status_code == 403, denied_resolve.text
 
+        # FSD-FR-087 to 089: arrival is its own milestone, separate from resolve.
+        denied_arrive = client.post(f"/api/v1/sos/{sos_id}/arrive", headers=outsider)
+        assert denied_arrive.status_code == 403, denied_arrive.text
+        arrived = client.post(f"/api/v1/sos/{sos_id}/arrive", headers=driver)
+        assert arrived.status_code == 200, arrived.text
+        assert arrived.json()["status"] == "assigned"
+        # A repeated tap after a lost response must not duplicate the milestone.
+        assert client.post(f"/api/v1/sos/{sos_id}/arrive", headers=driver).status_code == 200
+
+        # First telemetry on the live dispatch marks the unit en route.
+        telemetry = client.post(
+            f"/api/v1/vehicles/{vehicle_id}/telemetry",
+            headers=driver,
+            json={"latitude": 14.6070, "longitude": 120.9860, "speed_kmh": 30.0},
+        )
+        assert telemetry.status_code == 204, telemetry.text
+
+        events = client.get(f"/api/v1/dispatch/{sos_id}/events")
+        assert events.status_code == 200, events.text
+        kinds = [row["event_type"] for row in events.json()]
+        assert kinds == ["created", "assigned", "arrived", "en_route"], kinds
+        assert all(row["sos_id"] == sos_id for row in events.json())
+
         resolved = client.post(f"/api/v1/sos/{sos_id}/resolve", headers=driver)
         assert resolved.status_code == 200, resolved.text
         assert resolved.json()["status"] == "resolved"
         assert latest_audit(client, action_type="SOS_RESOLVE")[0]["payload"]["sos_id"] == sos_id
+        kinds = [
+            row["event_type"] for row in client.get(f"/api/v1/dispatch/{sos_id}/events").json()
+        ]
+        assert kinds[-1] == "completed", kinds
 
         # The mission is closed and the unit is back in the available pool.
         assert client.get(f"/api/v1/vehicles/{vehicle_id}/mission", headers=driver).json() is None
