@@ -728,11 +728,14 @@ only works inside the window. `GET /sos/{id}/log` returns the same chronological
 | `POST`  | `/api/v1/hazards/{hazard_id}/publish` | —                                                       | `hazard` | BR-016 / FSD-FR-085     |
 | `GET`   | `/api/v1/hazards`                 | —                                                           | `hazard[]` | BR-013 / FSD-FR-059   |
 | `GET`   | `/api/v1/hazards/active`          | —                                                           | `hazard[]` | BR-013 / FSD-FR-059   |
+| `GET`   | `/api/v1/hazards/{hazard_id}`     | —                                                           | `hazard`   | BR-016                |
 
 A hazard is created active but unpublished; `publish` stamps `published_at` and
 is the step the portal performs before dispatch. Depth is in centimetres.
 `GET /api/v1/hazards/active` is the driver map's hazard layer; it returns the same
-rows as `GET /api/v1/hazards?active=true`.
+rows as `GET /api/v1/hazards?active=true`. `GET /api/v1/hazards/{hazard_id}` is a
+single-row read for editing a draft without refetching the whole list; `404` when
+the id does not exist.
 
 ### 9.4 Fleet
 
@@ -743,6 +746,10 @@ rows as `GET /api/v1/hazards?active=true`.
 | `PATCH` | `/api/v1/vehicles/{vehicle_id}` | any of the above, plus `speed_kmh`                         | `vehicle`   | BR-016 / FSD-FR-076     |
 | `DELETE` | `/api/v1/vehicles/{vehicle_id}` | —                                                          | `204`       | BR-016 / FSD-FR-075     |
 | `GET`  | `/api/v1/vehicles/{vehicle_id}/mission` | —                                                    | `sos` or `null` | BR-015 / FSD-FR-074 |
+| `GET`  | `/api/v1/vehicles/{vehicle_id}`  | —                                                          | `vehicle`   | BR-016                  |
+
+`GET /api/v1/vehicles/{vehicle_id}` is a single-unit read for a detail view that
+does not need the whole fleet list; `404` when the id does not exist.
 
 Adding, editing and removing units is **super admin only** (`403` for a dispatcher); every change is
 audited (`VEHICLE_CREATE`, `VEHICLE_UPDATE`, `VEHICLE_DELETE`) and, for stream clients, emitted as
@@ -939,7 +946,9 @@ Every accepted reading is written to the road edges within `impact_radius_m` met
 the sensor (`edge_advisories`, one row per edge and source; an older reading never
 overwrites a newer one). A breach (`value >= threshold_value`) flags those edges and also
 writes a `SENSOR_BREACH` audit entry listing their ids. A flag is an **advisory** that
-never closes a road (BRULE-012, BRULE-016): routing does not read it. Read the result
+never closes a road (BRULE-012, BRULE-016), but routing does read it: a flagged, fresh
+edge costs 1.5× its travel time (`ADVISORY_PENALTY`), so it is preferred around when a
+safe alternative exists while remaining passable. Read the result
 with `GET /api/v1/flood-state` (§9.7b). Deleting a sensor deletes its advisories.
 Other sensor changes are audited too. Rescue
 route preview is `GET /api/v1/dispatch/{sos_id}/preview` (§9.2).
@@ -983,11 +992,12 @@ means **nothing covers the segment**, not that it is safe. `kind` says whether a
 as a measurement. `raining` is true while an active rain gauge is over its threshold; it
 gates the NOAH fallback.
 
-### 9.7a Not yet implemented
+### 9.7a Hazard withdrawal
 
-The following remain specified but absent, and must not be assumed by a client:
-
-- hazard withdrawal (`DELETE /api/v1/hazards/{id}`).
+There is no `DELETE /api/v1/hazards/{id}`. Withdrawal is
+`PATCH /api/v1/hazards/{id}` with `{"active": false}`, which hides the hazard from
+the driver maps and routing while keeping it in the audit trail. This is the route
+the portal's Withdraw button uses.
 
 ### 9.8 Error additions in this slice
 

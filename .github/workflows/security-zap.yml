@@ -29,6 +29,17 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Start the stack
+        # Rate limits raised for this scan only: ZAP's boolean-based SQLi probe
+        # fires dozens of requests per parameter in seconds against
+        # /auth/login, /auth/verify and /auth/send-verification, which blows
+        # through the pilot-sized default ceiling (15/10 per minute) mid-scan
+        # and reads the resulting 401->429 status flip as a true/false
+        # differential. Confirmed false positive, not a vulnerability: login
+        # and verify use parameterised SQLAlchemy, send-verification/verify
+        # touch no SQL at all (verification_store.py is an in-memory dict).
+        env:
+          METROFLOW_RATE_LIMIT_LOGIN_PER_MIN: "1000"
+          METROFLOW_RATE_LIMIT_REGISTER_PER_MIN: "1000"
         run: docker compose up -d --build postgres redis backend
 
       - name: Wait for the OpenAPI document

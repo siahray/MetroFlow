@@ -15,8 +15,8 @@ What that buys, and what it costs:
   sends ``Last-Event-ID`` and receives exactly what it missed. There is no
   at-most-once fan-out to lose messages.
 * **Latency bounded by the poll, not by a broker.** The relay wakes every
-  ``event_stream_poll_ms`` (100 ms), which keeps the server-side publication
-  inside the NFR-019 budget but is not Redis's sub-millisecond push.
+  ``event_stream_poll_ms`` (40 ms by default), which keeps the server-side
+  publication inside the NFR-019 budget but is not Redis's sub-millisecond push.
 * **One connection per open stream.** A serverless function holds the invocation
   until the stream ends, so ``stream`` stops after
   ``event_stream_lifetime_seconds`` and the client reconnects; this is a

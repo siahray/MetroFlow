@@ -2277,6 +2277,21 @@ def get_vehicle_mission(
     )
 
 
+@app.get("/api/v1/vehicles/{vehicle_id}", response_model=VehicleResponse)
+def get_vehicle(
+    vehicle_id: int,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """A single unit's record, for a detail view that does not need the whole fleet list."""
+    import models
+
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return vehicle
+
+
 # ---------------------------------------------------------------------------
 # Audit trail (FSD-FR-093, TSD LIM-008)
 # ---------------------------------------------------------------------------
@@ -3628,3 +3643,18 @@ def list_active_hazards(
         .order_by(models.HazardZone.created_at.desc())
         .all()
     )
+
+
+@app.get("/api/v1/hazards/{hazard_id}", response_model=HazardResponse)
+def get_hazard(
+    hazard_id: int,
+    _user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """A single hazard's record, for editing a draft without refetching the whole list."""
+    import models
+
+    hazard = db.query(models.HazardZone).filter(models.HazardZone.hazard_id == hazard_id).first()
+    if not hazard:
+        raise HTTPException(status_code=404, detail="Hazard not found")
+    return hazard

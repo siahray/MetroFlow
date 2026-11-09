@@ -474,7 +474,7 @@ Full request and response contracts, examples and error bodies are in
 | Evidence upload validation: MIME sniff, size cap, re-encode and EXIF strip             | BR-014 / FSD-FR-066, 067     |
 | Rate limits on login, reports, telemetry and SOS                                       | BR-009 / FSD-FR-092          |
 | CORS allowlist for the portal; bearer tokens for the native app                        | BR-011 / FSD-FR-051          |
-| Location minimisation: 50 m rounding, salted hash, 24-hour retention                   | BR-011 / NFR-021             |
+| Location minimisation: salted reporter hash (50 m rounding and 24-hour retention are specified but not implemented) | BR-011 / NFR-021 |
 | Immutable audit writes for privileged actions                                          | BR-008 / FSD-FR-093          |
 | Authenticated SSE subscriptions                                                        | BR-013 / FSD-FR-086          |
 | Sensor gateway authentication and range validation                                     | BR-017 / FSD-FR-090 (implemented)          |
@@ -897,6 +897,36 @@ handing schema ownership to it is recorded as LIM-023. The browser never
 connects to Postgres: the API never uses the anon key, and it remains the only
 data path.
 
+#### Backup and restore (NFR-016; LIM-012 only partly closed)
+
+Point-in-time recovery is a paid Supabase tier (ADR-002); the project runs on
+the free tier, so the backup mechanism is Supabase's automatic daily backup,
+not PITR.
+
+| Objective | Target | Basis |
+| --------- | ------ | ----- |
+| RPO (data loss window) | ≤ 24 hours | Bounded by the free tier's daily backup cadence — there is no PITR to shrink it further without upgrading the plan |
+| RTO (time to restore) | ≤ 1 hour | Supabase dashboard "Restore" action on a backup of this size; see the drill below for the restore step itself |
+
+**Restore procedure** (Supabase dashboard, Project → Database → Backups →
+Restore): pick the most recent backup, confirm, and wait for the project to
+come back online. This replaces the whole database, so it is only ever run
+after `S-1` (API connects as a role that cannot read other tenants' data) and
+with the lead dev's explicit go-ahead — it is destructive to anything written
+since that backup.
+
+**Drill performed 9 Nov 2026** (against a local throwaway Postgres, not the
+hosted project — a live restore against the real project is destructive and
+needs that explicit go-ahead): seeded the pilot network (34 nodes, 61 edges),
+a dispatcher account and a hazard; `pg_dump -F c`; dropped the database;
+`pg_restore` into a fresh one. Restore completed in ~1 s at this data volume;
+`alembic check` on the restored database reported no drift, and every row
+count and value (user email/role, hazard name, node/edge counts) matched the
+pre-drill baseline exactly. This verifies the dump/restore mechanics and the
+schema surviving the round trip; it does not exercise Supabase's own restore
+path, DNS cutover, or a volume anywhere near production size — those remain
+open until the live drill above is run against the hosted project.
+
 ### 5.3 Hosted API
 
 The API runs as a Vercel Python function built from `backend/`. Vercel detects
@@ -1016,7 +1046,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-009 | Browser end-to-end coverage is a portal smoke only | UI regressions outside sign-in and triage caught manually; no component or driver-app tests | Playwright (`metroflow-admin/e2e/`) runs in Web CI: sign-in gate, rejected password, triage queue, stored session. Not yet covered: React component tests, driver-app tests, an offline Playwright run |
 | LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
 | LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
-| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | Define RPO/RTO and test restore                                                                              |
+| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | RPO/RTO defined and dump/restore drilled locally 9 Nov 2026 (§5.2); a restore of the hosted project is still untested |
 | LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                         | Documented in migration rules                                                                                |
 | LIM-014 | Seeded graph is four nodes                         | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-015 | Driver app is not distributed through public app stores | Users need an EAS or TestFlight build        | Internal distribution for the pilot; public store release is a separate gate                                 |

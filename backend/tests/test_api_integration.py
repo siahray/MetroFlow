@@ -602,6 +602,20 @@ def test_approving_a_report_creates_and_publishes_a_hazard(client, created_recor
     assert audit_entry["payload"]["hazard_id"] == body["hazard_id"]
 
 
+def test_hazard_detail_matches_the_list_row(client, created_records):
+    report = submit_report(client, created_records, depth="KNEE", barangay="San Antonio")
+    approved = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
+    hazard_id = approved.json()["hazard_id"]
+    created_records[1].append(hazard_id)
+
+    detail = client.get(f"/api/v1/hazards/{hazard_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["hazard_id"] == hazard_id
+    assert detail.json()["obstruction_level"] == "LEVEL_2"
+
+    assert client.get("/api/v1/hazards/999999").status_code == 404
+
+
 def test_rejection_requires_a_reason(client, created_records):
     report = submit_report(client, created_records)
 
@@ -1127,6 +1141,19 @@ def test_telemetry_updates_vehicle_location(client):
     finally:
         _delete_test_vehicle(client, vehicle_id)
         _cleanup_email(email)
+
+
+def test_vehicle_detail_matches_the_list_row(client):
+    vehicle_id = _create_test_vehicle(client)
+    try:
+        detail = client.get(f"/api/v1/vehicles/{vehicle_id}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["vehicle_id"] == vehicle_id
+        assert detail.json()["call_sign"] == "TEST-TELEMETRY"
+
+        assert client.get("/api/v1/vehicles/999999").status_code == 404
+    finally:
+        _delete_test_vehicle(client, vehicle_id)
 
 
 def test_telemetry_throttles_second_batch_within_window(client):

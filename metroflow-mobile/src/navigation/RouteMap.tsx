@@ -6,7 +6,7 @@ import type { EdgeFeature, HazardInfo, RoutePlan } from "../api";
 import { polygonRing, routeCoordinates, type LatLng } from "./geo";
 import { basemap } from "./tiles";
 
-import { colors } from '../theme';
+import { useTheme, type ThemeColors } from '../theme';
 
 // Same status colours as the dispatcher portal's network map.
 const STATUS_STYLE = {
@@ -57,6 +57,9 @@ export function RouteMap({
   hazards,
   edges = [],
 }: Props) {
+  const { c, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
+
   // A route determines the framing; between routes the map follows the driver.
   // Computing it during render avoids a state round-trip that would otherwise
   // animate the camera twice for every plan.
@@ -98,7 +101,7 @@ export function RouteMap({
           <Polyline
             key={road.id}
             coordinates={road.points}
-            strokeColor={STATUS_STYLE[road.status]?.color ?? colors.slate600}
+            strokeColor={STATUS_STYLE[road.status]?.color ?? c.slate600}
             strokeWidth={3}
             lineCap="round"
             lineJoin="round"
@@ -108,7 +111,7 @@ export function RouteMap({
         {line.length > 1 ? (
           <Polyline
             coordinates={line}
-            strokeColor={colors.blue600}
+            strokeColor={c.blue600}
             strokeWidth={5}
             lineCap="round"
             lineJoin="round"
@@ -124,7 +127,7 @@ export function RouteMap({
               key={hazard.hazard_id}
               coordinates={ring}
               fillColor={closed ? "rgba(220,38,38,0.25)" : "rgba(245,158,11,0.22)"}
-              strokeColor={closed ? colors.red600 : "#f59e0b"}
+              strokeColor={closed ? c.red600 : "#f59e0b"}
               strokeWidth={2}
             />
           );
@@ -134,7 +137,7 @@ export function RouteMap({
           <Marker
             coordinate={position}
             title="Your location"
-            pinColor={colors.blue600}
+            pinColor={c.blue600}
             tracksViewChanges={false}
           />
         ) : null}
@@ -143,7 +146,7 @@ export function RouteMap({
           <Marker
             coordinate={destination}
             title={destinationName ?? "Destination"}
-            pinColor={colors.red600}
+            pinColor={c.red600}
             tracksViewChanges={false}
           />
         ) : null}
@@ -163,29 +166,32 @@ export function RouteMap({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, overflow: "hidden", backgroundColor: colors.slate200 },
-  legend: {
-    position: "absolute",
-    left: 8,
-    bottom: 22,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 3,
-  },
-  legendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  swatch: { width: 14, height: 4, borderRadius: 2 },
-  legendText: { fontSize: 10, color: colors.slate600 },
-  attribution: {
-    position: "absolute",
-    right: 6,
-    bottom: 4,
-    fontSize: 9,
-    color: colors.slate600,
-    backgroundColor: "rgba(255,255,255,0.8)",
-    paddingHorizontal: 4,
-    borderRadius: 3,
-  },
-});
+function makeStyles(c: ThemeColors, mode: "light" | "storm") {
+  const chromeBg = mode === "storm" ? "rgba(11,18,32,0.88)" : "rgba(255,255,255,0.92)";
+  return StyleSheet.create({
+    container: { flex: 1, overflow: "hidden", backgroundColor: c.slate200 },
+    legend: {
+      position: "absolute",
+      left: 8,
+      bottom: 22,
+      backgroundColor: chromeBg,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      gap: 3,
+    },
+    legendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    swatch: { width: 14, height: 4, borderRadius: 2 },
+    legendText: { fontSize: 10, color: c.slate600 },
+    attribution: {
+      position: "absolute",
+      right: 6,
+      bottom: 4,
+      fontSize: 9,
+      color: c.slate600,
+      backgroundColor: chromeBg,
+      paddingHorizontal: 4,
+      borderRadius: 3,
+    },
+  });
+}

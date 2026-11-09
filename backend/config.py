@@ -105,10 +105,14 @@ class Settings(BaseSettings):
 
     # --- Event streams (FSD-FR-086) --------------------------------------------
     # The relays read the event log on a short timer rather than through a broker
-    # (ADR-024). At 100 ms a published hazard reaches a connected client within
-    # the NFR-019 budget on the server side, and the query is an index probe on
-    # (channel, event_id), so ten reads a second per client costs little.
-    event_stream_poll_ms: int = 100
+    # (ADR-024). NFR-019 budgets 100 ms p95 for the whole publish-to-delivery
+    # path, so the poll interval itself has to sit well under that -- a 100 ms
+    # poll alone puts the p95 wait near 95 ms before any processing time is
+    # added (measured: ~110 ms median, ~220-330 ms p95, over budget). 40 ms
+    # keeps the p95 wait near 38 ms and leaves headroom; the query is an index
+    # probe on (channel, event_id), so 25 reads a second per client still costs
+    # little.
+    event_stream_poll_ms: int = 40
     # A serverless function cannot hold a socket open forever, so a stream ends
     # on its own and the client reconnects with Last-Event-ID. Forty-five seconds
     # sits inside the sixty-second function limit with room for startup.
