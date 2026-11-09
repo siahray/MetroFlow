@@ -1,6 +1,6 @@
 # MetroFlow - UI Polish Backlog
 
-**Status:** Enhancement Opportunities (No Required Features Missing)
+**Status:** All items implemented (9 Nov 2026) — see `BACKLOG.md` §5 for the per-item record, including the two sub-items deliberately not built (bulk assign-to-unit, dispatch-response-time chart, signal-strength indicator).
 **Date:** November 2, 2026
 
 This backlog contains UI/UX enhancements for the MetroFlow Portal and Driver App. All required functionality per FSD is implemented; these are polish items to improve visual design, user experience, and production readiness.

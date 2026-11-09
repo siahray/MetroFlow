@@ -152,7 +152,7 @@ export function SensorManagement() {
         </div>
         <button
           onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+          className="flex items-center gap-2 rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
         >
           <Plus className="h-4 w-4" />
           Add Sensor
@@ -383,7 +383,7 @@ export function SensorManagement() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
                 >
                   {isSubmitting ? "Saving..." : editingSensor ? "Save" : "Create"}
                 </button>

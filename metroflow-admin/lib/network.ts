@@ -156,6 +156,23 @@ export const MAP_COLORS = {
   sensorOff: "#94a3b8",
 } as const;
 
+/**
+ * Literal colours for the recharts panels on the triage page (P2-4). Recharts
+ * paint props need strings, not Tailwind classes, so they live here beside
+ * MAP_COLORS for the same reason.
+ */
+export const CHART_COLORS = {
+  sos: MAP_COLORS.alert,
+  report: MAP_COLORS.accent,
+  hazard: MAP_COLORS.warning,
+  grid: "#e2e8f0",
+  axis: "#94a3b8",
+  cursor: "#f1f5f9",
+  tooltipBorder: "#e2e8f0",
+  /** Cycled across fleet-status segments; order matches first-seen statuses. */
+  fleet: ["#10b981", "#f59e0b", "#6366f1", "#f43f5e", "#64748b"],
+} as const;
+
 function numberParam(value: number): string {
   return Number.isFinite(value) ? String(value) : "0";
 }

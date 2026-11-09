@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 
-import { colors } from '../theme';
+import { fontSize, space, colors } from '../theme';
 
 /** Password input with a show/hide toggle. */
 export function PasswordField({
@@ -22,7 +22,7 @@ export function PasswordField({
 
   return (
     <View>
-      <Text style={{ fontSize: 11, fontWeight: '600', color: colors.slate700, marginBottom: 6 }}>
+      <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: colors.slate700, marginBottom: space[6] }}>
         {label}
       </Text>
       <View
@@ -46,9 +46,9 @@ export function PasswordField({
           placeholder={placeholder}
           style={{
             flex: 1,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            fontSize: 13,
+            paddingHorizontal: space[14],
+            paddingVertical: space[12],
+            fontSize: fontSize.label,
             color: colors.slate900,
           }}
         />
@@ -57,7 +57,7 @@ export function PasswordField({
           accessibilityLabel={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
           onPress={() => setVisible((v) => !v)}
           hitSlop={8}
-          style={{ paddingHorizontal: 14 }}
+          style={{ paddingHorizontal: space[14] }}
         >
           {visible ? <EyeOff size={18} color={colors.slate500} /> : <Eye size={18} color={colors.slate500} />}
         </TouchableOpacity>

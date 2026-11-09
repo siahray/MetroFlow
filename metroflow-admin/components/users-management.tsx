@@ -145,7 +145,7 @@ export function UsersManagement() {
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors"
+          className="flex items-center gap-2 rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition-colors"
         >
           <Plus className="h-4 w-4" />
           Add User
@@ -384,7 +384,7 @@ export function UsersManagement() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {isSubmitting ? "Creating..." : "Create User"}
                 </button>
@@ -495,7 +495,7 @@ export function UsersManagement() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {isSubmitting ? "Updating..." : "Update User"}
                 </button>

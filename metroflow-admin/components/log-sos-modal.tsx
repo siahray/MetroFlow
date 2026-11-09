@@ -159,7 +159,7 @@ export function LogSOSModal({ onLogged, onClose }: LogSOSModalProps) {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {saving ? "Saving…" : "Log incident"}
           </button>

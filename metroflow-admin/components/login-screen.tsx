@@ -80,7 +80,7 @@ export function LoginScreen({
             <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-xl border border-sky-100 bg-sky-50 text-sky-600 shadow-sm">
               <Waves className="h-6 w-6 text-sky-600" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">MetroFlow Portal</h1>
+            <h1 className="text-display tracking-tight text-slate-900">MetroFlow Portal</h1>
             <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
               LGU Dispatch & Triage System
             </p>
@@ -173,7 +173,7 @@ export function LoginScreen({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="group flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-slate-900/10 transition-all duration-200 hover:bg-slate-800 hover:shadow-lg disabled:opacity-50"
+              className="group flex w-full items-center justify-center gap-2 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-slate-900/10 transition-all duration-200 hover:bg-slate-800 hover:shadow-lg disabled:opacity-50"
             >
               <span>{isSubmitting ? "Authenticating..." : "Sign in to Dispatch Operations"}</span>
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

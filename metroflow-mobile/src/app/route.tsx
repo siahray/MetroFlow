@@ -19,6 +19,7 @@ import {
   ArrowRight,
   ArrowUp,
   CheckCircle2,
+  Compass,
   CornerUpLeft,
   CornerUpRight,
   Flag,
@@ -52,6 +53,7 @@ import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
 import { loadCache, saveCache, useOnline } from "../offline";
 import { loadMyVehicle } from "../myVehicle";
+import { usePrefs } from "../prefs";
 import {
   distanceToPolygonMeters,
   formatDistance,
@@ -66,7 +68,7 @@ import {
   type LatLng,
 } from "../navigation/geo";
 
-import { useTheme, type ThemeColors, type ThemeMode } from '../theme';
+import { fontSize, space, useTheme, type ThemeColors, type ThemeMode } from '../theme';
 
 type Banner = {
   title: string;
@@ -74,12 +76,12 @@ type Banner = {
   tone: "warning" | "danger" | "success";
 } | null;
 
-function bannerColors(c: ThemeColors, mode: ThemeMode) {
+function bannerColors(c: ThemeColors) {
   return {
-    warning: { background: mode === "storm" ? "#3a2a06" : "#fffbeb", border: "#f59e0b", text: c.amber800 },
+    warning: { background: c.amberSurface, border: c.amber500, text: c.amber800 },
     danger: { background: c.red50, border: c.red600, text: c.red800 },
     success: {
-      background: mode === "storm" ? "#052e1b" : "#f0fdf4",
+      background: c.green50,
       border: c.green600,
       text: c.green700,
     },
@@ -126,7 +128,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const { user } = useAuth();
   const { c, mode, toggle: toggleTheme } = useTheme();
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
-  const BANNER_COLORS = useMemo(() => bannerColors(c, mode), [c, mode]);
+  const BANNER_COLORS = useMemo(() => bannerColors(c), [c]);
   const { destination: destinationParam } = useLocalSearchParams<{ destination?: string }>();
 
   const [network, setNetwork] = useState<NetworkState | null>(null);
@@ -141,8 +143,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Telemetry display (P3-4): the driver's own read of what is being sent.
   const [speedKmh, setSpeedKmh] = useState<number | null>(null);
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
+  const [headingDeg, setHeadingDeg] = useState<number | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const online = useOnline();
+  const prefs = usePrefs();
   const [locationError, setLocationError] = useState<string | null>(null);
   const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
   // Bumped by the Retry action so the one-shot location effect runs again.
@@ -165,6 +169,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const networkRef = useRef<NetworkState | null>(null);
   const hazardsRef = useRef<HazardInfo[]>([]);
   const unsafeRef = useRef(false);
+  const prefsRef = useRef(prefs);
   const plannedFor = useRef<number | null>(null);
   const initialDestinationHandled = useRef(false);
   const hazardsInitialised = useRef(false);
@@ -191,6 +196,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   useEffect(() => {
     unsafeRef.current = unsafeRoute;
   }, [unsafeRoute]);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
 
   // --- Offline fallback (FSD-FR-071) ---------------------------------------
   // The API call fails outright with no connection; a real routing refusal
@@ -258,10 +266,15 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             });
             setSpeedKmh(update.coords.speed != null ? Math.max(update.coords.speed * 3.6, 0) : null);
             setGpsAccuracyM(update.coords.accuracy ?? null);
+            setHeadingDeg(update.coords.heading ?? null);
 
             // --- Telemetry sender (FSD-FR-072) --------------------------------
             // Fire-and-forget: only while actively navigating as a linked unit.
-            if (telemetryVehicleId !== null && routeRef.current !== null) {
+            if (
+              prefsRef.current.telemetry &&
+              telemetryVehicleId !== null &&
+              routeRef.current !== null
+            ) {
               const nowMs = Date.now();
               if (nowMs - lastTelemetrySentMs.current >= 5000) {
                 lastTelemetrySentMs.current = nowMs;
@@ -528,7 +541,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   // --- Proximity alerts (FSD-FR-063, FSD-FR-064) ---------------------------
   useEffect(() => {
-    if (!position) return;
+    if (!position || !prefs.hazardAlerts) return;
     for (const hazard of hazards) {
       const ring = polygonRing(hazard.geometry);
       if (ring.length === 0) continue;
@@ -547,7 +560,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         alertedHazards.current.delete(hazard.hazard_id);
       }
     }
-  }, [position, hazards]);
+  }, [position, hazards, prefs.hazardAlerts]);
 
   // --- Instruction and arrival advances (FSD-FR-058) ----------------------
   const progress = useMemo(
@@ -834,6 +847,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     ? `in ${formatDistance(stepRemaining)}`
                     : ""}
                 {instruction.road_name ? ` • ${instruction.road_name}` : ""}
+                {remainingMinutes !== null ? ` • ETA ${formatEta(remainingMinutes)}` : ""}
               </Text>
             </View>
             {speedKmh !== null ? (
@@ -913,7 +927,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             </View>
             {route.hazards.length > 0 ? (
               <View style={styles.hazardChip}>
-                <AlertTriangle size={12} color="#b45309" />
+                <AlertTriangle size={12} color={c.amber700} />
                 <Text style={styles.hazardChipText}>
                   {route.hazards.length} hazard{route.hazards.length === 1 ? "" : "s"}
                 </Text>
@@ -954,6 +968,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 <MapPin size={12} color={c.slate400} />
                 <Text style={styles.telemetryText}>
                   {gpsAccuracyM !== null ? `±${Math.round(gpsAccuracyM)} m` : "no fix"}
+                </Text>
+              </View>
+              <View style={styles.telemetryItem}>
+                <Compass size={12} color={c.slate400} />
+                <Text style={styles.telemetryText}>
+                  {headingDeg !== null ? `${Math.round(headingDeg)}°` : "—"}
                 </Text>
               </View>
               <View style={styles.telemetryItem}>
@@ -1000,9 +1020,9 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: space[12],
+    paddingHorizontal: space[16],
+    paddingVertical: space[12],
     borderBottomWidth: 1,
     borderColor: c.slate100,
   },
@@ -1016,8 +1036,8 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     borderWidth: 1,
     borderColor: c.slate200,
   },
-  headerTitle: { fontSize: 15, fontWeight: "800", color: c.slate900 },
-  headerSubtitle: { fontSize: 10, color: c.slate500, marginTop: 1 },
+  headerTitle: { fontSize: fontSize.subtitle, fontWeight: "800", color: c.slate900 },
+  headerSubtitle: { fontSize: fontSize.micro, color: c.slate500, marginTop: space[1] },
   mapArea: { flex: 1, position: "relative" },
   banner: {
     position: "absolute",
@@ -1026,13 +1046,13 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     right: 12,
     borderWidth: 1,
     borderRadius: 14,
-    padding: 12,
+    padding: space[12],
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: space[10],
   },
-  bannerTitle: { fontSize: 12, fontWeight: "800" },
-  bannerBody: { fontSize: 11, marginTop: 2, lineHeight: 15 },
+  bannerTitle: { fontSize: fontSize.body, fontWeight: "800" },
+  bannerBody: { fontSize: fontSize.caption, marginTop: space[2], lineHeight: 15 },
   instructionCard: {
     position: "absolute",
     left: 12,
@@ -1040,10 +1060,10 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     bottom: 12,
     backgroundColor: "rgba(15,23,42,0.94)",
     borderRadius: 16,
-    padding: 14,
+    padding: space[14],
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space[12],
   },
   instructionIcon: {
     width: 36,
@@ -1053,28 +1073,28 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     alignItems: "center",
     justifyContent: "center",
   },
-  instructionText: { fontSize: 14, fontWeight: "800", color: c.onInk },
+  instructionText: { fontSize: fontSize.lead, fontWeight: "800", color: c.onInk },
   speedBadge: {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: space[8],
+    paddingVertical: space[4],
   },
-  speedBadgeValue: { fontSize: 15, fontWeight: "800", color: c.onInk },
-  speedBadgeUnit: { fontSize: 8, color: c.inkMuted },
+  speedBadgeValue: { fontSize: fontSize.subtitle, fontWeight: "800", color: c.onInk },
+  speedBadgeUnit: { fontSize: fontSize.nano, color: c.inkMuted },
   telemetryStrip: {
     flexDirection: "row",
     justifyContent: "space-between",
     borderTopWidth: 1,
     borderColor: c.slate100,
-    paddingTop: 8,
+    paddingTop: space[8],
   },
-  telemetryItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  telemetryText: { fontSize: 10, color: c.slate500 },
-  instructionMeta: { fontSize: 11, color: c.inkMuted, marginTop: 2 },
+  telemetryItem: { flexDirection: "row", alignItems: "center", gap: space[4] },
+  telemetryText: { fontSize: fontSize.micro, color: c.slate500 },
+  instructionMeta: { fontSize: fontSize.caption, color: c.inkMuted, marginTop: space[2] },
   mapNotice: {
     position: "absolute",
     top: "45%",
@@ -1082,13 +1102,13 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     right: 24,
     backgroundColor: c.white,
     borderRadius: 14,
-    padding: 14,
+    padding: space[14],
     alignItems: "center",
-    gap: 8,
+    gap: space[8],
     borderWidth: 1,
     borderColor: c.slate200,
   },
-  mapNoticeText: { fontSize: 12, color: c.slate700, textAlign: "center" },
+  mapNoticeText: { fontSize: fontSize.body, color: c.slate700, textAlign: "center" },
   refreshButton: {
     position: "absolute",
     right: 12,
@@ -1105,119 +1125,119 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   routePanel: {
     borderTopWidth: 1,
     borderColor: c.slate200,
-    padding: 16,
-    gap: 10,
+    padding: space[16],
+    gap: space[10],
     backgroundColor: c.white,
   },
-  routeSummary: { flexDirection: "row", alignItems: "center", gap: 10 },
-  routeDestination: { fontSize: 14, fontWeight: "800", color: c.slate900 },
-  routeMeta: { fontSize: 11, color: c.slate500, marginTop: 2 },
+  routeSummary: { flexDirection: "row", alignItems: "center", gap: space[10] },
+  routeDestination: { fontSize: fontSize.lead, fontWeight: "800", color: c.slate900 },
+  routeMeta: { fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] },
   hazardChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "#fffbeb",
+    gap: space[4],
+    backgroundColor: c.amberSurface,
     borderWidth: 1,
-    borderColor: "#fde68a",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderColor: c.amber200,
+    paddingHorizontal: space[8],
+    paddingVertical: space[4],
     borderRadius: 999,
   },
-  hazardChipText: { fontSize: 10, fontWeight: "700", color: "#b45309" },
+  hazardChipText: { fontSize: fontSize.micro, fontWeight: "700", color: c.amber800 },
   safeChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: mode === "storm" ? "#052e1b" : "#f0fdf4",
+    gap: space[4],
+    backgroundColor: c.green50,
     borderWidth: 1,
-    borderColor: "#bbf7d0",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderColor: c.green200,
+    paddingHorizontal: space[8],
+    paddingVertical: space[4],
     borderRadius: 999,
   },
-  safeChipText: { fontSize: 10, fontWeight: "700", color: c.green700 },
+  safeChipText: { fontSize: fontSize.micro, fontWeight: "700", color: c.green700 },
   unsafeNotice: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: space[6],
     backgroundColor: c.red50,
     borderRadius: 10,
-    padding: 8,
+    padding: space[8],
   },
-  unsafeNoticeText: { flex: 1, fontSize: 10, color: c.red700 },
-  arrivedRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  arrivedText: { fontSize: 12, fontWeight: "700", color: c.green700 },
-  panelButtons: { flexDirection: "row", gap: 10, marginTop: 4 },
+  unsafeNoticeText: { flex: 1, fontSize: fontSize.micro, color: c.red700 },
+  arrivedRow: { flexDirection: "row", alignItems: "center", gap: space[8] },
+  arrivedText: { fontSize: fontSize.body, fontWeight: "700", color: c.green700 },
+  panelButtons: { flexDirection: "row", gap: space[10], marginTop: space[4] },
   secondaryButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
+    gap: space[6],
+    paddingVertical: space[12],
     borderRadius: 12,
     borderWidth: 1,
     borderColor: c.slate300,
     backgroundColor: c.slate50,
   },
-  secondaryButtonText: { fontSize: 12, fontWeight: "700", color: c.slate800 },
+  secondaryButtonText: { fontSize: fontSize.body, fontWeight: "700", color: c.slate800 },
   endButton: {
-    paddingHorizontal: 22,
-    paddingVertical: 12,
+    paddingHorizontal: space[22],
+    paddingVertical: space[12],
     borderRadius: 12,
     backgroundColor: c.inkBg,
     alignItems: "center",
     justifyContent: "center",
   },
-  endButtonText: { fontSize: 12, fontWeight: "800", color: c.onInk },
+  endButtonText: { fontSize: fontSize.body, fontWeight: "800", color: c.onInk },
   searchPanel: {
     borderBottomWidth: 1,
     borderColor: c.slate200,
-    padding: 16,
-    gap: 10,
+    padding: space[16],
+    gap: space[10],
     backgroundColor: c.white,
   },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space[8],
     backgroundColor: c.slate50,
     borderWidth: 1,
     borderColor: c.slate200,
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: space[12],
+    paddingVertical: space[10],
   },
-  searchInput: { flex: 1, fontSize: 13, color: c.slate900 },
-  planningRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  planningText: { fontSize: 11, color: c.slate600 },
-  errorText: { flex: 1, fontSize: 11, color: c.red700 },
-  errorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  errorRetry: { fontSize: 11, fontWeight: "800", color: c.red700 },
+  searchInput: { flex: 1, fontSize: fontSize.label, color: c.slate900 },
+  planningRow: { flexDirection: "row", alignItems: "center", gap: space[8] },
+  planningText: { fontSize: fontSize.caption, color: c.slate600 },
+  errorText: { flex: 1, fontSize: fontSize.caption, color: c.red700 },
+  errorRow: { flexDirection: "row", alignItems: "center", gap: space[8] },
+  errorRetry: { fontSize: fontSize.caption, fontWeight: "800", color: c.red700 },
   refusalCard: {
     backgroundColor: c.red50,
     borderWidth: 1,
     borderColor: c.red700,
     borderRadius: 14,
-    padding: 12,
-    gap: 6,
+    padding: space[12],
+    gap: space[6],
   },
-  refusalTitle: { fontSize: 13, fontWeight: "800", color: c.red800 },
-  refusalBody: { fontSize: 11, color: c.red800, lineHeight: 15 },
+  refusalTitle: { fontSize: fontSize.label, fontWeight: "800", color: c.red800 },
+  refusalBody: { fontSize: fontSize.caption, color: c.red800, lineHeight: 15 },
   dangerButton: {
     flex: 1.4,
-    paddingVertical: 12,
+    paddingVertical: space[12],
     borderRadius: 12,
     backgroundColor: c.red700,
     alignItems: "center",
     justifyContent: "center",
   },
-  dangerButtonText: { fontSize: 12, fontWeight: "700", color: c.white },
+  dangerButtonText: { fontSize: fontSize.body, fontWeight: "700", color: c.white },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
+    gap: space[10],
+    paddingVertical: space[10],
     borderBottomWidth: 1,
     borderColor: c.slate100,
   },
@@ -1229,29 +1249,29 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     alignItems: "center",
     justifyContent: "center",
   },
-  resultName: { fontSize: 12, fontWeight: "700", color: c.slate800 },
-  resultMeta: { fontSize: 10, color: c.slate400, marginTop: 1 },
-  emptyText: { fontSize: 11, color: c.slate500 },
-  hintText: { fontSize: 11, color: c.slate500, lineHeight: 16 },
+  resultName: { fontSize: fontSize.body, fontWeight: "700", color: c.slate800 },
+  resultMeta: { fontSize: fontSize.micro, color: c.slate400, marginTop: space[1] },
+  emptyText: { fontSize: fontSize.caption, color: c.slate500 },
+  hintText: { fontSize: fontSize.caption, color: c.slate500, lineHeight: 16 },
   signedOutCard: {
-    margin: 20,
-    padding: 20,
+    margin: space[20],
+    padding: space[20],
     borderRadius: 18,
     borderWidth: 1,
     borderColor: c.slate200,
     backgroundColor: c.slate50,
     alignItems: "center",
-    gap: 10,
+    gap: space[10],
   },
-  signedOutTitle: { fontSize: 15, fontWeight: "800", color: c.slate900 },
-  signedOutBody: { fontSize: 12, color: c.slate600, textAlign: "center", lineHeight: 17 },
+  signedOutTitle: { fontSize: fontSize.subtitle, fontWeight: "800", color: c.slate900 },
+  signedOutBody: { fontSize: fontSize.body, color: c.slate600, textAlign: "center", lineHeight: 17 },
   primaryButton: {
-    marginTop: 6,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+    marginTop: space[6],
+    paddingHorizontal: space[28],
+    paddingVertical: space[12],
     borderRadius: 12,
     backgroundColor: c.inkBg,
   },
-  primaryButtonText: { fontSize: 13, fontWeight: "800", color: c.onInk },
+  primaryButtonText: { fontSize: fontSize.label, fontWeight: "800", color: c.onInk },
   });
 }

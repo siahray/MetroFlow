@@ -155,7 +155,7 @@ function RadarContent() {
                   onClick={() => setSelectedId(inc.id)}
                   className={`rounded-lg px-2.5 py-1 text-xs font-bold font-mono transition-colors ${
                     inc.id === selected.id
-                      ? "bg-slate-900 text-white shadow-xs"
+                      ? "bg-brand-primary text-white shadow-xs"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
@@ -185,7 +185,7 @@ function RadarContent() {
           </p>
           <Link
             href="/triage"
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-primary px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800 transition-colors"
           >
             <CheckSquare className="h-3.5 w-3.5" /> Open Triage Desk
           </Link>

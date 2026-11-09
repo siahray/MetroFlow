@@ -2,11 +2,7 @@ import { cn } from "@/lib/cn";
 
 export function Skeleton({ className }: { className?: string }) {
   return (
-    <div
-      className={cn("animate-pulse rounded bg-slate-200", className)}
-      role="status"
-      aria-label="Loading"
-    />
+    <div className={cn("animate-shimmer rounded", className)} role="status" aria-label="Loading" />
   );
 }
 

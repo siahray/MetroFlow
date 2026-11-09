@@ -351,7 +351,7 @@ export function DispatchRadar({
                   <button
                     type="button"
                     onClick={handleSaveNote}
-                    className="rounded bg-slate-900 px-3 py-1 text-xs font-bold text-white hover:bg-slate-800"
+                    className="rounded bg-brand-primary px-3 py-1 text-xs font-bold text-white hover:bg-slate-800"
                   >
                     Save Note
                   </button>

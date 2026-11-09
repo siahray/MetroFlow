@@ -33,7 +33,7 @@ import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
 import { isOffline, useOnline } from '../../offline';
-import { colors } from '../../theme';
+import { fontSize, space, colors } from '../../theme';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
 /** Location staleness limit for SOS submissions (VAL-021). */
@@ -203,28 +203,28 @@ export default function SOSScreen() {
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
-      <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, backgroundColor: colors.slate50 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ paddingHorizontal: space[20], paddingTop: space[10], paddingBottom: space[10], backgroundColor: colors.slate50 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[12] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
             <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.blue100, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' }}>
               <Waves size={18} color={colors.blue600} />
             </View>
             <View>
-              <Text style={{ fontSize: 9, fontWeight: '800', color: colors.blue600, textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
+              <Text style={{ fontSize: fontSize.tiny, fontWeight: '800', color: colors.blue600, textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
                 METROFLOW
               </Text>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: colors.slate900, lineHeight: 20 }}>
+              <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: colors.slate900, lineHeight: 20 }}>
                 Sos Rescue Dispatch
               </Text>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12] }}>
             <Avatar name={user?.name || user?.email} size={32} />
           </View>
         </View>
 
         {/* Subheader */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back"
             onPress={() => router.back()}
             style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(226,232,240,0.6)', alignItems: 'center', justifyContent: 'center' }}
@@ -232,9 +232,9 @@ export default function SOSScreen() {
             <ArrowLeft size={18} color={colors.slate700} />
           </TouchableOpacity>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.red50, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#fee2e2' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], backgroundColor: colors.red50, paddingHorizontal: space[14], paddingVertical: space[6], borderRadius: 999, borderWidth: 1, borderColor: colors.red100 }}>
             <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: colors.red500 }} />
-            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.red600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: colors.red600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
               PRIORITY SOS LINE
             </Text>
           </View>
@@ -251,55 +251,55 @@ export default function SOSScreen() {
       {/* Scrollable Content */}
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 28 }}
+        contentContainerStyle={{ paddingHorizontal: space[20], paddingTop: space[4], paddingBottom: space[28] }}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero Graphic */}
-        <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: 6, marginBottom: 12, position: 'relative' }}>
+        <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: space[6], marginBottom: space[12], position: 'relative' }}>
           <View style={{ width: 128, height: 128, borderRadius: 64, backgroundColor: colors.blue50, alignItems: 'center', justifyContent: 'center' }}>
             <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.blue100, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 }}>
+              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', shadowColor: colors.black, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 }}>
                 <Target size={38} color={colors.blue600} />
               </View>
             </View>
           </View>
 
           {/* Overlapping Geo-Lock Badge */}
-          <View style={{ position: 'absolute', bottom: -10, backgroundColor: colors.slate900, paddingHorizontal: 14, paddingVertical: 5, borderRadius: 999, borderWidth: 2, borderColor: colors.white, flexDirection: 'row', alignItems: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, elevation: 4 }}>
+          <View style={{ position: 'absolute', bottom: -10, backgroundColor: colors.slate900, paddingHorizontal: space[14], paddingVertical: space[5], borderRadius: 999, borderWidth: 2, borderColor: colors.white, flexDirection: 'row', alignItems: 'center', gap: space[6], shadowColor: colors.black, shadowOpacity: 0.12, shadowRadius: 4, elevation: 4 }}>
             <Lock size={11} color={colors.white} />
-            <Text style={{ fontSize: 10, fontWeight: '800', color: colors.white, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: colors.white, textTransform: 'uppercase', letterSpacing: 0.8 }}>
               Active Geo-Lock
             </Text>
           </View>
         </View>
 
         {/* Title & Description */}
-        <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 18, paddingHorizontal: 4 }}>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: colors.slate900, marginBottom: 6 }}>
+        <View style={{ alignItems: 'center', marginTop: space[18], marginBottom: space[18], paddingHorizontal: space[4] }}>
+          <Text style={{ fontSize: fontSize.jumbo, fontWeight: '800', color: colors.slate900, marginBottom: space[6] }}>
             Need Assistance?
           </Text>
-          <Text style={{ fontSize: 13, color: colors.slate500, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 }}>
+          <Text style={{ fontSize: fontSize.label, color: colors.slate500, textAlign: 'center', lineHeight: 20, paddingHorizontal: space[8] }}>
             If you are stranded or your vehicle is trapped in rising floodwaters, request immediate deployment. Civic dispatch units are active in your sector.
           </Text>
         </View>
 
         {/* Info Cards */}
-        <View style={{ gap: 12, marginBottom: 18 }}>
+        <View style={{ gap: space[12], marginBottom: space[18] }}>
           {/* Identified Location */}
-          <View style={{ backgroundColor: colors.white, borderRadius: 18, padding: 14, flexDirection: 'row', gap: 14, borderWidth: 1, borderColor: colors.slate100, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }}>
+          <View style={{ backgroundColor: colors.white, borderRadius: 18, padding: space[14], flexDirection: 'row', gap: space[14], borderWidth: 1, borderColor: colors.slate100, shadowColor: colors.black, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }}>
             <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.slate100, alignItems: 'center', justifyContent: 'center' }}>
               <MapPin size={20} color={colors.slate900} />
             </View>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.blue600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space[2] }}>
+                <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: colors.blue600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
                   YOUR LOCATION
                 </Text>
               </View>
-              <Text style={{ fontSize: 15, fontWeight: '700', color: colors.slate900 }}>
+              <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: colors.slate900 }}>
                 {"Shared from your phone's GPS"}
               </Text>
-              <Text style={{ fontSize: 12, color: colors.slate500, marginTop: 2 }}>
+              <Text style={{ fontSize: fontSize.body, color: colors.slate500, marginTop: space[2] }}>
                 A fresh location fix is taken when you send the request.
               </Text>
             </View>
@@ -308,20 +308,20 @@ export default function SOSScreen() {
         </View>
 
         {/* Situation Type */}
-        <View style={{ marginBottom: 18 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.slate900 }}>Situation Type</Text>
-            <Text style={{ fontSize: 11, fontWeight: '500', color: colors.slate500 }}>Tap to refine</Text>
+        <View style={{ marginBottom: space[18] }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: space[10] }}>
+            <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: colors.slate900 }}>Situation Type</Text>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '500', color: colors.slate500 }}>Tap to refine</Text>
           </View>
 
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: space[8] }}>
             {/* Vehicle Stuck */}
             <TouchableOpacity
               onPress={() => setSituation('vehicle')}
-              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: situation === 'vehicle' ? 1.5 : 1, borderColor: situation === 'vehicle' ? colors.slate900 : colors.slate200, backgroundColor: situation === 'vehicle' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 }}
+              style={{ flex: 1, paddingVertical: space[14], paddingHorizontal: space[4], borderRadius: 18, borderWidth: situation === 'vehicle' ? 1.5 : 1, borderColor: situation === 'vehicle' ? colors.slate900 : colors.slate200, backgroundColor: situation === 'vehicle' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: space[6], shadowColor: colors.black, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 }}
             >
               <Car size={20} color={situation === 'vehicle' ? colors.white : colors.slate900} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: situation === 'vehicle' ? colors.white : colors.slate900, textAlign: 'center' }}>
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'vehicle' ? colors.white : colors.slate900, textAlign: 'center' }}>
                 Vehicle Stuck
               </Text>
             </TouchableOpacity>
@@ -329,10 +329,10 @@ export default function SOSScreen() {
             {/* Pedestrian */}
             <TouchableOpacity
               onPress={() => setSituation('pedestrian')}
-              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: situation === 'pedestrian' ? 1.5 : 1, borderColor: situation === 'pedestrian' ? colors.slate900 : colors.slate200, backgroundColor: situation === 'pedestrian' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 }}
+              style={{ flex: 1, paddingVertical: space[14], paddingHorizontal: space[4], borderRadius: 18, borderWidth: situation === 'pedestrian' ? 1.5 : 1, borderColor: situation === 'pedestrian' ? colors.slate900 : colors.slate200, backgroundColor: situation === 'pedestrian' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: space[6], shadowColor: colors.black, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 }}
             >
               <User size={20} color={situation === 'pedestrian' ? colors.white : colors.slate900} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: situation === 'pedestrian' ? colors.white : colors.slate900, textAlign: 'center' }}>
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'pedestrian' ? colors.white : colors.slate900, textAlign: 'center' }}>
                 Pedestrian
               </Text>
             </TouchableOpacity>
@@ -340,10 +340,10 @@ export default function SOSScreen() {
             {/* Medical Need */}
             <TouchableOpacity
               onPress={() => setSituation('medical')}
-              style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 4, borderRadius: 18, borderWidth: situation === 'medical' ? 1.5 : 1, borderColor: situation === 'medical' ? colors.slate900 : colors.slate200, backgroundColor: situation === 'medical' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: 6, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 }}
+              style={{ flex: 1, paddingVertical: space[14], paddingHorizontal: space[4], borderRadius: 18, borderWidth: situation === 'medical' ? 1.5 : 1, borderColor: situation === 'medical' ? colors.slate900 : colors.slate200, backgroundColor: situation === 'medical' ? colors.slate900 : colors.white, alignItems: 'center', justifyContent: 'center', gap: space[6], shadowColor: colors.black, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 }}
             >
               <BriefcaseMedical size={20} color={situation === 'medical' ? colors.white : colors.slate900} />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: situation === 'medical' ? colors.white : colors.slate900, textAlign: 'center' }}>
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'medical' ? colors.white : colors.slate900, textAlign: 'center' }}>
                 Medical Need
               </Text>
             </TouchableOpacity>
@@ -351,33 +351,33 @@ export default function SOSScreen() {
         </View>
 
         {/* Action Buttons / Dispatch Status (FSD-FR-074) */}
-        <View style={{ gap: 10, marginBottom: 14 }}>
+        <View style={{ gap: space[10], marginBottom: space[14] }}>
           {dispatchedSOS ? (
             /* ---- Post-submission status panel ---- */
             <View
               style={{
-                backgroundColor: '#f0fdf4',
+                backgroundColor: colors.green50,
                 borderRadius: 18,
-                padding: 18,
+                padding: space[18],
                 borderWidth: 1,
-                borderColor: '#bbf7d0',
-                gap: 10,
+                borderColor: colors.green200,
+                gap: space[10],
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
                 <CheckCircle2 size={20} color={colors.green600} />
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#166534' }}>
+                <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: colors.green800 }}>
                   Rescue Request Sent
                 </Text>
               </View>
-              <Text style={{ fontSize: 13, color: colors.green700 }}>
+              <Text style={{ fontSize: fontSize.label, color: colors.green700 }}>
                 SOS #{dispatchedSOS.sos_id} •{' '}
                 Status:{' '}
                 <Text style={{ fontWeight: '800', textTransform: 'capitalize' }}>
                   {sosStatus ?? dispatchedSOS.status}
                 </Text>
               </Text>
-              <Text style={{ fontSize: 12, color: colors.slate500 }}>
+              <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>
                 Coords: {dispatchedSOS.latitude.toFixed(5)}, {dispatchedSOS.longitude.toFixed(5)}
               </Text>
 
@@ -389,12 +389,12 @@ export default function SOSScreen() {
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 6,
-                  paddingVertical: 10,
+                  gap: space[6],
+                  paddingVertical: space[10],
                   backgroundColor: colors.white,
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: '#d1fae5',
+                  borderColor: colors.emerald100,
                 }}
               >
                 {refreshingStatus ? (
@@ -402,7 +402,7 @@ export default function SOSScreen() {
                 ) : (
                   <RefreshCw size={14} color={colors.green600} />
                 )}
-                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.green600 }}>
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.green600 }}>
                   Check Status
                 </Text>
               </TouchableOpacity>
@@ -411,13 +411,13 @@ export default function SOSScreen() {
               <TouchableOpacity
                 onPress={() => router.replace('/(tabs)/home')}
                 style={{
-                  paddingVertical: 12,
+                  paddingVertical: space[12],
                   backgroundColor: colors.slate900,
                   borderRadius: 12,
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.white }}>
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.white }}>
                   Return to Home
                 </Text>
               </TouchableOpacity>
@@ -430,17 +430,17 @@ export default function SOSScreen() {
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 8,
-                    paddingVertical: 10,
-                    paddingHorizontal: 12,
-                    marginBottom: 10,
+                    gap: space[8],
+                    paddingVertical: space[10],
+                    paddingHorizontal: space[12],
+                    marginBottom: space[10],
                     borderRadius: 12,
                     backgroundColor: colors.amber100,
                   }}
                 >
                   <WifiOff size={14} color={colors.amber800} />
                   <Text
-                    style={{ flex: 1, fontSize: 12, fontWeight: '700', color: colors.amber800 }}
+                    style={{ flex: 1, fontSize: fontSize.body, fontWeight: '700', color: colors.amber800 }}
                   >
                     Offline: a rescue request needs a live connection.
                   </Text>
@@ -451,12 +451,12 @@ export default function SOSScreen() {
               <TouchableOpacity
                 onPress={handleSOS}
                 disabled={sending || locating}
-                style={{ backgroundColor: colors.slate900, paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 }}
+                style={{ backgroundColor: colors.slate900, paddingVertical: space[16], borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: space[8], shadowColor: colors.black, shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 }}
               >
                 {locating ? (
                   <>
                     <ActivityIndicator color={colors.white} />
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.white }}>
+                    <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: colors.white }}>
                       Getting Location…
                     </Text>
                   </>
@@ -464,10 +464,10 @@ export default function SOSScreen() {
                   <ActivityIndicator color={colors.white} />
                 ) : (
                   <>
-                    <Text style={{ fontSize: 15, fontWeight: '900', color: colors.white, letterSpacing: 0.8 }}>
+                    <Text style={{ fontSize: fontSize.subtitle, fontWeight: '900', color: colors.white, letterSpacing: 0.8 }}>
                       SOS
                     </Text>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.white }}>
+                    <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: colors.white }}>
                       Request Rescue
                     </Text>
                     <ArrowRight size={16} color={colors.white} />
@@ -476,12 +476,12 @@ export default function SOSScreen() {
               </TouchableOpacity>
 
               {/* Secondary Buttons Row */}
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flexDirection: 'row', gap: space[10] }}>
                 <TouchableOpacity
                   onPress={() => router.back()}
-                  style={{ flex: 1, paddingVertical: 14, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.slate200, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flex: 1, paddingVertical: space[14], backgroundColor: colors.white, borderWidth: 1, borderColor: colors.slate200, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.slate600 }}>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.slate600 }}>
                     Cancel
                   </Text>
                 </TouchableOpacity>
@@ -491,9 +491,9 @@ export default function SOSScreen() {
         </View>
 
         {/* Monitored Response Footer */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space[6], marginTop: space[4] }}>
           <ShieldCheck size={14} color={colors.sky600} />
-          <Text style={{ fontSize: 10, fontWeight: '600', color: colors.slate500 }}>
+          <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: colors.slate500 }}>
             Metro Emergency Dispatch • 24/7 Monitored Response
           </Text>
         </View>
