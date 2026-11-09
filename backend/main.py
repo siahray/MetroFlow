@@ -35,6 +35,7 @@ from schemas import (
     AuditResponse,
     AuditVerifyResponse,
     ConfirmRequest,
+    DispatchEventItem,
     DispatchPreviewResponse,
     DispatchPreviewUnit,
     EdgeFeature,
@@ -1084,6 +1085,59 @@ def delete_user(
 # ---------------------------------------------------------------------------
 
 
+# --- Dispatch milestones (FSD-FR-087 to 089, BACKLOG F-4) --------------------
+#
+# ``dispatch_events`` is the mission timeline's source of truth: one row per
+# lifecycle step, written inside the same transaction as the change it records.
+
+DISPATCH_CREATED = "created"
+DISPATCH_ASSIGNED = "assigned"
+DISPATCH_DISPATCHED = "dispatched"
+DISPATCH_EN_ROUTE = "en_route"
+DISPATCH_ARRIVED = "arrived"
+DISPATCH_COMPLETED = "completed"
+DISPATCH_CANCELLED = "cancelled"
+
+# Statuses in which a unit is committed to an incident (BRULE-011).
+ACTIVE_DISPATCH_STATUSES = ("assigned", "confirmed")
+
+
+def record_dispatch_event(
+    db: Session,
+    *,
+    sos_id: int,
+    event_type: str,
+    actor: str | None = None,
+    vehicle_id: int | None = None,
+    note: str | None = None,
+) -> models.DispatchEvent:
+    """Append one mission milestone; the caller commits it with the change."""
+    event = models.DispatchEvent(
+        sos_id=sos_id,
+        event_type=event_type,
+        actor=actor,
+        vehicle_id=vehicle_id,
+        note=note,
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
+def _active_dispatch_for_vehicle(db: Session, vehicle_id: int) -> models.SOSRequest | None:
+    """The incident a unit is committed to, if any (BRULE-011 keeps it to one)."""
+    return (
+        db.query(models.SOSRequest)
+        .filter(
+            models.SOSRequest.vehicle_id == vehicle_id,
+            models.SOSRequest.status.in_(ACTIVE_DISPATCH_STATUSES),
+            models.SOSRequest.dismissed_at.is_(None),
+        )
+        .order_by(models.SOSRequest.sos_id.desc())
+        .first()
+    )
+
+
 @app.post(
     "/api/v1/sos",
     response_model=SOSResponse,
@@ -1110,6 +1164,9 @@ def create_sos(
     db.flush()
     events.emit(
         db, channel=events.SOS, event_type=events.SOS_CREATED, payload=events.sos_payload(new_sos)
+    )
+    record_dispatch_event(
+        db, sos_id=new_sos.sos_id, event_type=DISPATCH_CREATED, actor=_user.name or _user.email
     )
     db.commit()
     db.refresh(new_sos)
@@ -1373,6 +1430,14 @@ def assign_sos(
             "actor": _user.name or _user.email,
         },
     )
+    record_dispatch_event(
+        db,
+        sos_id=db_sos.sos_id,
+        event_type=DISPATCH_ASSIGNED,
+        actor=_user.name or _user.email,
+        vehicle_id=assign_req.vehicle_id,
+        note=db_vehicle.call_sign,
+    )
     db.flush()
     events.emit(
         db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
@@ -1416,6 +1481,14 @@ def confirm_dispatch(
             "actor": _user.name or _user.email,
         },
     )
+    record_dispatch_event(
+        db,
+        sos_id=db_sos.sos_id,
+        event_type=DISPATCH_DISPATCHED,
+        actor=_user.name or _user.email,
+        vehicle_id=db_sos.vehicle_id,
+        note=confirm_req.note or None,
+    )
     db.flush()
     events.emit(
         db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
@@ -1457,6 +1530,14 @@ def undo_dispatch(
             "actor": _user.name or _user.email,
         },
     )
+    record_dispatch_event(
+        db,
+        sos_id=db_sos.sos_id,
+        event_type=DISPATCH_CANCELLED,
+        actor=_user.name or _user.email,
+        vehicle_id=prev_vehicle,
+        note="Dispatch undone",
+    )
     db.flush()
     events.emit(
         db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
@@ -1481,6 +1562,8 @@ def reject_sos(
         raise HTTPException(status_code=404, detail="SOS not found")
     if db_sos.status in ("confirmed", "dispatched"):
         raise HTTPException(status_code=409, detail="Cannot reject an already dispatched incident")
+    was_dispatched = db_sos.vehicle_id is not None or db_sos.status in ACTIVE_DISPATCH_STATUSES
+    prev_vehicle = db_sos.vehicle_id
     if db_sos.vehicle_id:
         _release_vehicle(db, db_sos.vehicle_id)
     db_sos.status = "rejected"
@@ -1498,6 +1581,15 @@ def reject_sos(
             "actor": _user.name or _user.email,
         },
     )
+    if was_dispatched:
+        record_dispatch_event(
+            db,
+            sos_id=db_sos.sos_id,
+            event_type=DISPATCH_CANCELLED,
+            actor=_user.name or _user.email,
+            vehicle_id=prev_vehicle,
+            note=f"Rejected: {req.reason}",
+        )
     db.flush()
     events.emit(
         db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
@@ -1548,12 +1640,82 @@ def resolve_sos(
             "actor": current_user.name or current_user.email,
         },
     )
+    record_dispatch_event(
+        db,
+        sos_id=db_sos.sos_id,
+        event_type=DISPATCH_COMPLETED,
+        actor=current_user.name or current_user.email,
+        vehicle_id=db_sos.vehicle_id,
+    )
     db.flush()
     events.emit(
         db, channel=events.SOS, event_type=events.SOS_UPDATED, payload=events.sos_payload(db_sos)
     )
     db.commit()
     db.refresh(db_sos)
+    return db_sos
+
+
+@app.post("/api/v1/sos/{sos_id}/arrive", response_model=SOSResponse)
+def arrive_sos(
+    sos_id: int,
+    current_user: models.User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Mark the unit on scene without closing the incident (FSD-FR-087 to 089).
+
+    The driver taps this when they reach the scene; the incident stays open
+    until ``resolve``. Idempotent: a repeated tap does not duplicate the
+    milestone, which keeps retries after a lost response safe.
+    """
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+    if current_user.role not in ADMIN_ROLES and (
+        db_sos.vehicle_id is None or current_user.vehicle_id != db_sos.vehicle_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="Only the assigned unit or a dispatcher can mark arrival"
+        )
+    if db_sos.status not in ACTIVE_DISPATCH_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot mark arrival for an incident in state '{db_sos.status}'",
+        )
+    already = (
+        db.query(models.DispatchEvent)
+        .filter(
+            models.DispatchEvent.sos_id == sos_id,
+            models.DispatchEvent.event_type == DISPATCH_ARRIVED,
+        )
+        .first()
+    )
+    if not already:
+        vehicle = (
+            db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == db_sos.vehicle_id).first()
+            if db_sos.vehicle_id
+            else None
+        )
+        audit.record(
+            db,
+            user=current_user,
+            action_type=audit.SOS_ARRIVE,
+            payload={
+                "sos_id": sos_id,
+                "vehicle_id": db_sos.vehicle_id,
+                "call_sign": vehicle.call_sign if vehicle else None,
+                "actor": current_user.name or current_user.email,
+            },
+        )
+        record_dispatch_event(
+            db,
+            sos_id=sos_id,
+            event_type=DISPATCH_ARRIVED,
+            actor=current_user.name or current_user.email,
+            vehicle_id=db_sos.vehicle_id,
+        )
+        db.commit()
+        db.refresh(db_sos)
     return db_sos
 
 
@@ -1670,6 +1832,39 @@ def add_sos_note(
     return db_sos
 
 
+@app.get("/api/v1/dispatch/{sos_id}/events", response_model=list[DispatchEventItem])
+def get_dispatch_events(
+    sos_id: int,
+    _user: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Mission milestone timeline for one dispatch (FSD-FR-087 to 089)."""
+    db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
+    if not db_sos:
+        raise HTTPException(status_code=404, detail="SOS not found")
+
+    rows = (
+        db.query(models.DispatchEvent, models.Vehicle.call_sign)
+        .outerjoin(models.Vehicle, models.DispatchEvent.vehicle_id == models.Vehicle.vehicle_id)
+        .filter(models.DispatchEvent.sos_id == sos_id)
+        .order_by(models.DispatchEvent.event_id.asc())
+        .all()
+    )
+    return [
+        DispatchEventItem(
+            event_id=event.event_id,
+            sos_id=event.sos_id,
+            event_type=event.event_type,
+            actor=event.actor,
+            vehicle_id=event.vehicle_id,
+            call_sign=call_sign,
+            note=event.note,
+            created_at=event.created_at,
+        )
+        for event, call_sign in rows
+    ]
+
+
 @app.get("/api/v1/sos/{sos_id}/log", response_model=list[IncidentLogItem])
 def get_sos_log(
     sos_id: int,
@@ -1734,6 +1929,9 @@ def get_sos_log(
         elif act == audit.SOS_REJECT:
             kind = "action"
             text = f"Rejected (False Alarm) by {actor}: {payload.get('reason')}"
+        elif act == audit.SOS_ARRIVE:
+            kind = "action"
+            text = f"Unit {payload.get('call_sign') or 'assigned'} marked on scene by {actor}"
         elif act == audit.SOS_HOLD:
             kind = "action"
             text = f"Held for sensor update by {actor}: {payload.get('reason')}"
@@ -2097,6 +2295,26 @@ def post_telemetry(
     # heading is not persisted on the Vehicle model (pilot scope); it is
     # forwarded in the SSE payload for live display only.
     db_vehicle.updated_at = now
+
+    # First accepted ping on a live dispatch marks the unit en route (FSD-FR-089).
+    mission = _active_dispatch_for_vehicle(db, db_vehicle.vehicle_id)
+    if mission is not None:
+        en_route_recorded = (
+            db.query(models.DispatchEvent)
+            .filter(
+                models.DispatchEvent.sos_id == mission.sos_id,
+                models.DispatchEvent.event_type == DISPATCH_EN_ROUTE,
+            )
+            .first()
+        )
+        if en_route_recorded is None:
+            record_dispatch_event(
+                db,
+                sos_id=mission.sos_id,
+                event_type=DISPATCH_EN_ROUTE,
+                vehicle_id=db_vehicle.vehicle_id,
+                note=db_vehicle.call_sign,
+            )
     db.flush()
     events.emit(
         db,

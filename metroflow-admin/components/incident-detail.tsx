@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { MissionTimeline } from "@/components/mission-timeline";
 import { cn } from "@/lib/cn";
 import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
 import { toUnitStatus, type RescueUnit } from "@/lib/rescue";
@@ -114,6 +115,10 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
 
   const reportId = incident.reportId;
   const photoLoading = Boolean(reportId && !photoUrl && !photoError);
+
+  // Mission timeline applies to SOS dispatches only; field reports have no unit.
+  const sosIdNum = parseInt(incident.id.replace(/\D/g, ""), 10);
+  const isSosIncident = !reportId && (incident.incidentType === "sos" || !isNaN(sosIdNum));
 
   // Load persistent operations log on incident change
   useEffect(() => {
@@ -680,7 +685,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             onClick={() => setLightboxOpen(false)}
           >
             <div
-              className="relative max-h-[90vh] max-w-4xl animate-modal-in overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+              className="relative max-h-[90vh] max-w-4xl animate-modal-in overflow-hidden rounded-2xl border border-slate-700 bg-brand-primary shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-white">
@@ -708,7 +713,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
                 />
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900 p-4 text-xs font-mono border-t border-slate-800 text-slate-300">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-brand-primary p-4 text-xs font-mono border-t border-slate-800 text-slate-300">
                 <div>
                   <div className="text-[10px] text-slate-500 uppercase">Submersion Range</div>
                   <div className="font-bold text-amber-400">
@@ -742,6 +747,12 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
               </div>
             </div>
           </div>
+        )}
+
+        {/* Mission Milestone Timeline (FSD-FR-087 to 089) — refreshes whenever
+            the operations log gains an entry, i.e. after each dispatch action */}
+        {isSosIncident && !isNaN(sosIdNum) && (
+          <MissionTimeline sosId={sosIdNum} refreshKey={liveLogs.length} />
         )}
 
         {/* Operations Log (FSD-FR-036, FSD-FR-043) */}

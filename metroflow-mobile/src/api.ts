@@ -196,6 +196,11 @@ export function getMission(vehicleId: number): Promise<SOSRequest | null> {
   return request<SOSRequest | null>(`/api/v1/vehicles/${vehicleId}/mission`);
 }
 
+/** Mark the unit on scene; the incident stays open until resolve (FSD-FR-087 to 089). */
+export function arriveSOS(sosId: number): Promise<SOSRequest> {
+  return request<SOSRequest>(`/api/v1/sos/${sosId}/arrive`, { method: "POST" });
+}
+
 /** Close the incident once the unit is on scene (FSD-FR-046). */
 export function resolveSOS(sosId: number): Promise<SOSRequest> {
   return request<SOSRequest>(`/api/v1/sos/${sosId}/resolve`, { method: "POST" });

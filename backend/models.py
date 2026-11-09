@@ -260,6 +260,43 @@ class SOSRequest(Base):
     )
 
 
+class DispatchEvent(Base):
+    """One milestone in a rescue mission's lifecycle (FSD-FR-087 to 089).
+
+    Written in the same transaction as the change it records, like
+    ``event_log``, so the portal's mission timeline can never show a step that
+    rolled back. ``event_type`` is one of ``created``, ``assigned``,
+    ``dispatched``, ``en_route``, ``arrived``, ``completed`` or ``cancelled``;
+    ``en_route`` is derived from the first accepted telemetry ping on a live
+    dispatch, ``arrived`` from the driver's on-scene action.
+    """
+
+    __tablename__ = "dispatch_events"
+    event_id = Column(Integer, primary_key=True, index=True)
+    sos_id = Column(
+        Integer,
+        ForeignKey("sos_requests.sos_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="The dispatch this milestone belongs to",
+    )
+    vehicle_id = Column(
+        Integer,
+        ForeignKey("vehicles.vehicle_id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Unit involved, when the milestone has one",
+    )
+    event_type = Column(
+        String(20),
+        nullable=False,
+        index=True,
+        comment="created, assigned, dispatched, en_route, arrived, completed, cancelled",
+    )
+    actor = Column(String(120), nullable=True, comment="Name or email of who caused it")
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+
 class RateLimitCounter(Base):
     """
     One fixed window of requests for one counter bucket (TSD LIM-006).
