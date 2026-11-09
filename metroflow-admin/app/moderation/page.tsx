@@ -133,6 +133,56 @@ export default function ModerationPage() {
     [load, selected, show],
   );
 
+  // P3-3: bulk decisions run the same audited endpoints one row at a time —
+  // the API has no batch verb, and per-row calls keep the audit trail intact.
+  const handleBulkApprove = useCallback(
+    async (reportIds: string[]) => {
+      setBusy(true);
+      let succeeded = 0;
+      let failed = 0;
+      for (const id of reportIds) {
+        try {
+          await approveReport(id);
+          succeeded += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      show(
+        failed === 0
+          ? `${succeeded} report${succeeded === 1 ? "" : "s"} approved — hazards are live on the map`
+          : `${succeeded} approved, ${failed} failed — the queue was refreshed`,
+      );
+      await load();
+      setBusy(false);
+    },
+    [load, show],
+  );
+
+  const handleBulkReject = useCallback(
+    async (reportIds: string[], reason: string) => {
+      setBusy(true);
+      let succeeded = 0;
+      let failed = 0;
+      for (const id of reportIds) {
+        try {
+          await rejectReport(id, reason, null);
+          succeeded += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      show(
+        failed === 0
+          ? `${succeeded} report${succeeded === 1 ? "" : "s"} rejected`
+          : `${succeeded} rejected, ${failed} failed — the queue was refreshed`,
+      );
+      await load();
+      setBusy(false);
+    },
+    [load, show],
+  );
+
   return (
     <AppShell activeItem="moderation" title="Moderation & Evidence Desk">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -181,6 +231,9 @@ export default function ModerationPage() {
           selectedId={selected?.report_id ?? ""}
           filter={filter}
           query={query}
+          busy={busy}
+          onBulkApprove={(ids) => void handleBulkApprove(ids)}
+          onBulkReject={(ids, reason) => void handleBulkReject(ids, reason)}
           onSelect={setSelectedId}
           onFilterChange={setFilter}
           onQueryChange={setQuery}

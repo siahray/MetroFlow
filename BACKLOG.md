@@ -107,9 +107,9 @@ location read.
 | U-2 | ~~Accessibility pass beyond buttons: form labels, focus order, contrast, screen-reader test~~ **Done — axe scan in CI, contrast fixes, shared dialog focus trap** | M |
 | U-3 | ~~Adopt `theme.ts` for font sizes and spacing; finish moving hex into tokens in the admin Tailwind config~~ **Done — every portal hex now lives in `MAP_COLORS` (`lib/network.ts`), guarded by `lib/no-raw-colors.test.ts`; `theme.ts` gained the type and spacing scales** | S |
 | U-4 | ~~P1-4 custom splash screen; P1-5 context-specific error messages (GPS denied, network) in the driver app~~ **Done — already implemented; added the missing GPS Retry** | S |
-| U-5 | P2-1/2/3 brand palette, typography scale, motion — this is where the 219 hardcoded mobile `fontSize` values and 384 spacing values get swept onto the new `theme.ts` scale (snapping them now would mean doing it twice) | M |
-| U-6 | P2-6 turn-by-turn icons and ETA; P2-7 profile settings; P3-4 telemetry display; P3-5 report history | M each |
-| U-7 | P3-1 keyboard shortcuts; P3-2 advanced filters; P3-3 bulk actions; P2-4 charts | L, defer |
+| U-5 | ~~P2-1/2/3 brand palette, typography scale, motion~~ **Done — mobile: every `fontSize`/`padding`/`margin`/`gap` literal and hex colour now resolves through `theme.tsx` (`fontSize.*`, `space[n]`, `colors.*`/`c.*`); palette extended to the full ramp the screens use, `stormColors` is now a partial override merged over `lightColors`. Portal: `brand-*` tokens adopted (`bg-slate-900` → `bg-brand-primary`), `text-display`/`text-kpi` type steps, shimmer skeletons, page fade-in** | M |
+| U-6 | ~~P2-6 turn-by-turn icons and ETA; P2-7 profile settings; P3-4 telemetry display; P3-5 report history~~ **Done — most of P2-6/P3-4/P3-5 already existed; added ETA to the turn card, heading to the telemetry strip, notification/sharing prefs (`prefs.ts`, wired into hazard alerts and telemetry consent), a Profile entry point to report history, and expandable report details. Signal-strength indicator skipped: RN exposes no radio metric; connectivity status covers it** | M each |
+| U-7 | ~~P3-1 keyboard shortcuts; P3-2 advanced filters; P3-3 bulk actions; P2-4 charts~~ **Done — Ctrl+T/R/H/F/M/U/E/K shortcuts + `?` help in the app shell; advanced queue filters (barangay, type, age, min-urgency) with localStorage presets; bulk dismiss/restore on triage and bulk approve/reject on moderation; recharts panel on triage (24 h signal volume, fleet donut, hazard-level bars). Not built: bulk assign-to-unit (dispatch is a per-incident flow) and a dispatch-response-time chart (no data source)** | L |
 
 ## 6. Suggested order
 
@@ -117,7 +117,7 @@ location read.
 2. **D-1..D-9** documentation sync in one PR (done; **H-3** and **H-4** were done first).
 3. **Q-1** minimal automated tests: admin unit tests for `lib/` helpers (done), one Playwright smoke (login, triage — done), the offline Playwright run and the driver-app queue/route tests (done; React component tests still open).
 4. **F-4** to close the functional gap left in the portal: there is no mission timeline yet, so settle the data source first. **F-5** is done (the dashboard page is a redirect).
-5. **U-1, U-2, U-4** - done. The rest of section 5 (U-3, U-5..U-7) is deferred until after pilot feedback.
+5. **U-1..U-7** - done (9 Nov 2026, ahead of pilot feedback). Section 5 is closed; the deferred-scope note above no longer applies.
 6. **S-1, S-4** before any real users.
 
 ## Out of scope (unchanged)

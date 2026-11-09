@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="status"
         aria-live="polite"
         className={cn(
-          "fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-xs text-white shadow-2xl transition-all duration-300",
+          "fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-xl border border-slate-800 bg-brand-primary px-4 py-3 text-xs text-white shadow-2xl transition-all duration-300",
           visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-20 opacity-0",
         )}
       >

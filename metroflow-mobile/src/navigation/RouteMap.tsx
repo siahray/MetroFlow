@@ -6,14 +6,20 @@ import type { EdgeFeature, HazardInfo, RoutePlan } from "../api";
 import { polygonRing, routeCoordinates, type LatLng } from "./geo";
 import { basemap } from "./tiles";
 
-import { useTheme, type ThemeColors } from '../theme';
+import { fontSize, space, useTheme, type ThemeColors } from "../theme";
 
 // Same status colours as the dispatcher portal's network map.
 const STATUS_STYLE = {
-  PASSABLE: { color: "#059669", label: "Passable" },
-  LIGHT_FLOOD: { color: "#d97706", label: "Light flood" },
-  SUBMERGED: { color: "#e11d48", label: "Submerged" },
+  PASSABLE: { label: "Passable" },
+  LIGHT_FLOOD: { label: "Light flood" },
+  SUBMERGED: { label: "Submerged" },
 } as const;
+type StatusKey = keyof typeof STATUS_STYLE;
+const STATUS_COLOR = (c: ThemeColors): Record<StatusKey, string> => ({
+  PASSABLE: c.emerald600,
+  LIGHT_FLOOD: c.amber600,
+  SUBMERGED: c.rose600,
+});
 
 type MapHazard = Pick<HazardInfo, "hazard_id" | "name" | "obstruction_level" | "geometry">;
 
@@ -59,6 +65,7 @@ export function RouteMap({
 }: Props) {
   const { c, mode } = useTheme();
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
+  const statusColor = useMemo(() => STATUS_COLOR(c), [c]);
 
   // A route determines the framing; between routes the map follows the driver.
   // Computing it during render avoids a state round-trip that would otherwise
@@ -101,7 +108,7 @@ export function RouteMap({
           <Polyline
             key={road.id}
             coordinates={road.points}
-            strokeColor={STATUS_STYLE[road.status]?.color ?? c.slate600}
+            strokeColor={statusColor[road.status as StatusKey] ?? c.slate600}
             strokeWidth={3}
             lineCap="round"
             lineJoin="round"
@@ -127,7 +134,7 @@ export function RouteMap({
               key={hazard.hazard_id}
               coordinates={ring}
               fillColor={closed ? "rgba(220,38,38,0.25)" : "rgba(245,158,11,0.22)"}
-              strokeColor={closed ? c.red600 : "#f59e0b"}
+              strokeColor={closed ? c.red600 : c.amber500}
               strokeWidth={2}
             />
           );
@@ -153,9 +160,9 @@ export function RouteMap({
       </MapView>
       {roads.length > 0 ? (
         <View style={styles.legend}>
-          {Object.values(STATUS_STYLE).map((item) => (
+          {Object.entries(STATUS_STYLE).map(([key, item]) => (
             <View key={item.label} style={styles.legendRow}>
-              <View style={[styles.swatch, { backgroundColor: item.color }]} />
+              <View style={[styles.swatch, { backgroundColor: statusColor[key as StatusKey] }]} />
               <Text style={styles.legendText}>{item.label}</Text>
             </View>
           ))}
@@ -176,21 +183,21 @@ function makeStyles(c: ThemeColors, mode: "light" | "storm") {
       bottom: 22,
       backgroundColor: chromeBg,
       borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      gap: 3,
+      paddingHorizontal: space[8],
+      paddingVertical: space[6],
+      gap: space[3],
     },
-    legendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    legendRow: { flexDirection: "row", alignItems: "center", gap: space[6] },
     swatch: { width: 14, height: 4, borderRadius: 2 },
-    legendText: { fontSize: 10, color: c.slate600 },
+    legendText: { fontSize: fontSize.micro, color: c.slate600 },
     attribution: {
       position: "absolute",
       right: 6,
       bottom: 4,
-      fontSize: 9,
+      fontSize: fontSize.tiny,
       color: c.slate600,
       backgroundColor: chromeBg,
-      paddingHorizontal: 4,
+      paddingHorizontal: space[4],
       borderRadius: 3,
     },
   });

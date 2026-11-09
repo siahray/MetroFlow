@@ -57,7 +57,7 @@ export function Sidebar({
   const isAlertActive = queueCount > 0;
 
   return (
-    <aside className="flex w-64 flex-shrink-0 select-none flex-col justify-between border-r border-slate-800 bg-slate-900 text-slate-300">
+    <aside className="flex w-64 flex-shrink-0 select-none flex-col justify-between border-r border-slate-800 bg-brand-primary text-slate-300">
       <div>
         {/* App Logo Header */}
         <Link

@@ -8,7 +8,13 @@ import { AppShell } from "@/components/app-shell";
 import { IncidentDetail } from "@/components/incident-detail";
 import { IncidentQueue } from "@/components/incident-queue";
 import { LogSOSModal } from "@/components/log-sos-modal";
+import { TrendsCharts } from "@/components/trends-charts";
 import { useToast } from "@/components/toast-provider";
+import {
+  EMPTY_ADVANCED_FILTERS,
+  matchesAdvancedFilters,
+  type AdvancedFilters,
+} from "@/lib/advanced-filters";
 import {
   compareIncidents,
   matchesQueueFilter,
@@ -28,6 +34,7 @@ export default function TriagePage() {
   const { show } = useToast();
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [query, setQuery] = useState("");
+  const [advanced, setAdvanced] = useState<AdvancedFilters>(EMPTY_ADVANCED_FILTERS);
   const [sosList, setSosList] = useState<SOSRequest[]>([]);
   const [liveIncidents, setLiveIncidents] = useState<Incident[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -178,9 +185,9 @@ export default function TriagePage() {
           value.toLowerCase().includes(needle),
         );
 
-      return matchesFilter && matchesQuery;
+      return matchesFilter && matchesQuery && matchesAdvancedFilters(incident, advanced);
     });
-  }, [allIncidents, filter, query]);
+  }, [allIncidents, filter, query, advanced]);
 
   const selected = selectedId
     ? (incidentById.get(selectedId) ?? allIncidents[0] ?? null)
@@ -312,7 +319,7 @@ export default function TriagePage() {
               Pending Triage
             </p>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-900">{pendingCount}</span>
+              <span className="text-kpi text-slate-900">{pendingCount}</span>
             </div>
             <p className="mt-1 text-[11px] text-slate-500">Awaiting dispatch review</p>
           </div>
@@ -334,7 +341,7 @@ export default function TriagePage() {
                   {card.label}
                 </p>
                 <div className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-slate-900">{card.value}</span>
+                  <span className="text-kpi text-slate-900">{card.value}</span>
                   {card.trend ? (
                     <span
                       className={`flex items-center text-xs font-medium ${card.trend.className}`}
@@ -360,7 +367,7 @@ export default function TriagePage() {
         <button
           type="button"
           onClick={() => setLogOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
         >
           <PhoneCall className="h-4 w-4" />
           Log a call-in distress signal
@@ -371,9 +378,11 @@ export default function TriagePage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <IncidentQueue
           incidents={visible}
+          allIncidents={allIncidents}
           selectedId={selected?.id || ""}
           filter={filter}
           query={query}
+          advanced={advanced}
           view={view}
           dismissedCount={dismissedIncidents.length}
           onViewChange={setView}
@@ -389,6 +398,7 @@ export default function TriagePage() {
           onRestore={handleRestore}
           onFilterChange={setFilter}
           onQueryChange={setQuery}
+          onAdvancedChange={setAdvanced}
         />
 
         {selected ? (
@@ -403,6 +413,8 @@ export default function TriagePage() {
           </div>
         )}
       </div>
+
+      <TrendsCharts sos={sosList} reports={reports} vehicles={vehicles} hazards={hazards} />
 
       {logOpen ? (
         <LogSOSModal onLogged={handleCallLogged} onClose={() => setLogOpen(false)} />

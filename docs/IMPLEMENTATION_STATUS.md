@@ -84,13 +84,23 @@ list) — that table is stale, see §6.
 ## 5. UI polish — `BACKLOG.md` §5
 
 ```
-███████████░░░░░░░░░ 57%  (4 / 7)
+████████████████████ 100%  (7 / 7)
 ```
 
 - [x] U-1, U-2, U-3, U-4 — loading states, accessibility pass, colour tokens, splash/error copy
-- [ ] U-5 — brand palette/typography/motion sweep (219 hardcoded mobile `fontSize`, 384 spacing values) — deferred post-pilot by design
-- [ ] U-6 — turn-by-turn icons/ETA, profile settings, telemetry display, report history
-- [ ] U-7 — keyboard shortcuts, advanced filters, bulk actions, charts — deferred by design
+- [x] U-5 — brand palette/typography/motion. Mobile: all `fontSize`/spacing/hex
+  literals swept onto `theme.tsx` scales and the extended palette (storm
+  overrides are now partial merges). Portal: `brand-*` tokens adopted,
+  `text-display`/`text-kpi` steps, shimmer skeletons, page fade-in
+- [x] U-6 — turn-by-turn (ETA added to the turn card; icons/manoeuvres already
+  existed), profile settings (new `prefs.ts`: hazard-alert and telemetry
+  consent toggles wired into `route.tsx`), telemetry display (heading added;
+  speed/accuracy/connection/last-sync already shown — no signal-strength API
+  exists), report history (Profile entry point + expandable details added)
+- [x] U-7 — portal power features: Ctrl/Cmd shortcuts + `?` help, advanced
+  queue filters with saved presets, bulk dismiss/restore (triage) and bulk
+  approve/reject (moderation), recharts trends panel. Not built: bulk
+  assign-to-unit and a dispatch-response-time chart (no data source)
 
 ## 6. Quality, tests, CI — `BACKLOG.md` §3
 

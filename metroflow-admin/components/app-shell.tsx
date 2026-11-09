@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Keyboard } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
@@ -22,6 +22,64 @@ type AppShellProps = {
   children: ReactNode;
 };
 
+/** P3-1: power-user shortcuts. `go` paths are portal routes; `focus` targets a DOM id. */
+const SHORTCUTS: { keys: string; label: string; go?: string; focus?: string }[] = [
+  { keys: "Ctrl K", label: "Focus incident search", focus: "incident-search" },
+  { keys: "Ctrl T", label: "Go to triage", go: "/triage" },
+  { keys: "Ctrl R", label: "Go to dispatch radar", go: "/radar" },
+  { keys: "Ctrl H", label: "Go to hazards", go: "/hazards" },
+  { keys: "Ctrl F", label: "Go to fleet", go: "/fleet" },
+  { keys: "Ctrl M", label: "Go to moderation", go: "/moderation" },
+  { keys: "Ctrl U", label: "Go to users", go: "/users" },
+  { keys: "Ctrl E", label: "Go to export", go: "/export" },
+  { keys: "?", label: "Show this shortcut list" },
+];
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+function ShortcutHelp({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm animate-modal-in rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <Keyboard className="h-4 w-4 text-slate-500" />
+          <h2 className="text-sm font-bold text-slate-900">Keyboard shortcuts</h2>
+        </div>
+        <ul className="space-y-2">
+          {SHORTCUTS.map((shortcut) => (
+            <li key={shortcut.keys} className="flex items-center justify-between text-xs">
+              <span className="text-slate-600">{shortcut.label}</span>
+              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-700">
+                {shortcut.keys}
+              </kbd>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function subscribeOnline(cb: () => void) {
   window.addEventListener("online", cb);
   window.addEventListener("offline", cb);
@@ -38,6 +96,41 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
     () => true,
   );
   const router = useRouter();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // P3-1: global shortcuts. Navigation uses Ctrl/Cmd so plain typing is unaffected.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (!mod && event.key !== "?") return;
+      if (isTypingTarget(event.target) && !mod) return;
+
+      const key = event.key.toLowerCase();
+      if (mod && !event.shiftKey && !event.altKey) {
+        const letter = key;
+        const match = SHORTCUTS.find(
+          (s) => s.go && s.keys.replace(/^Ctrl /, "").toLowerCase() === letter,
+        );
+        if (match?.go) {
+          event.preventDefault();
+          router.push(match.go);
+          return;
+        }
+        if (letter === "k") {
+          event.preventDefault();
+          document.getElementById("incident-search")?.focus();
+          return;
+        }
+      }
+      if (!mod && key === "?") {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [router]);
+
   // The portal has no server-side session, so the shell reads the browser cache
   // through useSyncExternalStore instead of copying it into state from an effect.
   const user = useSyncExternalStore(subscribeToSession, getSessionUser, () => null);
@@ -122,7 +215,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
             </div>
             <div className="h-4 w-px bg-slate-200" />
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-primary text-xs font-bold text-white">
                 {officerInitials}
               </div>
               <div>
@@ -135,8 +228,10 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
 
         {/* Page Content */}
         {!online && <OfflineBanner />}
-        <main className="flex-1 space-y-6 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 animate-fade-in space-y-6 overflow-y-auto p-6">{children}</main>
       </div>
+
+      {shortcutsOpen ? <ShortcutHelp onClose={() => setShortcutsOpen(false)} /> : null}
     </div>
   );
 }

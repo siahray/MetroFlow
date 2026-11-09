@@ -1,6 +1,7 @@
 "use client";
 
-import { Camera, Copy, MapPin, Search, Users } from "lucide-react";
+import { Camera, CheckSquare, Copy, MapPin, Search, Square, Users } from "lucide-react";
+import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { ageLabel, type FieldReport } from "@/lib/reports";
@@ -19,6 +20,10 @@ type ReportQueueProps = {
   selectedId: string;
   filter: ReportFilter;
   query: string;
+  /** P3-3: bulk decisions. The page owns the API calls and the reload. */
+  busy?: boolean;
+  onBulkApprove: (reportIds: string[]) => void;
+  onBulkReject: (reportIds: string[], reason: string) => void;
   onSelect: (reportId: string) => void;
   onFilterChange: (filter: ReportFilter) => void;
   onQueryChange: (query: string) => void;
@@ -46,10 +51,45 @@ export function ReportQueue({
   selectedId,
   filter,
   query,
+  busy = false,
+  onBulkApprove,
+  onBulkReject,
   onSelect,
   onFilterChange,
   onQueryChange,
 }: ReportQueueProps) {
+  const [selectMode, setSelectMode] = useState(false);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+
+  function toggleChecked(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setChecked(new Set());
+    setRejecting(false);
+    setRejectReason("");
+  }
+
+  function confirmApprove() {
+    onBulkApprove([...checked]);
+    exitSelectMode();
+  }
+
+  function confirmReject() {
+    const reason = rejectReason.trim();
+    if (!reason) return;
+    onBulkReject([...checked], reason);
+    exitSelectMode();
+  }
   const filters = REPORT_FILTERS.map((option) => ({
     ...option,
     count:
@@ -67,11 +107,83 @@ export function ReportQueue({
             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-800">
               {reports.length}
             </span>
+            <button
+              type="button"
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              aria-pressed={selectMode}
+              className={cn(
+                "rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-colors",
+                selectMode
+                  ? "border-sky-600 bg-sky-50 text-sky-800"
+                  : "border-slate-200 text-slate-500 hover:bg-slate-100",
+              )}
+            >
+              {selectMode ? "Done" : "Select"}
+            </button>
           </div>
           <span className="text-xs text-slate-500">
             Sort by: <strong className="font-semibold text-slate-700">Live urgency</strong>
           </span>
         </div>
+
+        {selectMode ? (
+          <div className="space-y-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sky-900">{checked.size} selected</span>
+              <button
+                type="button"
+                onClick={() => setChecked(new Set(reports.map((r) => r.report_id)))}
+                className="font-medium text-sky-700 hover:underline"
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setChecked(new Set())}
+                className="font-medium text-sky-700 hover:underline"
+              >
+                None
+              </button>
+              <span className="flex-1" />
+              <button
+                type="button"
+                disabled={checked.size === 0 || busy}
+                onClick={confirmApprove}
+                className="rounded-lg bg-emerald-600 px-2.5 py-1 font-bold text-white disabled:opacity-40"
+              >
+                Approve selected
+              </button>
+              <button
+                type="button"
+                disabled={checked.size === 0 || busy}
+                onClick={() => setRejecting((open) => !open)}
+                className="rounded-lg border border-rose-300 bg-white px-2.5 py-1 font-bold text-rose-600 disabled:opacity-40"
+              >
+                Reject selected
+              </button>
+            </div>
+            {rejecting ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  aria-label="Rejection reason for selected reports"
+                  value={rejectReason}
+                  onChange={(event) => setRejectReason(event.target.value)}
+                  placeholder="Reason applied to every selected report…"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={!rejectReason.trim() || busy}
+                  onClick={confirmReject}
+                  className="flex-shrink-0 rounded-lg bg-rose-600 px-2.5 py-1 font-bold text-white disabled:opacity-40"
+                >
+                  Confirm reject
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
           {filters.map((option) => (
@@ -83,7 +195,7 @@ export function ReportQueue({
               className={cn(
                 "flex-shrink-0 rounded-lg px-3 py-1 font-medium transition-colors",
                 filter === option.id
-                  ? "bg-slate-900 text-white"
+                  ? "bg-brand-primary text-white"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200",
               )}
             >
@@ -116,22 +228,33 @@ export function ReportQueue({
 
         {reports.map((report) => {
           const selected = report.report_id === selectedId;
+          const isChecked = checked.has(report.report_id);
 
           return (
             <button
               key={report.report_id}
               type="button"
-              onClick={() => onSelect(report.report_id)}
+              onClick={() =>
+                selectMode ? toggleChecked(report.report_id) : onSelect(report.report_id)
+              }
               aria-current={selected ? "true" : undefined}
               className={cn(
                 "block w-full border-l-4 p-4 text-left transition-colors",
                 selected
                   ? "border-sky-600 bg-sky-50/70 hover:bg-sky-50"
                   : "border-transparent hover:bg-slate-50/80",
+                selectMode && isChecked && "bg-sky-100/60",
               )}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
+                  {selectMode ? (
+                    isChecked ? (
+                      <CheckSquare className="h-4 w-4 flex-shrink-0 text-sky-700" />
+                    ) : (
+                      <Square className="h-4 w-4 flex-shrink-0 text-slate-300" />
+                    )
+                  ) : null}
                   <span className="font-mono text-xs font-bold text-slate-800">
                     #{report.report_id.slice(0, 8)}
                   </span>

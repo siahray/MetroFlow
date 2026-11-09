@@ -17,7 +17,7 @@ import { useAuth } from '../auth';
 import { PasswordField } from '../components/PasswordField';
 import { login as apiLogin, register as apiRegister } from '../api';
 
-import { colors } from '../theme';
+import { fontSize, space, colors } from '../theme';
 type Mode = 'splash' | 'login' | 'register';
 
 export default function IndexScreen() {
@@ -79,56 +79,56 @@ export default function IndexScreen() {
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.slate50 }}>
         <StatusBar barStyle="dark-content" />
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, padding: 24, justifyContent: 'space-between' }}
+          contentContainerStyle={{ flexGrow: 1, padding: space[24], justifyContent: 'space-between' }}
           keyboardShouldPersistTaps="handled"
         >
           {/* Top badge */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(219,234,254,0.8)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.blue600, marginRight: 6 }} />
-              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.blue700 }}>Live Flood Network</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: space[8] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(219,234,254,0.8)', paddingHorizontal: space[12], paddingVertical: space[4], borderRadius: 999 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.blue600, marginRight: space[6] }} />
+              <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: colors.blue700 }}>Live Flood Network</Text>
             </View>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.slate500, textTransform: 'uppercase' }}>Civic Transit Safe</Text>
+            <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: colors.slate500, textTransform: 'uppercase' }}>Civic Transit Safe</Text>
           </View>
 
           {/* Hero */}
-          <View style={{ alignItems: 'center', paddingVertical: 32 }}>
-            <View style={{ width: 80, height: 80, backgroundColor: colors.slate900, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Waves size={40} color="#38bdf8" />
+          <View style={{ alignItems: 'center', paddingVertical: space[32] }}>
+            <View style={{ width: 80, height: 80, backgroundColor: colors.slate900, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: space[16] }}>
+              <Waves size={40} color={colors.sky400} />
             </View>
-            <Text style={{ fontSize: 28, fontWeight: '900', color: colors.slate900, letterSpacing: -0.5 }}>MetroFlow</Text>
-            <Text style={{ fontSize: 13, color: colors.slate500, marginTop: 4 }}>Safer Roads. Stronger Communities.</Text>
+            <Text style={{ fontSize: fontSize.hero, fontWeight: '900', color: colors.slate900, letterSpacing: -0.5 }}>MetroFlow</Text>
+            <Text style={{ fontSize: fontSize.label, color: colors.slate500, marginTop: space[4] }}>Safer Roads. Stronger Communities.</Text>
 
-            <View style={{ backgroundColor: '#fff', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.slate200, marginTop: 24, maxWidth: 300, width: '100%' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ShieldCheck size={16} color="#0891b2" />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.slate800 }}>Real-Time Hydrologic Rerouting</Text>
+            <View style={{ backgroundColor: colors.white, padding: space[14], borderRadius: 16, borderWidth: 1, borderColor: colors.slate200, marginTop: space[24], maxWidth: 300, width: '100%' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
+                <ShieldCheck size={16} color={colors.cyan600} />
+                <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.slate800 }}>Real-Time Hydrologic Rerouting</Text>
               </View>
-              <Text style={{ fontSize: 10, color: colors.slate500, marginTop: 6, lineHeight: 15 }}>
+              <Text style={{ fontSize: fontSize.micro, color: colors.slate500, marginTop: space[6], lineHeight: 15 }}>
                 Calculates safe corridors based on your vehicle&apos;s ground clearance. Flood data is live-synced from the MDRRMC emergency network.
               </Text>
             </View>
           </View>
 
           {/* CTA */}
-          <View style={{ gap: 12, marginBottom: 16 }}>
+          <View style={{ gap: space[12], marginBottom: space[16] }}>
             <TouchableOpacity
-              style={{ backgroundColor: colors.slate900, paddingVertical: 15, borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }}
+              style={{ backgroundColor: colors.slate900, paddingVertical: space[15], borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: space[8] }}
               onPress={() => setMode('login')}
             >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Log In</Text>
-              <ArrowRight size={16} color="#fff" />
+              <Text style={{ color: colors.white, fontWeight: '700', fontSize: fontSize.lead }}>Log In</Text>
+              <ArrowRight size={16} color={colors.white} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={{ backgroundColor: colors.blue50, paddingVertical: 15, borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: '#bfdbfe' }}
+              style={{ backgroundColor: colors.blue50, paddingVertical: space[15], borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.blue200 }}
               onPress={() => setMode('register')}
             >
-              <Text style={{ color: '#1e3a8a', fontWeight: '700', fontSize: 14 }}>Create Account</Text>
+              <Text style={{ color: colors.blue900, fontWeight: '700', fontSize: fontSize.lead }}>Create Account</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={goToApp}>
-              <Text style={{ fontSize: 12, color: colors.slate400 }}>Continue as Guest</Text>
+            <TouchableOpacity style={{ alignItems: 'center', paddingVertical: space[10] }} onPress={goToApp}>
+              <Text style={{ fontSize: fontSize.body, color: colors.slate400 }}>Continue as Guest</Text>
             </TouchableOpacity>
-            <Text style={{ textAlign: 'center', fontSize: 10, color: colors.slate300 }}>
+            <Text style={{ textAlign: 'center', fontSize: fontSize.micro, color: colors.slate300 }}>
               By continuing, you agree to the Safe Transit Guidelines.
             </Text>
           </View>
@@ -142,47 +142,47 @@ export default function IndexScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.slate50 }}>
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-<ScrollView contentContainerStyle={{ flexGrow: 1, padding: 24 }} keyboardShouldPersistTaps="handled">
+<ScrollView contentContainerStyle={{ flexGrow: 1, padding: space[24] }} keyboardShouldPersistTaps="handled">
         <TouchableOpacity
           onPress={() => { setMode('splash'); setError(''); }}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 32 }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], marginTop: space[8], marginBottom: space[32] }}
         >
-          <Text style={{ fontSize: 22, color: colors.slate800 }}>‹</Text>
-          <Text style={{ fontSize: 13, color: colors.slate800 }}>Back</Text>
+          <Text style={{ fontSize: fontSize.display, color: colors.slate800 }}>‹</Text>
+          <Text style={{ fontSize: fontSize.label, color: colors.slate800 }}>Back</Text>
         </TouchableOpacity>
 
-        <View style={{ alignItems: 'center', marginBottom: 32 }}>
-          <View style={{ width: 64, height: 64, backgroundColor: colors.slate900, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-            <Waves size={30} color="#38bdf8" />
+        <View style={{ alignItems: 'center', marginBottom: space[32] }}>
+          <View style={{ width: 64, height: 64, backgroundColor: colors.slate900, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: space[12] }}>
+            <Waves size={30} color={colors.sky400} />
           </View>
-          <Text style={{ fontSize: 22, fontWeight: '900', color: colors.slate900 }}>
+          <Text style={{ fontSize: fontSize.display, fontWeight: '900', color: colors.slate900 }}>
             MetroFlow {mode === 'login' ? 'Login' : 'Sign Up'}
           </Text>
-          <Text style={{ fontSize: 12, color: colors.slate500, marginTop: 4 }}>
+          <Text style={{ fontSize: fontSize.body, color: colors.slate500, marginTop: space[4] }}>
             {mode === 'login' ? 'Sign in to access real-time flood navigation' : 'Create your public motorist account'}
           </Text>
         </View>
 
-        <View style={{ gap: 14 }}>
+        <View style={{ gap: space[14] }}>
           {mode === 'register' && (
             <View>
-              <Text style={{ fontSize: 11, fontWeight: '600', color: colors.slate700, marginBottom: 6 }}>Full Name</Text>
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: colors.slate700, marginBottom: space[6] }}>Full Name</Text>
               <TextInput
                 value={name}
                 onChangeText={setName}
-                style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: colors.slate200, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 13, color: colors.slate900 }}
+                style={{ backgroundColor: colors.white, borderWidth: 1, borderColor: colors.slate200, borderRadius: 12, paddingHorizontal: space[14], paddingVertical: space[12], fontSize: fontSize.label, color: colors.slate900 }}
                 placeholder="Juan Dela Cruz"
               />
             </View>
           )}
           <View>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.slate700, marginBottom: 6 }}>Email</Text>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: colors.slate700, marginBottom: space[6] }}>Email</Text>
             <TextInput
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
-              style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: colors.slate200, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 13, color: colors.slate900 }}
+              style={{ backgroundColor: colors.white, borderWidth: 1, borderColor: colors.slate200, borderRadius: 12, paddingHorizontal: space[14], paddingVertical: space[12], fontSize: fontSize.label, color: colors.slate900 }}
               placeholder="you@example.com"
             />
           </View>
@@ -202,32 +202,32 @@ export default function IndexScreen() {
           )}
 
           {error ? (
-            <Text style={{ fontSize: 12, color: colors.red600, textAlign: 'center' }}>
+            <Text style={{ fontSize: fontSize.body, color: colors.red600, textAlign: 'center' }}>
               {error}
             </Text>
           ) : null}
 
           <TouchableOpacity
-            style={{ backgroundColor: colors.slate900, paddingVertical: 15, borderRadius: 14, alignItems: 'center', marginTop: 4 }}
+            style={{ backgroundColor: colors.slate900, paddingVertical: space[15], borderRadius: 14, alignItems: 'center', marginTop: space[4] }}
             onPress={mode === 'login' ? handleLogin : handleRegister}
             disabled={submitting}
           >
             {submitting
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+              ? <ActivityIndicator size="small" color={colors.white} />
+              : <Text style={{ color: colors.white, fontWeight: '700', fontSize: fontSize.lead }}>
                   {mode === 'login' ? 'Sign In' : 'Sign Up'}
                 </Text>
             }
           </TouchableOpacity>
 
-          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setConfirmPassword(''); }}>
-            <Text style={{ fontSize: 13, color: colors.slate600 }}>
+          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: space[10] }} onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setConfirmPassword(''); }}>
+            <Text style={{ fontSize: fontSize.label, color: colors.slate600 }}>
               {mode === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Sign In'}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 6 }} onPress={goToApp}>
-            <Text style={{ fontSize: 12, color: colors.slate400 }}>Continue</Text>
+          <TouchableOpacity style={{ alignItems: 'center', paddingVertical: space[6] }} onPress={goToApp}>
+            <Text style={{ fontSize: fontSize.body, color: colors.slate400 }}>Continue</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

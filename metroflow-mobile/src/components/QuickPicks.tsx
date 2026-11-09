@@ -17,7 +17,7 @@ import {
 import { getNetworkState, getRoute, type NetworkState, type NodeFeature } from '../api';
 import { listQuickPicks, saveQuickPicks, type QuickPick, type QuickPickIcon } from '../quickPicks';
 import { formatDistance, nearestNode, type LatLng } from '../navigation/geo';
-import { colors } from '../theme';
+import { fontSize, space, colors } from '../theme';
 
 const ICONS: Record<QuickPickIcon, typeof Home> = {
   home: Home,
@@ -119,15 +119,15 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
   if (picks === null) return null;
 
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: space[10] }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.slate900 }}>Quick Picks</Text>
+        <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: colors.slate900 }}>Quick Picks</Text>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Manage quick picks"
           onPress={() => setManaging(true)}
         >
-          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.blue600 }}>Custom Pins</Text>
+          <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: colors.blue600 }}>Custom Pins</Text>
         </TouchableOpacity>
       </View>
 
@@ -142,17 +142,17 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
           style={{
             ...card,
             borderStyle: 'dashed',
-            padding: 20,
+            padding: space[20],
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
+            gap: space[6],
           }}
         >
           <Plus size={20} color={colors.slate400} />
-          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.slate500 }}>Add a quick pick</Text>
+          <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: colors.slate500 }}>Add a quick pick</Text>
         </TouchableOpacity>
       ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[12] }}>
           {picks.map((pick) => {
             const Icon = ICONS[pick.icon];
             const s = status[pick.id] ?? { state: 'loading' };
@@ -167,7 +167,7 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
                     params: { destination: `${pick.latitude},${pick.longitude}` },
                   })
                 }
-                style={{ ...card, flexBasis: '47%', flexGrow: 1, padding: 14, gap: 10 }}
+                style={{ ...card, flexBasis: '47%', flexGrow: 1, padding: space[14], gap: space[10] }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View
@@ -183,30 +183,30 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
                     <Icon size={20} color={colors.slate900} />
                   </View>
                   {(s.state === 'clear' || s.state === 'hazard') && (
-                    <View style={{ backgroundColor: colors.slate100, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: colors.slate700 }}>
+                    <View style={{ backgroundColor: colors.slate100, borderRadius: 20, paddingHorizontal: space[8], paddingVertical: space[3] }}>
+                      <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: colors.slate700 }}>
                         {formatDistance(s.distanceM)}
                       </Text>
                     </View>
                   )}
                 </View>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: colors.slate900 }} numberOfLines={1}>
+                <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: colors.slate900 }} numberOfLines={1}>
                   {pick.name}
                 </Text>
                 {s.state === 'clear' ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
                     <CheckCircle2 size={13} color={colors.green600} />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.green700 }}>Clear</Text>
+                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.green700 }}>Clear</Text>
                   </View>
                 ) : s.state === 'hazard' ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
                     <AlertTriangle size={13} color={colors.red600} />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red600 }} numberOfLines={1}>
+                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.red600 }} numberOfLines={1}>
                       {s.hazardName}
                     </Text>
                   </View>
                 ) : (
-                  <Text style={{ fontSize: 11, color: colors.slate400 }}>
+                  <Text style={{ fontSize: fontSize.caption, color: colors.slate400 }}>
                     {s.state === 'error' ? 'No route found' : 'Checking…'}
                   </Text>
                 )}
@@ -218,9 +218,9 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
 
       <Modal visible={managing} animationType="slide" transparent onRequestClose={() => setManaging(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: colors.slate900 }}>Custom Pins</Text>
+          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space[20], maxHeight: '80%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[14] }}>
+              <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: colors.slate900 }}>Custom Pins</Text>
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Close"
@@ -236,9 +236,9 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
             {(picks ?? []).map((pick) => (
               <View
                 key={pick.id}
-                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderColor: colors.slate100 }}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space[10], borderBottomWidth: 1, borderColor: colors.slate100 }}
               >
-                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate800 }}>{pick.name}</Text>
+                <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate800 }}>{pick.name}</Text>
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Remove ${pick.name}`} onPress={() => removePick(pick.id)}>
                   <Trash2 size={16} color={colors.red600} />
                 </TouchableOpacity>
@@ -246,15 +246,15 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
             ))}
 
             {adding ? (
-              <View style={{ gap: 10, marginTop: 14 }}>
+              <View style={{ gap: space[10], marginTop: space[14] }}>
                 <TextInput
                   value={nameInput}
                   onChangeText={setNameInput}
                   placeholder="Name (e.g. Work HQ)"
                   placeholderTextColor={colors.slate400}
-                  style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 10, padding: 10, fontSize: 13 }}
+                  style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 10, padding: space[10], fontSize: fontSize.label }}
                 />
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flexDirection: 'row', gap: space[8] }}>
                   {(Object.keys(ICONS) as QuickPickIcon[]).map((key) => {
                     const Icon = ICONS[key];
                     const selected = iconChoice === key;
@@ -286,7 +286,7 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
                   }}
                   placeholder="Search the road network for a named point"
                   placeholderTextColor={colors.slate400}
-                  style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 10, padding: 10, fontSize: 13 }}
+                  style={{ borderWidth: 1, borderColor: colors.slate200, borderRadius: 10, padding: space[10], fontSize: fontSize.label }}
                 />
                 {results.map((node) => (
                   <TouchableOpacity
@@ -297,12 +297,12 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
                       setQuery(node.properties.name ?? '');
                     }}
                     style={{
-                      padding: 10,
+                      padding: space[10],
                       borderRadius: 8,
                       backgroundColor: selectedNode?.id === node.id ? colors.blue50 : colors.slate50,
                     }}
                   >
-                    <Text style={{ fontSize: 12, color: colors.slate800 }}>{node.properties.name}</Text>
+                    <Text style={{ fontSize: fontSize.body, color: colors.slate800 }}>{node.properties.name}</Text>
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
@@ -313,12 +313,12 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
                   style={{
                     backgroundColor: colors.slate900,
                     borderRadius: 10,
-                    paddingVertical: 12,
+                    paddingVertical: space[12],
                     alignItems: 'center',
                     opacity: !selectedNode || !nameInput.trim() ? 0.5 : 1,
                   }}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: colors.white }}>Save</Text>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.white }}>Save</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -326,10 +326,10 @@ export function QuickPicks({ clearanceCm, position }: { clearanceCm: number; pos
                 accessibilityRole="button"
                 accessibilityLabel="Add a new quick pick"
                 onPress={() => setAdding(true)}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14 }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: space[8], paddingVertical: space[14] }}
               >
                 <Plus size={16} color={colors.blue600} />
-                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.blue600 }}>Add a quick pick</Text>
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.blue600 }}>Add a quick pick</Text>
               </TouchableOpacity>
             )}
           </View>
