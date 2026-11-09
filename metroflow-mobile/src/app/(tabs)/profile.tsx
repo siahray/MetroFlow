@@ -7,6 +7,7 @@ import {
   StatusBar,
   Linking,
   Alert,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,12 +28,13 @@ import {
   Check,
   HelpCircle,
   Info,
+  Moon,
 } from 'lucide-react-native';
 import { updateMyName } from '../../api';
 import { useAuth } from '../../auth';
 import { loadMyVehicle, saveMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
 
-import { colors } from '../../theme';
+import { colors, useTheme } from '../../theme';
 
 const VEHICLE_TYPE_ICON: Record<VehicleType, typeof Car> = {
   motorcycle: Bike,
@@ -50,6 +52,7 @@ const VEHICLE_TYPE_LABEL: Record<VehicleType, string> = {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
+  const { mode: themeMode, toggle: toggleTheme } = useTheme();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(user?.name ?? '');
   const [savingName, setSavingName] = useState(false);
@@ -273,6 +276,24 @@ export default function ProfileScreen() {
               </View>
               <ChevronRight size={16} color={colors.slate300} />
             </TouchableOpacity>
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13, borderTopWidth: 1, borderColor: colors.slate50 }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, backgroundColor: colors.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                  <Moon size={15} color={colors.slate500} />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.slate900 }}>Night / storm theme</Text>
+                  <Text style={{ fontSize: 10, color: colors.slate400 }}>Low-glare navigation screen</Text>
+                </View>
+              </View>
+              <Switch
+                value={themeMode === 'storm'}
+                onValueChange={toggleTheme}
+                accessibilityLabel="Night or storm navigation theme"
+              />
+            </View>
           </View>
 
           {/* App */}

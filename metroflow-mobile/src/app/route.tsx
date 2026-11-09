@@ -22,8 +22,10 @@ import {
   CornerUpLeft,
   CornerUpRight,
   Flag,
+  Sun,
   Gauge,
   MapPin,
+  Moon,
   Navigation,
   RefreshCw,
   RotateCcw,
@@ -64,7 +66,7 @@ import {
   type LatLng,
 } from "../navigation/geo";
 
-import { colors } from '../theme';
+import { useTheme, type ThemeColors, type ThemeMode } from '../theme';
 
 type Banner = {
   title: string;
@@ -72,11 +74,17 @@ type Banner = {
   tone: "warning" | "danger" | "success";
 } | null;
 
-const BANNER_COLORS = {
-  warning: { background: "#fffbeb", border: "#f59e0b", text: colors.amber800 },
-  danger: { background: colors.red50, border: colors.red600, text: colors.red800 },
-  success: { background: "#f0fdf4", border: colors.green600, text: "#166534" },
-} as const;
+function bannerColors(c: ThemeColors, mode: ThemeMode) {
+  return {
+    warning: { background: mode === "storm" ? "#3a2a06" : "#fffbeb", border: "#f59e0b", text: c.amber800 },
+    danger: { background: c.red50, border: c.red600, text: c.red800 },
+    success: {
+      background: mode === "storm" ? "#052e1b" : "#f0fdf4",
+      border: c.green600,
+      text: c.green700,
+    },
+  } as const;
+}
 
 function hazardAdvice(level: string): { label: string; action: string } {
   switch (level.toUpperCase()) {
@@ -116,6 +124,9 @@ function samePath(a: RoutePlan, b: RoutePlan) {
 export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const router = useRouter();
   const { user } = useAuth();
+  const { c, mode, toggle: toggleTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
+  const BANNER_COLORS = useMemo(() => bannerColors(c, mode), [c, mode]);
   const { destination: destinationParam } = useLocalSearchParams<{ destination?: string }>();
 
   const [network, setNetwork] = useState<NetworkState | null>(null);
@@ -613,15 +624,23 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   if (!user) {
     return (
       <SafeAreaView edges={edges} style={styles.screen}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
         <View style={styles.header}>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={18} color={colors.slate800} />
+            <ArrowLeft size={18} color={c.slate800} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Navigation</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+            onPress={toggleTheme}
+            style={styles.backButton}
+          >
+            {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
+          </TouchableOpacity>
         </View>
         <View style={styles.signedOutCard}>
-          <ShieldAlert size={28} color={colors.blue600} />
+          <ShieldAlert size={28} color={c.blue600} />
           <Text style={styles.signedOutTitle}>Sign in to navigate</Text>
           <Text style={styles.signedOutBody}>
             Flood-safe routes and live hazard alerts are attached to your driver account.
@@ -636,11 +655,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   return (
     <SafeAreaView edges={edges} style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
 
       <View style={styles.header}>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={18} color={colors.slate800} />
+          <ArrowLeft size={18} color={c.slate800} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Navigation</Text>
@@ -648,13 +667,21 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             {clearanceCm} cm clearance • live hazards
           </Text>
         </View>
-        {streamError ? <AlertTriangle size={16} color={colors.red600} /> : null}
+        {streamError ? <AlertTriangle size={16} color={c.red600} /> : null}
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+          onPress={toggleTheme}
+          style={styles.backButton}
+        >
+          {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
+        </TouchableOpacity>
       </View>
 
       {!route ? (
         <View style={styles.searchPanel}>
           <View style={styles.searchBox}>
-            <MapPin size={16} color={colors.blue600} />
+            <MapPin size={16} color={c.blue600} />
             <TextInput
               value={destinationQuery}
               onChangeText={(value) => {
@@ -663,7 +690,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 plannedFor.current = null;
               }}
               placeholder="Search a road or intersection"
-              placeholderTextColor={colors.slate400}
+              placeholderTextColor={c.slate400}
               style={styles.searchInput}
               autoCorrect={false}
             />
@@ -677,14 +704,14 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 }}
                 hitSlop={8}
               >
-                <X size={16} color={colors.slate400} />
+                <X size={16} color={c.slate400} />
               </TouchableOpacity>
             ) : null}
           </View>
 
           {planning ? (
             <View style={styles.planningRow}>
-              <ActivityIndicator color={colors.blue600} />
+              <ActivityIndicator color={c.blue600} />
               <Text style={styles.planningText}>Planning a flood-safe route…</Text>
             </View>
           ) : null}
@@ -737,7 +764,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   }}
                 >
                   <View style={styles.resultIcon}>
-                    <MapPin size={14} color={colors.blue600} />
+                    <MapPin size={14} color={c.blue600} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.resultName}>{node.properties.name}</Text>
@@ -795,7 +822,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             <View style={styles.instructionIcon}>
               {(() => {
                 const ManoeuvreIcon = MANOEUVRE_ICON[instruction.manoeuvre] ?? Navigation;
-                return <ManoeuvreIcon size={20} color={colors.white} />;
+                return <ManoeuvreIcon size={20} color={c.white} />;
               })()}
             </View>
             <View style={{ flex: 1 }}>
@@ -826,27 +853,27 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             accessibilityLabel="Refresh route and alternatives"
           >
             {refreshing ? (
-              <ActivityIndicator size="small" color={colors.blue600} />
+              <ActivityIndicator size="small" color={c.blue600} />
             ) : (
-              <RefreshCw size={17} color={colors.blue600} />
+              <RefreshCw size={17} color={c.blue600} />
             )}
           </TouchableOpacity>
         ) : null}
 
         {!position && !locationError ? (
           <View style={styles.mapNotice}>
-            <ActivityIndicator color={colors.blue600} />
+            <ActivityIndicator color={c.blue600} />
             <Text style={styles.mapNoticeText}>Finding your position…</Text>
           </View>
         ) : null}
 
         {locationError ? (
           <View style={styles.mapNotice}>
-            <AlertTriangle size={18} color={colors.red600} />
-            <Text style={[styles.mapNoticeText, { color: colors.red800 }]}>{locationError}</Text>
+            <AlertTriangle size={18} color={c.red600} />
+            <Text style={[styles.mapNoticeText, { color: c.red800 }]}>{locationError}</Text>
             {locationPermissionDenied ? (
               <TouchableOpacity onPress={() => void Linking.openSettings()} hitSlop={8}>
-                <Text style={[styles.mapNoticeText, { color: colors.blue600, fontWeight: "700" }]}>
+                <Text style={[styles.mapNoticeText, { color: c.blue600, fontWeight: "700" }]}>
                   Open Settings
                 </Text>
               </TouchableOpacity>
@@ -858,7 +885,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 }}
                 hitSlop={8}
               >
-                <Text style={[styles.mapNoticeText, { color: colors.blue600, fontWeight: "700" }]}>
+                <Text style={[styles.mapNoticeText, { color: c.blue600, fontWeight: "700" }]}>
                   Retry
                 </Text>
               </TouchableOpacity>
@@ -893,7 +920,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               </View>
             ) : (
               <View style={styles.safeChip}>
-                <CheckCircle2 size={12} color={colors.green700} />
+                <CheckCircle2 size={12} color={c.green700} />
                 <Text style={styles.safeChipText}>Hazard-free</Text>
               </View>
             )}
@@ -901,7 +928,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
           {unsafeRoute ? (
             <View style={styles.unsafeNotice}>
-              <AlertTriangle size={14} color={colors.red700} />
+              <AlertTriangle size={14} color={c.red700} />
               <Text style={styles.unsafeNoticeText}>
                 Unsafe alternative — this route crosses a verified hazard.
               </Text>
@@ -910,7 +937,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
           {arrived ? (
             <View style={styles.arrivedRow}>
-              <CheckCircle2 size={18} color={colors.green600} />
+              <CheckCircle2 size={18} color={c.green600} />
               <Text style={styles.arrivedText}>Arrived at your destination</Text>
             </View>
           ) : null}
@@ -918,22 +945,22 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           {telemetryVehicleId !== null ? (
             <View style={styles.telemetryStrip}>
               <View style={styles.telemetryItem}>
-                <Gauge size={12} color={colors.slate400} />
+                <Gauge size={12} color={c.slate400} />
                 <Text style={styles.telemetryText}>
                   {speedKmh !== null ? `${Math.round(speedKmh)} km/h` : "— km/h"}
                 </Text>
               </View>
               <View style={styles.telemetryItem}>
-                <MapPin size={12} color={colors.slate400} />
+                <MapPin size={12} color={c.slate400} />
                 <Text style={styles.telemetryText}>
                   {gpsAccuracyM !== null ? `±${Math.round(gpsAccuracyM)} m` : "no fix"}
                 </Text>
               </View>
               <View style={styles.telemetryItem}>
                 {online ? (
-                  <Wifi size={12} color={colors.green600} />
+                  <Wifi size={12} color={c.green600} />
                 ) : (
-                  <WifiOff size={12} color={colors.red600} />
+                  <WifiOff size={12} color={c.red600} />
                 )}
                 <Text style={styles.telemetryText}>
                   {lastSyncAt
@@ -948,7 +975,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
           <View style={styles.panelButtons}>
             <TouchableOpacity style={styles.secondaryButton} onPress={resetRoute}>
-              <Search size={15} color={colors.slate800} />
+              <Search size={15} color={c.slate800} />
               <Text style={styles.secondaryButtonText}>New destination</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -967,8 +994,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.white },
+function makeStyles(c: ThemeColors, mode: ThemeMode) {
+  return StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.white },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -976,20 +1004,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: colors.slate100,
+    borderColor: c.slate100,
   },
   backButton: {
     width: 36,
     height: 36,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.slate50,
+    backgroundColor: c.slate50,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
   },
-  headerTitle: { fontSize: 15, fontWeight: "800", color: colors.slate900 },
-  headerSubtitle: { fontSize: 10, color: colors.slate500, marginTop: 1 },
+  headerTitle: { fontSize: 15, fontWeight: "800", color: c.slate900 },
+  headerSubtitle: { fontSize: 10, color: c.slate500, marginTop: 1 },
   mapArea: { flex: 1, position: "relative" },
   banner: {
     position: "absolute",
@@ -1021,11 +1049,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: colors.blue600,
+    backgroundColor: c.blue600,
     alignItems: "center",
     justifyContent: "center",
   },
-  instructionText: { fontSize: 14, fontWeight: "800", color: colors.white },
+  instructionText: { fontSize: 14, fontWeight: "800", color: c.onInk },
   speedBadge: {
     alignItems: "center",
     justifyContent: "center",
@@ -1035,32 +1063,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  speedBadgeValue: { fontSize: 15, fontWeight: "800", color: colors.white },
-  speedBadgeUnit: { fontSize: 8, color: colors.slate300 },
+  speedBadgeValue: { fontSize: 15, fontWeight: "800", color: c.onInk },
+  speedBadgeUnit: { fontSize: 8, color: c.inkMuted },
   telemetryStrip: {
     flexDirection: "row",
     justifyContent: "space-between",
     borderTopWidth: 1,
-    borderColor: colors.slate100,
+    borderColor: c.slate100,
     paddingTop: 8,
   },
   telemetryItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  telemetryText: { fontSize: 10, color: colors.slate500 },
-  instructionMeta: { fontSize: 11, color: colors.slate300, marginTop: 2 },
+  telemetryText: { fontSize: 10, color: c.slate500 },
+  instructionMeta: { fontSize: 11, color: c.inkMuted, marginTop: 2 },
   mapNotice: {
     position: "absolute",
     top: "45%",
     left: 24,
     right: 24,
-    backgroundColor: colors.white,
+    backgroundColor: c.white,
     borderRadius: 14,
     padding: 14,
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
   },
-  mapNoticeText: { fontSize: 12, color: colors.slate700, textAlign: "center" },
+  mapNoticeText: { fontSize: 12, color: c.slate700, textAlign: "center" },
   refreshButton: {
     position: "absolute",
     right: 12,
@@ -1068,22 +1096,22 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: colors.white,
+    backgroundColor: c.white,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
   },
   routePanel: {
     borderTopWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
     padding: 16,
     gap: 10,
-    backgroundColor: colors.white,
+    backgroundColor: c.white,
   },
   routeSummary: { flexDirection: "row", alignItems: "center", gap: 10 },
-  routeDestination: { fontSize: 14, fontWeight: "800", color: colors.slate900 },
-  routeMeta: { fontSize: 11, color: colors.slate500, marginTop: 2 },
+  routeDestination: { fontSize: 14, fontWeight: "800", color: c.slate900 },
+  routeMeta: { fontSize: 11, color: c.slate500, marginTop: 2 },
   hazardChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -1100,25 +1128,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#f0fdf4",
+    backgroundColor: mode === "storm" ? "#052e1b" : "#f0fdf4",
     borderWidth: 1,
     borderColor: "#bbf7d0",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
-  safeChipText: { fontSize: 10, fontWeight: "700", color: colors.green700 },
+  safeChipText: { fontSize: 10, fontWeight: "700", color: c.green700 },
   unsafeNotice: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.red50,
+    backgroundColor: c.red50,
     borderRadius: 10,
     padding: 8,
   },
-  unsafeNoticeText: { flex: 1, fontSize: 10, color: colors.red700 },
+  unsafeNoticeText: { flex: 1, fontSize: 10, color: c.red700 },
   arrivedRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  arrivedText: { fontSize: 12, fontWeight: "700", color: colors.green700 },
+  arrivedText: { fontSize: 12, fontWeight: "700", color: c.green700 },
   panelButtons: { flexDirection: "row", gap: 10, marginTop: 4 },
   secondaryButton: {
     flex: 1,
@@ -1129,100 +1157,101 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.slate300,
-    backgroundColor: colors.slate50,
+    borderColor: c.slate300,
+    backgroundColor: c.slate50,
   },
-  secondaryButtonText: { fontSize: 12, fontWeight: "700", color: colors.slate800 },
+  secondaryButtonText: { fontSize: 12, fontWeight: "700", color: c.slate800 },
   endButton: {
     paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: colors.slate900,
+    backgroundColor: c.inkBg,
     alignItems: "center",
     justifyContent: "center",
   },
-  endButtonText: { fontSize: 12, fontWeight: "800", color: colors.white },
+  endButtonText: { fontSize: 12, fontWeight: "800", color: c.onInk },
   searchPanel: {
     borderBottomWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
     padding: 16,
     gap: 10,
-    backgroundColor: colors.white,
+    backgroundColor: c.white,
   },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: colors.slate50,
+    backgroundColor: c.slate50,
     borderWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  searchInput: { flex: 1, fontSize: 13, color: colors.slate900 },
+  searchInput: { flex: 1, fontSize: 13, color: c.slate900 },
   planningRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  planningText: { fontSize: 11, color: colors.slate600 },
-  errorText: { flex: 1, fontSize: 11, color: colors.red700 },
+  planningText: { fontSize: 11, color: c.slate600 },
+  errorText: { flex: 1, fontSize: 11, color: c.red700 },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  errorRetry: { fontSize: 11, fontWeight: "800", color: colors.red700 },
+  errorRetry: { fontSize: 11, fontWeight: "800", color: c.red700 },
   refusalCard: {
-    backgroundColor: colors.red50,
+    backgroundColor: c.red50,
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: c.red700,
     borderRadius: 14,
     padding: 12,
     gap: 6,
   },
-  refusalTitle: { fontSize: 13, fontWeight: "800", color: colors.red800 },
-  refusalBody: { fontSize: 11, color: "#7f1d1d", lineHeight: 15 },
+  refusalTitle: { fontSize: 13, fontWeight: "800", color: c.red800 },
+  refusalBody: { fontSize: 11, color: c.red800, lineHeight: 15 },
   dangerButton: {
     flex: 1.4,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: colors.red700,
+    backgroundColor: c.red700,
     alignItems: "center",
     justifyContent: "center",
   },
-  dangerButtonText: { fontSize: 12, fontWeight: "700", color: colors.white },
+  dangerButtonText: { fontSize: 12, fontWeight: "700", color: c.white },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderColor: colors.slate100,
+    borderColor: c.slate100,
   },
   resultIcon: {
     width: 30,
     height: 30,
     borderRadius: 9,
-    backgroundColor: colors.blue50,
+    backgroundColor: c.blue50,
     alignItems: "center",
     justifyContent: "center",
   },
-  resultName: { fontSize: 12, fontWeight: "700", color: colors.slate800 },
-  resultMeta: { fontSize: 10, color: colors.slate400, marginTop: 1 },
-  emptyText: { fontSize: 11, color: colors.slate500 },
-  hintText: { fontSize: 11, color: colors.slate500, lineHeight: 16 },
+  resultName: { fontSize: 12, fontWeight: "700", color: c.slate800 },
+  resultMeta: { fontSize: 10, color: c.slate400, marginTop: 1 },
+  emptyText: { fontSize: 11, color: c.slate500 },
+  hintText: { fontSize: 11, color: c.slate500, lineHeight: 16 },
   signedOutCard: {
     margin: 20,
     padding: 20,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.slate200,
-    backgroundColor: colors.slate50,
+    borderColor: c.slate200,
+    backgroundColor: c.slate50,
     alignItems: "center",
     gap: 10,
   },
-  signedOutTitle: { fontSize: 15, fontWeight: "800", color: colors.slate900 },
-  signedOutBody: { fontSize: 12, color: colors.slate600, textAlign: "center", lineHeight: 17 },
+  signedOutTitle: { fontSize: 15, fontWeight: "800", color: c.slate900 },
+  signedOutBody: { fontSize: 12, color: c.slate600, textAlign: "center", lineHeight: 17 },
   primaryButton: {
     marginTop: 6,
     paddingHorizontal: 28,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: colors.slate900,
+    backgroundColor: c.inkBg,
   },
-  primaryButtonText: { fontSize: 13, fontWeight: "800", color: colors.white },
-});
+  primaryButtonText: { fontSize: 13, fontWeight: "800", color: c.onInk },
+  });
+}

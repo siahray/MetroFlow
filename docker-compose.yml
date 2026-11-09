@@ -46,6 +46,15 @@ services:
     container_name: metroflow_backend
     environment:
       DATABASE_URL: postgresql+psycopg2://metroflow_admin:metroflow_password@postgres:5432/metroflow_db
+      # Overridable so the ZAP workflow can raise these for its own run (see
+      # security-zap.yml): its boolean-based SQLi probe fires dozens of requests
+      # per parameter in seconds, which blows through the pilot-sized default
+      # ceiling and reads the resulting 401->429 flip as a true/false
+      # differential -- a false positive from scan volume, not a vulnerability
+      # (confirmed: /auth/login and /auth/verify use parameterised SQLAlchemy,
+      # /auth/send-verification and /auth/verify touch no SQL at all).
+      METROFLOW_RATE_LIMIT_LOGIN_PER_MIN: ${METROFLOW_RATE_LIMIT_LOGIN_PER_MIN:-15}
+      METROFLOW_RATE_LIMIT_REGISTER_PER_MIN: ${METROFLOW_RATE_LIMIT_REGISTER_PER_MIN:-10}
     ports:
       - "8000:8000"
     depends_on:

@@ -8,7 +8,7 @@
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
 | 1.0     | 21 Oct 2026 | «Project Team» | Initial Version                                                    |
 | 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch, sensor ingestion |
-| 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI |
+| 1.4     | 9 Nov 2026  | «Project Team» | Current-state column in Appendix A synced with the delivered pilot   |
 
 ## Approvals
 
@@ -124,10 +124,10 @@ Appendix A.
 
 | Req ID  | Description                                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------------------------------ |
-| NFR-001 | Network state responds within 500 ms at p95 for the pilot graph (target; not yet load-tested).                     |
-| NFR-002 | Route requests respond within 200 ms at p95 (target; not yet load-tested).                                         |
+| NFR-001 | Network state responds within 500 ms at p95 for the pilot graph. Met: measured p95 ~163 ms (34-node pilot graph, `backend/benchmarks/bench_latency.py`, 9 Nov 2026). |
+| NFR-002 | Route requests respond within 200 ms at p95. Met: measured p95 ~115 ms (same benchmark).                           |
 | NFR-003 | API availability of 99% during a declared event `[TBC]`.                                                           |
-| NFR-004 | No High or Medium findings from the OWASP ZAP API scan.                                                            |
+| NFR-004 | No High or Medium findings from the OWASP ZAP API scan. Fixed 9 Nov 2026, awaiting a green CI run: the last two scheduled runs showed a High SQLi alert on `/auth/login`, `/auth/send-verification` and `/auth/verify`, which was a false positive from the scan's own request volume tripping the login/register rate limiter mid-scan (401→429 read as a boolean differential); `security-zap.yml` now raises those limits for its own ephemeral run only, and a local run of the same scan reports 0 High/Medium/Low. |
 | NFR-005 | No secrets in the repository; runtime configuration supplied by environment variables.                             |
 | NFR-006 | Public database roles cannot read or write application tables (row-level security).                                |
 | NFR-007 | Reporter personal data is not exposed to unauthenticated callers.                                                  |
@@ -139,14 +139,14 @@ Appendix A.
 | NFR-013 | The API runs from a container with all configuration supplied externally.                                          |
 | NFR-014 | Every override and decision is attributable to an actor and a timestamp.                                           |
 | NFR-015 | API instances can be added horizontally behind a load balancer.                                                    |
-| NFR-016 | Recovery point and recovery time objectives are defined and tested `[TBC]`.                                        |
+| NFR-016 | Recovery point and recovery time objectives are defined and tested. RPO ≤24h, RTO ≤1h (`docs/TSD.md` §5.2, set by the free-tier daily-backup cadence); dump/restore mechanics drilled locally 9 Nov 2026 with an exact data match post-restore. The live Supabase dashboard restore itself is still untested against the hosted project — destructive, needs the lead dev's go-ahead. |
 | NFR-017 | Times shown in PHT, distances in metres/kilometres, depths in centimetres.                                         |
 | NFR-018 | The driver app navigates and accepts reports from the cached corridor when offline `[TBC]`.                        |
-| NFR-019 | A published hazard reaches every connected SSE client in 100 ms at p95, server-side.                               |
+| NFR-019 | A published hazard reaches every connected SSE client in 100 ms at p95, server-side. Was failing at the 100 ms poll default (measured ~110 ms median, ~220-330 ms p95 -- a 100 ms poll alone cannot bound p95 to 100 ms once any processing time is added). Fixed: `event_stream_poll_ms` lowered to 40 (`backend/config.py`); re-measured p95 ~50 ms. |
 | NFR-020 | Every privileged LGU action is role-checked; unauthorised calls return 403 and change nothing.                     |
 | NFR-021 | Driver positions are rounded to 50 m, device ids salted-hashed, and retained at most 24 hours.                     |
 | NFR-022 | Telemetry is throttled to at most one batch per five seconds per device.                                           |
-| NFR-023 | Storm and night themes keep AA text contrast and pair colour with a text or shape cue.                             |
+| NFR-023 | Storm and night themes keep AA text contrast and pair colour with a text or shape cue. Built in the driver app (9 Nov 2026): a persisted toggle (Profile, and a quick-access icon on the navigation screen) switches the route/navigation screen and map chrome between day and a low-glare storm palette (`metroflow-mobile/src/theme.tsx`), mapped per contrast role rather than inverted wholesale. Scoped to the screen a driver actually watches while driving; Home/SOS/Report/history/the admin portal stay single-theme for now (follow-up, matches the sizing `BACKLOG.md` already gave this). |
 | NFR-024 | The driver app becomes interactive within 5 s on a mid-range phone over 4G `[TBC]`.                                |
 | NFR-025 | The LGU map renders the pilot network and active hazards at a usable frame rate while panning and zooming `[TBC]`. |
 
@@ -163,7 +163,7 @@ Business-level risks. The full register, scoring and responses are in
 | Dispatchers find the portal slower than radio     | They bypass the system                     | Usability sessions from M4; keep the existing process running in parallel                      |
 | Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require a change request                                    |
 | Personal data incident during testing             | Legal and ethical exposure                 | Synthetic data only; row-level security verified; no personal data in logs                     |
-| Hosted database secret never supplied             | Hosted deployment not demonstrated         | Local stack is the primary demonstration; the CD workflow is gated and visible                 |
+| Hosted database secret never supplied             | Hosted deployment not demonstrated         | Resolved — the hosted deployment is live (`docs/TSD.md` §5.2/5.3): Supabase Postgres at head, API on Vercel, portal on Vercel, migrations applied by CI             |
 | CR-001 scope exceeds the remaining term           | Schedule overrun; nothing accepted on time | Phase gates; `Must` requirements first; every further addition requires a change request       |
 | Drivers do not adopt the app                      | Field evidence stays thin                  | Usability tests from M7; QR onboarding; synthetic reports remain a fallback                    |
 | Background location limits on iOS                 | Telemetry gaps during navigation           | Foreground-only telemetry; limitation recorded                                                  |
@@ -173,19 +173,19 @@ Business-level risks. The full register, scoring and responses are in
 
 ## Success Metrics
 
-| KPI                                         | Target                                         |
-| ------------------------------------------- | ---------------------------------------------- |
-| Report-to-triage time                       | Below the M1 baseline `[TBC]`                  |
-| Dispatches aborted for road conditions      | 0 per event                                    |
-| Decisions with actor, timestamp and action  | 100%                                           |
-| Route responses respecting clearance        | 100%                                           |
-| High/Medium security findings               | 0                                              |
-| `Must` requirements accepted                | 100% by M9                                     |
-| System Usability Scale                      | ≥ 75 `[TBC]`                                   |
-| Hazard publish to SSE event                 | ≤ 100 ms at p95, server-side                   |
-| Offline route completion in cached corridor | 100% of scripted runs                          |
-| Privileged actions blocked without a role   | 100%                                           |
-| Driver reports reaching a triage decision   | 100% of queued reports have a recorded outcome |
+| KPI                                         | Target                                         | Current (9 Nov 2026)                                                          |
+| ------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| Report-to-triage time                       | Below the M1 baseline `[TBC]`                  | Blocked — needs a client-supplied M1 baseline, not an engineering gap         |
+| Dispatches aborted for road conditions      | 0 per event                                    | Structurally guaranteed (routing refuses an over-clearance edge, `test_clearance_gates_route_availability`); no declared event has run yet to confirm empirically |
+| Decisions with actor, timestamp and action  | 100%                                           | Met — every triage/dispatch decision endpoint calls `audit.record` in the same transaction |
+| Route responses respecting clearance        | 100%                                           | Met — `td_a_star_search` excludes any edge at or above clearance; test-covered |
+| High/Medium security findings               | 0                                              | Met (9 Nov 2026) — see NFR-004 above                                          |
+| `Must` requirements accepted                | 100% by M9                                     | Tracked in the FSD, not this document                                        |
+| System Usability Scale                      | ≥ 75 `[TBC]`                                   | Blocked — needs real UAT sessions                                            |
+| Hazard publish to SSE event                 | ≤ 100 ms at p95, server-side                   | Met (9 Nov 2026) — see NFR-019 above                                         |
+| Offline route completion in cached corridor | 100% of scripted runs                          | Met — `offline-route.test.ts` (clearance vs depth, hazard detour, `ignore_hazards`, no safe route), 15/15 passing |
+| Privileged actions blocked without a role   | 100%                                           | Met — role-dependency checks return 403 on every privileged route; test-covered |
+| Driver reports reaching a triage decision   | 100% of queued reports have a recorded outcome | Structurally guaranteed (no silent delete, `BRULE-005`); not yet measured over a real event |
 
 ## Appendix A — Business Requirements and Scope
 
@@ -203,20 +203,21 @@ does, so this document is also an honest statement of scope.
 | BR-005 | Allow narrowing the queue by source and by free-text search                  | Should   | Met — source filters and search                                                       |
 | BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                     |
 | BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — decisions append to the operations log                            |
-| BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Partly met — schema exists; write path planned under CR-001                           |
+| BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Met — every privileged action writes a hash-chained row in the same transaction; `/audit/verify` and CSV export |
 | BR-009 | Restrict access to authorised personnel by role                              | Must     | Met — API-issued tokens, bcrypt credentials and per-route role checks; no route is reachable without a token |
 | BR-010 | Operate on the equipment the LGU already has                                 | Should   | Met — browser-based portal                                                            |
-| BR-011 | Protect the personal data of reporters                                       | Must     | Partly met — database access denied to public API roles; privacy controls planned     |
-| BR-012 | Provide management information after an event                                | Could    | Not met — future release                                                              |
-| BR-013 | Give drivers flood-aware navigation that reroutes around verified hazards    | Must     | Not met — planned under CR-001                                                        |
-| BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Not met — planned under CR-001                                                        |
-| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Partly met — SOS creation and listing persist through the API; no native telephony    |
-| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Partly met — fleet, hazard and dispatch calls persist through the API; map layers are static |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Not met — planned under CR-001                                                        |
-| BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Not met — planned under CR-001                                                        |
+| BR-011 | Protect the personal data of reporters                                       | Must     | Met — reporters stored as salted hashes, phone numbers masked in the portal, public roles denied at the database |
+| BR-012 | Provide management information after an event                                | Could    | Met — audit and incident CSV export                                                   |
+| BR-013 | Give drivers flood-aware navigation that reroutes around verified hazards    | Must     | Met — destination search, turn-by-turn, live hazard stream, automatic rerouting and proximity alerts |
+| BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue and a moderation desk            |
+| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; native telephony is out of scope |
+| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — gauge ingestion and advisory road flagging are implemented; external PAGASA and satellite feeds (CR-004) are not connected |
+| BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
 
-`Must` requirements define the acceptance boundary. BR-009, BR-013 to BR-016 and
-BR-018 are the largest open items; CR-001 is the vehicle that closes them.
+`Must` requirements define the acceptance boundary. All of them are met in the pilot
+except the external-feed half of BR-017, which is `Should`; CR-004 is the vehicle that
+closes it. Deprioritised or out-of-pilot scope is marked above rather than assumed.
 
 ### A.2 In scope
 

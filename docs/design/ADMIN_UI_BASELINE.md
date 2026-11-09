@@ -778,7 +778,7 @@ must be resolved before implementation.
 | Suggested reroute             | Not in `hazard_zones`                             | Add `reroute_note text null`, or fold into `notes`          | `[TBD]`  |
 | Closure edge                  | Not in `hazard_zones`                             | Add `edge_id` FK to `road_edges`, or validate geometry only | `[TBD]`  |
 | Draft / published / withdrawn | `published_at` and `active` only                  | Derive state; contract must expose it                       | Proposed |
-| Hazard read for editing       | No `GET /api/v1/hazards/{id}`                     | Add read endpoint or include drafts in list                 | `[TBD]`  |
+| Hazard read for editing       | `GET /api/v1/hazards/{id}`                        | —                                                            | Done (9 Nov 2026) |
 | Hazard list by status         | Only `/hazards/active`                            | Add `GET /api/v1/hazards?status=` for drafts                | `[TBD]`  |
 | Publish and withdraw          | `POST`, `PATCH`, `DELETE` described at high level | Define payloads, transitions, idempotency and events        | `[TBD]`  |
 | Validation errors             | `E001`–`E015` exist                               | Add geometry, state-transition and conflict errors          | `[TBD]`  |
@@ -858,7 +858,7 @@ identity, status, task and route have an FSD basis. The rest is a scope decision
 
 | Item                      | Current state                             | Required change                                                    | Decision |
 | ------------------------- | ----------------------------------------- | ------------------------------------------------------------------ | -------- |
-| Unit detail read          | Only `GET /api/v1/vehicles`               | Add `GET /api/v1/vehicles/{id}` and include the active task        | `[TBD]`  |
+| Unit detail read          | `GET /api/v1/vehicles/{id}`; active task is the separate `GET /api/v1/vehicles/{id}/mission` | — | Done (9 Nov 2026) |
 | Active task               | `GET /api/v1/vehicles` lists status only  | Return task id, distress id, status and timestamps                 | `[TBD]`  |
 | External asset id         | `call_sign` and `vehicle_id` only         | Add `asset_code`, or remove `#LCT-0321`                            | `[TBD]`  |
 | Unit subtype              | `vehicle_type` enum only                  | Add `subtype`, or display the enum only                            | `[TBD]`  |
