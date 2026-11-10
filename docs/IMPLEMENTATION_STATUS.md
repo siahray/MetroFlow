@@ -17,7 +17,7 @@ charter dates) are excluded entirely — they were never engineering work.
 ## Overall
 
 ```
-███████████████░░░░░ 83%  (41.5 / 50 weighted items)
+█████████████████░░░ 85%  (42.5 / 50 weighted items)
 ```
 
 ---
@@ -30,9 +30,7 @@ links to its full writeup via the ID.
 
 ### Ready to implement (no external dependency)
 
-| ID | What's left | Where |
-|----|-------------|-------|
-| §7 doc | `docs/design/ADMIN_UI_BASELINE.md`'s ~130-row gap table predates CR-001 and lists things as missing that now exist — needs a pass to mark them resolved | §7 |
+Nothing left here — the only item that fit this bucket (§7's doc sweep) is done.
 
 ### Written but needs a production go-ahead (lead dev sign-off, not coding)
 
@@ -153,10 +151,10 @@ list) — that table is stale, see §6.
 ## 7. Documentation hygiene (not code)
 
 ```
-░░░░░░░░░░░░░░░░░░░░ 0%  (0 / 1)
+████████████████████ 100%  (1 / 1)
 ```
 
-- [ ] `docs/design/ADMIN_UI_BASELINE.md`'s gap-analysis table (~130 rows) predates the CR-001 build and still lists things as missing that now exist (hold/escalate/notes actions, `vehicles.clearance_cm`, the general hazards list). Needs a pass to mark those resolved — low priority, it's a reference doc, not the authoritative backlog.
+- [x] `docs/design/ADMIN_UI_BASELINE.md`'s gap-analysis table (~130 rows, across §9's four data-delta tables and four API-call tables) swept against `backend/main.py`'s actual routes (10 Nov 2026): hold/escalate/notes/duplicate, the hazard `name`/`avg_depth_cm`/`edge_id` columns, publish/withdraw, and `vehicles.clearance_cm` are now marked `Done`; Civic Broadcasts, Evacuation Centers, Crew Profiles, Comms Streams and Air-Asset Escalation are marked `Out of scope` (settled per `AGENTS.md`) instead of left as open `[TBD]`. Genuinely open and left as such: ranked dispatch candidates, mission reroute, decision/audit as one block.
 
 ## Explicitly excluded (not implementation work)
 
@@ -172,7 +170,9 @@ list) — that table is stale, see §6.
 
 ## Suggested next step
 
-**Q-1/Q-4** are done as far as engineering can take them without hardware:
-portal and mobile component-test harnesses both exist, and offline-route
-latency is benchmarked. What remains is genuinely external — the Q-2 device
-run (offline queue + on-device timing) and UAT.
+There is no more purely-engineering, no-dependency work left on the board.
+Everything open now needs either the lead dev's go-ahead on a destructive
+step (S-4/NFR-016's live restore drill), an account this project doesn't
+have (S-5's Apple Developer membership), or real users/hardware (Q-2,
+NFR-003/009/018/024/025). The project is at a natural pause point for
+engineering; what's next is a decision, not a task.
