@@ -48,7 +48,7 @@ jobs:
         run: bun run lint
 
       - name: Unit tests
-        run: bun test lib
+        run: bun test lib components
 
       # next build also runs the TypeScript check, so a type error fails CI.
       - name: Build
