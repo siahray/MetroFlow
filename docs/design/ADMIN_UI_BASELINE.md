@@ -38,6 +38,17 @@ covered separately in [DRIVER_APP_BASELINE.md](DRIVER_APP_BASELINE.md).
 > but there is no single decision/audit block. The cells below are corrected
 > where the current portal has moved past the note.
 
+> **Implementation status (10 November 2026).** Swept every data-delta and
+> API-call table in §9 against the actual routes in `backend/main.py`: hold,
+> escalate, notes, duplicate (folded into reject), the hazard `name`/
+> `avg_depth_cm`/`edge_id` columns, hazard publish/withdraw, and
+> `vehicles.clearance_cm` are all `Done`, not missing. Civic Broadcasts,
+> Evacuation Centers, Crew Profiles, Comms Streams and Air-Asset Escalation are
+> marked `Out of scope` rather than `[TBD]` — that scope decision is settled
+> per `AGENTS.md`, not still open. What's left genuinely open: ranked dispatch
+> candidates, mission reroute, decision/audit as one block, and a few
+> cosmetic-only fields (asset code, unit subtype, battery/endurance).
+
 The supplied UIs are the **visual source of truth**. The FSD remains the
 **behavioural source of truth**. Where the two disagree, the FSD behaviour wins
 and the UI is adapted. Where the FSD is silent, the UI is used and the gap is
@@ -770,17 +781,17 @@ must be resolved before implementation.
 
 | Item                          | Current state                                     | Required change                                             | Decision |
 | ----------------------------- | ------------------------------------------------- | ----------------------------------------------------------- | -------- |
-| Hazard name                   | Not in `hazard_zones`                             | Add `name varchar(120) not null`                            | Proposed |
-| Average depth                 | Not in `hazard_zones`                             | Add `avg_depth_cm smallint null`                            | Proposed |
+| Hazard name                   | `hazard_zones.name varchar(120) not null`         | —                                                            | Done     |
+| Average depth                 | `hazard_zones.avg_depth_cm smallint null`         | —                                                            | Done     |
 | Estimated residents           | Not in `hazard_zones`                             | Add `estimated_residents integer null`, or drop the field   | `[TBD]`  |
 | Overlay colour                | Not in `hazard_zones`                             | Derive from `obstruction_level`; do not persist             | Proposed |
 | Closure barrier               | Not in `hazard_zones`                             | Add `barrier_deployed boolean null`, or fold into `notes`   | `[TBD]`  |
 | Suggested reroute             | Not in `hazard_zones`                             | Add `reroute_note text null`, or fold into `notes`          | `[TBD]`  |
-| Closure edge                  | Not in `hazard_zones`                             | Add `edge_id` FK to `road_edges`, or validate geometry only | `[TBD]`  |
-| Draft / published / withdrawn | `published_at` and `active` only                  | Derive state; contract must expose it                       | Proposed |
+| Closure edge                  | `hazard_zones.edge_id` FK to `road_edges`         | —                                                            | Done     |
+| Draft / published / withdrawn | `published_at` and `active` exposed on the contract | Client derives draft/published/withdrawn from those two fields | Done  |
 | Hazard read for editing       | `GET /api/v1/hazards/{id}`                        | —                                                            | Done (9 Nov 2026) |
-| Hazard list by status         | Only `/hazards/active`                            | Add `GET /api/v1/hazards?status=` for drafts                | `[TBD]`  |
-| Publish and withdraw          | `POST`, `PATCH`, `DELETE` described at high level | Define payloads, transitions, idempotency and events        | `[TBD]`  |
+| Hazard list by status         | `GET /api/v1/hazards?active=`                     | —                                                            | Done — filters by `active`, not a `status` enum |
+| Publish and withdraw          | `POST /hazards/{id}/publish`, `PATCH /hazards/{id}` (withdraw sets `active=false`) | —                             | Done     |
 | Validation errors             | `E001`–`E015` exist                               | Add geometry, state-transition and conflict errors          | `[TBD]`  |
 
 The `barrier_deployed` and `reroute_note` fields are useful operationally but
@@ -802,16 +813,16 @@ as a manual estimate, or removed. It must not be presented as computed.
 | Report summary / title  | No field                        | Derive from the narrative, or add `summary varchar(160)`          | `[TBD]`  |
 | Depth estimate range    | `depth_level` only              | Add `estimated_depth_min_cm` and `estimated_depth_max_cm`         | `[TBD]`  |
 | Location plausibility   | Not computed                    | Compare claimed point, EXIF point and sensor point                | `[TBD]`  |
-| Photo viewer            | `photo_path` only               | Add an authenticated evidence route; never expose the object path | Proposed |
-| Sensor cross-reference  | No read contract                | Return nearest sensors with value, unit and timestamp             | `[TBD]`  |
-| CCTV cross-reference    | Demo registry only              | Return labelled demo availability; never imply live footage       | Proposed |
+| Photo viewer            | `GET /api/v1/reports/{id}/photo` (authenticated) | —                                                 | Done     |
+| Sensor cross-reference  | `GET /api/v1/reports/{id}/nearest-sensor`        | —                                                 | Done     |
+| CCTV cross-reference    | Removed                         | Real CCTV integration is out of scope (`AGENTS.md`); no references remain | Out of scope |
 | Nearest-unit candidates | Only assign and route endpoints | Add a ranked candidate endpoint with ETA and safety               | `[TBD]`  |
-| Report notes            | No endpoint                     | Add `POST /api/v1/reports/{id}/notes`                             | `[TBD]`  |
-| Hold action             | No endpoint                     | Add `POST /api/v1/reports/{id}/hold` with reason                  | `[TBD]`  |
-| Escalate action         | No endpoint                     | Add `POST /api/v1/reports/{id}/escalate` with target and reason   | `[TBD]`  |
-| Duplicate action        | No endpoint                     | Add `POST /api/v1/reports/{id}/duplicate` with canonical id       | `[TBD]`  |
-| Decision summary        | `audit_logs` schema only        | Read decision record and expose actor, reason and timestamp       | `[TBD]`  |
-| PII masking             | No policy in UI                 | Mask by default; reveal only with a role and an audit entry       | `[TBD]`  |
+| Report notes            | `POST /api/v1/reports/{id}/notes`                | —                                                                 | Done     |
+| Hold action             | `POST /api/v1/reports/{id}/hold`                 | —                                                                 | Done     |
+| Escalate action         | `POST /api/v1/reports/{id}/escalate`             | —                                                                 | Done     |
+| Duplicate action        | `POST /api/v1/reports/{id}/reject` with `duplicate_of` | —                                                           | Done — folded into reject rather than a separate endpoint |
+| Decision summary        | `GET /api/v1/reports/{id}/log`                   | —                                                                 | Done     |
+| PII masking             | Phone numbers masked by default in the portal (`maskPhoneNumber()`); reporter identity is a salted hash, never a user id | A reveal-with-audit path for phone numbers does not exist | Done — masking; no reveal path |
 
 The report detail screen must not display a full phone number, citizen ID or
 exact home address to every dispatcher by default. The UI can show a verified
@@ -821,8 +832,11 @@ must be audited.
 ### Published alert data deltas
 
 UI 3 introduces a public bulletin and broadcast-delivery surface that has no
-current schema or API contract. It is not in the FSD. The following deltas are
-proposals for a scope decision, not approved additions.
+current schema or API contract. It is not in the FSD, and the scope decision
+below is now settled: **Civic Broadcasts and Evacuation Centers are out of
+scope for the pilot** (`AGENTS.md`). The sidebar entry is disabled with a
+"Out of scope for pilot" tooltip. The deltas below are left as a record of
+what a future-product implementation would need, not open work.
 
 | Item                    | Current state                         | Required change                                                        | Decision |
 | ----------------------- | ------------------------------------- | ---------------------------------------------------------------------- | -------- |
@@ -862,26 +876,26 @@ identity, status, task and route have an FSD basis. The rest is a scope decision
 | Active task               | `GET /api/v1/vehicles` lists status only  | Return task id, distress id, status and timestamps                 | `[TBD]`  |
 | External asset id         | `call_sign` and `vehicle_id` only         | Add `asset_code`, or remove `#LCT-0321`                            | `[TBD]`  |
 | Unit subtype              | `vehicle_type` enum only                  | Add `subtype`, or display the enum only                            | `[TBD]`  |
-| Vehicle clearance / draft | Used by routing, not stored on `vehicles` | Add `clearance_cm` to the vehicle record                           | `[TBD]`  |
+| Vehicle clearance / draft | `vehicles.clearance_cm`                   | —                                                                   | Done     |
 | Current load              | `capacity` only                           | Add `current_load`, or remove “Live Payload”                       | `[TBD]`  |
-| Water speed               | `speed_kmh` only                          | Add a water-speed field, or display km/h with the source           | `[TBD]`  |
+| Water speed               | `speed_kmh`, displayed as km/h             | —                                                                   | Done — decision taken: display km/h, no separate water-speed field |
 | Battery and endurance     | Not in `vehicle_telemetry`                | Add fields, or remove the battery card                             | `[TBD]`  |
-| Crew profile              | No crew table                             | Add a crew table with PII rules, or remove the profile             | `[TBD]`  |
-| Crew certification        | No field                                  | Add a verified certification reference, or remove the claim        | `[TBD]`  |
+| Crew profile              | Removed                                   | Crew Profiles are out of scope for the pilot (`AGENTS.md`)         | Out of scope |
+| Crew certification        | Removed                                   | Same as Crew profile above                                         | Out of scope |
 | Distress detail           | `sos_requests` has `contact_note` only    | Add structured counts, vulnerability and water depth/trend         | `[TBD]`  |
 | Report-to-SOS link        | `sos_requests` has no report id           | Add a link or state that they are separate records                 | `[TBD]`  |
-| Mission history           | `dispatch_tasks` has no event table       | Derive milestones from timestamps and audit, or add an event table | `[TBD]`  |
-| Complete / cancel         | Statuses exist                            | Add endpoints and UI states; resolve or requeue the SOS            | `[TBD]`  |
+| Mission history           | `dispatch_events` table (created/assigned/dispatched/en_route/arrived/completed/cancelled); `GET /api/v1/dispatch/{id}/events` | — | Done (F-4) |
+| Complete / cancel         | `POST /sos/{id}/arrive` + `POST /sos/{id}/resolve` (complete); `POST /dispatch/{id}/undo` (cancel) | — | Done |
 | Reroute                   | Routing endpoint only                     | Add a mission reroute contract with audit and collision handling   | `[TBD]`  |
-| Comms stream              | No table                                  | Add messages, author, retention and access rules, or remove        | `[TBD]`  |
-| Radio channel             | No integration                            | Label as demo and remove encryption claims, or defer               | `[TBD]`  |
-| Broadcast ping            | No contract                               | Define audience and channel, or remove                             | `[TBD]`  |
+| Comms stream              | Removed                                   | Comms Streams are out of scope for the pilot (`AGENTS.md`)         | Out of scope |
+| Radio channel             | Removed                                   | Same as Comms stream above                                         | Out of scope |
+| Broadcast ping            | Removed                                   | Civic Broadcasts are out of scope for the pilot (`AGENTS.md`)      | Out of scope |
 | Support unit request      | `POST /api/v1/sos` or reassignment        | Choose one behaviour and define idempotency                        | `[TBD]`  |
-| Air-asset escalation      | No actor or agency model                  | Add through a change request, or remove                            | `[TBD]`  |
-| Safe haven                | No evacuation-center table                | Same conditional scope as UI 3                                     | `[TBD]`  |
+| Air-asset escalation      | Removed                                   | Air-Asset Escalation is out of scope for the pilot (`AGENTS.md`)   | Out of scope |
+| Safe haven                | Removed                                   | Evacuation Centers are out of scope for the pilot (`AGENTS.md`)    | Out of scope |
 | Route depth and distance  | Route response has segments and ETA       | Add route distance and maximum depth, or derive them client-side   | `[TBD]`  |
 | Telemetry freshness       | No stale threshold in UI                  | Return `recorded_at` and stale/offline state                       | Proposed |
-| Evacuation capacity       | No table                                  | Same conditional scope as UI 3                                     | `[TBD]`  |
+| Evacuation capacity       | Removed                                   | Evacuation Centers are out of scope for the pilot (`AGENTS.md`)    | Out of scope |
 
 The UI 4 figures — 14 active SOS, a 2/6 payload, 14.8 knots, 88% battery,
 4.2 km remaining, a 6.8 km corridor, 1.2 m route depth and a 450-person center
@@ -897,80 +911,80 @@ hard-coded.
 | Purpose          | Endpoint                           | Status      |
 | ---------------- | ---------------------------------- | ----------- |
 | Road network     | `GET /api/v1/network/state`        | Implemented |
-| Active hazards   | `GET /api/v1/hazards/active`       | Planned     |
-| Create hazard    | `POST /api/v1/hazards`             | Planned     |
-| Update hazard    | `PATCH /api/v1/hazards/{id}`       | Planned     |
-| Withdraw hazard  | `DELETE /api/v1/hazards/{id}`      | Planned     |
-| Hazard stream    | `GET /api/v1/hazards/stream` (SSE) | Planned     |
-| Vehicles         | `GET /api/v1/vehicles`             | Planned     |
-| SOS queue        | `GET /api/v1/sos`                  | Planned     |
-| Sensor readings  | `GET /api/v1/sensors`              | Planned     |
-| Report evidence  | `GET /api/v1/reports/{id}`         | Planned     |
-| Session and role | `GET /api/v1/auth/me`              | Planned     |
+| Active hazards   | `GET /api/v1/hazards/active`       | Done        |
+| Create hazard    | `POST /api/v1/hazards`             | Done        |
+| Update hazard    | `PATCH /api/v1/hazards/{id}`       | Done        |
+| Withdraw hazard  | `PATCH /api/v1/hazards/{id}` with `active=false` | Done — no separate DELETE; withdraw is a PATCH |
+| Hazard stream    | `GET /api/v1/hazards/stream` (SSE) | Done        |
+| Vehicles         | `GET /api/v1/vehicles`             | Done        |
+| SOS queue        | `GET /api/v1/sos`                  | Done        |
+| Sensor readings  | `GET /api/v1/sensors`              | Done        |
+| Report evidence  | `GET /api/v1/reports/{id}`         | Done        |
+| Session and role | `GET /api/v1/auth/me`              | Done        |
 
 ### API calls used by report verification
 
 | Purpose                  | Endpoint                                    | Status  |
 | ------------------------ | ------------------------------------------- | ------- |
-| Report detail            | `GET /api/v1/reports/{id}`                  | Planned |
-| Original evidence        | `GET /api/v1/reports/{id}/evidence/{asset}` | `[TBD]` |
-| Add internal note        | `POST /api/v1/reports/{id}/notes`           | `[TBD]` |
-| Hold report              | `POST /api/v1/reports/{id}/hold`            | `[TBD]` |
-| Escalate report          | `POST /api/v1/reports/{id}/escalate`        | `[TBD]` |
-| Reject report            | `POST /api/v1/reports/{id}/reject`          | Planned |
-| Mark duplicate           | `POST /api/v1/reports/{id}/duplicate`       | `[TBD]` |
-| Approve report           | `POST /api/v1/reports/{id}/approve`         | Planned |
-| Rank dispatch candidates | `GET /api/v1/dispatch/{id}/candidates`      | `[TBD]` |
-| Preview rescue route     | `GET /api/v1/dispatch/{id}/route`           | Planned |
-| Assign unit              | `POST /api/v1/sos/{id}/assign`              | Planned |
-| Neighbouring sensors     | `GET /api/v1/sensors?near={report_id}`      | `[TBD]` |
-| Decision audit           | `GET /api/v1/reports/{id}/audit`            | `[TBD]` |
+| Report detail            | `GET /api/v1/reports/{id}`                  | Done |
+| Original evidence        | `GET /api/v1/reports/{id}/photo`            | Done — single evidence photo, not a generic `{asset}` route |
+| Add internal note        | `POST /api/v1/reports/{id}/notes`           | Done |
+| Hold report              | `POST /api/v1/reports/{id}/hold`            | Done |
+| Escalate report          | `POST /api/v1/reports/{id}/escalate`        | Done |
+| Reject report            | `POST /api/v1/reports/{id}/reject`          | Done |
+| Mark duplicate           | `POST /api/v1/reports/{id}/reject` with `duplicate_of` | Done — folded into reject |
+| Approve report           | `POST /api/v1/reports/{id}/approve`         | Done |
+| Rank dispatch candidates | No endpoint                                 | `[TBD]` |
+| Preview rescue route     | `GET /api/v1/dispatch/{id}/preview`         | Done |
+| Assign unit              | `POST /api/v1/sos/{id}/assign`              | Done |
+| Neighbouring sensors     | `GET /api/v1/reports/{id}/nearest-sensor`   | Done — nearest sensor, not a list by proximity |
+| Decision audit           | `GET /api/v1/reports/{id}/log`              | Done |
 
 ### API calls used by the published alert
 
 | Purpose               | Endpoint                                 | Status  |
 | --------------------- | ---------------------------------------- | ------- |
-| Active public hazards | `GET /api/v1/hazards/active`             | Planned |
-| Hazard detail         | `GET /api/v1/hazards/{id}`               | `[TBD]` |
-| Bulletin detail       | `GET /api/v1/broadcasts/{id}`            | `[TBD]` |
-| Create bulletin       | `POST /api/v1/broadcasts`                | `[TBD]` |
-| Publish bulletin      | `POST /api/v1/broadcasts/{id}/publish`   | `[TBD]` |
-| Revise bulletin       | `POST /api/v1/broadcasts/{id}/revisions` | `[TBD]` |
-| Withdraw bulletin     | `POST /api/v1/broadcasts/{id}/withdraw`  | `[TBD]` |
-| Delivery status       | `GET /api/v1/broadcasts/{id}/deliveries` | `[TBD]` |
-| Public bulletin URL   | `GET /api/v1/broadcasts/{id}/public`     | `[TBD]` |
-| Evacuation centers    | `GET /api/v1/evacuation-centers`         | `[TBD]` |
-| Sensor readings       | `GET /api/v1/sensors`                    | Planned |
-| Public hazard stream  | `GET /api/v1/hazards/stream`             | Planned |
-| Hazard update         | `PATCH /api/v1/hazards/{id}`             | Planned |
-| Hazard withdrawal     | `DELETE /api/v1/hazards/{id}`            | Planned |
+| Active public hazards | `GET /api/v1/hazards/active`             | Done |
+| Hazard detail         | `GET /api/v1/hazards/{id}`               | Done |
+| Bulletin detail       | No endpoint                              | Out of scope |
+| Create bulletin       | No endpoint                              | Out of scope |
+| Publish bulletin      | No endpoint                              | Out of scope |
+| Revise bulletin       | No endpoint                              | Out of scope |
+| Withdraw bulletin     | No endpoint                              | Out of scope |
+| Delivery status       | No endpoint                              | Out of scope |
+| Public bulletin URL   | No endpoint                              | Out of scope |
+| Evacuation centers    | No endpoint                              | Out of scope |
+| Sensor readings       | `GET /api/v1/sensors`                    | Done |
+| Public hazard stream  | `GET /api/v1/hazards/stream`             | Done |
+| Hazard update         | `PATCH /api/v1/hazards/{id}`             | Done |
+| Hazard withdrawal     | `PATCH /api/v1/hazards/{id}` with `active=false` | Done — no separate DELETE |
 
 ### API calls used by rescue tracking
 
 | Purpose              | Endpoint                               | Status  |
 | -------------------- | -------------------------------------- | ------- |
-| Unit detail          | `GET /api/v1/vehicles/{id}`            | `[TBD]` |
-| Fleet list and task  | `GET /api/v1/vehicles`                 | Planned |
-| Manual unit status   | `PATCH /api/v1/vehicles/{id}/status`   | Planned |
-| Telemetry stream     | `GET /api/v1/vehicles/stream` (SSE)    | Planned |
-| Telemetry batch      | `POST /api/v1/vehicles/{id}/telemetry` | Planned |
-| Distress detail      | `GET /api/v1/sos/{id}`                 | `[TBD]` |
-| Distress queue       | `GET /api/v1/sos`                      | Planned |
-| Active task detail   | `GET /api/v1/dispatch/{id}`            | `[TBD]` |
-| Rescue route preview | `GET /api/v1/dispatch/{id}/route`      | Planned |
-| Rank candidates      | `GET /api/v1/dispatch/{id}/candidates` | `[TBD]` |
-| Assign unit          | `POST /api/v1/sos/{id}/assign`         | Planned |
-| Reroute mission      | `POST /api/v1/dispatch/{id}/reroute`   | `[TBD]` |
-| Complete mission     | `POST /api/v1/dispatch/{id}/complete`  | `[TBD]` |
-| Cancel mission       | `POST /api/v1/dispatch/{id}/cancel`    | `[TBD]` |
+| Unit detail          | `GET /api/v1/vehicles/{id}`            | Done |
+| Fleet list and task  | `GET /api/v1/vehicles`                 | Done |
+| Manual unit status   | `PATCH /api/v1/vehicles/{id}`          | Done — generic update, not a dedicated `/status` route |
+| Telemetry stream     | `GET /api/v1/vehicles/stream` (SSE)    | Done |
+| Telemetry batch      | `POST /api/v1/vehicles/{id}/telemetry` | Done |
+| Distress detail      | `GET /api/v1/sos/{id}`                 | Done |
+| Distress queue       | `GET /api/v1/sos`                      | Done |
+| Active task detail   | No endpoint                            | `[TBD]` — use `GET /api/v1/vehicles/{id}/mission` or `GET /api/v1/sos/{id}` |
+| Rescue route preview | `GET /api/v1/dispatch/{id}/preview`    | Done |
+| Rank candidates      | No endpoint                            | `[TBD]` |
+| Assign unit          | `POST /api/v1/sos/{id}/assign`         | Done |
+| Reroute mission      | No endpoint                            | `[TBD]` |
+| Complete mission     | `POST /api/v1/sos/{id}/resolve`        | Done |
+| Cancel mission       | `POST /api/v1/dispatch/{id}/undo`      | Done |
 | Request support      | `POST /api/v1/sos` or reassignment     | `[TBD]` |
 | Mission timeline     | `GET /api/v1/dispatch/{id}/events`     | Done (9 Nov 2026) |
-| Comms history        | `GET /api/v1/dispatch/{id}/messages`   | `[TBD]` |
-| Send comms message   | `POST /api/v1/dispatch/{id}/messages`  | `[TBD]` |
-| Radio link           | No contract                            | Demo    |
-| Broadcast ping       | No contract                            | `[TBD]` |
-| Air-asset escalation | No contract                            | `[TBD]` |
-| Safe haven detail    | `GET /api/v1/evacuation-centers/{id}`  | `[TBD]` |
+| Comms history        | No endpoint                            | Out of scope |
+| Send comms message   | No endpoint                            | Out of scope |
+| Radio link           | No contract                            | Out of scope |
+| Broadcast ping       | No contract                            | Out of scope |
+| Air-asset escalation | No contract                            | Out of scope |
+| Safe haven detail    | No endpoint                            | Out of scope |
 
 ## 10. Role and Permission Matrix
 
