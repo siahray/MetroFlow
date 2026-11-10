@@ -43,7 +43,7 @@ Location: `supabase-migrations/`
 - `add_new_tables.sql` - Main migration for new tables
 - Verification scripts: `check_alembic.sql`, `check_rls.sql`, `check_indexes.sql`
 
-## Implementation Status (8 Nov 2026)
+## Implementation Status (9 Nov 2026)
 
 ### ✅ Completed
 1. **Database Schema**
@@ -128,7 +128,7 @@ Location: `supabase-migrations/`
 - None
 
 ### 📋 Backlog Items Not Yet Started
-- None. Offline operation (FR-068-071) is implemented (`metroflow-mobile/src/offline.ts`): ordered report queue with pending banner and sync-on-reconnect, SQLite caching of the road graph/hazards/last route, and `navigation/offline-route.ts` planning a route over that cache when offline. Replays carry a `client_id` so a lost response cannot duplicate a report. Basemap tile download stays out of scope per the section above.
+- Open items are tracked in `BACKLOG.md` (Q-2 device test, S-4 live restore drill, S-5 iOS build, and remaining UI polish). S-1 is done: the API connects as `metroflow_app`, not `postgres`. Offline operation (FR-068-071) itself is implemented (`metroflow-mobile/src/offline.ts`): ordered report queue with pending banner and sync-on-reconnect, SQLite caching of the road graph/hazards/last route, and `navigation/offline-route.ts` planning a route over that cache when offline. Replays carry a `client_id` so a lost response cannot duplicate a report. Basemap tile download stays out of scope per the section above.
 
 ## Scope Constraints (per UI/UX Design Audit)
 
@@ -176,8 +176,8 @@ npm run dev
 ### Admin UI tests
 ```bash
 cd metroflow-admin
-bun test lib          # unit tests over lib/
-bun run test:e2e      # Playwright portal suite; build + serve on :3100, API stubbed
+bun test lib components   # unit tests over lib/, component tests (jsdom via happy-dom) over components/
+bun run test:e2e          # Playwright portal suite; build + serve on :3100, API stubbed
 ```
 
 ### Driver App tests

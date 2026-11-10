@@ -1,6 +1,6 @@
 # MetroFlow - Algorithms Demonstration Document
 **For Professor Review | Current Implementation State**  
-**Date:** October 28, 2026  
+**Date:** November 9, 2026  
 **Project:** MetroFlow - Intelligent Urban Mobility & Flood Simulation System
 
 ---
@@ -23,7 +23,7 @@ MetroFlow currently implements **two core algorithmic components** for flood-awa
 1. **Hydrology Modeling** - USDA SCS Curve Number method for runoff estimation + empirical ponding model
 2. **Flood-Aware Pathfinding** - Water-aware A* (Time-Dependent A*) with clearance-based gating and exponential flood penalties
 
-All implemented algorithms have **33/33 tests passing** with verified optimality against Dijkstra's algorithm.
+All implemented algorithms have **57/57 tests passing** (43 routing + 14 hydrology) with verified optimality against Dijkstra's algorithm.
 
 ---
 
@@ -45,9 +45,9 @@ All implemented algorithms have **33/33 tests passing** with verified optimality
 cd backend && source venv/bin/activate && pytest tests/test_routing.py tests/test_hydrology.py -v
 ```
 
-**Result:** `33 passed in 0.34s`
+**Result:** `57 passed` (43 routing + 14 hydrology) in the two files above
 
-### Routing Tests (19 tests)
+### Routing Tests (43 tests)
 | Test | What it verifies |
 |------|-----------------|
 | `test_a_star_matches_dijkstra_under_flooding` | **Optimality guarantee** - Compares against Dijkstra over 2000 random flood scenarios (24,000 route queries). All results match exactly. |
@@ -91,8 +91,8 @@ EDGES = [(1,2,1100,60),(2,3,1000,50),(3,4,850,50),(1,4,2800,40)]
 def build_graph(depths, bidir=True):
     g={}
     for (u,v,l,s),d in zip(EDGES, depths):
-        g.setdefault(u,[]).append((v,l,s,d))
-        if bidir: g.setdefault(v,[]).append((u,l,s,d))
+        g.setdefault(u,[]).append((v,l,s,d,False))
+        if bidir: g.setdefault(v,[]).append((u,l,s,d,False))
     return g
 
 # SCENARIO 1: Normal conditions - shortest route
@@ -239,8 +239,8 @@ Based on the original project specification vs current state:
 
 | Feature | Specified | Status | Notes |
 |---------|-----------|--------|-------|
-| **Bcrypt/Argon2 password hashing** | Yes | ❌ Not Active | Dependencies present in requirements but not implemented; using simple auth flow currently |
-| **Crowdsourced flood verification** | Yes | ❌ Not Active | Photo upload UI exists but no backend/ML processing |
+| **Bcrypt/Argon2 password hashing** | Yes | ✅ **Active** | bcrypt hashes on `users`; the API verifies them and issues its own HS256 tokens |
+| **Crowdsourced flood verification** | Yes | ✅ **Active (manual)** | Report intake with photo evidence, EXIF, duplicate and sensor-mismatch hints, and a human moderation desk; no ML verification |
 | **CNN/ViT water depth estimation from photos** | Yes | ❌ Not Active | No ML/CV libraries or inference code |
 | **RL/Genetic Algorithm for VRP dispatch** | Yes | ❌ Not Active | Dispatch is manual (human selects vehicle) via `POST /api/v1/sos/{id}/assign` |
 | **Flood-aware pathfinding** | Yes | ✅ **Active** | Core algorithm implemented and tested |
