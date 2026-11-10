@@ -13,14 +13,18 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Camera, CheckCircle2, ChevronDown, ChevronUp, Clock, FileWarning, RotateCcw, XCircle } from 'lucide-react-native';
 
 import { ApiError, listMyReports, type MyReport } from '../api';
-import { fontSize, space, colors } from '../theme';
+import { fontSize, space, useTheme, type ThemeColors } from '../theme';
 
-const STATUS_STYLE: Record<string, { label: string; color: string; bg: string; Icon: typeof Clock }> = {
-  PENDING: { label: 'Pending review', color: colors.amber800, bg: colors.amber100, Icon: Clock },
-  VERIFIED: { label: 'Verified', color: colors.green700, bg: colors.green50, Icon: CheckCircle2 },
-  REJECTED: { label: 'Rejected', color: colors.red700, bg: colors.red50, Icon: XCircle },
-  DUPLICATE: { label: 'Duplicate', color: colors.slate600, bg: colors.slate100, Icon: FileWarning },
-};
+function statusStyle(
+  c: ThemeColors,
+): Record<string, { label: string; color: string; bg: string; Icon: typeof Clock }> {
+  return {
+    PENDING: { label: 'Pending review', color: c.amber800, bg: c.amber100, Icon: Clock },
+    VERIFIED: { label: 'Verified', color: c.green700, bg: c.green50, Icon: CheckCircle2 },
+    REJECTED: { label: 'Rejected', color: c.red700, bg: c.red50, Icon: XCircle },
+    DUPLICATE: { label: 'Duplicate', color: c.slate600, bg: c.slate100, Icon: FileWarning },
+  };
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -38,6 +42,8 @@ export default function ReportHistoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { c, mode } = useTheme();
+  const STATUS_STYLE = statusStyle(c);
 
   const load = useCallback(async () => {
     try {
@@ -70,29 +76,29 @@ export default function ReportHistoryScreen() {
   const rejected = reports?.filter((r) => r.status === 'REJECTED').length ?? 0;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.slate50 }}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.slate50 }}>
+      <StatusBar barStyle={mode === 'storm' ? 'light-content' : 'dark-content'} />
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12], paddingHorizontal: space[16], paddingVertical: space[14], backgroundColor: colors.white, borderBottomWidth: 1, borderColor: colors.slate100 }}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.slate50, borderRadius: 10, borderWidth: 1, borderColor: colors.slate200 }}>
-          <ArrowLeft size={18} color={colors.slate800} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12], paddingHorizontal: space[16], paddingVertical: space[14], backgroundColor: c.white, borderBottomWidth: 1, borderColor: c.slate100 }}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: c.slate50, borderRadius: 10, borderWidth: 1, borderColor: c.slate200 }}>
+          <ArrowLeft size={18} color={c.slate800} />
         </TouchableOpacity>
-        <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: colors.slate900 }}>My Reports</Text>
+        <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: c.slate900 }}>My Reports</Text>
       </View>
 
       {reports && reports.length > 0 ? (
         <View style={{ flexDirection: 'row', gap: space[8], padding: space[16], paddingBottom: space[0] }}>
-          <View style={{ flex: 1, backgroundColor: colors.white, borderRadius: 12, borderWidth: 1, borderColor: colors.slate200, padding: space[12], alignItems: 'center' }}>
-            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.slate900 }}>{reports.length}</Text>
-            <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Total</Text>
+          <View style={{ flex: 1, backgroundColor: c.white, borderRadius: 12, borderWidth: 1, borderColor: c.slate200, padding: space[12], alignItems: 'center' }}>
+            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>{reports.length}</Text>
+            <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Total</Text>
           </View>
-          <View style={{ flex: 1, backgroundColor: colors.white, borderRadius: 12, borderWidth: 1, borderColor: colors.slate200, padding: space[12], alignItems: 'center' }}>
-            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.green700 }}>{verified}</Text>
-            <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Verified</Text>
+          <View style={{ flex: 1, backgroundColor: c.white, borderRadius: 12, borderWidth: 1, borderColor: c.slate200, padding: space[12], alignItems: 'center' }}>
+            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.green700 }}>{verified}</Text>
+            <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Verified</Text>
           </View>
-          <View style={{ flex: 1, backgroundColor: colors.white, borderRadius: 12, borderWidth: 1, borderColor: colors.slate200, padding: space[12], alignItems: 'center' }}>
-            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.red700 }}>{rejected}</Text>
-            <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Rejected</Text>
+          <View style={{ flex: 1, backgroundColor: c.white, borderRadius: 12, borderWidth: 1, borderColor: c.slate200, padding: space[12], alignItems: 'center' }}>
+            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.red700 }}>{rejected}</Text>
+            <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Rejected</Text>
           </View>
         </View>
       ) : null}
@@ -104,22 +110,22 @@ export default function ReportHistoryScreen() {
       >
         {!reports && !error ? (
           <View style={{ paddingVertical: space[60], alignItems: 'center' }}>
-            <ActivityIndicator color={colors.blue600} />
+            <ActivityIndicator color={c.blue600} />
           </View>
         ) : error ? (
-          <View style={{ backgroundColor: colors.red50, borderRadius: 12, padding: space[16], gap: space[8] }}>
-            <Text style={{ fontSize: fontSize.body, color: colors.red700 }}>{error}</Text>
+          <View style={{ backgroundColor: c.red50, borderRadius: 12, padding: space[16], gap: space[8] }}>
+            <Text style={{ fontSize: fontSize.body, color: c.red700 }}>{error}</Text>
             <TouchableOpacity onPress={() => void load()}>
-              <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: colors.red700 }}>Retry</Text>
+              <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: c.red700 }}>Retry</Text>
             </TouchableOpacity>
           </View>
         ) : reports!.length === 0 ? (
           <View style={{ paddingVertical: space[60], alignItems: 'center', gap: space[8] }}>
-            <Camera size={28} color={colors.slate300} />
-            <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.slate700 }}>
+            <Camera size={28} color={c.slate300} />
+            <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate700 }}>
               No reports yet
             </Text>
-            <Text style={{ fontSize: fontSize.caption, color: colors.slate400 }}>
+            <Text style={{ fontSize: fontSize.caption, color: c.slate400 }}>
               Field reports you submit will show up here.
             </Text>
           </View>
@@ -135,10 +141,10 @@ export default function ReportHistoryScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Report details: ${report.depth_label}, ${status.label}`}
                 onPress={() => setExpandedId(expanded ? null : report.report_id)}
-                style={{ backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.slate200, padding: space[14], gap: space[8] }}
+                style={{ backgroundColor: c.white, borderRadius: 14, borderWidth: 1, borderColor: c.slate200, padding: space[14], gap: space[8] }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.slate900 }}>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate900 }}>
                     {report.depth_label}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[4] }}>
@@ -147,31 +153,31 @@ export default function ReportHistoryScreen() {
                       <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: status.color }}>{status.label}</Text>
                     </View>
                     {expanded ? (
-                      <ChevronUp size={14} color={colors.slate400} />
+                      <ChevronUp size={14} color={c.slate400} />
                     ) : (
-                      <ChevronDown size={14} color={colors.slate400} />
+                      <ChevronDown size={14} color={c.slate400} />
                     )}
                   </View>
                 </View>
-                <Text style={{ fontSize: fontSize.caption, color: colors.slate500 }}>
+                <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>
                   {formatDate(report.submitted_at)}
                   {report.barangay ? ` • ${report.barangay}` : ''}
                 </Text>
                 {report.narrative ? (
-                  <Text style={{ fontSize: fontSize.body, color: colors.slate700 }} numberOfLines={expanded ? undefined : 2}>
+                  <Text style={{ fontSize: fontSize.body, color: c.slate700 }} numberOfLines={expanded ? undefined : 2}>
                     {report.narrative}
                   </Text>
                 ) : null}
                 {expanded ? (
-                  <View style={{ borderTopWidth: 1, borderColor: colors.slate100, paddingTop: space[8], gap: space[4] }}>
-                    <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>
+                  <View style={{ borderTopWidth: 1, borderColor: c.slate100, paddingTop: space[8], gap: space[4] }}>
+                    <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>
                       Captured {formatDate(report.captured_at)} • Submitted {formatDate(report.submitted_at)}
                     </Text>
-                    <Text style={{ fontSize: fontSize.micro, color: colors.slate300 }}>ID {report.report_id}</Text>
+                    <Text style={{ fontSize: fontSize.micro, color: c.slate300 }}>ID {report.report_id}</Text>
                   </View>
                 ) : null}
                 {report.status === 'REJECTED' && report.decision_reason ? (
-                  <Text style={{ fontSize: fontSize.caption, color: colors.red700, fontStyle: 'italic' }}>
+                  <Text style={{ fontSize: fontSize.caption, color: c.red700, fontStyle: 'italic' }}>
                     {report.decision_reason}
                   </Text>
                 ) : null}
@@ -189,8 +195,8 @@ export default function ReportHistoryScreen() {
                     }
                     style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], alignSelf: 'flex-start', marginTop: space[2] }}
                   >
-                    <RotateCcw size={12} color={colors.blue600} />
-                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.blue600 }}>
+                    <RotateCcw size={12} color={c.blue600} />
+                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.blue600 }}>
                       Report again
                     </Text>
                   </TouchableOpacity>
