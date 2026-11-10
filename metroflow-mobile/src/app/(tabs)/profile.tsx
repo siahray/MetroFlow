@@ -20,6 +20,7 @@ import {
   Bike,
   Truck,
   Map,
+  MapPin,
   ChevronRight,
   LogOut,
   ShieldCheck,
@@ -34,6 +35,7 @@ import {
 } from 'lucide-react-native';
 import { updateMyName } from '../../api';
 import { useAuth } from '../../auth';
+import { QuickPicks } from '../../components/QuickPicks';
 import { loadMyVehicle, saveMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
 import { savePrefs, usePrefs, type DriverPrefs } from '../../prefs';
 
@@ -68,6 +70,7 @@ export default function ProfileScreen() {
   const [vehicle, setVehicle] = useState<MyVehicle | null>(null);
   const [editingVehicle, setEditingVehicle] = useState(false);
   const [clearanceDraft, setClearanceDraft] = useState('');
+  const [showQuickPicks, setShowQuickPicks] = useState(false);
 
   useEffect(() => {
     void loadMyVehicle().then(setVehicle);
@@ -284,6 +287,23 @@ export default function ProfileScreen() {
               </View>
               <ChevronRight size={16} color={colors.slate300} />
             </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Manage Quick Picks"
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: colors.slate50 }}
+              onPress={() => setShowQuickPicks(true)}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
+                <View style={{ width: 32, height: 32, backgroundColor: colors.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                  <MapPin size={15} color={colors.slate500} />
+                </View>
+                <View>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Quick Picks</Text>
+                  <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Saved destinations for faster safe routes</Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color={colors.slate300} />
+            </TouchableOpacity>
             <View
               style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: colors.slate50 }}
             >
@@ -399,6 +419,12 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <QuickPicks
+        visible={showQuickPicks}
+        onClose={() => setShowQuickPicks(false)}
+        clearanceCm={vehicle?.clearanceCm ?? 28}
+      />
     </SafeAreaView>
   );
 }

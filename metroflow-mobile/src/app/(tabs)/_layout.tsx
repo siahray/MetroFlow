@@ -1,10 +1,29 @@
 import { Tabs } from 'expo-router';
+import type { ReactNode } from 'react';
 import { View, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePendingReports } from '../../offline';
 import { Droplet, Map as MapIcon, Bell, User } from 'lucide-react-native';
 
 import { fontSize, space, colors } from '../../theme';
+
+/** Icon plus the small active-tab dot shown under the focused tab. */
+function TabIcon({ focused, children }: { focused: boolean; children: ReactNode }) {
+  return (
+    <View style={{ alignItems: 'center', gap: space[3] }}>
+      {children}
+      <View
+        style={{
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: focused ? colors.sky600 : 'transparent',
+        }}
+      />
+    </View>
+  );
+}
+
 export default function TabsLayout() {
   const pending = usePendingReports();
   const insets = useSafeAreaInsets();
@@ -29,14 +48,22 @@ export default function TabsLayout() {
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Droplet size={20} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <Droplet size={20} color={color} />
+            </TabIcon>
+          ),
         }}
       />
       <Tabs.Screen
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color, size }) => <MapIcon size={20} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <MapIcon size={20} color={color} />
+            </TabIcon>
+          ),
         }}
       />
       <Tabs.Screen
@@ -46,19 +73,23 @@ export default function TabsLayout() {
           // Reports saved offline and not yet sent (FSD-FR-068).
           tabBarBadge: pending > 0 ? pending : undefined,
           tabBarBadgeStyle: { backgroundColor: colors.amber800, color: colors.white },
-          tabBarIcon: ({ color, size }) => <Bell size={20} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <Bell size={20} color={color} />
+            </TabIcon>
+          ),
         }}
       />
       <Tabs.Screen
         name="sos"
         options={{
           title: 'Rescue',
-          tabBarIcon: ({ color }) => (
-            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
               <Text style={{ fontSize: fontSize.caption, fontWeight: '900', color, letterSpacing: 0.8 }}>
                 SOS
               </Text>
-            </View>
+            </TabIcon>
           ),
         }}
       />
@@ -66,7 +97,11 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <User size={20} color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused}>
+              <User size={20} color={color} />
+            </TabIcon>
+          ),
         }}
       />
     </Tabs>

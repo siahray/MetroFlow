@@ -10,14 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import * as Location from 'expo-location';
 import {
   Waves,
-  ChevronRight,
-  Search,
   ShieldCheck,
   WifiOff,
-  Megaphone,
   LifeBuoy,
   Navigation,
   Gauge,
@@ -26,25 +22,34 @@ import {
   Car,
   CarFront,
   Pencil,
+  RefreshCw,
+  Route as RouteIcon,
+  ArrowRight,
+  Wifi,
+  AlertTriangle,
+  Ban,
+  CloudRain,
+  CloudOff,
 } from 'lucide-react-native';
 
 import {
   arriveSOS,
+  getFloodState,
   getMission,
   listActiveHazards,
   listVehicles,
   resolveSOS,
+  type FloodStateResponse,
   type HazardInfo,
   type SOSRequest,
   type Vehicle,
 } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
-import { QuickPicks } from '../../components/QuickPicks';
-import { loadCache, saveCache, useOnline } from '../../offline';
+import { QuickPickList } from '../../components/QuickPicks';
+import { loadCache, saveCache, useOnline, usePendingReports } from '../../offline';
 import { loadMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
 import { fontSize, space, useTheme, type ThemeColors } from '../../theme';
-import type { LatLng } from '../../navigation/geo';
 
 function vehicleStatusColor(c: ThemeColors): Record<string, string> {
   return {
@@ -68,15 +73,32 @@ const MY_VEHICLE_LABEL: Record<VehicleType, string> = {
   truck: 'Truck',
 };
 
-function clock(date: Date) {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+/** Relative age of an ISO timestamp, for the advisory card ("12m ago"). */
+function timeAgo(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
+
+const BASIS_LABEL: Record<string, string> = {
+  VERIFIED_HAZARD: 'Verified Hazard Advisory',
+  LIVE_ADVISORY: 'Live Rain Advisory',
+  NOAH_CAUTION: 'Monsoon Caution Advisory',
+  NOAH_LAYER: 'Flood Caution Advisory',
+};
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
 
   const [hazards, setHazards] = useState<HazardInfo[] | null>(null);
+  const [floodState, setFloodState] = useState<FloodStateResponse | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -95,14 +117,14 @@ export default function HomeScreen() {
   }
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [myVehicle, setMyVehicle] = useState<MyVehicle | null>(null);
-  const [position, setPosition] = useState<LatLng | null>(null);
   const online = useOnline();
+  const pendingReports = usePendingReports();
   const { c, mode } = useTheme();
   const VEHICLE_STATUS_COLOR = vehicleStatusColor(c);
 
   const displayName = user?.name || user?.email || 'Guest';
+  const firstName = displayName.split(/[\s@]/)[0];
   const vehicleId = user?.vehicle_id ?? null;
-  const clearanceCm = vehicle?.clearance_cm ?? myVehicle?.clearanceCm ?? 28;
 
   // The fleet rescue unit this emergency driver reports as — not the public driver's own vehicle.
   useEffect(() => {
@@ -119,18 +141,6 @@ export default function HomeScreen() {
     }, []),
   );
 
-  // A one-shot fix is enough for Quick Picks' distance/route check.
-  useEffect(() => {
-    void (async () => {
-      const permission = await Location.requestForegroundPermissionsAsync().catch(() => null);
-      if (!permission?.granted) return;
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(
-        () => null,
-      );
-      if (current) setPosition({ latitude: current.coords.latitude, longitude: current.coords.longitude });
-    })();
-  }, []);
-
   const load = useCallback(
     () =>
       listActiveHazards()
@@ -145,6 +155,13 @@ export default function HomeScreen() {
           setHazards(await loadCache<HazardInfo[]>('hazards'));
           setOffline(true);
         }),
+    [],
+  );
+
+  // Road closures and the live advisory source (CR-004). No offline cache: this
+  // is supplementary and the card falls back to an unavailable state instead.
+  const loadFloodState = useCallback(
+    () => getFloodState(true).then(setFloodState).catch(() => setFloodState(null)),
     [],
   );
 
@@ -166,14 +183,15 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!online) return;
     load();
+    void loadFloodState();
     void loadMission();
     const timer = setInterval(() => void loadMission(), 10000);
     return () => clearInterval(timer);
-  }, [online, load, loadMission]);
+  }, [online, load, loadFloodState, loadMission]);
 
   async function handleRefresh() {
     setRefreshing(true);
-    await Promise.all([load(), loadMission()]);
+    await Promise.all([load(), loadFloodState(), loadMission()]);
     setRefreshing(false);
   }
 
@@ -204,13 +222,29 @@ export default function HomeScreen() {
     }
   }
 
-  const impassable = (hazards ?? []).filter((h) => h.obstruction_level === 'IMPASSABLE').length;
+  const activeHazards = hazards ? hazards.length : null;
+  const closedRoads = floodState ? floodState.edges.filter((e) => e.closes_road).length : null;
+  const syncLabel = pendingReports === 0 ? 'Synced' : `${pendingReports} pending`;
+
+  // The freshest flagged segment drives the advisory card; never invented text,
+  // only the resolver's own basis/source/timestamp (CR-004).
+  const advisoryEdges = floodState ? floodState.edges.filter((e) => e.advisory || e.closes_road) : [];
+  const latestAdvisory = advisoryEdges.reduce<typeof advisoryEdges[number] | null>(
+    (latest, edge) => (!latest || !latest.as_of || (edge.as_of ?? '') > latest.as_of ? edge : latest),
+    null,
+  );
+  const advisorySourceLabel =
+    latestAdvisory?.source ??
+    (latestAdvisory?.basis.startsWith('NOAH') ? 'Project NOAH' : 'MetroFlow Network');
 
   const card = {
     backgroundColor: c.white,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.slate200,
+    shadowColor: c.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
   } as const;
 
   return (
@@ -226,6 +260,7 @@ export default function HomeScreen() {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
+          backgroundColor: c.white,
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
@@ -249,7 +284,13 @@ export default function HomeScreen() {
             <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>Home</Text>
           </View>
         </View>
-        <Avatar name={user?.name || user?.email} size={34} />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          onPress={() => router.push('/(tabs)/profile')}
+        >
+          <Avatar name={user?.name || user?.email} size={34} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -258,35 +299,50 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
-        {/* Who is signed in, and whether the data is live */}
-        <View
-          style={{
-            ...card,
-            padding: space[14],
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate800 }} numberOfLines={1}>
-              {displayName}
+        {/* Personalized greeting */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12] }}>
+          <View style={{ flex: 1, gap: space[6] }}>
+            {user ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: space[4],
+                  backgroundColor: c.blue50,
+                  borderRadius: 999,
+                  paddingHorizontal: space[10],
+                  paddingVertical: space[4],
+                }}
+              >
+                <ShieldCheck size={11} color={c.blue600} />
+                <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.blue700 }}>
+                  Civic Commuter Verified
+                </Text>
+              </View>
+            ) : null}
+            <Text style={{ fontSize: fontSize.jumbo, fontWeight: '800', color: c.slate900 }} numberOfLines={1}>
+              Good day, {firstName}!
             </Text>
-            <Text style={{ fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] }}>
-              {user ? 'Signed in' : 'Guest: sign in to submit reports'}
-            </Text>
+            <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>Where are you heading today?</Text>
           </View>
-          {offline || !online ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
-              <WifiOff size={13} color={c.amber800} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.amber800 }}>Offline</Text>
-            </View>
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
-              <ShieldCheck size={13} color={c.green600} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.green700 }}>Live</Text>
-            </View>
-          )}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Refresh live data"
+            onPress={handleRefresh}
+            disabled={refreshing}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: c.blue600,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: refreshing ? 0.6 : 1,
+            }}
+          >
+            <RefreshCw size={18} color={c.white} />
+          </TouchableOpacity>
         </View>
 
         {/* Dispatch: the incident this unit was assigned in the portal */}
@@ -295,6 +351,7 @@ export default function HomeScreen() {
             style={{
               ...card,
               backgroundColor: c.red50,
+              borderWidth: 1,
               borderColor: c.red500,
               padding: space[14],
               gap: space[10],
@@ -366,6 +423,169 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Network and road status overview */}
+        <View style={{ flexDirection: 'row', gap: space[10] }}>
+          <View style={{ ...card, flex: 1, padding: space[12], gap: space[6] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
+              {offline || !online ? (
+                <WifiOff size={13} color={c.amber800} />
+              ) : (
+                <Wifi size={13} color={c.emerald600} />
+              )}
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.slate900 }} numberOfLines={1}>
+                Live Sync
+              </Text>
+            </View>
+            <Text style={{ fontSize: fontSize.micro, color: c.slate500 }} numberOfLines={1}>
+              {online && !offline ? 'Online' : 'Offline'} · {syncLabel}
+            </Text>
+          </View>
+
+          <View style={{ ...card, flex: 1, padding: space[12], gap: space[6] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
+              <AlertTriangle size={13} color={c.amber600} />
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.slate900 }} numberOfLines={1}>
+                {activeHazards ?? '—'} Active
+              </Text>
+            </View>
+            <Text style={{ fontSize: fontSize.micro, color: c.slate500 }} numberOfLines={1}>
+              Hazards citywide
+            </Text>
+          </View>
+
+          <View style={{ ...card, flex: 1, padding: space[12], gap: space[6] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
+              {closedRoads ? (
+                <Ban size={13} color={c.red600} />
+              ) : (
+                <ShieldCheck size={13} color={c.emerald600} />
+              )}
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.slate900 }} numberOfLines={1}>
+                {closedRoads ?? '—'} Closed
+              </Text>
+            </View>
+            <Text style={{ fontSize: fontSize.micro, color: c.slate500 }} numberOfLines={1}>
+              {closedRoads === null ? 'Data unavailable' : closedRoads === 0 ? 'All roads open' : 'Roads to avoid'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Route planning */}
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Plan a safe route"
+          onPress={() => router.push('/route')}
+          activeOpacity={0.9}
+          style={{
+            backgroundColor: c.slate900,
+            borderRadius: 16,
+            padding: space[14],
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space[12],
+          }}
+        >
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: c.blue600,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <RouteIcon size={20} color={c.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.white }}>Plan a Safe Route</Text>
+            <Text style={{ fontSize: fontSize.caption, color: c.slate300, marginTop: space[2] }} numberOfLines={1}>
+              Find safer routes &amp; avoid flooded roads
+            </Text>
+          </View>
+          <View
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              backgroundColor: c.slate700,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ArrowRight size={15} color={c.white} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Saved destinations for one-tap routing (opened via Home or Profile) */}
+        <QuickPickList clearanceCm={vehicle?.clearance_cm ?? myVehicle?.clearanceCm ?? 28} />
+
+        {/* Weather advisory (CR-004): the resolver's own basis/source/timestamp, never invented */}
+        {latestAdvisory ? (
+          <View style={{ ...card, backgroundColor: c.blue50, padding: space[14], gap: space[8] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: c.blue100,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <CloudRain size={18} color={c.blue700} />
+              </View>
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.blue700 }} numberOfLines={1}>
+                {advisorySourceLabel}
+                {timeAgo(latestAdvisory.as_of) ? ` · ${timeAgo(latestAdvisory.as_of)}` : ''}
+              </Text>
+            </View>
+            <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900 }}>
+              {BASIS_LABEL[latestAdvisory.basis] ?? 'Weather Advisory'}
+            </Text>
+            <Text style={{ fontSize: fontSize.body, color: c.slate600 }}>
+              {advisoryEdges.length} road segment{advisoryEdges.length === 1 ? '' : 's'} flagged
+              {floodState?.raining ? ' due to ongoing rainfall' : ''}.
+              {closedRoads ? ` ${closedRoads} closed to traffic.` : ''}
+            </Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="View advisory details on the route map"
+              onPress={() => router.push('/route')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: space[4] }}
+            >
+              <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.blue700 }}>
+                View Advisory Details
+              </Text>
+              <ArrowRight size={13} color={c.blue700} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ ...card, padding: space[14], flexDirection: 'row', alignItems: 'center', gap: space[12] }}>
+            <View
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                backgroundColor: c.slate100,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <CloudOff size={18} color={c.slate400} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.slate900 }}>
+                No active weather advisory
+              </Text>
+              <Text style={{ fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] }}>
+                {floodState ? 'Conditions are normal across the monitored network.' : 'Advisory data unavailable right now.'}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* The fleet rescue unit this emergency driver reports as (FSD-FR-048) */}
         {vehicleId !== null && vehicle ? (
           <View style={{ ...card, padding: space[14], flexDirection: 'row', alignItems: 'center', gap: space[12] }}>
@@ -403,7 +623,7 @@ export default function HomeScreen() {
               {vehicle.status.replace('_', ' ')}
             </Text>
           </View>
-        ) : (
+        ) : vehicleId === null ? (
           // Public driver's own vehicle, configured in Profile — drives clearance-aware routing.
           <TouchableOpacity
             accessibilityRole="button"
@@ -439,85 +659,15 @@ export default function HomeScreen() {
             </View>
             <Pencil size={14} color={c.slate400} />
           </TouchableOpacity>
-        )}
+        ) : null}
 
-        {/* Route planning */}
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Plan a safe route"
-          onPress={() => router.push('/route')}
-          activeOpacity={0.9}
-          style={{
-            backgroundColor: c.slate900,
-            borderRadius: 16,
-            padding: space[16],
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: space[12],
-          }}
-        >
-          <Search size={20} color={c.white} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.white }}>Plan a safe route</Text>
-            <Text style={{ fontSize: fontSize.caption, color: c.slate300, marginTop: space[2] }}>
-              Flood-aware routing for your vehicle clearance
-            </Text>
-          </View>
-          <ChevronRight size={16} color={c.slate300} />
-        </TouchableOpacity>
-
-        {/* Quick actions */}
-        <View style={{ flexDirection: 'row', gap: space[12] }}>
-          {[
-            { label: 'Report a hazard', icon: Megaphone, to: '/(tabs)/report' as const },
-            { label: 'Request rescue', icon: LifeBuoy, to: '/(tabs)/sos' as const },
-          ].map(({ label, icon: Icon, to }) => (
-            <TouchableOpacity
-              key={label}
-              accessibilityRole="button"
-              onPress={() => router.push(to)}
-              style={{ ...card, flex: 1, padding: space[14], gap: space[8] }}
-            >
-              <Icon size={20} color={c.slate900} />
-              <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate900 }}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <QuickPicks clearanceCm={clearanceCm} position={position} />
-
-        {/* Counts come from the same feed; nothing here is simulated */}
-        <View style={{ ...card, padding: space[14] }}>
-          <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.slate900 }}>Network status</Text>
-          <View style={{ flexDirection: 'row', marginTop: space[12] }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: c.slate500 }}>Active hazards</Text>
-              <Text style={{ fontSize: fontSize.display, fontWeight: '800', color: c.slate900, marginTop: space[2] }}>
-                {hazards ? hazards.length : '—'}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: c.slate500 }}>Impassable</Text>
-              <Text
-                style={{
-                  fontSize: fontSize.display,
-                  fontWeight: '800',
-                  color: impassable > 0 ? c.red600 : c.slate900,
-                  marginTop: space[2],
-                }}
-              >
-                {hazards ? impassable : '—'}
-              </Text>
-            </View>
-          </View>
-          <Text style={{ fontSize: fontSize.micro, color: c.slate400, marginTop: space[10] }}>
-            {updatedAt
-              ? `Updated ${clock(updatedAt)}`
-              : offline
-                ? 'Showing saved data from your last connection'
-                : 'Loading…'}
-          </Text>
-        </View>
+        <Text style={{ fontSize: fontSize.micro, color: c.slate400, textAlign: 'center' }}>
+          {updatedAt
+            ? `Updated ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : offline
+              ? 'Showing saved data from your last connection'
+              : 'Loading…'}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );

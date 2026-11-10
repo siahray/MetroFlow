@@ -371,6 +371,32 @@ export function listActiveHazards(): Promise<HazardInfo[]> {
   return request<HazardInfo[]>("/api/v1/hazards/active");
 }
 
+/** Resolved per-segment flood state, with source and freshness (CR-004). */
+export type FloodStateEdge = {
+  edge_id: number;
+  basis: "VERIFIED_HAZARD" | "LIVE_ADVISORY" | "NOAH_CAUTION" | "NOAH_LAYER" | "NONE";
+  source: string | null;
+  kind: "OBSERVED" | "MODELLED" | "SIMULATED" | "STATIC" | null;
+  as_of: string | null;
+  has_live_data: boolean;
+  stale: boolean;
+  advisory: boolean;
+  closes_road: boolean;
+  route_penalty: number;
+  notes: string[];
+};
+
+export type FloodStateResponse = {
+  generated_at: string;
+  raining: boolean;
+  fresh_window_minutes: number;
+  edges: FloodStateEdge[];
+};
+
+export function getFloodState(onlyFlagged = true): Promise<FloodStateResponse> {
+  return request<FloodStateResponse>(`/api/v1/flood-state?only_flagged=${onlyFlagged}`);
+}
+
 // ---------------------------------------------------------------------------
 // Field reports (FSD-FR-065 to 067)
 // ---------------------------------------------------------------------------

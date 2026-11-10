@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polygon, Polyline, UrlTile, type Region } from "react-native-maps";
 
@@ -7,6 +7,13 @@ import { polygonRing, routeCoordinates, type LatLng } from "./geo";
 import { basemap } from "./tiles";
 
 import { fontSize, space, useTheme, type ThemeColors } from "../theme";
+
+export type RouteMapHandle = {
+  /** Re-centres on the driver's own position, if known. */
+  recenter: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+};
 
 // Same status colours as the dispatcher portal's network map.
 const STATUS_STYLE = {
@@ -30,10 +37,18 @@ type Props = {
   destinationName: string | null;
   hazards: MapHazard[];
   edges?: EdgeFeature[];
+  /** The driver's own vehicle clearance, for the flood-depth marker labels (safe vs. exceeds). */
+  clearanceCm?: number;
 };
 
 function blocking(level: string) {
   return ["LEVEL_2", "LEVEL_3", "IMPASSABLE"].includes(level.toUpperCase());
+}
+
+function midpoint(coords: [number, number][]): LatLng | null {
+  if (coords.length === 0) return null;
+  const [lon, lat] = coords[Math.floor(coords.length / 2)];
+  return { latitude: lat, longitude: lon };
 }
 
 function regionFor(coordinates: LatLng[], fallback: LatLng | null): Region | null {
@@ -55,17 +70,35 @@ function regionFor(coordinates: LatLng[], fallback: LatLng | null): Region | nul
   };
 }
 
-export function RouteMap({
+export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   route,
   position,
   destination,
   destinationName,
   hazards,
   edges = [],
-}: Props) {
+  clearanceCm,
+}, ref) {
   const { c, mode } = useTheme();
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
   const statusColor = useMemo(() => STATUS_COLOR(c), [c]);
+  const mapRef = useRef<MapView>(null);
+
+  useImperativeHandle(ref, () => ({
+    recenter: () => {
+      if (position) mapRef.current?.animateCamera({ center: position }, { duration: 300 });
+    },
+    zoomIn: () => {
+      void mapRef.current
+        ?.getCamera()
+        .then((cam) => mapRef.current?.animateCamera({ ...cam, zoom: (cam.zoom ?? 15) + 1 }, { duration: 200 }));
+    },
+    zoomOut: () => {
+      void mapRef.current
+        ?.getCamera()
+        .then((cam) => mapRef.current?.animateCamera({ ...cam, zoom: (cam.zoom ?? 15) - 1 }, { duration: 200 }));
+    },
+  }));
 
   // A route determines the framing; between routes the map follows the driver.
   // Computing it during render avoids a state round-trip that would otherwise
@@ -92,9 +125,25 @@ export function RouteMap({
 
   const line = route ? routeCoordinates(route) : [];
 
+  // Depth-callout pills for flagged segments only (PASSABLE roads need no label).
+  const depthMarkers = useMemo(
+    () =>
+      edges
+        .filter((edge) => edge.properties.status !== "PASSABLE")
+        .map((edge) => ({
+          id: edge.properties.edge_id,
+          point: midpoint(edge.geometry.coordinates),
+          depthCm: edge.properties.water_depth_cm,
+          safe: clearanceCm === undefined || edge.properties.water_depth_cm <= clearanceCm,
+        }))
+        .filter((m): m is typeof m & { point: LatLng } => m.point !== null),
+    [edges, clearanceCm],
+  );
+
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
         region={region ?? undefined}
         showsUserLocation={false}
@@ -140,6 +189,16 @@ export function RouteMap({
           );
         })}
 
+        {depthMarkers.map((marker) => (
+          <Marker key={marker.id} coordinate={marker.point} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.depthPill, { borderColor: marker.safe ? c.blue500 : c.red600 }]}>
+              <Text style={[styles.depthPillText, { color: marker.safe ? c.blue700 : c.red700 }]}>
+                {marker.depthCm} cm {marker.safe ? "· Safe" : "Water"}
+              </Text>
+            </View>
+          </Marker>
+        ))}
+
         {position ? (
           <Marker
             coordinate={position}
@@ -171,7 +230,7 @@ export function RouteMap({
       <Text style={styles.attribution}>{basemap.attribution}</Text>
     </View>
   );
-}
+});
 
 function makeStyles(c: ThemeColors, mode: "light" | "storm") {
   const chromeBg = mode === "storm" ? "rgba(11,18,32,0.88)" : "rgba(255,255,255,0.92)";
@@ -190,6 +249,14 @@ function makeStyles(c: ThemeColors, mode: "light" | "storm") {
     legendRow: { flexDirection: "row", alignItems: "center", gap: space[6] },
     swatch: { width: 14, height: 4, borderRadius: 2 },
     legendText: { fontSize: fontSize.micro, color: c.slate600 },
+    depthPill: {
+      backgroundColor: chromeBg,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: space[8],
+      paddingVertical: space[3],
+    },
+    depthPillText: { fontSize: fontSize.tiny, fontWeight: "700" },
     attribution: {
       position: "absolute",
       right: 6,

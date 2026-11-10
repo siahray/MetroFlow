@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  LayoutAnimation,
   Linking,
+  PanResponder,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
@@ -19,12 +23,17 @@ import {
   ArrowRight,
   ArrowUp,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Compass,
   CornerUpLeft,
   CornerUpRight,
+  Droplet,
   Flag,
   Sun,
   Gauge,
+  Layers,
+  LocateFixed,
   MapPin,
   Moon,
   Navigation,
@@ -32,28 +41,33 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Wifi,
   WifiOff,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react-native";
 
 import {
   ApiError,
   getNetworkState,
   getRoute,
+  type EdgeFeature,
   type HazardInfo,
   type NetworkState,
   type NodeFeature,
+  type RouteHazard,
   type RoutePlan,
   postTelemetry,
 } from "../api";
 import { useAuth } from "../auth";
-import { RouteMap } from "../navigation/RouteMap";
+import { RouteMap, type RouteMapHandle } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
 import { loadCache, saveCache, useOnline } from "../offline";
 import { loadMyVehicle } from "../myVehicle";
-import { usePrefs } from "../prefs";
+import { usePrefs, savePrefs } from "../prefs";
 import {
   distanceToPolygonMeters,
   formatDistance,
@@ -123,6 +137,29 @@ function samePath(a: RoutePlan, b: RoutePlan) {
   return a.optimal_path_nodes.join(",") === b.optimal_path_nodes.join(",");
 }
 
+// shortcut: snap-on-release sheet drag (plain RN LayoutAnimation + PanResponder), not a
+// 1:1 finger-follow — upgrade with react-native-reanimated if fluid tracking is wanted.
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const SEGMENT_STATUS_LABEL: Record<string, string> = {
+  PASSABLE: "Paved",
+  LIGHT_FLOOD: "Light flood",
+  SUBMERGED: "Submerged",
+};
+
+/** Flow label from real recorded speed vs. the road's posted limit — never a fabricated traffic feed. */
+function congestionFromSpeeds(avgKmh: number, maxKmh: number): { label: string; tone: "success" | "warning" | "danger" } {
+  const ratio = maxKmh > 0 ? avgKmh / maxKmh : 1;
+  if (ratio >= 0.8) return { label: "Flowing", tone: "success" };
+  if (ratio >= 0.5) return { label: "Moderate", tone: "warning" };
+  return { label: "Congested", tone: "danger" };
+}
+
 export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const router = useRouter();
   const { user } = useAuth();
@@ -163,7 +200,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const [refusal, setRefusal] = useState(false);
   const [unsafeRoute, setUnsafeRoute] = useState(false);
   const [arrived, setArrived] = useState(false);
+  // Bottom-sheet presentation (Google-Maps-style): expanded shows the full route
+  // preview, compact shows only the floating turn card and a slim summary.
+  const [expanded, setExpanded] = useState(true);
 
+  const mapRef = useRef<RouteMapHandle>(null);
   const routeRef = useRef<RoutePlan | null>(null);
   const positionRef = useRef<LatLng | null>(null);
   const networkRef = useRef<NetworkState | null>(null);
@@ -408,6 +449,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setArrived(false);
         arrivedRef.current = false;
         setBanner(null);
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setExpanded(true);
       } catch (cause) {
         if (cause instanceof ApiError && cause.status === 404) {
           setRoute(null);
@@ -629,10 +672,56 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     setArrived(false);
     setBanner(null);
     setError(null);
+    setExpanded(true);
     arrivedRef.current = false;
     plannedFor.current = null;
     alertedHazards.current.clear();
   }
+
+  function setSheetExpanded(next: boolean) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded(next);
+  }
+
+  // A drag of the handle bar beyond a small threshold snaps the sheet open/closed.
+  const sheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dy) > 6,
+        onPanResponderRelease: (_evt, gesture) => {
+          if (gesture.dy < -12) setSheetExpanded(true);
+          else if (gesture.dy > 12) setSheetExpanded(false);
+        },
+      }),
+    [],
+  );
+
+  // --- Current-step metrics (CR-004/FSD-FR-089-style, from the plan itself) ---
+  const currentSegment = useMemo(() => {
+    if (!route) return null;
+    const instr = route.instructions[currentStep];
+    const match = instr
+      ? route.segments.find(
+          (s) => s.start_node_id === instr.start_node_id && s.end_node_id === instr.end_node_id,
+        )
+      : null;
+    return match ?? route.segments[0] ?? null;
+  }, [route, currentStep]);
+
+  const currentEdgeMeta = useMemo(() => {
+    if (!currentSegment || !network) return null;
+    return (
+      network.edges.features.find((e: EdgeFeature) => e.properties.edge_id === currentSegment.edge_id)
+        ?.properties ?? null
+    );
+  }, [currentSegment, network]);
+
+  const safetyMarginCm = currentSegment ? clearanceCm - currentSegment.water_depth_cm : null;
+  const congestion = currentEdgeMeta ? congestionFromSpeeds(currentEdgeMeta.avg_speed_kmh, currentEdgeMeta.max_speed_kmh) : null;
+
+  const primaryHazard: RouteHazard | null =
+    route?.hazards.find((h) => h.blocking) ?? route?.hazards[0] ?? null;
 
   if (!user) {
     return (
@@ -642,7 +731,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
             <ArrowLeft size={18} color={c.slate800} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Navigation</Text>
+          <Text style={styles.headerTitle}>Active Navigation</Text>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
@@ -675,7 +764,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           <ArrowLeft size={18} color={c.slate800} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Navigation</Text>
+          <Text style={styles.headerTitle}>Active Navigation</Text>
           <Text style={styles.headerSubtitle}>
             {clearanceCm} cm clearance • live hazards
           </Text>
@@ -721,6 +810,37 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               </TouchableOpacity>
             ) : null}
           </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Edit vehicle clearance in Profile"
+              onPress={() => router.push('/(tabs)/profile')}
+              style={[styles.chip, styles.chipDark]}
+            >
+              <Gauge size={13} color={c.white} />
+              <Text style={[styles.chipText, { color: c.white }]}>{clearanceCm} cm clearance</Text>
+            </TouchableOpacity>
+            <View style={[styles.chip, styles.chipOutline]}>
+              <ShieldCheck size={13} color={c.blue600} />
+              <Text style={[styles.chipText, { color: c.blue700 }]}>Flood-free routes only</Text>
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={prefs.hazardAlerts ? "Turn off water level alerts" : "Turn on water level alerts"}
+              onPress={() => void savePrefs({ ...prefs, hazardAlerts: !prefs.hazardAlerts })}
+              style={[styles.chip, prefs.hazardAlerts ? styles.chipOutline : styles.chipMuted]}
+            >
+              <Droplet size={13} color={prefs.hazardAlerts ? c.blue600 : c.slate400} />
+              <Text style={[styles.chipText, { color: prefs.hazardAlerts ? c.blue700 : c.slate500 }]}>
+                Water level alerts
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
 
           {planning ? (
             <View style={styles.planningRow}>
@@ -798,13 +918,57 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
       <View style={styles.mapArea}>
         <RouteMap
+          ref={mapRef}
           route={route}
           position={position}
           destination={destinationCoordinate}
           destinationName={selected?.properties.name ?? route?.destination_name ?? null}
           hazards={mapHazards}
           edges={network?.edges.features}
+          clearanceCm={clearanceCm}
         />
+
+        {route && !expanded ? (
+          <View style={styles.statusPill}>
+            <View style={styles.statusPillClearance}>
+              <Text style={styles.statusPillClearanceText}>{clearanceCm} cm clearance</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[4] }}>
+              <View style={[styles.statusDot, { backgroundColor: mapHazards.length > 0 ? c.red500 : c.green600 }]} />
+              <Text style={styles.statusPillText}>
+                {mapHazards.length > 0 ? "Live hazards active" : "No hazards nearby"}
+              </Text>
+            </View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Hazard details" onPress={() => setSheetExpanded(true)} hitSlop={6}>
+              <AlertTriangle size={14} color={c.red600} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+              onPress={toggleTheme}
+              hitSlop={6}
+            >
+              {mode === "storm" ? <Sun size={14} color={c.slate700} /> : <Moon size={14} color={c.slate700} />}
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {!route || expanded ? (
+          <View style={styles.vControls}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Centre on my location" onPress={() => mapRef.current?.recenter()} style={styles.controlButton}>
+              <LocateFixed size={18} color={c.slate800} />
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Toggle map theme" onPress={toggleTheme} style={styles.controlButton}>
+              <Layers size={18} color={c.slate800} />
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => mapRef.current?.zoomIn()} style={styles.controlButton}>
+              <ZoomIn size={18} color={c.slate800} />
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom out" onPress={() => mapRef.current?.zoomOut()} style={styles.controlButton}>
+              <ZoomOut size={18} color={c.slate800} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {banner ? (
           <View
@@ -830,7 +994,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           </View>
         ) : null}
 
-        {route && instruction ? (
+        {route && instruction && !expanded ? (
           <View style={styles.instructionCard}>
             <View style={styles.instructionIcon}>
               {(() => {
@@ -859,19 +1023,28 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           </View>
         ) : null}
 
-        {route ? (
-          <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={() => void refreshRoute()}
-            disabled={refreshing}
-            accessibilityLabel="Refresh route and alternatives"
-          >
-            {refreshing ? (
-              <ActivityIndicator size="small" color={c.blue600} />
-            ) : (
-              <RefreshCw size={17} color={c.blue600} />
-            )}
-          </TouchableOpacity>
+        {route && !expanded ? (
+          <View style={styles.vControlsCompact}>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => mapRef.current?.recenter()}
+              accessibilityLabel="Centre on my location"
+            >
+              <LocateFixed size={18} color={c.slate800} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => void refreshRoute()}
+              disabled={refreshing}
+              accessibilityLabel="Refresh route and alternatives"
+            >
+              {refreshing ? (
+                <ActivityIndicator size="small" color={c.blue600} />
+              ) : (
+                <RefreshCw size={17} color={c.blue600} />
+              )}
+            </TouchableOpacity>
+          </View>
         ) : null}
 
         {!position && !locationError ? (
@@ -910,6 +1083,49 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
       {route ? (
         <View style={styles.routePanel}>
+          <View {...sheetPanResponder.panHandlers} style={styles.dragHandleArea}>
+            <View style={styles.dragHandleBar} />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? "Collapse route details" : "Expand route details"}
+              onPress={() => setSheetExpanded(!expanded)}
+              hitSlop={10}
+              style={styles.dragHandleButton}
+            >
+              {expanded ? <ChevronDown size={16} color={c.slate400} /> : <ChevronUp size={16} color={c.slate400} />}
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={expanded ? styles.sheetScroll : undefined} contentContainerStyle={{ gap: space[10] }}>
+          {expanded && instruction ? (
+            <View style={styles.sheetInstructionRow}>
+              <View style={styles.sheetInstructionIcon}>
+                {(() => {
+                  const ManoeuvreIcon = MANOEUVRE_ICON[instruction.manoeuvre] ?? Navigation;
+                  return <ManoeuvreIcon size={18} color={c.white} />;
+                })()}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.routeDestination} numberOfLines={1}>{instruction.text}</Text>
+                <Text style={styles.routeMeta}>
+                  {instruction.manoeuvre === "ARRIVE"
+                    ? "Destination ahead"
+                    : stepRemaining !== null
+                      ? `in ${formatDistance(stepRemaining)}`
+                      : ""}
+                  {instruction.road_name ? ` • ${instruction.road_name}` : ""}
+                  {remainingMinutes !== null ? ` • ETA ${formatEta(remainingMinutes)}` : ""}
+                </Text>
+              </View>
+              {speedKmh !== null ? (
+                <View style={styles.sheetSpeedBadge}>
+                  <Text style={styles.metricValue}>{Math.round(speedKmh)}</Text>
+                  <Text style={styles.metricSub}>km/h</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={styles.routeSummary}>
             <View style={{ flex: 1 }}>
               <Text style={styles.routeDestination} numberOfLines={1}>
@@ -939,6 +1155,49 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               </View>
             )}
           </View>
+
+          {expanded && currentSegment ? (
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>MAX DEPTH</Text>
+                <Text style={styles.metricValue}>{currentSegment.water_depth_cm} cm</Text>
+                <Text style={styles.metricSub}>
+                  ({SEGMENT_STATUS_LABEL[currentSegment.status] ?? currentSegment.status})
+                </Text>
+              </View>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>SAFETY MARGIN</Text>
+                <Text
+                  style={[
+                    styles.metricValue,
+                    { color: (safetyMarginCm ?? 0) >= 0 ? c.green700 : c.red700 },
+                  ]}
+                >
+                  {safetyMarginCm !== null ? `${safetyMarginCm >= 0 ? "+" : ""}${safetyMarginCm} cm` : "—"}
+                </Text>
+                <Text style={styles.metricSub}>clearance</Text>
+              </View>
+              <View style={styles.metricCell}>
+                <Text style={styles.metricLabel}>CONGESTION</Text>
+                <Text
+                  style={[
+                    styles.metricValue,
+                    {
+                      color: !congestion
+                        ? c.slate900
+                        : congestion.tone === "success"
+                          ? c.green700
+                          : congestion.tone === "warning"
+                            ? c.amber700
+                            : c.red700,
+                    },
+                  ]}
+                >
+                  {congestion?.label ?? "—"}
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           {unsafeRoute ? (
             <View style={styles.unsafeNotice}>
@@ -993,6 +1252,34 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             </View>
           ) : null}
 
+          {expanded && primaryHazard ? (
+            <View style={styles.alertCard}>
+              <Droplet size={16} color={c.blue700} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.alertCardTitle}>{primaryHazard.name}</Text>
+                <Text style={styles.alertCardBody}>
+                  {hazardAdvice(primaryHazard.obstruction_level).label}
+                  {primaryHazard.avg_depth_cm !== null ? ` • ${primaryHazard.avg_depth_cm} cm` : ""}
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Hazard details"
+                onPress={() => {
+                  const advice = hazardAdvice(primaryHazard.obstruction_level);
+                  setBanner({
+                    title: primaryHazard.name,
+                    body: `${advice.label}. ${advice.action}`,
+                    tone: primaryHazard.blocking ? "danger" : "warning",
+                  });
+                }}
+                hitSlop={8}
+              >
+                <Text style={styles.alertCardAction}>Details</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           <View style={styles.panelButtons}>
             <TouchableOpacity style={styles.secondaryButton} onPress={resetRoute}>
               <Search size={15} color={c.slate800} />
@@ -1008,6 +1295,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               <Text style={styles.endButtonText}>End</Text>
             </TouchableOpacity>
           </View>
+          </ScrollView>
         </View>
       ) : null}
     </SafeAreaView>
@@ -1109,10 +1397,7 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     borderColor: c.slate200,
   },
   mapNoticeText: { fontSize: fontSize.body, color: c.slate700, textAlign: "center" },
-  refreshButton: {
-    position: "absolute",
-    right: 12,
-    bottom: 88,
+  controlButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -1122,6 +1407,107 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     borderWidth: 1,
     borderColor: c.slate200,
   },
+  vControls: {
+    position: "absolute",
+    right: 12,
+    top: "38%",
+    gap: space[10],
+  },
+  vControlsCompact: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    gap: space[10],
+  },
+  statusPill: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[10],
+    backgroundColor: mode === "storm" ? "rgba(11,18,32,0.92)" : "rgba(255,255,255,0.95)",
+    borderRadius: 999,
+    paddingHorizontal: space[12],
+    paddingVertical: space[8],
+    borderWidth: 1,
+    borderColor: c.slate200,
+  },
+  statusPillClearance: {
+    backgroundColor: c.inkBg,
+    borderRadius: 999,
+    paddingHorizontal: space[8],
+    paddingVertical: space[3],
+  },
+  statusPillClearanceText: { fontSize: fontSize.micro, fontWeight: "800", color: c.onInk },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusPillText: { fontSize: fontSize.micro, fontWeight: "700", color: c.slate700, flexShrink: 1 },
+  chipRow: { flexDirection: "row", gap: space[8], paddingTop: space[2] },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[5],
+    borderRadius: 999,
+    paddingHorizontal: space[10],
+    paddingVertical: space[6],
+    borderWidth: 1,
+  },
+  chipDark: { backgroundColor: c.inkBg, borderColor: c.inkBg },
+  chipOutline: { backgroundColor: c.blue50, borderColor: c.blue200 },
+  chipMuted: { backgroundColor: c.slate50, borderColor: c.slate200 },
+  chipText: { fontSize: fontSize.caption, fontWeight: "700" },
+  dragHandleArea: { alignItems: "center", paddingBottom: space[8] },
+  dragHandleBar: { width: 36, height: 4, borderRadius: 2, backgroundColor: c.slate200 },
+  dragHandleButton: { position: "absolute", right: 0, top: -4, padding: space[4] },
+  sheetScroll: { maxHeight: 420 },
+  sheetInstructionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[10],
+    backgroundColor: c.slate50,
+    borderRadius: 14,
+    padding: space[12],
+  },
+  sheetInstructionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: c.blue600,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetSpeedBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: c.slate200,
+    paddingHorizontal: space[8],
+    paddingVertical: space[4],
+  },
+  metricsGrid: { flexDirection: "row", gap: space[8] },
+  metricCell: {
+    flex: 1,
+    backgroundColor: c.slate50,
+    borderRadius: 12,
+    padding: space[10],
+    gap: space[2],
+  },
+  metricLabel: { fontSize: fontSize.nano, fontWeight: "800", color: c.slate400, letterSpacing: 0.4 },
+  metricValue: { fontSize: fontSize.label, fontWeight: "800", color: c.slate900 },
+  metricSub: { fontSize: fontSize.tiny, color: c.slate500 },
+  alertCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[10],
+    backgroundColor: c.blue50,
+    borderRadius: 14,
+    padding: space[12],
+  },
+  alertCardTitle: { fontSize: fontSize.label, fontWeight: "800", color: c.slate900 },
+  alertCardBody: { fontSize: fontSize.caption, color: c.slate600, marginTop: space[1] },
+  alertCardAction: { fontSize: fontSize.caption, fontWeight: "800", color: c.blue700 },
   routePanel: {
     borderTopWidth: 1,
     borderColor: c.slate200,

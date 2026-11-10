@@ -22,4 +22,9 @@ export async function listQuickPicks(): Promise<QuickPick[]> {
 
 export async function saveQuickPicks(picks: QuickPick[]): Promise<void> {
   await saveCache(KEY, picks);
+  // saveCache swallows storage failures, so read back to report a lost write
+  // instead of showing a stale list as saved.
+  if (JSON.stringify(await loadCache<QuickPick[]>(KEY)) !== JSON.stringify(picks)) {
+    throw new Error("Quick Picks could not be saved");
+  }
 }
