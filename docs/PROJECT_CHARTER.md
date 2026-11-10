@@ -112,7 +112,7 @@ Roles may be combined depending on team size. The RACI detail is in
 | R-008 | Risk       | Driver location privacy incident                    | Compliance | Rounding, hashing, 24-hour retention, role-only access, synthetic testing                      |
 | R-009 | Risk       | Provider quota or outage degrades maps or rainfall  | Technical  | OSM fallback, manual rainfall, cached derived data, usage alerts                               |
 | R-010 | Risk       | UI template arrives late or diverges from the FSD   | Schedule   | Treat the FSD behaviour as fixed and the template as visual; review on arrival                 |
-| I-001 | Issue      | Authentication is not implemented in baseline       | Business   | Closed 27 Oct 2026: API-issued tokens with per-route role checks; rate limiting remains open (LIM-006)  |
+| I-001 | Issue      | Authentication is not implemented in baseline       | Business   | Closed 27 Oct 2026: API-issued tokens with per-route role checks; application rate limits closed LIM-006 on 28 Oct, an edge WAF remains open (LIM-025)  |
 | I-002 | Issue      | Baseline incident data is mock data                 | Business   | CR-001 replaces it with the persisted report API                                               |
 | I-003 | Issue      | CCTV is out of scope and gauges may be simulated    | Business   | Evidence is the reporter's own photo; label simulated gauges in the API and UI                   |
 | D-001 | Dependency | Client supplies the hosted database secret          | Delivery   | Track at every milestone review                                                                |

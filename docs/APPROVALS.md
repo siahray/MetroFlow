@@ -54,19 +54,19 @@ cannot close until its dependencies are approved.
 | A-04 | [Functional Specification](FSD.md) | 1.3 | Functional behaviour, actors, requirements and tests | «Project Adviser» / panel | For Review | Yes |
 | A-05 | [Technical Specification](TSD.md) | 1.4 | Architecture, data model, security and technical decisions | «Project Adviser» / panel | For Review | Yes |
 | A-06 | [Project Management Plan](PROJ_MANAGEMENT_PLAN.md) | 1.6 | Schedule, quality, risk, communication and change control | «Project Adviser» / panel | For Review | Yes |
-| A-07 | [API Reference](api.md) | 1.4 | Implemented and planned API contracts and error model | «Project Adviser» / panel; technical review by «Project Team Lead» | Draft | Yes |
+| A-07 | [API Reference](api.md) | 1.4 | Implemented API contracts and error model | «Project Adviser» / panel; technical review by «Project Team Lead» | Draft | Yes |
 | A-08 | [Admin UI Design Baseline](design/ADMIN_UI_BASELINE.md) | 0.4 | Admin design gate, components, states and traceability | «Project Adviser» / panel | For Review | Yes |
 | A-09 | [Driver App Design Baseline](design/DRIVER_APP_BASELINE.md) | 0.7 | Driver design gate, screens, states and traceability | «Project Adviser» / panel | For Review | Yes |
 | A-10 | [CR-001](CR-001.md) | 1.0 | Native Expo driver app, live hazards, fleet dispatch and sensors | «Project Adviser» / panel | Approved 27 Oct 2026 | No |
 | A-11 | [CR-002](CR-002.md) | 1.0 | Final-product Offline Areas; pilot scope unchanged | «Project Adviser» / panel | Approved 27 Oct 2026 | No — final-product scope only |
 | A-12 | [CR-003](CR-003.md) | 1.0 | Sentinel-1 advisory flood observations; pilot scope unchanged | «Project Adviser» / panel | Approved 27 Oct 2026 | No — final-product scope only |
 | A-15 | [CR-004](CR-004.md) | 1.0 | Live flood state from PAGASA river telemetry and satellite; Project NOAH as the advisory fallback | Project Lead (adviser and panel acknowledgement not recorded) | Approved 3 Nov 2026 by the Project Lead | No — final-product scope only |
-| A-13 | Implementation start gate | — | A-01 to A-12 approved or formally deferred; open decisions closed | «Project Adviser» / panel | Partly cleared — A-10 to A-12 approved; A-01 to A-09 still For Review | Yes |
+| A-13 | Implementation start gate | — | A-01 to A-12 and A-15 approved or formally deferred; open decisions closed | «Project Adviser» / panel | Partly cleared — A-10 to A-12 and A-15 approved; A-01 to A-09 still For Review | Yes |
 | A-14 | Data and privacy approach | — | Synthetic/public data, no real personal data, no live CCTV | «Project Adviser» / panel | For Review | Yes before any real data |
-| A-15 | Native distribution path (`OD-D07`) | — | EAS/TestFlight/internal build path, bundle identifiers and accounts; public store release remains separate | «Project Adviser» / panel | Open | Yes before a native binary is distributed |
 | A-16 | Demo and acceptance review | — | Working demonstration, test evidence and known limitations | «Project Adviser» / panel | Not started | Yes for final acceptance |
 | A-17 | Final document set and defense | — | All documents accepted and limitations disclosed | «Project Adviser» / panel | Not started | Yes for final acceptance |
 | A-18 | External free-tier service use | — | Supabase, Mapbox/OSM, Copernicus/Sentinel, EAS and GitHub free tiers | «Project Adviser» / `«Project Team Lead»` | For Review | Yes before provisioning accounts |
+| A-19 | Native distribution path (`OD-D07`) | — | EAS/TestFlight/internal build path, bundle identifiers and accounts; public store release remains separate | «Project Adviser» / panel | Open | Yes before a native binary is distributed |
 
 ### 2.1 Open decisions that block the gate
 
@@ -87,7 +87,7 @@ they are resolved or explicitly deferred in writing.
 | Date       | Item | Decision | Note |
 | ---------- | ---- | -------- | ---- |
 | 27 Oct 2026 | A-10 (CR-001) | Approved | Scope accepted; implementation continues, with route-level token enforcement tracked as TSD LIM-022 |
-| 27 Oct 2026 | A-11 (CR-002) | Approved | Final-product Offline Areas accepted; the pilot offline screen stays a labelled placeholder |
+| 27 Oct 2026 | A-11 (CR-002) | Approved | Final-product Offline Areas accepted; the pilot keeps its on-device report queue and cache, while basemap tile download stays out of scope (TSD LIM-017) |
 | 27 Oct 2026 | A-12 (CR-003) | Approved | Sentinel-1 selected as the final-product satellite source; no feed exists yet |
 | 3 Nov 2026 | A-15 (CR-004) | Approved by the Project Lead | PAGASA telemetry and satellite are the live sources; NOAH is a rain-gated advisory fallback. The Project Lead approves change requests under standing authority; adviser and panel acknowledgement is not recorded. `OD-D25` (PAGASA access route) is open |
 | 3 Nov 2026 | A-15 (CR-004 rev 1.1) | Approved by the Project Lead | Open data sources (Open-Meteo, NASA GPM IMERG) added as the working live sources while PAGASA access is open; values are labelled observed, modelled or estimated. Adviser and panel acknowledgement not recorded |

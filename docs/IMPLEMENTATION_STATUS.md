@@ -1,6 +1,6 @@
 # MetroFlow — What's Left to Implement
 
-**As of:** 9 November 2026 · **Source:** cross-checked against `BACKLOG.md`,
+**As of:** 10 November 2026 · **Source:** cross-checked against `BACKLOG.md`,
 `docs/BRD.md`, `docs/TSD.md`, `docs/design/*_BASELINE.md`, and the actual code
 (`backend/main.py`, `models.py`, test suites) — not just what the docs claim.
 
@@ -17,15 +17,46 @@ charter dates) are excluded entirely — they were never engineering work.
 ## Overall
 
 ```
-████████████░░░░░░░░ 71%  (35.5 / 50 weighted items)
+███████████████░░░░░ 83%  (41.5 / 50 weighted items)
 ```
+
+---
+
+## Open backlog at a glance
+
+Every ⬜/🔶/⛔ item from the sections below, sorted by whether it's ours to
+pick up right now or needs something outside engineering first. Each row
+links to its full writeup via the ID.
+
+### Ready to implement (no external dependency)
+
+| ID | What's left | Where |
+|----|-------------|-------|
+| §7 doc | `docs/design/ADMIN_UI_BASELINE.md`'s ~130-row gap table predates CR-001 and lists things as missing that now exist — needs a pass to mark them resolved | §7 |
+
+### Written but needs a production go-ahead (lead dev sign-off, not coding)
+
+| ID | What's left | Where |
+|----|-------------|-------|
+| S-4 | Runbook + local/hosted-cluster drill done; a restore *over* prod is a destructive go-ahead-gated runbook step (the free tier exposes no managed backups to restore from — `backups: []`, `pitr_enabled: false`) | §4 |
+| NFR-016 | Same dependency as S-4 — the live restore drill | §1 |
+
+### Blocked on something we don't control
+
+| ID | What's left | Needs |
+|----|-------------|-------|
+| S-5 | iOS build only — Android internal APK already built via EAS (10 Nov 2026); iOS needs a paid Apple Developer account + registered device UDIDs, deferred by choice (pilot is Android-only) | An Apple Developer Program membership |
+| Q-2 / NFR-018 | Offline device test (TC-029/030) | A native build on physical hardware, airplane mode |
+| NFR-024, NFR-025 | App-interactive time, map frame rate | A real mid-range device, not a simulator |
+| NFR-003 | 99% uptime during a declared event | Real incident history from an actual event |
+| NFR-009 | SUS ≥75 | Real UAT sessions |
 
 ---
 
 ## 1. Non-Functional Requirements — `docs/BRD.md`
 
 ```
-███████████████░░░░░ 76%  (19 / 25)
+███████████████░░░░░ 78%  (19.5 / 25)
 ```
 
 - [x] NFR-001, 002 — network state / routing latency within budget (measured, `bench_latency.py`)
@@ -36,8 +67,8 @@ charter dates) are excluded entirely — they were never engineering work.
 - [x] NFR-017 — units and timezone
 - [x] NFR-019 — SSE publish latency ≤100ms p95 (was failing, fixed by lowering the poll interval)
 - [x] NFR-020, 021, 022 — role checks, location privacy, telemetry throttle
-- [ ] 🔶 NFR-016 — RPO/RTO defined, dump/restore drilled **locally**; the live Supabase dashboard restore against the hosted project is still open (needs `S-1` first)
-- [ ] 🔶 NFR-023 — storm/night theme built for the driver app's navigation screen only; Home/SOS/Report/history and the admin portal stay single-theme
+- [ ] 🔶 NFR-016 — RPO/RTO defined; `scripts/backup-db.sh` now runs nightly via a launchd job (03:00, 14-dump retention) and the drill on the hosted cluster matched prod row counts exactly; a restore *over* prod stays a go-ahead-gated runbook step — the free tier has no managed backups to restore from
+- [x] NFR-023 — storm/night theme now covers the driver app's navigation screen plus Home, SOS, Report and Report History (10 Nov 2026); the admin portal stays single-theme by standing scope decision, not a gap
 - [ ] ⛔ NFR-003 — 99% uptime during a declared event — needs real incident history from an actual event
 - [ ] ⛔ NFR-009 — SUS ≥75 — needs real UAT sessions
 - [ ] ⛔ NFR-018 — offline device test (`Q-2`) — needs a native build on physical hardware in airplane mode
@@ -76,15 +107,15 @@ list) — that table is stale, see §6.
 ## 4. Security / operations — `BACKLOG.md` §4
 
 ```
-█████░░░░░░░░░░░░░░░ 25%  (1.5 / 6, excluding S-2's accepted risk)
+██████████████░░░░░░ 83%  (5 / 6, excluding S-2's accepted risk)
 ```
 
 - [x] S-7 — CI gate: every public table has RLS
-- [ ] 🔶 S-4 — backup/restore runbook + RPO/RTO written, drilled locally; live hosted drill still open (needs S-1 first)
-- [ ] S-1 — API connects as `postgres`, bypassing RLS; create a scoped `metroflow_app` role, rotate `DATABASE_URL` — **recommended next** (see below)
-- [ ] S-5 — internal EAS/TestFlight build needed for pilot distribution
-- [ ] S-6 — reporter hash salt / JWT secret rotation procedure undocumented
-- [ ] ⛔ S-3 — CodeQL inactive on the private repo — needs a paid GitHub plan
+- [x] S-6 — reporter hash salt / JWT secret rotation procedure documented (`docs/TSD.md` §4.3)
+- [x] S-3 — repo went public (10 Nov 2026); also fixed a real bug this surfaced in `codeql.yml`'s own preflight probe (it read a 404 from a repo's first-ever scan as "scanning unavailable", the same code as the private-without-GHAS case — would have stayed permanently skipped even once public). Verified live: both `Analyze` jobs completed, 0 alerts
+- [x] S-1 — scoped `metroflow_app` role live on the hosted project (role, password, table/sequence ownership via Supabase MCP) **and** `DATABASE_URL` rotated to it in `backend/.env` + Vercel production; redeployed and verified (login + DB reads) 10 Nov 2026. Migration `d7e2a9c4f815` ships in-repo so CI applies it idempotently
+- [ ] 🔶 S-4 — backup/restore runbook + RPO/RTO written; nightly launchd schedule installed (`scripts/com.metroflow.db-backup.plist`, 14-dump retention); drill done against the hosted cluster (dump → scratch DB → `pg_restore` → row counts matched prod exactly → dropped); a restore *over* prod stays a go-ahead-gated runbook step — the free tier has no managed backups to restore from
+- [ ] 🔶 S-5 — Android internal EAS build done (preview APK, `com.metroflow.app`, project `@siah0ray/metroflow-mobile`); iOS deferred — needs Apple Developer Program credentials
 
 ## 5. UI polish — `BACKLOG.md` §5
 
@@ -110,14 +141,14 @@ list) — that table is stale, see §6.
 ## 6. Quality, tests, CI — `BACKLOG.md` §3
 
 ```
-████████░░░░░░░░░░░░ 40%  (2 / 5)
+████████████████░░░░ 80%  (4 / 5)
 ```
 
-- [x] Q-3 — mobile lint in CI, clean
-- [ ] 🔶 Q-1 — backend/admin/mobile automated coverage is in place; React component tests (jsdom/testing-library) still missing
-- [ ] 🔶 Q-4 — hazard-publish and network/routing latency now measured (NFR-019, 001/002); on-device offline-route latency still unmeasured
+- [x] Q-3 — mobile lint in CI, clean again (was red on `main` since the F-4 commit over a `useEffect`-based `setState` in `home.tsx` that a newer `eslint-plugin-react-hooks` rule flags; fixed 10 Nov 2026 in passing while touching that file for NFR-023)
+- [x] Q-5 — `_cleanup_leftover_rows` autouse fixture in `test_api_integration.py` diffs `sos_requests`/`hazard_zones`/`users` ids and deletes what each test added; a user with audit history is left in place (append-only `audit_logs`, by design), everything else no longer accumulates
+- [x] Q-1 — portal component tests now cover `error-notice`, `use-dialog-focus`, `toast-provider`, `sensor-management`, `incident-queue` (9), `dispatch-radar` (8) and `unit-form-modal` (4); the driver app has a jest-expo + `@testing-library/react-native` harness (`jest.config.js`, `__tests__/`, `bun run test:components`) with first coverage on `Avatar`/`initialsOf`/`PasswordField`. Heavier screens still need per-screen native-module mocks
+- [x] Q-4 — hazard-publish + network/routing latency measured earlier (NFR-019, 001/002); offline-route planning latency measured 10 Nov 2026 via `metroflow-mobile/benchmarks/offline-route.ts` (p50 ~1 ms at 1600-node scale in the JS runtime; on-device confirmation rides with Q-2)
 - [ ] ⛔ Q-2 — offline device test (TC-029/030) — deferred with the pilot/UAT, not an engineering gap right now
-- [ ] Q-5 — integration tests leave rows behind on a clean run — tidy-up, not urgent
 
 ## 7. Documentation hygiene (not code)
 
@@ -141,7 +172,7 @@ list) — that table is stale, see §6.
 
 ## Suggested next step
 
-**S-1** (database role separation) — the only open item that's pure
-engineering, unblocks the live NFR-016 restore drill, and has no client/UAT/
-device dependency. It does touch the hosted production database's role
-grants, so it needs a careful rollback plan, not a quick pass.
+**Q-1/Q-4** are done as far as engineering can take them without hardware:
+portal and mobile component-test harnesses both exist, and offline-route
+latency is benchmarked. What remains is genuinely external — the Q-2 device
+run (offline queue + on-device timing) and UAT.

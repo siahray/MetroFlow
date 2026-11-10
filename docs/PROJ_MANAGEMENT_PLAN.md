@@ -62,10 +62,11 @@ cost, risk, quality, communication and change. The project is delivered
 incrementally inside a fixed academic term, with a working demonstration at each
 milestone rather than a single delivery at the end.
 
-Current position: the baseline API, schema and portal are built and tested. The
-CR-001 increment — authentication, report intake, live map, hazard publishing,
-fleet dispatch, sensors and the driver app — is proposed and planned, pending
-sponsor approval. Every unconfirmed date or amount is marked `[TBC]`.
+Current position: the baseline API, schema and portal are built and tested, and so is
+the CR-001 increment — authentication, report intake and moderation, live map, hazard
+publishing and drawing, fleet dispatch, sensors, exports, offline operation and the
+driver app are implemented and hosted. Every unconfirmed date or amount is marked
+`[TBC]`; remaining work is test depth and operations (`BACKLOG.md`).
 
 ## Project Overview
 
