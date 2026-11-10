@@ -47,6 +47,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A 404 here means "no analysis found", which is the normal response
+          # on this repo's first-ever scan and is NOT the same as "code scanning
+          # unavailable" (that's a 403, from a private repo without GitHub Code
+          # Security). The original check treated both as unavailable, which
+          # meant this workflow could never run its own first scan.
           status=$(curl -sS -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -54,7 +59,7 @@ jobs:
 
           echo "code-scanning probe: HTTP $status"
 
-          if [ "$status" = "200" ]; then
+          if [ "$status" = "200" ] || [ "$status" = "404" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
