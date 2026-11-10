@@ -10,6 +10,7 @@ import type {
   Popup as MapLibrePopup,
 } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -219,6 +220,12 @@ type NetworkMapProps = {
   drawMode?: "polygon" | "line" | null;
   /** Fired with the finished shape on "Finish", or `null` on "Cancel". */
   onDrawComplete?: (geometry: DrawnGeometry | null) => void;
+  /**
+   * Where to render the clearance/rainfall/routing controls. Omitted, they
+   * float over the map as before; passed, they portal into that element
+   * instead, so a caller can place them outside the map canvas.
+   */
+  controlsContainer?: HTMLElement | null;
 };
 
 function errorMessage(error: unknown): string {
@@ -264,6 +271,7 @@ export function NetworkMap({
   onSummary,
   drawMode = null,
   onDrawComplete,
+  controlsContainer = null,
 }: NetworkMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -991,7 +999,7 @@ export function NetworkMap({
               type="button"
               onClick={undoDrawPoint}
               disabled={drawPoints.length === 0}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg border border-slate-700 bg-brand-primary px-3 py-1.5 text-[11px] font-semibold text-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Undo point
             </button>
@@ -1006,7 +1014,7 @@ export function NetworkMap({
             <button
               type="button"
               onClick={cancelDraw}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-100 hover:border-rose-500 hover:text-rose-300"
+              className="rounded-lg border border-slate-700 bg-brand-primary px-3 py-1.5 text-[11px] font-semibold text-slate-100 hover:border-rose-500 hover:text-rose-300"
             >
               Cancel
             </button>
@@ -1048,158 +1056,177 @@ export function NetworkMap({
         ))}
       </div>
 
-      {/* Simulation + routing controls */}
-      <div className="absolute right-4 bottom-24 z-30 w-[272px] space-y-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-            Live Network Model
-          </span>
-          <span className="font-mono text-[10px] text-emerald-400">
-            {loading
-              ? "syncing…"
-              : summary
-                ? `${summary.nodeCount} nodes · ${summary.edgeCount} edges`
-                : "…"}
-          </span>
-        </div>
+      {/* Simulation + routing controls: float over the map unless the caller
+          gave us somewhere else to put them (`controlsContainer`). */}
+      {(() => {
+        const panel = (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                Live Network Model
+              </span>
+              <span className="font-mono text-[10px] text-emerald-400">
+                {loading
+                  ? "syncing…"
+                  : summary
+                    ? `${summary.nodeCount} nodes · ${summary.edgeCount} edges`
+                    : "…"}
+              </span>
+            </div>
 
-        <label className="block space-y-1.5">
-          <span className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
-            <span className="flex items-center gap-1.5">
-              <RouteIcon className="h-3.5 w-3.5 text-sky-400" />
-              Vehicle clearance
-            </span>
-            <span className="font-mono text-sky-300">{clearanceCm} cm</span>
-          </span>
-          <input
-            type="range"
-            min={10}
-            max={120}
-            step={5}
-            value={clearanceCm}
-            onChange={(event) => handleClearanceChange(Number(event.target.value))}
-            aria-label="Vehicle clearance in centimetres"
-            className="w-full accent-sky-500"
-          />
-        </label>
-
-        <label className="block space-y-1.5">
-          <span className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
-            <span className="flex items-center gap-1.5">
-              <CloudRain className="h-3.5 w-3.5 text-sky-400" />
-              Rainfall intensity
-            </span>
-            <span className="font-mono text-sky-300">{rainfallMmHr} mm/hr</span>
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={150}
-            step={10}
-            value={rainfallMmHr}
-            onChange={(event) => setRainfallMmHr(Number(event.target.value))}
-            aria-label="Rainfall intensity in millimetres per hour"
-            className="w-full accent-sky-500"
-          />
-        </label>
-
-        <button
-          type="button"
-          onClick={handleSimulation}
-          disabled={busy !== null}
-          className={cn(
-            "flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
-            busy === "simulation"
-              ? "cursor-wait bg-slate-700 text-slate-300"
-              : "bg-sky-600 text-white hover:bg-sky-500",
-          )}
-        >
-          <Waves className="h-3.5 w-3.5" />
-          {busy === "simulation"
-            ? "Running hydrology…"
-            : rainfallMmHr === 0
-              ? "Reset flood state"
-              : `Apply ${rainfallMmHr} mm/hr`}
-        </button>
-
-        <div className="flex flex-wrap gap-1.5 border-t border-slate-800 pt-2.5">
-          {(["PASSABLE", "LIGHT_FLOOD", "SUBMERGED"] as const).map((status) => (
-            <span
-              key={status}
-              className="inline-flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300"
-            >
-              <span
-                className="h-2 w-2 rounded-sm"
-                style={{ backgroundColor: STATUS_COLORS[status] }}
+            <label className="block space-y-1.5">
+              <span className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <RouteIcon className="h-3.5 w-3.5 text-sky-400" />
+                  Vehicle clearance
+                </span>
+                <span className="font-mono text-sky-300">{clearanceCm} cm</span>
+              </span>
+              <input
+                type="range"
+                min={10}
+                max={120}
+                step={5}
+                value={clearanceCm}
+                onChange={(event) => handleClearanceChange(Number(event.target.value))}
+                aria-label="Vehicle clearance in centimetres"
+                className="w-full accent-sky-500"
               />
-              {summary ? summary[STATUS_FILTER[status]] : "–"}
-            </span>
-          ))}
-        </div>
+            </label>
 
-        <div className="space-y-2 border-t border-slate-800 pt-2.5">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1">
-              <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-                From
+            <label className="block space-y-1.5">
+              <span className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <CloudRain className="h-3.5 w-3.5 text-sky-400" />
+                  Rainfall intensity
+                </span>
+                <span className="font-mono text-sky-300">{rainfallMmHr} mm/hr</span>
               </span>
-              <select
-                value={effectiveStart ?? ""}
-                onChange={(event) => setStartNodeId(Number(event.target.value))}
-                aria-label="Route start node"
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-100 focus:border-sky-500 focus:outline-none"
-              >
-                {nodeOptions.map((node) => (
-                  <option key={node.properties.node_id} value={node.properties.node_id}>
-                    {node.properties.node_id} · {node.properties.name ?? "Unnamed"}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="range"
+                min={0}
+                max={150}
+                step={10}
+                value={rainfallMmHr}
+                onChange={(event) => setRainfallMmHr(Number(event.target.value))}
+                aria-label="Rainfall intensity in millimetres per hour"
+                className="w-full accent-sky-500"
+              />
             </label>
-            <label className="space-y-1">
-              <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-                To
-              </span>
-              <select
-                value={effectiveTarget ?? ""}
-                onChange={(event) => setTargetNodeId(Number(event.target.value))}
-                aria-label="Route target node"
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-100 focus:border-sky-500 focus:outline-none"
+
+            <button
+              type="button"
+              onClick={handleSimulation}
+              disabled={busy !== null}
+              className={cn(
+                "flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
+                busy === "simulation"
+                  ? "cursor-wait bg-slate-700 text-slate-300"
+                  : "bg-sky-600 text-white hover:bg-sky-500",
+              )}
+            >
+              <Waves className="h-3.5 w-3.5" />
+              {busy === "simulation"
+                ? "Running hydrology…"
+                : rainfallMmHr === 0
+                  ? "Reset flood state"
+                  : `Apply ${rainfallMmHr} mm/hr`}
+            </button>
+
+            <div className="flex flex-wrap gap-1.5 border-t border-slate-800 pt-2.5">
+              {(["PASSABLE", "LIGHT_FLOOD", "SUBMERGED"] as const).map((status) => (
+                <span
+                  key={status}
+                  className="inline-flex items-center gap-1 rounded border border-slate-800 bg-brand-primary px-1.5 py-0.5 text-[10px] font-semibold text-slate-300"
+                >
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{ backgroundColor: STATUS_COLORS[status] }}
+                  />
+                  {summary ? summary[STATUS_FILTER[status]] : "–"}
+                </span>
+              ))}
+            </div>
+
+            <div className="space-y-2 border-t border-slate-800 pt-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+                    From
+                  </span>
+                  <select
+                    value={effectiveStart ?? ""}
+                    onChange={(event) => setStartNodeId(Number(event.target.value))}
+                    aria-label="Route start node"
+                    className="w-full rounded border border-slate-700 bg-brand-primary px-1.5 py-1 text-[11px] text-slate-100 focus:border-sky-500 focus:outline-none"
+                  >
+                    {nodeOptions.map((node) => (
+                      <option key={node.properties.node_id} value={node.properties.node_id}>
+                        {node.properties.node_id} · {node.properties.name ?? "Unnamed"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+                    To
+                  </span>
+                  <select
+                    value={effectiveTarget ?? ""}
+                    onChange={(event) => setTargetNodeId(Number(event.target.value))}
+                    aria-label="Route target node"
+                    className="w-full rounded border border-slate-700 bg-brand-primary px-1.5 py-1 text-[11px] text-slate-100 focus:border-sky-500 focus:outline-none"
+                  >
+                    {nodeOptions.map((node) => (
+                      <option key={node.properties.node_id} value={node.properties.node_id}>
+                        {node.properties.node_id} · {node.properties.name ?? "Unnamed"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={handleRoute}
+                disabled={
+                  busy !== null ||
+                  effectiveTarget === null ||
+                  effectiveStart === null ||
+                  effectiveTarget === effectiveStart
+                }
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-brand-primary px-3 py-1.5 text-[11px] font-semibold text-slate-100 transition-colors hover:border-sky-500 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {nodeOptions.map((node) => (
-                  <option key={node.properties.node_id} value={node.properties.node_id}>
-                    {node.properties.node_id} · {node.properties.name ?? "Unnamed"}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <RouteIcon className="h-3.5 w-3.5" />
+                {busy === "route" ? "Searching A*…" : "Find flood-safe route"}
+              </button>
+              {summary?.route ? (
+                <p className="font-mono text-[10px] text-sky-300">
+                  {summary.route.nodes} nodes · {summary.route.minutes.toFixed(1)} min ·{" "}
+                  {summary.route.path[0]} → {summary.route.path[summary.route.path.length - 1]}
+                </p>
+              ) : (
+                <p className="text-[10px] leading-snug text-slate-500">
+                  Pick two nodes to preview the time-dependent A* reroute for this clearance.
+                </p>
+              )}
+            </div>
+          </>
+        );
+
+        if (controlsContainer) {
+          return createPortal(
+            <div className="w-full space-y-3 rounded-xl border border-slate-200 bg-slate-950 p-4 text-slate-100 shadow-sm">
+              {panel}
+            </div>,
+            controlsContainer,
+          );
+        }
+        return (
+          <div className="absolute right-4 bottom-24 z-30 w-[272px] space-y-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
+            {panel}
           </div>
-          <button
-            type="button"
-            onClick={handleRoute}
-            disabled={
-              busy !== null ||
-              effectiveTarget === null ||
-              effectiveStart === null ||
-              effectiveTarget === effectiveStart
-            }
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-100 transition-colors hover:border-sky-500 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RouteIcon className="h-3.5 w-3.5" />
-            {busy === "route" ? "Searching A*…" : "Find flood-safe route"}
-          </button>
-          {summary?.route ? (
-            <p className="font-mono text-[10px] text-sky-300">
-              {summary.route.nodes} nodes · {summary.route.minutes.toFixed(1)} min ·{" "}
-              {summary.route.path[0]} → {summary.route.path[summary.route.path.length - 1]}
-            </p>
-          ) : (
-            <p className="text-[10px] leading-snug text-slate-500">
-              Pick two nodes to preview the time-dependent A* reroute for this clearance.
-            </p>
-          )}
-        </div>
-      </div>
+        );
+      })()}
     </div>
   );
 }

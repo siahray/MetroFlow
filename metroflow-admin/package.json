@@ -10,7 +10,7 @@
     "lint:fix": "eslint --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "bun test lib",
+    "test": "bun test lib components",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -25,8 +25,11 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@happy-dom/global-registrator": "^21.0.4",
     "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "^4",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/maplibre-gl": "^1.14.0",
     "@types/node": "^26",
     "@types/react": "^19",
