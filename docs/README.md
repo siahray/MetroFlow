@@ -4,13 +4,14 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v1.2 (CR-001, approved 27 October 2026) · **Code baseline:** `main` · 29 October 2026
+**Document baseline:** v1.2 (CR-001, approved 27 October 2026) · **Code baseline:** `main`, 9 November 2026
 
 CR-001 extends the scope to the Expo driver app, live hazard publication, fleet
-dispatch and sensor ingestion. The change request is **approved** and partly
-implemented: authentication, SOS, hazards, fleet and dispatch persist through the
-API, while reports, sensors and event streams remain planned. Each document
-labels its own status honestly rather than assuming the target state.
+dispatch and sensor ingestion. The change request is **approved and implemented**:
+authentication, SOS, hazards, fleet, dispatch, field reports and moderation, sensors,
+event streams, offline operation, exports and user management all exist in the API and
+the clients. Each document labels its own status honestly rather than assuming the
+target state; `FSD.md` §Implementation Status is the per-requirement record.
 
 ## Documents
 
@@ -26,6 +27,7 @@ labels its own status honestly rather than assuming the target state.
 | Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the Expo driver app, hazards, fleet, sensors | Sponsor, team, panel  |
 | Change Request CR-002          | [CR-002.md](CR-002.md)                             | MF-CR-002  | Final-product Offline Areas; pilot scope unchanged                   | Adviser, team, panel    |
 | Change Request CR-003          | [CR-003.md](CR-003.md)                             | MF-CR-003  | Sentinel-1 advisory flood observations; pilot scope unchanged        | Adviser, team, panel    |
+| Change Request CR-004          | [CR-004.md](CR-004.md)                             | MF-CR-004  | Live flood-state sources and the source-priority rule; NOAH fallback | Adviser, team, panel    |
 | Progress Report                | [../PROGRESS_REPORT.md](../PROGRESS_REPORT.md)      | —          | Records what is implemented on the current branch                    | Team, panel             |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
 

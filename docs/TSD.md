@@ -486,7 +486,7 @@ Full request and response contracts, examples and error bodies are in
 | SEC-001 | Most endpoints did not check the session token    | High     | Resolved 27 Oct 2026: every route except the auth entry points requires a token, and writes require a portal role |
 | SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist in CR-001; the app uses bearer tokens        |
 | SEC-003 | Baseline has no rate limiting                     | Medium   | Closed 28 Oct 2026 for the routes that exist: login, registration, SOS and simulation are limited per address in Postgres. Report and telemetry limits land with those routes |
-| SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Activates automatically when public or licensed                             |
+| SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Resolved 10 Nov 2026: repository is public, which is free for CodeQL. Scan runs on push/PR/weekly; first run reported 0 alerts |
 | SEC-005 | Audit hash column has no write path               | Low      | Implement with FSD-FR-093                                                   |
 | SEC-006 | Uploaded evidence can exhaust or poison storage   | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution                  |
 | SEC-007 | SSE stream could leak fleet or SOS positions      | Medium   | Authenticate the stream and filter by role                                  |
@@ -855,6 +855,30 @@ secret, and no service-role key may ever appear in either client.
 | `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`        | Vercel project env        | Public by design; unused until the raster map lands               |
 | `EXPO_PUBLIC_API_BASE_URL`               | Driver app env file       | Not a secret; the only variable the app reads                     |
 
+#### Rotation procedure (S-6)
+
+`JWT_SECRET` and `report_hash_salt` (`METROFLOW_REPORT_HASH_SALT`) were the two
+secrets with no documented rotation path. Both are read once at process start
+(`config.py`), so rotating either is a restart, not a migration:
+
+1. Generate a new value: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+2. Set it in the Vercel project env (`metroflow-api`) for the variable being
+   rotated, then redeploy so every function picks it up — Vercel functions
+   cache env vars per build.
+3. **`JWT_SECRET`**: every session token signed under the old secret stops
+   validating the instant the new one is live (HS256 has no grace window), so
+   this logs every signed-in user out; there is no user-visible impact beyond
+   that.
+4. **`report_hash_salt`**: existing `incident_reports.reporter_hash` rows keep
+   validating against the old salt forever — this field is a stored digest,
+   not something recomputed on read. Rotating it only changes hashing for
+   reports filed *after* the rotation, so a report filed just before and one
+   filed just after stop matching as duplicates/corroboration (BR-011) across
+   that boundary. Rotate only when there is a reason to break that linkage
+   (e.g. suspected salt leak), not routinely.
+5. Record the rotation date and reason in `BACKLOG.md` / incident notes; there
+   is no automated rotation schedule for either secret.
+
 ## 5. Deployment and CI/CD
 
 ### 5.1 Local stack
@@ -882,50 +906,75 @@ evidence volume read-write, and applies migrations on start unless
 | Region       | `ap-northeast-2` (Seoul)                                           |
 | Engine       | PostgreSQL 17.11 with PostGIS                                      |
 | Connection   | Session pooler with `sslmode=require`                              |
-| Access model | API connects as an application role; `anon`/`authenticated` denied |
+| Access model | API connects as `metroflow_app` (non-superuser, owns app tables); `anon`/`authenticated` already denied |
 
 The direct `db.<ref>.supabase.co` host is IPv6-only and unreachable from GitHub's
 IPv4 runners, so the session pooler host is required for CI migrations. A runtime
 host with IPv6 connectivity may use the direct host, but the session pooler is the
 portable choice. Both forms require `sslmode=require`.
 
-The runtime connects as the `postgres` project role through the session pooler.
-That is broader than the API needs: the startup geometry backfill issues
-`CREATE INDEX IF NOT EXISTS`, which needs table ownership, so a dedicated role
-would have to own the tables the migrations create. Creating that role and
-handing schema ownership to it is recorded as LIM-023. The browser never
-connects to Postgres: the API never uses the anon key, and it remains the only
-data path.
+The runtime connects as `metroflow_app` through the session pooler (rotated
+10 Nov 2026 — `DATABASE_URL` in `backend/.env` and the Vercel production
+environment, production redeployed and verified). The role is non-superuser
+and owns every app table and sequence, which is what the startup geometry
+backfill's `CREATE INDEX IF NOT EXISTS` needs; it holds no privilege on
+Supabase-managed schemas (`auth`, `storage`, `realtime`). Migration
+`d7e2a9c4f815` creates the role and moves ownership; Supabase's `postgres`
+is not a true superuser, so the transfer needed an explicit
+`GRANT metroflow_app TO postgres` first — also in `upgrade()` so a fresh
+database doesn't hit the same error. The browser
+never connects to Postgres: the API never uses the anon key, and it remains
+the only data path.
 
-#### Backup and restore (NFR-016; LIM-012 only partly closed)
+#### Backup and restore (NFR-016; LIM-012 closed 10 Nov 2026)
 
-Point-in-time recovery is a paid Supabase tier (ADR-002); the project runs on
-the free tier, so the backup mechanism is Supabase's automatic daily backup,
-not PITR.
+Point-in-time recovery is a paid Supabase tier (ADR-002) and the project runs
+on the free tier. Verified against the Management API on 10 Nov 2026:
+`GET /v1/projects/{ref}/database/backups` returns an empty list and
+`pitr_enabled=false` — **the free tier has no managed backups at all**, so an
+earlier draft of this section that assumed a daily backup cadence was wrong.
+The backup mechanism is therefore a manual `pg_dump`, not a Supabase feature.
 
 | Objective | Target | Basis |
 | --------- | ------ | ----- |
-| RPO (data loss window) | ≤ 24 hours | Bounded by the free tier's daily backup cadence — there is no PITR to shrink it further without upgrading the plan |
-| RTO (time to restore) | ≤ 1 hour | Supabase dashboard "Restore" action on a backup of this size; see the drill below for the restore step itself |
+| RPO (data loss window) | Age of the newest dump in `backups/` | There is no automatic backup; a launchd job (`scripts/com.metroflow.db-backup.plist`, installed as `~/Library/LaunchAgents/com.metroflow.db-backup.plist`) runs `scripts/backup-db.sh` nightly at 03:00 local and the script prunes dumps older than 14. Dumps still live only on this machine — copy them off-site for a real RPO |
+| RTO (time to restore) | ≤ 1 hour | `pg_restore` of a dump this size took seconds in the drill below; the remaining time is cutover and verification |
 
-**Restore procedure** (Supabase dashboard, Project → Database → Backups →
-Restore): pick the most recent backup, confirm, and wait for the project to
-come back online. This replaces the whole database, so it is only ever run
-after `S-1` (API connects as a role that cannot read other tenants' data) and
-with the lead dev's explicit go-ahead — it is destructive to anything written
-since that backup.
+**Backup procedure**: `scripts/backup-db.sh` runs
+`pg_dump -F c -n public` against `DATABASE_URL` into `backups/`
+(git-ignored — dumps contain live data), then prunes all but the newest 14
+dumps. `-n public` is deliberate: the dump must not touch Supabase-managed
+schemas (`auth`, `storage`, `realtime`), which the app role cannot read
+anyway. Scheduling: the checked-in plist
+`scripts/com.metroflow.db-backup.plist` is installed at
+`~/Library/LaunchAgents/com.metroflow.db-backup.plist` and fires nightly at
+03:00, logging to `backups/backup.log`. Verify with
+`launchctl list | grep metroflow`. This is a single-machine schedule — if the
+laptop is off or asleep at 03:00 the run is skipped (launchd does not
+catch up), so check `backups/` freshness before relying on the RPO; a missed
+night just means the RPO is the previous night's dump.
 
-**Drill performed 9 Nov 2026** (against a local throwaway Postgres, not the
-hosted project — a live restore against the real project is destructive and
-needs that explicit go-ahead): seeded the pilot network (34 nodes, 61 edges),
-a dispatcher account and a hazard; `pg_dump -F c`; dropped the database;
-`pg_restore` into a fresh one. Restore completed in ~1 s at this data volume;
-`alembic check` on the restored database reported no drift, and every row
-count and value (user email/role, hazard name, node/edge counts) matched the
-pre-drill baseline exactly. This verifies the dump/restore mechanics and the
-schema surviving the round trip; it does not exercise Supabase's own restore
-path, DNS cutover, or a volume anywhere near production size — those remain
-open until the live drill above is run against the hosted project.
+**Restore procedure**: `pg_restore -d <target> --no-owner --no-privileges
+backups/metroflow-prod-<stamp>.dump`, then `CREATE EXTENSION IF NOT EXISTS
+postgis SCHEMA public` first if the target is a fresh database (the dump does
+not carry extension creation). Against the hosted `postgres` database this
+replaces the whole `public` schema — destructive to anything written since
+the dump — so it still needs the lead dev's explicit go-ahead.
+
+**Drills performed**:
+
+- **9 Nov 2026**, local throwaway Postgres: seeded pilot data, `pg_dump -F c`,
+  drop, `pg_restore`, `alembic check` clean, every row exact.
+- **10 Nov 2026**, hosted cluster: `pg_dump -F c -n public` of the live
+  project (107 KB), `CREATE DATABASE metroflow_drill`, `pg_restore
+  --no-owner --no-privileges` into it, verified every public table's row
+  count matched production exactly (`road_nodes` 34, `road_edges` 61,
+  `audit_logs` 16, `alembic_version` `a1f4e8c2d607`, …) and dropped the
+  scratch database. This exercised the real dump/restore path against the
+  hosted engine, PostGIS included. What remains unexercised is only a
+  restore *over* the production `postgres` database itself — same mechanics,
+  but destructive, so it stays a go-ahead-gated runbook step rather than a
+  scheduled drill.
 
 ### 5.3 Hosted API
 
@@ -1043,13 +1092,13 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
 | LIM-007 | No map in the baseline portal                      | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-008 | Baseline audit log is schema-only                  | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-009 | Browser end-to-end coverage is a portal smoke only | UI regressions outside sign-in and triage caught manually; no component or driver-app tests | Playwright (`metroflow-admin/e2e/`) runs in Web CI: sign-in gate, rejected password, triage queue, stored session. Not yet covered: React component tests, driver-app tests, an offline Playwright run |
-| LIM-010 | CodeQL inactive on the private repository          | Static analysis gap                              | Publish the repo or license Code Security                                                                    |
+| LIM-009 | Browser end-to-end coverage is a portal smoke only | UI regressions outside sign-in and triage caught manually; driver-app component tests still missing | Playwright (`metroflow-admin/e2e/`) runs in Web CI: sign-in gate, rejected password, triage queue, stored session, axe scans, dialog focus trap, an offline run. `bun test lib components` adds jsdom + testing-library component tests for the portal (`error-notice`, `use-dialog-focus`, `toast-provider`, `sensor-management`, `incident-queue`, `dispatch-radar`, `unit-form-modal`). The driver app has a separate jest-expo + `@testing-library/react-native` harness (`metroflow-mobile/__tests__/`, `bun run test:components`) covering `Avatar`/`PasswordField`; heavier screens still need per-screen native-module mocks |
+| LIM-010 | ~~CodeQL inactive on the private repository~~      | Resolved 10 Nov 2026                             | Repository went public; also fixed a real bug this surfaced in `codeql.yml`'s preflight probe (it read a repo's first-ever-scan 404 as "unavailable", the same signal as private-without-GHAS, so it would have stayed skipped forever even once public) |
 | LIM-011 | Single-region hosted database                      | Latency and availability risk                    | Choose a region near operations                                                                              |
-| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | RPO/RTO defined and dump/restore drilled locally 9 Nov 2026 (§5.2); a restore of the hosted project is still untested |
+| LIM-012 | No backup/restore runbook or DR test               | Recovery objectives unverified                   | RPO/RTO defined; free tier has no managed backups so `scripts/backup-db.sh` is the mechanism; dump/restore drilled locally and on the hosted cluster 10 Nov 2026 (§5.2) |
 | LIM-013 | Deleting a model needs a manual `DROP`             | Migration authoring risk                         | Documented in migration rules                                                                                |
 | LIM-014 | Seeded graph is four nodes                         | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-015 | Driver app is not distributed through public app stores | Users need an EAS or TestFlight build        | Internal distribution for the pilot; public store release is a separate gate                                 |
+| LIM-015 | Driver app is not distributed through public app stores | Users need an EAS or TestFlight build        | Android internal EAS build done 10 Nov 2026 (`com.metroflow.app`, project `@siah0ray/metroflow-mobile`); iOS deferred — needs Apple Developer credentials; public store release is a separate gate |
 | LIM-016 | Evidence is user-submitted photos only             | No video corroboration of a report               | CCTV is out of scope: the reporter's phone is the only camera                                              |
 | LIM-017 | Offline mode has no basemap tiles                  | Offline view is schematic, not photographic      | Optional tile cache if storage and licensing allow                                                           |
 | LIM-018 | SOS has no carrier fallback                        | A failed data connection cannot send SOS         | The UI directs the user to the emergency line; telephony is out of scope                                     |
@@ -1057,7 +1106,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | Keyless Carto style swapped by URL (ADR-022), manual rainfall override, cached derived data and labelled degradation |
 | LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
 | LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Create `metroflow_app`, move table ownership to it and rotate `DATABASE_URL`                                 |
+| LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Closed 10 Nov 2026: `metroflow_app` owns every app table/sequence and `DATABASE_URL` (local + Vercel) points at it |
 | LIM-024 | API deployments are manual, not git-connected      | Closed 28 Oct 2026                               | The project now builds from `siahray/MetroFlow` with root directory `backend` and production branch `main`     |
 | LIM-025 | Vercel WAF rate-limit rules need a paid plan       | No edge-level limit or edge bot rule             | Application limits (LIM-006) cover the abuse surface; upgrade the team before public exposure                 |
 

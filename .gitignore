@@ -49,3 +49,6 @@ Thumbs.db
 # Local checkouts created by coding agents; never part of the tree.
 .claude/worktrees/
 
+
+# Database dumps (S-4): contain live data, never commit
+backups/

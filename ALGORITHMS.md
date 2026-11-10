@@ -26,7 +26,7 @@ This document explains all algorithms currently implemented in the backend, alon
 
 **Inputs:**
 - `graph_nodes`: `dict[int, tuple[float, float]]` - node_id -> (lat, lon)
-- `graph_edges`: `dict[int, list[tuple[int, float, float, float]]]` - u -> [(v, length_m, speed_kmh, water_depth_cm)]
+- `graph_edges`: `dict[int, list[tuple[int, float, float, float, bool]]]` - u -> [(v, length_m, speed_kmh, water_depth_cm, advisory_flagged)]
 
 **Algorithm Steps:**
 | Step | Description | Details |
@@ -38,12 +38,13 @@ This document explains all algorithms currently implemented in the backend, alon
 | 5 | Search initialization | `g_score` all inf, `g_score[start]=0`, push `(f = h(start), g=0, start)` to min-heap |
 | 6 | Expansion | Pop from heap, skip if stale (`current_g > g_score`) or already settled. Add to settled set. |
 | 7 | Goal test | If `current == target_node`, reconstruct path via `came_from` and return |
-| 8 | Edge relaxation | For each neighbor: if `water_depth_cm >= vehicle_clearance_cm` skip (hard block). Compute water penalty `1.0 + (water_depth_cm/10.0)^1.8`, effective speed = `max((speed_kmh/3.6)/water_penalty, 0.5)`. `traversal_time_s = length_m / effective_speed_m_s`. Update if better path found. |
+| 8 | Edge relaxation | For each neighbor: if `water_depth_cm >= vehicle_clearance_cm` skip (hard block). Compute water penalty `1.0 + (water_depth_cm/10.0)^1.8`, effective speed = `max((speed_kmh/3.6)/water_penalty, 0.5)`. `traversal_time_s = length_m / effective_speed_m_s`; if the edge is `advisory_flagged`, multiply by `ADVISORY_PENALTY` (1.5). Update if better path found. |
 
 **Properties:**
 - **Time Complexity:** `O(E log V)` due to binary heap
 - **Optimality:** Guaranteed optimal among safe routes (admissible heuristic)
 - **Safety:** Hard clearance threshold prevents routing through submerged roads
+- **Advisories:** A fresh sensor-breach advisory multiplies the edge's time by 1.5 (BRULE-012); the edge stays passable, but a safe alternative is preferred
 - **Realism:** Exponential penalty makes deeper water increasingly costly to traverse
 
 **Notes:** Despite the "Time-Dependent" naming, this is state-dependent (current water depths from `live_edge_states`), not time-of-day dependent. A more accurate name would be "Water-Aware A*".
