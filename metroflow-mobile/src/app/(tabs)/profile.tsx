@@ -6,7 +6,6 @@ import {
   ScrollView,
   StatusBar,
   Linking,
-  Alert,
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,6 +35,7 @@ import {
 import { updateMyName } from '../../api';
 import { useAuth } from '../../auth';
 import { QuickPicks } from '../../components/QuickPicks';
+import { useDialog } from '../../components/Dialog';
 import { loadMyVehicle, saveMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
 import { savePrefs, usePrefs, type DriverPrefs } from '../../prefs';
 
@@ -57,6 +57,7 @@ const VEHICLE_TYPE_LABEL: Record<VehicleType, string> = {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
+  const { confirm, notice } = useDialog();
   const { mode: themeMode, toggle: toggleTheme } = useTheme();
   const prefs = usePrefs();
 
@@ -109,7 +110,11 @@ export default function ProfileScreen() {
       signIn(updated);
       setEditingName(false);
     } catch {
-      Alert.alert('Could not save', 'Check your connection and try again.');
+      await notice({
+        title: 'Could not save',
+        message: 'Check your connection and try again.',
+        tone: 'danger',
+      });
     } finally {
       setSavingName(false);
     }
@@ -124,7 +129,15 @@ export default function ProfileScreen() {
     .join('')
     .toUpperCase() || 'PD';
 
-  function handleSignOut() {
+  async function handleSignOut() {
+    const confirmed = await confirm({
+      title: 'Sign out?',
+      message:
+        'Saved quick picks and offline data stay on this phone; you will need your password to sign back in.',
+      confirmLabel: 'Sign Out',
+      destructive: true,
+    });
+    if (!confirmed) return;
     signOut();
     router.replace('/');
   }

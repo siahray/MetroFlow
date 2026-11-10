@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Waves, ArrowRight, ShieldCheck } from 'lucide-react-native';
 import { useAuth } from '../auth';
+import { BackButton } from '../components/BackButton';
 import { PasswordField } from '../components/PasswordField';
 import { login as apiLogin, register as apiRegister } from '../api';
 
@@ -143,13 +144,9 @@ export default function IndexScreen() {
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 <ScrollView contentContainerStyle={{ flexGrow: 1, padding: space[24] }} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity
-          onPress={() => { setMode('splash'); setError(''); }}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], marginTop: space[8], marginBottom: space[32] }}
-        >
-          <Text style={{ fontSize: fontSize.display, color: colors.slate800 }}>‹</Text>
-          <Text style={{ fontSize: fontSize.label, color: colors.slate800 }}>Back</Text>
-        </TouchableOpacity>
+        <View style={{ alignSelf: 'flex-start', marginTop: space[8], marginBottom: space[32] }}>
+          <BackButton onPress={() => { setMode('splash'); setError(''); }} />
+        </View>
 
         <View style={{ alignItems: 'center', marginBottom: space[32] }}>
           <View style={{ width: 64, height: 64, backgroundColor: colors.slate900, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: space[12] }}>

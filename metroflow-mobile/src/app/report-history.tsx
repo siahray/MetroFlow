@@ -10,9 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Camera, CheckCircle2, ChevronDown, ChevronUp, Clock, FileWarning, RotateCcw, XCircle } from 'lucide-react-native';
+import { Camera, CheckCircle2, ChevronDown, ChevronUp, Clock, FileWarning, RotateCcw, XCircle } from 'lucide-react-native';
 
 import { ApiError, listMyReports, type MyReport } from '../api';
+import { BackButton } from '../components/BackButton';
 import { fontSize, space, useTheme, type ThemeColors } from '../theme';
 
 function statusStyle(
@@ -80,9 +81,7 @@ export default function ReportHistoryScreen() {
       <StatusBar barStyle={mode === 'storm' ? 'light-content' : 'dark-content'} />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12], paddingHorizontal: space[16], paddingVertical: space[14], backgroundColor: c.white, borderBottomWidth: 1, borderColor: c.slate100 }}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: c.slate50, borderRadius: 10, borderWidth: 1, borderColor: c.slate200 }}>
-          <ArrowLeft size={18} color={c.slate800} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: c.slate900 }}>My Reports</Text>
       </View>
 

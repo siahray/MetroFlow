@@ -6,7 +6,6 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,7 +13,6 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import {
   Waves,
-  ArrowLeft,
   Info,
   Target,
   Lock,
@@ -32,7 +30,9 @@ import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
 
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
+import { BackButton } from '../../components/BackButton';
 import { isOffline, useOnline } from '../../offline';
+import { useDialog } from '../../components/Dialog';
 import { fontSize, space, useTheme } from '../../theme';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
@@ -51,6 +51,7 @@ const OFFLINE_MESSAGE =
 export default function SOSScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { confirm, notice } = useDialog();
   const [situation, setSituation] = useState<SituationType>('pedestrian');
   const [sending, setSending] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -87,9 +88,25 @@ export default function SOSScreen() {
     if (sending || locating) return;
 
     if (await isOffline()) {
-      Alert.alert(OFFLINE_TITLE, OFFLINE_MESSAGE);
+      await notice({ title: OFFLINE_TITLE, message: OFFLINE_MESSAGE, tone: 'warning' });
       return;
     }
+
+    const situationLabel =
+      situation === 'vehicle'
+        ? 'Vehicle Stuck in Floodwaters'
+        : situation === 'medical'
+        ? 'Medical Need / Health Crisis'
+        : 'Pedestrian / Stranded Citizen';
+
+    // A mis-tap here dispatches a real rescue team, so confirm before the GPS prompt.
+    const confirmed = await confirm({
+      title: 'Send priority rescue request?',
+      message: `${situationLabel}. The emergency operations centre will receive your exact location.`,
+      confirmLabel: 'Send Request',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
 
     // --- Acquire fresh GPS fix (FSD-FR-073, VAL-021) -------------------------
     setLocating(true);
@@ -97,14 +114,15 @@ export default function SOSScreen() {
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert(
-          'Location Required',
-          'A rescue team needs your exact position to reach you. Enable location access for MetroFlow in Settings and try again.',
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => void Linking.openSettings() },
-          ],
-        );
+        const openSettings = await confirm({
+          title: 'Location Required',
+          message:
+            'A rescue team needs your exact position to reach you. Enable location access for MetroFlow in Settings and try again.',
+          confirmLabel: 'Open Settings',
+          cancelLabel: 'Not now',
+          tone: 'warning',
+        });
+        if (openSettings) void Linking.openSettings();
         setLocating(false);
         return;
       }
@@ -113,19 +131,21 @@ export default function SOSScreen() {
       });
       const ageMs = Date.now() - loc.timestamp;
       if (ageMs > SOS_LOCATION_MAX_AGE_MS) {
-        Alert.alert(
-          'Location Stale',
-          'Could not get a fresh GPS fix. Move to open sky and retry.'
-        );
+        await notice({
+          title: 'Location Stale',
+          message: 'Could not get a fresh GPS fix. Move to open sky and retry.',
+          tone: 'warning',
+        });
         setLocating(false);
         return;
       }
       coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
     } catch {
-      Alert.alert(
-        'GPS Error',
-        'Cannot read your location. Check that GPS is enabled and try again.'
-      );
+      await notice({
+        title: 'GPS Error',
+        message: 'Cannot read your location. Check that GPS is enabled and try again.',
+        tone: 'danger',
+      });
       setLocating(false);
       return;
     }
@@ -134,13 +154,6 @@ export default function SOSScreen() {
     // --- Submit SOS ----------------------------------------------------------
     setSending(true);
     try {
-      const situationLabel =
-        situation === 'vehicle'
-          ? 'Vehicle Stuck in Floodwaters'
-          : situation === 'medical'
-          ? 'Medical Need / Health Crisis'
-          : 'Pedestrian / Stranded Citizen';
-
       const result = await createSOS({
         latitude: coords.latitude,
         longitude: coords.longitude,
@@ -172,7 +185,7 @@ export default function SOSScreen() {
         ? `${apiError?.message ?? 'Rate limited.'} If this is life-threatening, contact local emergency services.`
         : 'Priority signal failed. If this is life-threatening, contact local emergency services.';
 
-      Alert.alert(title, message);
+      await notice({ title, message, tone: throttled || needsSignIn ? 'danger' : 'warning' });
     } finally {
       setSending(false);
     }
@@ -193,10 +206,11 @@ export default function SOSScreen() {
   }
 
   function handleInfo() {
-    Alert.alert(
-      'Priority SOS Protocol',
-      'Active Geo-Lock transmits telemetry and sub-meter location directly to the MetroFlow LGU Emergency Operations Center (EOC).'
-    );
+    void notice({
+      title: 'Priority SOS Protocol',
+      message:
+        'Active Geo-Lock transmits telemetry and sub-meter location directly to the MetroFlow LGU Emergency Operations Center (EOC).',
+    });
   }
 
   return (
@@ -226,12 +240,7 @@ export default function SOSScreen() {
 
         {/* Subheader */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back"
-            onPress={() => router.back()}
-            style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(226,232,240,0.6)', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <ArrowLeft size={18} color={c.slate700} />
-          </TouchableOpacity>
+          <BackButton />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], backgroundColor: c.red50, paddingHorizontal: space[14], paddingVertical: space[6], borderRadius: 999, borderWidth: 1, borderColor: c.red100 }}>
             <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.red500 }} />

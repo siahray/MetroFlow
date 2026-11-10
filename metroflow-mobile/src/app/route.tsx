@@ -62,6 +62,8 @@ import {
   postTelemetry,
 } from "../api";
 import { useAuth } from "../auth";
+import { BackButton } from "../components/BackButton";
+import { useDialog } from "../components/Dialog";
 import { RouteMap, type RouteMapHandle } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
@@ -163,6 +165,7 @@ function congestionFromSpeeds(avgKmh: number, maxKmh: number): { label: string; 
 export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const router = useRouter();
   const { user } = useAuth();
+  const { confirm } = useDialog();
   const { c, mode, toggle: toggleTheme } = useTheme();
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
   const BANNER_COLORS = useMemo(() => bannerColors(c), [c]);
@@ -728,9 +731,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       <SafeAreaView edges={edges} style={styles.screen}>
         <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
         <View style={styles.header}>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={18} color={c.slate800} />
-          </TouchableOpacity>
+          <BackButton />
           <Text style={styles.headerTitle}>Active Navigation</Text>
           <TouchableOpacity
             accessibilityRole="button"
@@ -760,9 +761,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
 
       <View style={styles.header}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={18} color={c.slate800} />
-        </TouchableOpacity>
+        <BackButton />
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Active Navigation</Text>
           <Text style={styles.headerSubtitle}>
@@ -1288,8 +1287,16 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             <TouchableOpacity
               style={styles.endButton}
               onPress={() => {
-                resetRoute();
-                router.back();
+                void confirm({
+                  title: "End navigation?",
+                  message: "The route and turn-by-turn instructions are cleared.",
+                  confirmLabel: "End Route",
+                  destructive: true,
+                }).then((confirmed) => {
+                  if (!confirmed) return;
+                  resetRoute();
+                  router.back();
+                });
               }}
             >
               <Text style={styles.endButtonText}>End</Text>

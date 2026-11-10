@@ -1,9 +1,9 @@
-import { View, Text, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Map, HardDrive, Info } from 'lucide-react-native';
+import { Map, HardDrive, Info } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 
+import { BackButton } from '../components/BackButton';
 import { cacheStats, formatBytes, type CacheStats } from '../offline';
 import { fontSize, space, colors } from '../theme';
 
@@ -19,7 +19,6 @@ function StatusRow({ label, value, ok }: { label: string; value: string; ok: boo
 }
 
 export default function OfflineMapsScreen() {
-  const router = useRouter();
   const [stats, setStats] = useState<CacheStats | null>(null);
 
   // Read once per visit: the cache fills as the driver navigates, and the screen
@@ -35,9 +34,7 @@ export default function OfflineMapsScreen() {
       <StatusBar barStyle="dark-content" />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12], paddingHorizontal: space[16], paddingVertical: space[14], borderBottomWidth: 1, borderColor: colors.slate100 }}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.slate50, borderRadius: 10, borderWidth: 1, borderColor: colors.slate200 }}>
-          <ArrowLeft size={18} color={colors.slate800} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: colors.slate900 }}>Offline Data</Text>
       </View>
 

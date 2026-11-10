@@ -19,7 +19,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import {
   Waves,
-  ChevronLeft,
   Droplet,
   Camera,
   ImagePlus,
@@ -35,6 +34,8 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
+import { BackButton } from '../../components/BackButton';
+import { useDialog } from '../../components/Dialog';
 import { enqueueReport, isOffline, newClientId } from '../../offline';
 import {
   ApiError,
@@ -113,6 +114,7 @@ function describeError(error: unknown): string {
 export default function ReportScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { confirm } = useDialog();
 
   const [depth, setDepth] = useState<Depth>('knee');
   const [passability, setPassability] = useState<Passability>('high');
@@ -263,11 +265,19 @@ export default function ReportScreen() {
       return;
     }
 
+    const selected = DEPTH_OPTIONS.find((d) => d.id === depth)!;
+
+    const confirmed = await confirm({
+      title: 'Submit report?',
+      message: `${selected.label} at your current pin${photo ? ' with a photo' : ''}. The moderation desk reviews it before it shows on the map.`,
+      confirmLabel: 'Submit Report',
+    });
+    if (!confirmed) return;
+
     setSubmitting(true);
     setMsg('');
     setResult(null);
 
-    const selected = DEPTH_OPTIONS.find((d) => d.id === depth)!;
     // One id per submission, so a retry after a lost response is stored once.
     const payload = {
       clientId: newClientId(),
@@ -344,13 +354,21 @@ export default function ReportScreen() {
 
         {/* Subheader */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: space[2] }}
-          >
-            <ChevronLeft size={18} color={c.slate600} />
-            <Text style={{ fontSize: fontSize.lead, fontWeight: '500', color: c.slate600 }}>Back</Text>
-          </TouchableOpacity>
+          <BackButton
+            onPress={() => {
+              // A half-filled report (photo, notes, barangay) would be lost silently.
+              if (!photo && !notes.trim() && !barangay.trim()) {
+                router.back();
+                return;
+              }
+              void confirm({
+                title: 'Discard this report?',
+                message: 'The photo, notes and location pin you entered are not saved.',
+                confirmLabel: 'Discard',
+                destructive: true,
+              }).then((confirmed) => confirmed && router.back());
+            }}
+          />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], backgroundColor: c.blue50, paddingHorizontal: space[12], paddingVertical: space[6], borderRadius: 999 }}>
             <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.blue500 }} />

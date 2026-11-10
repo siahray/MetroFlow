@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   View,
   Text,
   TouchableOpacity,
@@ -46,6 +45,8 @@ import {
 } from '../../api';
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
+import { useDialog } from '../../components/Dialog';
+
 import { QuickPickList } from '../../components/QuickPicks';
 import { loadCache, saveCache, useOnline, usePendingReports } from '../../offline';
 import { loadMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
@@ -96,6 +97,7 @@ const BASIS_LABEL: Record<string, string> = {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { confirm, notice } = useDialog();
 
   const [hazards, setHazards] = useState<HazardInfo[] | null>(null);
   const [floodState, setFloodState] = useState<FloodStateResponse | null>(null);
@@ -197,12 +199,22 @@ export default function HomeScreen() {
 
   async function handleArrived() {
     if (!mission) return;
+    const confirmed = await confirm({
+      title: 'Mark arrival?',
+      message: `Dispatch sees incident #${mission.sos_id} as reached once you confirm.`,
+      confirmLabel: 'Mark Arrived',
+    });
+    if (!confirmed) return;
     setClosing(true);
     try {
       await arriveSOS(mission.sos_id);
       setSceneMarked(true);
     } catch {
-      Alert.alert('Could not mark arrival', 'The server did not confirm. Try again.');
+      await notice({
+        title: 'Could not mark arrival',
+        message: 'The server did not confirm. Try again.',
+        tone: 'danger',
+      });
     } finally {
       setClosing(false);
     }
@@ -210,13 +222,24 @@ export default function HomeScreen() {
 
   async function handleResolve() {
     if (!mission) return;
+    const confirmed = await confirm({
+      title: 'Close incident?',
+      message: `Incident #${mission.sos_id} is cleared from your unit and cannot be reopened.`,
+      confirmLabel: 'Close Incident',
+      destructive: true,
+    });
+    if (!confirmed) return;
     setClosing(true);
     try {
       await resolveSOS(mission.sos_id);
       setMission(null);
       setSceneMarked(false);
     } catch {
-      Alert.alert('Could not close the incident', 'The server did not confirm. Try again.');
+      await notice({
+        title: 'Could not close the incident',
+        message: 'The server did not confirm. Try again.',
+        tone: 'danger',
+      });
     } finally {
       setClosing(false);
     }
