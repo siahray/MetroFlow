@@ -43,15 +43,17 @@ import { Avatar } from '../../components/Avatar';
 import { QuickPicks } from '../../components/QuickPicks';
 import { loadCache, saveCache, useOnline } from '../../offline';
 import { loadMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
-import { fontSize, space, colors } from '../../theme';
+import { fontSize, space, useTheme, type ThemeColors } from '../../theme';
 import type { LatLng } from '../../navigation/geo';
 
-const VEHICLE_STATUS_COLOR: Record<string, string> = {
-  AVAILABLE: colors.green700,
-  DISPATCHED: colors.red700,
-  EN_ROUTE: colors.red700,
-  MAINTENANCE: colors.amber800,
-};
+function vehicleStatusColor(c: ThemeColors): Record<string, string> {
+  return {
+    AVAILABLE: c.green700,
+    DISPATCHED: c.red700,
+    EN_ROUTE: c.red700,
+    MAINTENANCE: c.amber800,
+  };
+}
 
 const MY_VEHICLE_ICON: Record<VehicleType, typeof Car> = {
   motorcycle: Bike,
@@ -81,14 +83,22 @@ export default function HomeScreen() {
   const [mission, setMission] = useState<SOSRequest | null>(null);
   const [closing, setClosing] = useState(false);
   // On-scene is its own milestone now: "Mark arrived" records ARRIVED, then
-  // "Close incident" resolves. Reset whenever the mission changes.
+  // "Close incident" resolves. Reset whenever the mission changes -- adjusted
+  // during render (React's documented pattern) rather than in an effect, so
+  // there's no extra render pass between the mission changing and the reset.
   const [sceneMarked, setSceneMarked] = useState(false);
   const missionId = mission?.sos_id ?? null;
-  useEffect(() => setSceneMarked(false), [missionId]);
+  const [trackedMissionId, setTrackedMissionId] = useState(missionId);
+  if (missionId !== trackedMissionId) {
+    setTrackedMissionId(missionId);
+    setSceneMarked(false);
+  }
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [myVehicle, setMyVehicle] = useState<MyVehicle | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
   const online = useOnline();
+  const { c, mode } = useTheme();
+  const VEHICLE_STATUS_COLOR = vehicleStatusColor(c);
 
   const displayName = user?.name || user?.email || 'Guest';
   const vehicleId = user?.vehicle_id ?? null;
@@ -197,22 +207,22 @@ export default function HomeScreen() {
   const impassable = (hazards ?? []).filter((h) => h.obstruction_level === 'IMPASSABLE').length;
 
   const card = {
-    backgroundColor: colors.white,
+    backgroundColor: c.white,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.slate200,
+    borderColor: c.slate200,
   } as const;
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.white }}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.white }}>
+      <StatusBar barStyle={mode === 'storm' ? 'light-content' : 'dark-content'} />
 
       <View
         style={{
           paddingHorizontal: space[20],
           paddingVertical: space[12],
           borderBottomWidth: 1,
-          borderColor: colors.slate100,
+          borderColor: c.slate100,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -225,25 +235,25 @@ export default function HomeScreen() {
               height: 34,
               borderRadius: 17,
               borderWidth: 1,
-              borderColor: colors.blue100,
+              borderColor: c.blue100,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Waves size={18} color={colors.blue600} />
+            <Waves size={18} color={c.blue600} />
           </View>
           <View>
-            <Text style={{ fontSize: fontSize.tiny, fontWeight: '800', color: colors.blue600, letterSpacing: 0.8 }}>
+            <Text style={{ fontSize: fontSize.tiny, fontWeight: '800', color: c.blue600, letterSpacing: 0.8 }}>
               METROFLOW
             </Text>
-            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.slate900 }}>Home</Text>
+            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>Home</Text>
           </View>
         </View>
         <Avatar name={user?.name || user?.email} size={34} />
       </View>
 
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.slate50 }}
+        style={{ flex: 1, backgroundColor: c.slate50 }}
         contentContainerStyle={{ padding: space[16], gap: space[14], flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -259,22 +269,22 @@ export default function HomeScreen() {
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: colors.slate800 }} numberOfLines={1}>
+            <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate800 }} numberOfLines={1}>
               {displayName}
             </Text>
-            <Text style={{ fontSize: fontSize.caption, color: colors.slate500, marginTop: space[2] }}>
+            <Text style={{ fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] }}>
               {user ? 'Signed in' : 'Guest: sign in to submit reports'}
             </Text>
           </View>
           {offline || !online ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
-              <WifiOff size={13} color={colors.amber800} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.amber800 }}>Offline</Text>
+              <WifiOff size={13} color={c.amber800} />
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.amber800 }}>Offline</Text>
             </View>
           ) : (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[5] }}>
-              <ShieldCheck size={13} color={colors.green600} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.green700 }}>Live</Text>
+              <ShieldCheck size={13} color={c.green600} />
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.green700 }}>Live</Text>
             </View>
           )}
         </View>
@@ -284,23 +294,23 @@ export default function HomeScreen() {
           <View
             style={{
               ...card,
-              backgroundColor: colors.red50,
-              borderColor: colors.red500,
+              backgroundColor: c.red50,
+              borderColor: c.red500,
               padding: space[14],
               gap: space[10],
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
-              <LifeBuoy size={18} color={colors.red700} />
-              <Text style={{ flex: 1, fontSize: fontSize.label, fontWeight: '800', color: colors.red700 }}>
+              <LifeBuoy size={18} color={c.red700} />
+              <Text style={{ flex: 1, fontSize: fontSize.label, fontWeight: '800', color: c.red700 }}>
                 Dispatched: incident #{mission.sos_id}
               </Text>
             </View>
-            <Text style={{ fontSize: fontSize.caption, color: colors.slate700 }}>
+            <Text style={{ fontSize: fontSize.caption, color: c.slate700 }}>
               Scene at {mission.latitude.toFixed(4)}° N, {mission.longitude.toFixed(4)}° E
             </Text>
             {mission.note ? (
-              <Text style={{ fontSize: fontSize.caption, color: colors.slate700 }} numberOfLines={2}>
+              <Text style={{ fontSize: fontSize.caption, color: c.slate700 }} numberOfLines={2}>
                 {mission.note}
               </Text>
             ) : null}
@@ -320,13 +330,13 @@ export default function HomeScreen() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: space[6],
-                  backgroundColor: colors.slate900,
+                  backgroundColor: c.slate900,
                   borderRadius: 10,
                   paddingVertical: space[10],
                 }}
               >
-                <Navigation size={14} color={colors.white} />
-                <Text style={{ fontSize: fontSize.body, fontWeight: '800', color: colors.white }}>
+                <Navigation size={14} color={c.white} />
+                <Text style={{ fontSize: fontSize.body, fontWeight: '800', color: c.white }}>
                   Navigate
                 </Text>
               </TouchableOpacity>
@@ -342,13 +352,13 @@ export default function HomeScreen() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderWidth: 1,
-                  borderColor: colors.red500,
+                  borderColor: c.red500,
                   borderRadius: 10,
                   paddingVertical: space[10],
                   opacity: closing ? 0.6 : 1,
                 }}
               >
-                <Text style={{ fontSize: fontSize.body, fontWeight: '800', color: colors.red700 }}>
+                <Text style={{ fontSize: fontSize.body, fontWeight: '800', color: c.red700 }}>
                   {closing ? 'Working…' : sceneMarked ? 'Close incident' : 'Mark arrived'}
                 </Text>
               </TouchableOpacity>
@@ -364,20 +374,20 @@ export default function HomeScreen() {
                 width: 36,
                 height: 36,
                 borderRadius: 10,
-                backgroundColor: colors.slate100,
+                backgroundColor: c.slate100,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Truck size={20} color={colors.slate900} />
+              <Truck size={20} color={c.slate900} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.slate900 }}>
+              <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.slate900 }}>
                 {vehicle.call_sign} · {vehicle.vehicle_type}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[4], marginTop: space[2] }}>
-                <Gauge size={11} color={colors.slate500} />
-                <Text style={{ fontSize: fontSize.caption, color: colors.slate500 }}>
+                <Gauge size={11} color={c.slate500} />
+                <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>
                   Clearance {vehicle.clearance_cm ?? '—'} cm
                   {vehicle.speed_kmh !== null ? ` · ${Math.round(vehicle.speed_kmh)} km/h` : ''}
                 </Text>
@@ -387,7 +397,7 @@ export default function HomeScreen() {
               style={{
                 fontSize: fontSize.micro,
                 fontWeight: '800',
-                color: VEHICLE_STATUS_COLOR[vehicle.status] ?? colors.slate600,
+                color: VEHICLE_STATUS_COLOR[vehicle.status] ?? c.slate600,
               }}
             >
               {vehicle.status.replace('_', ' ')}
@@ -406,28 +416,28 @@ export default function HomeScreen() {
                 width: 36,
                 height: 36,
                 borderRadius: 10,
-                backgroundColor: colors.slate100,
+                backgroundColor: c.slate100,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
               {React.createElement(MY_VEHICLE_ICON[myVehicle?.type ?? 'sedan'], {
                 size: 18,
-                color: colors.slate900,
+                color: c.slate900,
               })}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.slate900 }}>
+              <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.slate900 }}>
                 {MY_VEHICLE_LABEL[myVehicle?.type ?? 'sedan']}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[4], marginTop: space[2] }}>
-                <Gauge size={11} color={colors.slate500} />
-                <Text style={{ fontSize: fontSize.caption, color: colors.slate500 }}>
+                <Gauge size={11} color={c.slate500} />
+                <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>
                   Clearance {myVehicle?.clearanceCm ?? 28} cm
                 </Text>
               </View>
             </View>
-            <Pencil size={14} color={colors.slate400} />
+            <Pencil size={14} color={c.slate400} />
           </TouchableOpacity>
         )}
 
@@ -438,7 +448,7 @@ export default function HomeScreen() {
           onPress={() => router.push('/route')}
           activeOpacity={0.9}
           style={{
-            backgroundColor: colors.slate900,
+            backgroundColor: c.slate900,
             borderRadius: 16,
             padding: space[16],
             flexDirection: 'row',
@@ -446,14 +456,14 @@ export default function HomeScreen() {
             gap: space[12],
           }}
         >
-          <Search size={20} color={colors.white} />
+          <Search size={20} color={c.white} />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: colors.white }}>Plan a safe route</Text>
-            <Text style={{ fontSize: fontSize.caption, color: colors.slate300, marginTop: space[2] }}>
+            <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.white }}>Plan a safe route</Text>
+            <Text style={{ fontSize: fontSize.caption, color: c.slate300, marginTop: space[2] }}>
               Flood-aware routing for your vehicle clearance
             </Text>
           </View>
-          <ChevronRight size={16} color={colors.slate300} />
+          <ChevronRight size={16} color={c.slate300} />
         </TouchableOpacity>
 
         {/* Quick actions */}
@@ -468,8 +478,8 @@ export default function HomeScreen() {
               onPress={() => router.push(to)}
               style={{ ...card, flex: 1, padding: space[14], gap: space[8] }}
             >
-              <Icon size={20} color={colors.slate900} />
-              <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.slate900 }}>{label}</Text>
+              <Icon size={20} color={c.slate900} />
+              <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate900 }}>{label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -478,21 +488,21 @@ export default function HomeScreen() {
 
         {/* Counts come from the same feed; nothing here is simulated */}
         <View style={{ ...card, padding: space[14] }}>
-          <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: colors.slate900 }}>Network status</Text>
+          <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.slate900 }}>Network status</Text>
           <View style={{ flexDirection: 'row', marginTop: space[12] }}>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: colors.slate500 }}>Active hazards</Text>
-              <Text style={{ fontSize: fontSize.display, fontWeight: '800', color: colors.slate900, marginTop: space[2] }}>
+              <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: c.slate500 }}>Active hazards</Text>
+              <Text style={{ fontSize: fontSize.display, fontWeight: '800', color: c.slate900, marginTop: space[2] }}>
                 {hazards ? hazards.length : '—'}
               </Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: colors.slate500 }}>Impassable</Text>
+              <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: c.slate500 }}>Impassable</Text>
               <Text
                 style={{
                   fontSize: fontSize.display,
                   fontWeight: '800',
-                  color: impassable > 0 ? colors.red600 : colors.slate900,
+                  color: impassable > 0 ? c.red600 : c.slate900,
                   marginTop: space[2],
                 }}
               >
@@ -500,7 +510,7 @@ export default function HomeScreen() {
               </Text>
             </View>
           </View>
-          <Text style={{ fontSize: fontSize.micro, color: colors.slate400, marginTop: space[10] }}>
+          <Text style={{ fontSize: fontSize.micro, color: c.slate400, marginTop: space[10] }}>
             {updatedAt
               ? `Updated ${clock(updatedAt)}`
               : offline
