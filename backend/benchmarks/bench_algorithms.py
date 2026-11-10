@@ -77,6 +77,7 @@ def grid_graph(side: int):
                             100.0,
                             random.choice((30, 40, 50, 60)),
                             random.choice((0, 0, 0, 5, 10, 15, 20, 26, 40)),
+                            False,
                         )
                     )
     return nodes, edges
@@ -92,7 +93,7 @@ def dijkstra_reference(edges, start, target, clearance):
             continue
         if u == target:
             return d
-        for v, length, speed, depth in edges.get(u, []):
+        for v, length, speed, depth, _advisory in edges.get(u, []):
             if depth >= clearance:
                 continue
             pen = 1.0 + math.pow(depth / 10.0, 1.8)
@@ -105,7 +106,7 @@ def dijkstra_reference(edges, start, target, clearance):
 
 def settled_counts(nodes, edges, start, target, clearance):
     """Nodes settled by A* (engine's heuristic) and by Dijkstra (h = 0), same edge cost."""
-    vmax = max(max(s for _, _, s, _ in adj) for adj in edges.values() if adj) / 3.6
+    vmax = max(max(s for _, _, s, _, _ in adj) for adj in edges.values() if adj) / 3.6
     tgt = nodes[target]
 
     def run(use_h):
@@ -120,7 +121,7 @@ def settled_counts(nodes, edges, start, target, clearance):
             settled.add(u)
             if u == target:
                 break
-            for v, length, speed, depth in edges[u]:
+            for v, length, speed, depth, _advisory in edges[u]:
                 if depth >= clearance:
                     continue
                 pen = 1.0 + math.pow(depth / 10.0, 1.8)
