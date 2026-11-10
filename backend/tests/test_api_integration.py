@@ -76,6 +76,49 @@ def dry_network(client):
     yield
 
 
+# (table, id column) pairs this suite writes to without an explicit cleanup
+# fixture (unlike reports/hazards created through `created_records`). Q-5:
+# left ~14 sos_requests, 2 hazard_zones and 3 users behind on a clean run.
+_LEFTOVER_ROW_TABLES = (
+    ("sos_requests", "sos_id"),
+    ("hazard_zones", "hazard_id"),
+    ("users", "user_id"),
+)
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_leftover_rows():
+    """Delete whatever rows a test added to the tables above (Q-5).
+
+    Diffs the id set before/after rather than tracking ids per test, so every
+    test is covered without touching its body. ``dispatch_events`` cascades
+    from ``sos_requests``. A user row with audit history can't be deleted
+    (``audit_logs.user_id`` has no ON DELETE clause by design -- the audit
+    chain is append-only) so that delete is best-effort and swallowed.
+    """
+    from sqlalchemy import text
+
+    from database import SessionLocal
+
+    with SessionLocal() as db:
+        before = {
+            table: {row[0] for row in db.execute(text(f"SELECT {col} FROM {table}"))}
+            for table, col in _LEFTOVER_ROW_TABLES
+        }
+    yield
+    with SessionLocal() as db:
+        for table, col in _LEFTOVER_ROW_TABLES:
+            after = {row[0] for row in db.execute(text(f"SELECT {col} FROM {table}"))}
+            new_ids = list(after - before[table])
+            if not new_ids:
+                continue
+            try:
+                db.execute(text(f"DELETE FROM {table} WHERE {col} = ANY(:ids)"), {"ids": new_ids})
+                db.commit()
+            except Exception:
+                db.rollback()
+
+
 def edge_features(response):
     return response.json()["edges"]["features"]
 
