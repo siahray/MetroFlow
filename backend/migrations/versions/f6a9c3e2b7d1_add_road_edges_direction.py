@@ -21,7 +21,15 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("road_edges", sa.Column("direction", sa.String(length=10), nullable=True))
+    op.add_column(
+        "road_edges",
+        sa.Column(
+            "direction",
+            sa.String(length=10),
+            nullable=True,
+            comment="BOTH, FORWARD (start to end only) or BACKWARD (end to start only)",
+        ),
+    )
     op.execute("UPDATE road_edges SET direction = 'BOTH' WHERE direction IS NULL")
     op.alter_column("road_edges", "direction", nullable=False)
 
