@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, MapPin, Navigation, Pentagon, Spline, X } from "lucide-react";
+import { Check, MapPin, Navigation, Pentagon, Route, Spline, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ErrorNotice } from "./error-notice";
@@ -183,50 +183,33 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
           </h3>
 
           <div>
-            <span className="mb-1 block text-xs font-semibold text-slate-700 uppercase">Shape</span>
+            <span className="mb-1.5 block text-xs font-semibold text-slate-700 uppercase">
+              Shape
+            </span>
             <div className="grid grid-cols-3 gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setShape("segment");
-                  setDrawnGeometry(null);
-                }}
-                className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${
-                  shape === "segment"
-                    ? "border-slate-900 bg-brand-primary text-white"
-                    : "border-slate-200 bg-white text-slate-700"
-                }`}
-              >
-                Road segment
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShape("polygon");
-                  setDrawnGeometry(null);
-                }}
-                className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${
-                  shape === "polygon"
-                    ? "border-slate-900 bg-brand-primary text-white"
-                    : "border-slate-200 bg-white text-slate-700"
-                }`}
-              >
-                <Pentagon className="h-3 w-3" /> Flood area
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShape("line");
-                  setDrawnGeometry(null);
-                }}
-                className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold ${
-                  shape === "line"
-                    ? "border-slate-900 bg-brand-primary text-white"
-                    : "border-slate-200 bg-white text-slate-700"
-                }`}
-              >
-                <Spline className="h-3 w-3" /> Closure line
-              </button>
+              {(
+                [
+                  { id: "segment", label: "Road segment", Icon: Route },
+                  { id: "polygon", label: "Flood area", Icon: Pentagon },
+                  { id: "line", label: "Closure line", Icon: Spline },
+                ] as const
+              ).map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setShape(id);
+                    setDrawnGeometry(null);
+                  }}
+                  className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors ${
+                    shape === id
+                      ? "border-slate-900 bg-brand-primary text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <Icon className="h-3 w-3" /> {label}
+                </button>
+              ))}
             </div>
           </div>
 

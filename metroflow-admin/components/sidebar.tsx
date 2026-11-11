@@ -64,7 +64,7 @@ export function Sidebar({
           href="/triage"
           className="flex items-center gap-3 border-b border-slate-800 p-4 hover:bg-slate-800/40 transition-colors"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500 text-white shadow-md shadow-sky-500/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm">
             <Waves className="h-5 w-5" />
           </div>
           <div>

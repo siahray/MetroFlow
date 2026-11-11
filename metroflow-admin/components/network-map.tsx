@@ -1023,37 +1023,39 @@ export function NetworkMap({
       ) : null}
 
       {/* Live overlay toggles (FSD-FR-075, FSD-FR-076) */}
-      <div className="absolute top-4 left-4 z-30 w-[186px] space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/95 p-2.5 text-slate-100 shadow-xl backdrop-blur">
+      <div className="absolute top-4 left-4 z-30 w-[200px] space-y-2 rounded-xl border border-slate-800 bg-slate-950/95 p-3.5 text-slate-100 shadow-sm backdrop-blur">
         <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
           Live overlays
         </span>
-        {(
-          [
-            ["hazards", ShieldAlert, hazards.length],
-            ["fleet", Truck, vehicles.length],
-            ["sos", Waves, sosRequests.length],
-            ["sensors", Gauge, sensors.length],
-          ] as [OverlayKey, typeof ShieldAlert, number][]
-        ).map(([key, Icon, count]) => (
-          <label
-            key={key}
-            className="flex cursor-pointer items-center justify-between gap-2 text-[11px] font-semibold text-slate-300"
-          >
-            <span className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={overlays[key]}
-                onChange={(event) =>
-                  setOverlays((current) => ({ ...current, [key]: event.target.checked }))
-                }
-                className="accent-sky-500"
-              />
-              <Icon className="h-3.5 w-3.5 text-slate-400" />
-              {OVERLAY_LABELS[key]}
-            </span>
-            <span className="font-mono text-[10px] text-slate-400">{count}</span>
-          </label>
-        ))}
+        <div className="space-y-1">
+          {(
+            [
+              ["hazards", ShieldAlert, hazards.length],
+              ["fleet", Truck, vehicles.length],
+              ["sos", Waves, sosRequests.length],
+              ["sensors", Gauge, sensors.length],
+            ] as [OverlayKey, typeof ShieldAlert, number][]
+          ).map(([key, Icon, count]) => (
+            <label
+              key={key}
+              className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-1 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-900"
+            >
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={overlays[key]}
+                  onChange={(event) =>
+                    setOverlays((current) => ({ ...current, [key]: event.target.checked }))
+                  }
+                  className="accent-sky-500"
+                />
+                <Icon className="h-3.5 w-3.5 text-slate-400" />
+                {OVERLAY_LABELS[key]}
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">{count}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Simulation + routing controls: float over the map unless the caller
@@ -1133,22 +1135,25 @@ export function NetworkMap({
                   : `Apply ${rainfallMmHr} mm/hr`}
             </button>
 
-            <div className="flex flex-wrap gap-1.5 border-t border-slate-800 pt-2.5">
+            <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-3">
               {(["PASSABLE", "LIGHT_FLOOD", "SUBMERGED"] as const).map((status) => (
                 <span
                   key={status}
-                  className="inline-flex items-center gap-1 rounded border border-slate-800 bg-brand-primary px-1.5 py-0.5 text-[10px] font-semibold text-slate-300"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-800 bg-brand-primary px-2 py-1 text-[10px] font-semibold text-slate-300"
                 >
                   <span
-                    className="h-2 w-2 rounded-sm"
+                    className="h-2 w-2 shrink-0 rounded-sm"
                     style={{ backgroundColor: STATUS_COLORS[status] }}
                   />
-                  {summary ? summary[STATUS_FILTER[status]] : "–"}
+                  {STATUS_LABELS[status]}
+                  <span className="font-mono text-slate-500">
+                    {summary ? summary[STATUS_FILTER[status]] : "–"}
+                  </span>
                 </span>
               ))}
             </div>
 
-            <div className="space-y-2 border-t border-slate-800 pt-2.5">
+            <div className="space-y-2.5 border-t border-slate-800 pt-3">
               <div className="grid grid-cols-2 gap-2">
                 <label className="space-y-1">
                   <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
@@ -1215,14 +1220,14 @@ export function NetworkMap({
 
         if (controlsContainer) {
           return createPortal(
-            <div className="w-full space-y-3 rounded-xl border border-slate-200 bg-slate-950 p-4 text-slate-100 shadow-sm">
+            <div className="w-full space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-sm">
               {panel}
             </div>,
             controlsContainer,
           );
         }
         return (
-          <div className="absolute right-4 bottom-24 z-30 w-[272px] space-y-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3 text-slate-100 shadow-xl backdrop-blur">
+          <div className="absolute right-4 bottom-24 z-30 w-[272px] space-y-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3.5 text-slate-100 shadow-sm backdrop-blur">
             {panel}
           </div>
         );
