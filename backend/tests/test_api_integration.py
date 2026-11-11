@@ -17,7 +17,7 @@ test_routing.py / test_hydrology.py cover the algorithms; neither would catch a
 
 import json
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from evidence import build_jpeg
@@ -2177,6 +2177,36 @@ def test_glofas_discharge_feeds_a_modelled_advisory(client, monkeypatch):
         assert cleared[hit[0]["edge_id"]]["has_live_data"] is True
     finally:
         client.delete(f"/api/v1/sensors/{river_discharge.SENSOR_ID}")
+
+
+def test_forecast_is_display_only_and_never_touches_flood_state(client, monkeypatch):
+    """CR-004 revision 1.1: the forecast card never feeds routing or an advisory."""
+    monkeypatch.setattr(weather, "_forecast_cache", None)
+    monkeypatch.setattr(river_discharge, "_forecast_cache", None)
+    rain_hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    monkeypatch.setattr(
+        weather,
+        "fetch_rain_forecast",
+        lambda: [(rain_hour, 0.0), (rain_hour + timedelta(hours=1), 5.0)],
+    )
+    today = datetime.now(UTC).date()
+    monkeypatch.setattr(
+        river_discharge,
+        "fetch_discharge_forecast",
+        lambda: [(today, 1.0, 2.0), (today + timedelta(days=1), 3.0, 2.0)],
+    )
+
+    response = client.get("/api/v1/forecast")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["rain"]["next_rain_at"] is not None
+    assert body["rain"]["peak_mm"] == 5.0
+    assert body["river"]["next_high_flow_date"] is not None
+    assert body["river"]["kind"] == "MODELLED"
+
+    # Still just display: a quiet forecast never creates a flood-state advisory.
+    quiet_state = _flood_state(client)
+    assert all(e["source"] != "forecast" for e in quiet_state["edges"])
 
 
 def test_flood_state_requires_a_session(client):

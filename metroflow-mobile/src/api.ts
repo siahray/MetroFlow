@@ -397,6 +397,32 @@ export function getFloodState(onlyFlagged = true): Promise<FloodStateResponse> {
   return request<FloodStateResponse>(`/api/v1/flood-state?only_flagged=${onlyFlagged}`);
 }
 
+export type RainForecast = {
+  source: string;
+  hours_covered: number;
+  next_rain_at: string | null;
+  peak_mm: number | null;
+  peak_at: string | null;
+};
+
+export type RiverForecast = {
+  source: string;
+  kind: string;
+  days_covered: number;
+  next_high_flow_date: string | null;
+};
+
+/** Display-only outlook (CR-004 revision 1.1): never affects routing or an advisory. */
+export type ForecastResponse = {
+  generated_at: string;
+  rain: RainForecast | null;
+  river: RiverForecast | null;
+};
+
+export function getForecast(): Promise<ForecastResponse> {
+  return request<ForecastResponse>("/api/v1/forecast");
+}
+
 // ---------------------------------------------------------------------------
 // Field reports (FSD-FR-065 to 067)
 // ---------------------------------------------------------------------------

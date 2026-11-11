@@ -493,6 +493,35 @@ class FloodStateResponse(BaseModel):
     edges: list[FloodStateEdge]
 
 
+class RainForecast(BaseModel):
+    """Display-only hourly rain outlook (CR-004 revision 1.1): never a routing input."""
+
+    source: str = "Open-Meteo Forecast API"
+    hours_covered: int
+    next_rain_at: datetime | None = Field(
+        default=None, description="First upcoming hour at or above the rain-gate threshold"
+    )
+    peak_mm: float | None = Field(default=None, description="Highest forecast hourly mm in range")
+    peak_at: datetime | None = None
+
+
+class RiverForecast(BaseModel):
+    """Display-only daily GloFAS discharge outlook (CR-004 revision 1.1): never a routing input."""
+
+    source: str = "Open-Meteo Flood API (GloFAS)"
+    kind: str = "MODELLED"
+    days_covered: int
+    next_high_flow_date: datetime | None = Field(
+        default=None, description="First upcoming day forecast at or above that day's own p75"
+    )
+
+
+class ForecastResponse(BaseModel):
+    generated_at: datetime
+    rain: RainForecast | None = None
+    river: RiverForecast | None = None
+
+
 class SensorReadingRequest(BaseModel):
     """Gateway posts a sensor reading (FSD-FR-090)."""
 

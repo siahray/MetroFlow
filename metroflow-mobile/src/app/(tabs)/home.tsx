@@ -34,11 +34,13 @@ import {
 import {
   arriveSOS,
   getFloodState,
+  getForecast,
   getMission,
   listActiveHazards,
   listVehicles,
   resolveSOS,
   type FloodStateResponse,
+  type ForecastResponse,
   type HazardInfo,
   type SOSRequest,
   type Vehicle,
@@ -87,6 +89,31 @@ function timeAgo(iso: string | null): string | null {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** Relative future time for a forecast timestamp ("in 3h", "around 2:00 PM"). */
+function forecastWhen(iso: string): string {
+  const target = new Date(iso);
+  const hours = Math.round((target.getTime() - Date.now()) / 3600000);
+  if (hours <= 1) return 'within the hour';
+  if (hours < 24) return `in about ${hours}h`;
+  return `around ${target.toLocaleDateString([], { weekday: 'short' })}`;
+}
+
+/** One-line "what's coming" summary for the quiet-advisory card (CR-004 revision 1.1). */
+function forecastSummary(forecast: ForecastResponse | null): string {
+  if (!forecast) return 'Conditions are normal across the monitored network.';
+  const parts: string[] = [];
+  if (forecast.rain?.next_rain_at) {
+    parts.push(`Rain expected ${forecastWhen(forecast.rain.next_rain_at)}`);
+  } else if (forecast.rain) {
+    parts.push(`No rain expected in the next ${forecast.rain.hours_covered}h`);
+  }
+  if (forecast.river?.next_high_flow_date) {
+    parts.push(`river levels may rise ${forecastWhen(forecast.river.next_high_flow_date)}`);
+  }
+  if (parts.length === 0) return 'Conditions are normal across the monitored network.';
+  return `${parts.join(', ')}.`;
+}
+
 const BASIS_LABEL: Record<string, string> = {
   VERIFIED_HAZARD: 'Verified Hazard Advisory',
   LIVE_ADVISORY: 'Live Rain Advisory',
@@ -106,6 +133,7 @@ export default function HomeScreen() {
 
   const [hazards, setHazards] = useState<HazardInfo[] | null>(null);
   const [floodState, setFloodState] = useState<FloodStateResponse | null>(null);
+  const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -172,6 +200,13 @@ export default function HomeScreen() {
     [],
   );
 
+  // Display-only outlook (CR-004 revision 1.1): what's coming, never a routing
+  // input. No offline cache, same as flood state -- the card just goes quiet.
+  const loadForecast = useCallback(
+    () => getForecast().then(setForecast).catch(() => setForecast(null)),
+    [],
+  );
+
   // The dispatcher assigns a unit in the portal; the unit polls its own mission
   // (FSD-FR-074) because there is no driver-facing stream.
   const loadMission = useCallback(
@@ -191,14 +226,15 @@ export default function HomeScreen() {
     if (!online) return;
     load();
     void loadFloodState();
+    void loadForecast();
     void loadMission();
     const timer = setInterval(() => void loadMission(), 10000);
     return () => clearInterval(timer);
-  }, [online, load, loadFloodState, loadMission]);
+  }, [online, load, loadFloodState, loadForecast, loadMission]);
 
   async function handleRefresh() {
     setRefreshing(true);
-    await Promise.all([load(), loadFloodState(), loadMission()]);
+    await Promise.all([load(), loadFloodState(), loadForecast(), loadMission()]);
     setRefreshing(false);
   }
 
@@ -611,7 +647,7 @@ export default function HomeScreen() {
                 No Active Weather Advisory
               </Text>
               <Text style={{ fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] }}>
-                {floodState ? 'Conditions are normal across the monitored network.' : 'Advisory data unavailable right now.'}
+                {floodState ? forecastSummary(forecast) : 'Advisory data unavailable right now.'}
               </Text>
             </View>
           </View>

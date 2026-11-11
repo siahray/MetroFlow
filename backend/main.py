@@ -46,6 +46,7 @@ from schemas import (
     EdgeProperties,
     FloodStateEdge,
     FloodStateResponse,
+    ForecastResponse,
     HazardCreate,
     HazardResponse,
     HazardUpdate,
@@ -56,6 +57,7 @@ from schemas import (
     NodeFeature,
     NodeFeatureCollection,
     NodeProperties,
+    RainForecast,
     RegisterRequest,
     ReportApproveRequest,
     ReportEscalateRequest,
@@ -64,6 +66,7 @@ from schemas import (
     ReportPhotoInfo,
     ReportRejectRequest,
     ReportResponse,
+    RiverForecast,
     RouteHazard,
     RouteInstruction,
     RouteResponse,
@@ -2991,6 +2994,44 @@ def get_flood_state(
         fresh_window_minutes=settings.flood_fresh_minutes,
         edges=states,
     )
+
+
+@app.get("/api/v1/forecast", response_model=ForecastResponse)
+def get_forecast(_user: models.User = Depends(require_user)):
+    """
+    Display-only rain and river-discharge outlook (CR-004 revision 1.1).
+
+    Unlike ``/flood-state``, nothing here feeds routing or an advisory: it is
+    the "what's coming" card for dispatchers and drivers, built from the same
+    Open-Meteo sources, cached well past their own ingest cadence since a
+    forecast barely moves minute to minute.
+    """
+    now = datetime.now(UTC)
+
+    rain: RainForecast | None = None
+    hourly = weather.cached_rain_forecast()
+    if hourly is not None:
+        flagged = [(t, mm) for t, mm in hourly if mm >= weather.RAIN_THRESHOLD_MM_HR]
+        peak = max(hourly, key=lambda h: h[1]) if hourly else None
+        rain = RainForecast(
+            hours_covered=weather.FORECAST_HOURS,
+            next_rain_at=flagged[0][0] if flagged else None,
+            peak_mm=peak[1] if peak else None,
+            peak_at=peak[0] if peak else None,
+        )
+
+    river: RiverForecast | None = None
+    daily = river_discharge.cached_discharge_forecast()
+    if daily is not None:
+        high_flow = [d for d, discharge, p75 in daily if discharge >= p75]
+        river = RiverForecast(
+            days_covered=river_discharge.FORECAST_DAYS,
+            next_high_flow_date=datetime.combine(high_flow[0], datetime.min.time(), tzinfo=UTC)
+            if high_flow
+            else None,
+        )
+
+    return ForecastResponse(generated_at=now, rain=rain, river=river)
 
 
 @app.get("/api/v1/sensors", response_model=list[SensorResponse])

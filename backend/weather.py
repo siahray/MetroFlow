@@ -36,6 +36,15 @@ _API_URL = (
     "&current=precipitation&timezone=UTC"
 )
 
+# Display-only forecast (no routing/advisory effect): the next day's hourly
+# rainfall outlook for the portal/driver "what's coming" card.
+FORECAST_HOURS = 24
+_FORECAST_API_URL = (
+    "https://api.open-meteo.com/v1/forecast"
+    f"?latitude={CORRIDOR_LAT}&longitude={CORRIDOR_LON}"
+    f"&hourly=precipitation&forecast_hours={FORECAST_HOURS}&timezone=UTC"
+)
+
 # One poll per window is plenty: Open-Meteo's current values update every 15
 # minutes, and the flood fresh window is 30.
 _REFRESH_INTERVAL = timedelta(minutes=10)
@@ -75,3 +84,39 @@ def fetch_rain_rate() -> tuple[float, datetime] | None:
         )
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def fetch_rain_forecast() -> list[tuple[datetime, float]] | None:
+    """Hourly ``(time, mm)`` for the next ``FORECAST_HOURS`` hours, or ``None`` on failure.
+
+    Display-only (CR-004's resolver only ever reasons about current, fresh
+    readings): this is the "what's coming" outlook, not a routing input.
+    """
+    try:
+        request = Request(
+            _FORECAST_API_URL, headers={"User-Agent": "MetroFlow flood advisory pilot"}
+        )
+        with urlopen(request, timeout=4) as response:
+            payload = json.load(response)
+        hourly = payload["hourly"]
+        return [
+            (datetime.fromisoformat(t).replace(tzinfo=UTC), float(mm))
+            for t, mm in zip(hourly["time"], hourly["precipitation"], strict=True)
+        ]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+# A forecast barely moves minute to minute, so the display endpoint can serve a
+# cached copy well past the rain-gate's own 10-minute ingest cadence.
+_FORECAST_CACHE_TTL = timedelta(minutes=15)
+_forecast_cache: tuple[datetime, list[tuple[datetime, float]] | None] | None = None
+
+
+def cached_rain_forecast() -> list[tuple[datetime, float]] | None:
+    """``fetch_rain_forecast``, reused for ``_FORECAST_CACHE_TTL`` before refetching."""
+    global _forecast_cache
+    now = datetime.now(UTC)
+    if _forecast_cache is None or now - _forecast_cache[0] >= _FORECAST_CACHE_TTL:
+        _forecast_cache = (now, fetch_rain_forecast())
+    return _forecast_cache[1]

@@ -15,7 +15,7 @@ ages out of the fresh window, and silence is never reported as a flood.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from urllib.request import Request, urlopen
 
 # The pilot river point. Several nearby requests across the Marikina/Pasig
@@ -36,6 +36,15 @@ _API_URL = (
     "https://flood-api.open-meteo.com/v1/flood"
     f"?latitude={RIVER_LAT}&longitude={RIVER_LON}"
     "&daily=river_discharge,river_discharge_p75&forecast_days=1&past_days=0"
+)
+
+# Display-only forecast (no routing/advisory effect): GloFAS's own daily
+# discharge outlook against that day's p75, for the "what's coming" card.
+FORECAST_DAYS = 7
+_FORECAST_API_URL = (
+    "https://flood-api.open-meteo.com/v1/flood"
+    f"?latitude={RIVER_LAT}&longitude={RIVER_LON}"
+    f"&daily=river_discharge,river_discharge_p75&forecast_days={FORECAST_DAYS}&past_days=0"
 )
 
 # GloFAS updates once a day, so there is no rush, but polling every 20
@@ -76,3 +85,38 @@ def fetch_discharge() -> tuple[float, float] | None:
         return float(daily["river_discharge"][0]), float(daily["river_discharge_p75"][0])
     except (OSError, ValueError, KeyError, IndexError, TypeError):
         return None
+
+
+def fetch_discharge_forecast() -> list[tuple[date, float, float]] | None:
+    """Daily ``(date, river_discharge, river_discharge_p75)`` for the next
+    ``FORECAST_DAYS`` days, or ``None`` on failure. Display-only, see weather.fetch_rain_forecast."""
+    try:
+        request = Request(
+            _FORECAST_API_URL, headers={"User-Agent": "MetroFlow flood advisory pilot"}
+        )
+        with urlopen(request, timeout=4) as response:
+            payload = json.load(response)
+        daily = payload["daily"]
+        return [
+            (date.fromisoformat(d), float(discharge), float(p75))
+            for d, discharge, p75 in zip(
+                daily["time"], daily["river_discharge"], daily["river_discharge_p75"], strict=True
+            )
+        ]
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
+# GloFAS updates once a day, so a long-lived cache on the display endpoint
+# costs nothing in staleness (see weather.cached_rain_forecast).
+_FORECAST_CACHE_TTL = timedelta(minutes=30)
+_forecast_cache: tuple[datetime, list[tuple[date, float, float]] | None] | None = None
+
+
+def cached_discharge_forecast() -> list[tuple[date, float, float]] | None:
+    """``fetch_discharge_forecast``, reused for ``_FORECAST_CACHE_TTL`` before refetching."""
+    global _forecast_cache
+    now = datetime.now(UTC)
+    if _forecast_cache is None or now - _forecast_cache[0] >= _FORECAST_CACHE_TTL:
+        _forecast_cache = (now, fetch_discharge_forecast())
+    return _forecast_cache[1]

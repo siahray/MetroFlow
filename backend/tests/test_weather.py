@@ -50,3 +50,42 @@ def test_due_for_refresh_claims_the_slot_once_per_interval(monkeypatch):
     assert weather.due_for_refresh() is False  # a failed fetch counts too
     monkeypatch.setattr(weather, "_last_fetch", datetime.now(UTC) - timedelta(minutes=11))
     assert weather.due_for_refresh() is True
+
+
+def test_fetch_rain_forecast_reads_the_hourly_series(monkeypatch):
+    _serve(
+        monkeypatch,
+        {"hourly": {"time": ["2026-11-11T15:00", "2026-11-11T16:00"], "precipitation": [0.0, 2.5]}},
+    )
+    hourly = weather.fetch_rain_forecast()
+    assert hourly == [
+        (datetime(2026, 11, 11, 15, 0, tzinfo=UTC), 0.0),
+        (datetime(2026, 11, 11, 16, 0, tzinfo=UTC), 2.5),
+    ]
+
+
+def test_a_forecast_outage_returns_none_instead_of_raising(monkeypatch):
+    _serve(monkeypatch, OSError("weather service unreachable"))
+    assert weather.fetch_rain_forecast() is None
+
+
+def test_cached_rain_forecast_reuses_the_result_within_the_ttl(monkeypatch):
+    monkeypatch.setattr(weather, "_forecast_cache", None)
+    calls = []
+
+    def fake_fetch():
+        calls.append(1)
+        return [(datetime.now(UTC), 1.0)]
+
+    monkeypatch.setattr(weather, "fetch_rain_forecast", fake_fetch)
+    weather.cached_rain_forecast()
+    weather.cached_rain_forecast()
+    assert len(calls) == 1  # second call served from cache
+
+    monkeypatch.setattr(
+        weather,
+        "_forecast_cache",
+        (datetime.now(UTC) - timedelta(minutes=16), [(datetime.now(UTC), 1.0)]),
+    )
+    weather.cached_rain_forecast()
+    assert len(calls) == 2  # stale cache triggers a refetch
