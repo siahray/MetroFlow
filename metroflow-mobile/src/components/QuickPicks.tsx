@@ -31,7 +31,7 @@ import {
 
 import { getNetworkState, type NetworkState, type NodeFeature } from '../api';
 import { listQuickPicks, saveQuickPicks, type QuickPick, type QuickPickIcon } from '../quickPicks';
-import { fontSize, space, colors, useTheme } from '../theme';
+import { fontSize, space, useTheme } from '../theme';
 
 const ICONS: Record<QuickPickIcon, typeof Home> = {
   home: Home,
@@ -65,6 +65,7 @@ export function QuickPicks({
   clearanceCm?: number;
 }) {
   const insets = useSafeAreaInsets();
+  const { c } = useTheme();
   const [picks, setPicks] = useState<QuickPick[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [network, setNetwork] = useState<NetworkState | null>(null);
@@ -266,10 +267,10 @@ export function QuickPicks({
               maxWidth: 420,
               maxHeight: '100%',
               alignSelf: 'center',
-              backgroundColor: colors.white,
+              backgroundColor: c.white,
               borderRadius: 20,
               overflow: 'hidden',
-              shadowColor: colors.black,
+              shadowColor: c.black,
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.18,
               shadowRadius: 24,
@@ -286,14 +287,14 @@ export function QuickPicks({
                 paddingTop: space[18],
                 paddingBottom: space[12],
                 borderBottomWidth: 1,
-                borderColor: colors.slate100,
+                borderColor: c.slate100,
               }}
             >
               <View style={{ flex: 1, gap: space[2] }}>
-                <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.slate900 }}>
+                <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>
                   {headerTitle}
                 </Text>
-                <Text style={{ fontSize: fontSize.caption, color: colors.slate500 }}>
+                <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>
                   Saved destinations for faster safe routes
                 </Text>
               </View>
@@ -307,13 +308,13 @@ export function QuickPicks({
                   width: 30,
                   height: 30,
                   borderRadius: 15,
-                  backgroundColor: colors.slate100,
+                  backgroundColor: c.slate100,
                   alignItems: 'center',
                   justifyContent: 'center',
                   opacity: busy ? 0.5 : 1,
                 }}
               >
-                <X size={16} color={colors.slate500} />
+                <X size={16} color={c.slate500} />
               </TouchableOpacity>
             </View>
 
@@ -327,11 +328,11 @@ export function QuickPicks({
                 <View style={{ alignItems: 'center', gap: space[10], paddingVertical: space[28] }}>
                   {loadError ? (
                     <>
-                      <AlertTriangle size={26} color={colors.amber600} />
-                      <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: colors.slate900 }}>
+                      <AlertTriangle size={26} color={c.amber600} />
+                      <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.slate900 }}>
                         Could not load Quick Picks
                       </Text>
-                      <Text style={{ fontSize: fontSize.body, color: colors.slate500, textAlign: 'center' }}>
+                      <Text style={{ fontSize: fontSize.body, color: c.slate500, textAlign: 'center' }}>
                         Your saved destinations are still on this device.
                       </Text>
                       <TouchableOpacity
@@ -340,21 +341,21 @@ export function QuickPicks({
                         onPress={() => void load()}
                         style={{
                           borderWidth: 1,
-                          borderColor: colors.slate200,
+                          borderColor: c.slate200,
                           borderRadius: 10,
                           paddingHorizontal: space[16],
                           paddingVertical: space[10],
                         }}
                       >
-                        <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.slate900 }}>
+                        <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate900 }}>
                           Try Again
                         </Text>
                       </TouchableOpacity>
                     </>
                   ) : (
                     <>
-                      <ActivityIndicator color={colors.blue600} />
-                      <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>
+                      <ActivityIndicator color={c.blue600} />
+                      <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
                         Loading Quick Picks…
                       </Text>
                     </>
@@ -363,7 +364,7 @@ export function QuickPicks({
               ) : draft ? (
                 <>
                   <View style={{ gap: space[6] }}>
-                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.slate700 }}>
+                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.slate700 }}>
                       Name
                     </Text>
                     <TextInput
@@ -371,21 +372,21 @@ export function QuickPicks({
                       onChangeText={(name) => setDraft((d) => (d ? { ...d, name } : d))}
                       accessibilityLabel="Quick Pick name"
                       placeholder="Name (e.g. Work HQ)"
-                      placeholderTextColor={colors.slate400}
+                      placeholderTextColor={c.slate400}
                       style={{
                         borderWidth: 1,
-                        borderColor: colors.slate200,
+                        borderColor: c.slate200,
                         borderRadius: 10,
                         paddingHorizontal: space[12],
                         paddingVertical: space[10],
                         fontSize: fontSize.label,
-                        color: colors.slate900,
+                        color: c.slate900,
                       }}
                     />
                   </View>
 
                   <View style={{ gap: space[6] }}>
-                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.slate700 }}>
+                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.slate700 }}>
                       Icon
                     </Text>
                     <View style={{ flexDirection: 'row', gap: space[8] }}>
@@ -405,10 +406,10 @@ export function QuickPicks({
                               borderRadius: 9,
                               alignItems: 'center',
                               justifyContent: 'center',
-                              backgroundColor: selected ? colors.slate900 : colors.slate100,
+                              backgroundColor: selected ? c.slate900 : c.slate100,
                             }}
                           >
-                            <Icon size={16} color={selected ? colors.white : colors.slate600} />
+                            <Icon size={16} color={selected ? c.white : c.slate600} />
                           </TouchableOpacity>
                         );
                       })}
@@ -416,7 +417,7 @@ export function QuickPicks({
                   </View>
 
                   <View style={{ gap: space[6] }}>
-                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: colors.slate700 }}>
+                    <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.slate700 }}>
                       Destination
                     </Text>
                     <TextInput
@@ -424,15 +425,15 @@ export function QuickPicks({
                       onChangeText={(query) => setDraft((d) => (d ? { ...d, query, node: null } : d))}
                       accessibilityLabel="Search destinations"
                       placeholder="Search the road network for a named point"
-                      placeholderTextColor={colors.slate400}
+                      placeholderTextColor={c.slate400}
                       style={{
                         borderWidth: 1,
-                        borderColor: colors.slate200,
+                        borderColor: c.slate200,
                         borderRadius: 10,
                         paddingHorizontal: space[12],
                         paddingVertical: space[10],
                         fontSize: fontSize.label,
-                        color: colors.slate900,
+                        color: c.slate900,
                       }}
                     />
                     {draft.node ? (
@@ -441,26 +442,26 @@ export function QuickPicks({
                           flexDirection: 'row',
                           alignItems: 'center',
                           gap: space[6],
-                          backgroundColor: colors.blue50,
+                          backgroundColor: c.blue50,
                           borderRadius: 8,
                           paddingHorizontal: space[10],
                           paddingVertical: space[8],
                         }}
                       >
-                        <MapPin size={13} color={colors.blue700} />
+                        <MapPin size={13} color={c.blue700} />
                         <Text
                           numberOfLines={1}
-                          style={{ flex: 1, fontSize: fontSize.body, fontWeight: '700', color: colors.blue700 }}
+                          style={{ flex: 1, fontSize: fontSize.body, fontWeight: '700', color: c.blue700 }}
                         >
                           {draft.node.properties.name ?? 'Selected point'}
                         </Text>
                       </View>
                     ) : draft.pick ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[6] }}>
-                        <MapPin size={13} color={colors.slate400} />
+                        <MapPin size={13} color={c.slate400} />
                         <Text
                           numberOfLines={1}
-                          style={{ flex: 1, fontSize: fontSize.caption, color: colors.slate500 }}
+                          style={{ flex: 1, fontSize: fontSize.caption, color: c.slate500 }}
                         >
                           {currentName ? `Current: ${currentName}` : 'Current point saved'}. Search to move it.
                         </Text>
@@ -482,16 +483,16 @@ export function QuickPicks({
                           paddingHorizontal: space[10],
                           paddingVertical: space[10],
                           borderRadius: 8,
-                          backgroundColor: draft.node?.id === node.id ? colors.blue50 : colors.slate50,
+                          backgroundColor: draft.node?.id === node.id ? c.blue50 : c.slate50,
                         }}
                       >
-                        <Text style={{ fontSize: fontSize.body, color: colors.slate800 }}>
+                        <Text style={{ fontSize: fontSize.body, color: c.slate800 }}>
                           {node.properties.name}
                         </Text>
                       </TouchableOpacity>
                     ))}
                     {draft.query.trim().length > 0 && !draft.node && results.length === 0 ? (
-                      <Text style={{ fontSize: fontSize.caption, color: colors.slate500 }}>
+                      <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>
                         {network
                           ? 'No matching points on the road network.'
                           : 'The road network is unavailable. Try again when you are back online.'}
@@ -502,9 +503,9 @@ export function QuickPicks({
                   {error ? (
                     <View
                       accessibilityRole="alert"
-                      style={{ backgroundColor: colors.red50, borderRadius: 10, padding: space[10] }}
+                      style={{ backgroundColor: c.red50, borderRadius: 10, padding: space[10] }}
                     >
-                      <Text style={{ fontSize: fontSize.body, color: colors.red700 }}>{error}</Text>
+                      <Text style={{ fontSize: fontSize.body, color: c.red700 }}>{error}</Text>
                     </View>
                   ) : null}
 
@@ -518,13 +519,13 @@ export function QuickPicks({
                         flex: 1,
                         alignItems: 'center',
                         borderWidth: 1,
-                        borderColor: colors.slate200,
+                        borderColor: c.slate200,
                         borderRadius: 10,
                         paddingVertical: space[12],
                         opacity: busy ? 0.5 : 1,
                       }}
                     >
-                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.slate700 }}>
+                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.slate700 }}>
                         Cancel
                       </Text>
                     </TouchableOpacity>
@@ -539,14 +540,14 @@ export function QuickPicks({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: space[6],
-                        backgroundColor: colors.slate900,
+                        backgroundColor: c.slate900,
                         borderRadius: 10,
                         paddingVertical: space[12],
                         opacity: !draftReady || busy ? 0.5 : 1,
                       }}
                     >
-                      {busy ? <ActivityIndicator size="small" color={colors.white} /> : null}
-                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.white }}>
+                      {busy ? <ActivityIndicator size="small" color={c.white} /> : null}
+                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
                         {draft.pick ? 'Save Changes' : 'Add Quick Pick'}
                       </Text>
                     </TouchableOpacity>
@@ -559,20 +560,20 @@ export function QuickPicks({
                       width: 64,
                       height: 64,
                       borderRadius: 32,
-                      backgroundColor: colors.blue50,
+                      backgroundColor: c.blue50,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <MapPinOff size={28} color={colors.blue600} />
+                    <MapPinOff size={28} color={c.blue600} />
                   </View>
-                  <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: colors.slate900 }}>
+                  <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900 }}>
                     No Quick Picks Yet
                   </Text>
                   <Text
                     style={{
                       fontSize: fontSize.body,
-                      color: colors.slate500,
+                      color: c.slate500,
                       textAlign: 'center',
                       maxWidth: 280,
                     }}
@@ -587,15 +588,15 @@ export function QuickPicks({
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: space[6],
-                      backgroundColor: colors.slate900,
+                      backgroundColor: c.slate900,
                       borderRadius: 10,
                       paddingHorizontal: space[20],
                       paddingVertical: space[12],
                       marginTop: space[4],
                     }}
                   >
-                    <Plus size={16} color={colors.white} />
-                    <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.white }}>
+                    <Plus size={16} color={c.white} />
+                    <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
                       Add a Quick Pick
                     </Text>
                   </TouchableOpacity>
@@ -605,9 +606,9 @@ export function QuickPicks({
                   {error ? (
                     <View
                       accessibilityRole="alert"
-                      style={{ backgroundColor: colors.red50, borderRadius: 10, padding: space[10] }}
+                      style={{ backgroundColor: c.red50, borderRadius: 10, padding: space[10] }}
                     >
-                      <Text style={{ fontSize: fontSize.body, color: colors.red700 }}>{error}</Text>
+                      <Text style={{ fontSize: fontSize.body, color: c.red700 }}>{error}</Text>
                     </View>
                   ) : null}
                   {picks.map((pick) => {
@@ -620,7 +621,7 @@ export function QuickPicks({
                           alignItems: 'center',
                           gap: space[12],
                           borderWidth: 1,
-                          borderColor: colors.slate200,
+                          borderColor: c.slate200,
                           borderRadius: 12,
                           paddingHorizontal: space[12],
                           paddingVertical: space[10],
@@ -631,16 +632,16 @@ export function QuickPicks({
                             width: 36,
                             height: 36,
                             borderRadius: 10,
-                            backgroundColor: colors.blue50,
+                            backgroundColor: c.blue50,
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}
                         >
-                          <Icon size={18} color={colors.slate900} />
+                          <Icon size={18} color={c.slate900} />
                         </View>
                         <Text
                           numberOfLines={1}
-                          style={{ flex: 1, fontSize: fontSize.lead, fontWeight: '700', color: colors.slate900 }}
+                          style={{ flex: 1, fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}
                         >
                           {pick.name}
                         </Text>
@@ -651,7 +652,7 @@ export function QuickPicks({
                           hitSlop={8}
                           style={{ padding: space[4] }}
                         >
-                          <Pencil size={16} color={colors.slate500} />
+                          <Pencil size={16} color={c.slate500} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           accessibilityRole="button"
@@ -663,7 +664,7 @@ export function QuickPicks({
                           hitSlop={8}
                           style={{ padding: space[4] }}
                         >
-                          <Trash2 size={16} color={colors.red600} />
+                          <Trash2 size={16} color={c.red600} />
                         </TouchableOpacity>
                       </View>
                     );
@@ -679,13 +680,13 @@ export function QuickPicks({
                       gap: space[6],
                       borderWidth: 1,
                       borderStyle: 'dashed',
-                      borderColor: colors.slate300,
+                      borderColor: c.slate300,
                       borderRadius: 12,
                       paddingVertical: space[12],
                     }}
                   >
-                    <Plus size={16} color={colors.blue600} />
-                    <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: colors.blue600 }}>
+                    <Plus size={16} color={c.blue600} />
+                    <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.blue600 }}>
                       Add a Quick Pick
                     </Text>
                   </TouchableOpacity>
@@ -715,11 +716,11 @@ export function QuickPicks({
                 width: '100%',
                 maxWidth: 340,
                 alignSelf: 'center',
-                backgroundColor: colors.white,
+                backgroundColor: c.white,
                 borderRadius: 18,
                 padding: space[20],
                 gap: space[12],
-                shadowColor: colors.black,
+                shadowColor: c.black,
                 shadowOffset: { width: 0, height: 8 },
                 shadowOpacity: 0.2,
                 shadowRadius: 24,
@@ -731,21 +732,21 @@ export function QuickPicks({
                   width: 44,
                   height: 44,
                   borderRadius: 22,
-                  backgroundColor: confirmRemove ? colors.red50 : colors.blue50,
+                  backgroundColor: confirmRemove ? c.red50 : c.blue50,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
                 {confirmRemove ? (
-                  <AlertTriangle size={20} color={colors.red600} />
+                  <AlertTriangle size={20} color={c.red600} />
                 ) : (
-                  <MapPin size={20} color={colors.blue600} />
+                  <MapPin size={20} color={c.blue600} />
                 )}
               </View>
-              <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: colors.slate900 }}>
+              <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900 }}>
                 {confirmRemove ? 'Remove Quick Pick?' : 'Save changes?'}
               </Text>
-              <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>
+              <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
                 {confirmRemove
                   ? 'Are you sure you want to remove this destination from your Quick Picks? This action will remove it from your saved shortcuts.'
                   : "You're about to update this Quick Pick. Would you like to save your changes?"}
@@ -760,13 +761,13 @@ export function QuickPicks({
                     flex: 1,
                     alignItems: 'center',
                     borderWidth: 1,
-                    borderColor: colors.slate200,
+                    borderColor: c.slate200,
                     borderRadius: 10,
                     paddingVertical: space[12],
                     opacity: busy ? 0.5 : 1,
                   }}
                 >
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.slate700 }}>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.slate700 }}>
                     {confirmRemove ? 'Keep It' : 'Cancel'}
                   </Text>
                 </TouchableOpacity>
@@ -781,14 +782,14 @@ export function QuickPicks({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: space[6],
-                    backgroundColor: confirmRemove ? colors.red600 : colors.slate900,
+                    backgroundColor: confirmRemove ? c.red600 : c.slate900,
                     borderRadius: 10,
                     paddingVertical: space[12],
                     opacity: busy ? 0.5 : 1,
                   }}
                 >
-                  {busy ? <ActivityIndicator size="small" color={colors.white} /> : null}
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: colors.white }}>
+                  {busy ? <ActivityIndicator size="small" color={c.white} /> : null}
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
                     {confirmRemove ? 'Remove' : 'Save Changes'}
                   </Text>
                 </TouchableOpacity>

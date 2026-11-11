@@ -5,13 +5,14 @@ import { useEffect, useState } from 'react';
 
 import { BackButton } from '../components/BackButton';
 import { cacheStats, formatBytes, type CacheStats } from '../offline';
-import { fontSize, space, colors } from '../theme';
+import { fontSize, space, useTheme } from '../theme';
 
 function StatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+  const { c } = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      <Text style={{ fontSize: fontSize.body, color: colors.slate600 }}>{label}</Text>
-      <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: ok ? colors.green700 : colors.slate400 }}>
+      <Text style={{ fontSize: fontSize.body, color: c.slate600 }}>{label}</Text>
+      <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: ok ? c.green700 : c.slate400 }}>
         {value}
       </Text>
     </View>
@@ -19,6 +20,7 @@ function StatusRow({ label, value, ok }: { label: string; value: string; ok: boo
 }
 
 export default function OfflineMapsScreen() {
+  const { c, mode: themeMode } = useTheme();
   const [stats, setStats] = useState<CacheStats | null>(null);
 
   // Read once per visit: the cache fills as the driver navigates, and the screen
@@ -30,37 +32,37 @@ export default function OfflineMapsScreen() {
   const saved = stats !== null && (stats.network || stats.hasRoute);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.white }}>
+      <StatusBar barStyle={themeMode === 'storm' ? 'light-content' : 'dark-content'} />
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12], paddingHorizontal: space[16], paddingVertical: space[14], borderBottomWidth: 1, borderColor: colors.slate100 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12], paddingHorizontal: space[16], paddingVertical: space[14], borderBottomWidth: 1, borderColor: c.slate100 }}>
         <BackButton />
-        <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: colors.slate900 }}>Offline Data</Text>
+        <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: c.slate900 }}>Offline Data</Text>
       </View>
 
       <View style={{ flex: 1, paddingHorizontal: space[24], justifyContent: 'center', alignItems: 'center', gap: space[16] }}>
-        <View style={{ width: 72, height: 72, backgroundColor: colors.slate100, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>
-          <Map size={34} color={colors.slate400} />
+        <View style={{ width: 72, height: 72, backgroundColor: c.slate100, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }}>
+          <Map size={34} color={c.slate400} />
         </View>
 
         <View style={{ alignItems: 'center', gap: space[8] }}>
-          <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.slate900 }}>
+          <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>
             {saved ? 'Saved for Offline Use' : 'Nothing Saved Yet'}
           </Text>
-          <Text style={{ fontSize: fontSize.label, color: colors.slate500, textAlign: 'center', lineHeight: 20 }}>
+          <Text style={{ fontSize: fontSize.label, color: c.slate500, textAlign: 'center', lineHeight: 20 }}>
             The road graph, active hazards and your last route are saved on this device and used
             when the network is unavailable. Plan one route while online to fill the cache.
           </Text>
         </View>
 
         {/* Storage card: what is really in the local cache (FSD-FR-070). */}
-        <View style={{ width: '100%', backgroundColor: colors.slate50, borderRadius: 14, padding: space[16], gap: space[10], borderWidth: 1, borderColor: colors.slate200 }}>
+        <View style={{ width: '100%', backgroundColor: c.slate50, borderRadius: 14, padding: space[16], gap: space[10], borderWidth: 1, borderColor: c.slate200 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
-              <HardDrive size={16} color={colors.slate600} />
-              <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate700 }}>On This Device</Text>
+              <HardDrive size={16} color={c.slate600} />
+              <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate700 }}>On This Device</Text>
             </View>
-            <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>{formatBytes(stats?.bytes ?? 0)}</Text>
+            <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>{formatBytes(stats?.bytes ?? 0)}</Text>
           </View>
 
           <StatusRow
@@ -80,9 +82,9 @@ export default function OfflineMapsScreen() {
           />
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[8], backgroundColor: colors.sky50, padding: space[14], borderRadius: 12, borderWidth: 1, borderColor: colors.sky200, width: '100%' }}>
-          <Info size={15} color={colors.sky600} />
-          <Text style={{ fontSize: fontSize.caption, color: colors.sky700, flex: 1, lineHeight: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[8], backgroundColor: c.sky50, padding: space[14], borderRadius: 12, borderWidth: 1, borderColor: c.sky200, width: '100%' }}>
+          <Info size={15} color={c.sky600} />
+          <Text style={{ fontSize: fontSize.caption, color: c.sky700, flex: 1, lineHeight: 16 }}>
             Basemap tiles are not downloaded in this pilot, so the map background needs a
             connection. The graph, hazards and route above do not.
           </Text>

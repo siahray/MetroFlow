@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+import { savePrefs, usePrefs } from "./prefs";
+
 /** Brand palette. Primary is slate-900, success emerald (AGENTS.md); use these, not raw hex. */
 export const lightColors = {
   white: "#ffffff",
@@ -115,7 +117,11 @@ export const stormColors: Partial<ThemeColors> = {
   blue100: "#123450",
   blue600: "#60a5fa",
   blue700: "#93c5fd",
+  blue900: "#bfdbfe",
+  sky50: "#082f49",
+  sky200: "#075985",
   sky600: "#38bdf8",
+  sky700: "#7dd3fc",
   red50: "#3a0a0a",
   red500: "#f87171",
   red600: "#f87171",
@@ -126,6 +132,8 @@ export const stormColors: Partial<ThemeColors> = {
   amber100: "#3a2a06",
   amber800: "#fcd34d",
   amberSurface: "#3a2a06",
+  surface: "#111c2e",
+  surfaceAlt: "#0a1220",
   green50: "#052e1b",
   inkBg: "#1d4ed8",
   onInk: "#ffffff",
@@ -192,6 +200,11 @@ type ThemeState = {
   c: ThemeColors;
 };
 
+/** Daytime is 06:00–17:59 on the device clock; storm takes over after dark. */
+export function modeForHour(hour: number): ThemeMode {
+  return hour >= 6 && hour < 18 ? "light" : "storm";
+}
+
 const ThemeContext = createContext<ThemeState>({
   mode: "light",
   toggle: () => {},
@@ -199,33 +212,44 @@ const ThemeContext = createContext<ThemeState>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>("light");
+  const prefs = usePrefs();
+  const [manualMode, setManualMode] = useState<ThemeMode>("light");
+  const [hour, setHour] = useState(() => new Date().getHours());
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((saved) => {
-        if (saved === "storm") setMode("storm");
+        if (saved === "storm") setManualMode("storm");
       })
       .catch(() => {
         // Default to light; the toggle still works for this run.
       });
   }, []);
 
-  const toggle = () => {
-    setMode((prev) => {
-      const next: ThemeMode = prev === "light" ? "storm" : "light";
-      AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
-      return next;
-    });
-  };
+  // Ticks the clock so the auto schedule flips at 6am/6pm without a reload.
+  // Runs cheaply even when auto is off; `value` is memoized on `mode`, so the
+  // subtree only re-renders when the theme actually changes.
+  useEffect(() => {
+    const tick = setInterval(() => setHour(new Date().getHours()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
+
+  const mode = prefs.autoTheme ? modeForHour(hour) : manualMode;
 
   const value = useMemo<ThemeState>(
     () => ({
       mode,
-      toggle,
+      // Toggling is a manual override: flip whatever is on screen and turn
+      // the time schedule off, so the sun/moon buttons always visibly work.
+      toggle: () => {
+        const next: ThemeMode = mode === "light" ? "storm" : "light";
+        if (prefs.autoTheme) void savePrefs({ ...prefs, autoTheme: false });
+        setManualMode(next);
+        AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
+      },
       c: mode === "storm" ? { ...lightColors, ...stormColors } : lightColors,
     }),
-    [mode],
+    [mode, prefs],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -234,6 +258,3 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export function useTheme() {
   return useContext(ThemeContext);
 }
-
-/** Static light palette for screens not yet retrofitted for storm mode. */
-export const colors = lightColors;

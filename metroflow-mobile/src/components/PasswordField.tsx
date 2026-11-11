@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 
-import { fontSize, space, colors } from '../theme';
+import { fontSize, space, useTheme } from '../theme';
 
 /** Password input with a show/hide toggle. */
 export function PasswordField({
@@ -19,19 +19,20 @@ export function PasswordField({
   autoComplete?: 'password' | 'new-password';
 }) {
   const [visible, setVisible] = useState(false);
+  const { c } = useTheme();
 
   return (
     <View>
-      <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: colors.slate700, marginBottom: space[6] }}>
+      <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: c.slate700, marginBottom: space[6] }}>
         {label}
       </Text>
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: colors.white,
+          backgroundColor: c.white,
           borderWidth: 1,
-          borderColor: colors.slate200,
+          borderColor: c.slate200,
           borderRadius: 12,
         }}
       >
@@ -49,7 +50,7 @@ export function PasswordField({
             paddingHorizontal: space[14],
             paddingVertical: space[12],
             fontSize: fontSize.label,
-            color: colors.slate900,
+            color: c.slate900,
           }}
         />
         <TouchableOpacity
@@ -59,7 +60,7 @@ export function PasswordField({
           hitSlop={8}
           style={{ paddingHorizontal: space[14] }}
         >
-          {visible ? <EyeOff size={18} color={colors.slate500} /> : <Eye size={18} color={colors.slate500} />}
+          {visible ? <EyeOff size={18} color={c.slate500} /> : <Eye size={18} color={c.slate500} />}
         </TouchableOpacity>
       </View>
     </View>

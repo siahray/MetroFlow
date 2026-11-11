@@ -1,14 +1,14 @@
 import { Tabs } from 'expo-router';
 import type { ReactNode } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePendingReports } from '../../offline';
 import { Droplet, Map as MapIcon, Bell, User } from 'lucide-react-native';
 
-import { fontSize, space, colors } from '../../theme';
+import { fontSize, space, useTheme } from '../../theme';
 
 /** Icon plus the small active-tab dot shown under the focused tab. */
-function TabIcon({ focused, children }: { focused: boolean; children: ReactNode }) {
+function TabIcon({ color, focused, children }: { color: ColorValue; focused: boolean; children: ReactNode }) {
   return (
     <View style={{ alignItems: 'center', gap: space[3] }}>
       {children}
@@ -17,7 +17,7 @@ function TabIcon({ focused, children }: { focused: boolean; children: ReactNode 
           width: 4,
           height: 4,
           borderRadius: 2,
-          backgroundColor: focused ? colors.sky600 : 'transparent',
+          backgroundColor: focused ? color : 'transparent',
         }}
       />
     </View>
@@ -25,6 +25,7 @@ function TabIcon({ focused, children }: { focused: boolean; children: ReactNode 
 }
 
 export default function TabsLayout() {
+  const { c } = useTheme();
   const pending = usePendingReports();
   const insets = useSafeAreaInsets();
   return (
@@ -32,15 +33,15 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.slate100,
+          backgroundColor: c.white,
+          borderTopColor: c.slate100,
           borderTopWidth: 1,
           height: 56 + insets.bottom,
           paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: space[6],
         },
-        tabBarActiveTintColor: colors.sky600,
-        tabBarInactiveTintColor: colors.slate400,
+        tabBarActiveTintColor: c.sky600,
+        tabBarInactiveTintColor: c.slate400,
         tabBarLabelStyle: { fontSize: fontSize.micro, fontWeight: '700' },
       }}
     >
@@ -49,7 +50,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
+            <TabIcon color={color} focused={focused}>
               <Droplet size={20} color={color} />
             </TabIcon>
           ),
@@ -60,7 +61,7 @@ export default function TabsLayout() {
         options={{
           title: 'Map',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
+            <TabIcon color={color} focused={focused}>
               <MapIcon size={20} color={color} />
             </TabIcon>
           ),
@@ -72,9 +73,9 @@ export default function TabsLayout() {
           title: 'Report',
           // Reports saved offline and not yet sent (FSD-FR-068).
           tabBarBadge: pending > 0 ? pending : undefined,
-          tabBarBadgeStyle: { backgroundColor: colors.amber800, color: colors.white },
+          tabBarBadgeStyle: { backgroundColor: c.amber800, color: c.white },
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
+            <TabIcon color={color} focused={focused}>
               <Bell size={20} color={color} />
             </TabIcon>
           ),
@@ -85,7 +86,7 @@ export default function TabsLayout() {
         options={{
           title: 'Rescue',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
+            <TabIcon color={color} focused={focused}>
               <Text style={{ fontSize: fontSize.caption, fontWeight: '900', color, letterSpacing: 0.8 }}>
                 SOS
               </Text>
@@ -98,7 +99,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon focused={focused}>
+            <TabIcon color={color} focused={focused}>
               <User size={20} color={color} />
             </TabIcon>
           ),

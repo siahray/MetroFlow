@@ -11,9 +11,11 @@ export type DriverPrefs = {
   hazardAlerts: boolean;
   /** Periodic speed/position pings to the fleet telemetry endpoint. */
   telemetry: boolean;
+  /** Follow the clock between light and storm themes (NFR-023); off = manual. */
+  autoTheme: boolean;
 };
 
-const DEFAULTS: DriverPrefs = { hazardAlerts: true, telemetry: true };
+const DEFAULTS: DriverPrefs = { hazardAlerts: true, telemetry: true, autoTheme: true };
 const STORAGE_KEY = "metroflow_driver_prefs";
 
 let cached: DriverPrefs | null = null;
