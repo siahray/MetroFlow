@@ -310,6 +310,11 @@ def replace_network(
         )
         for node in nodes
     )
+    # Flushed separately: with ~9k rows, the node inserts batch into several
+    # INSERTs, and a single combined flush let at least one edge batch reach
+    # Postgres before every node batch had (observed as a live FK violation
+    # against the hosted DB, node present in `nodes` and still rejected).
+    db.flush()
     db.add_all(
         models.RoadEdge(
             edge_id=edge.edge_id,

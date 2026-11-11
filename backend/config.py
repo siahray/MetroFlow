@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # once per 10 minutes). The suite and any deployment whose egress to
     # api.open-meteo.com is blocked turn this off.
     weather_ingest: bool = True
+    # Fetch the Open-Meteo Flood API's modelled GloFAS river discharge when
+    # flood-state is polled (at most once per 20 minutes). Same egress as
+    # weather_ingest; the suite turns this off too.
+    river_discharge_ingest: bool = True
 
     # --- Bootstrap dispatcher --------------------------------------------------
     # Registration only ever creates driver accounts, so the first LGU

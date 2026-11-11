@@ -24,6 +24,7 @@ for _limit in (
     # The flood-state endpoint would otherwise reach api.open-meteo.com from
     # the suite: network-dependent, and it would flag every seeded edge.
     "METROFLOW_WEATHER_INGEST",
+    "METROFLOW_RIVER_DISCHARGE_INGEST",
 ):
     os.environ.setdefault(_limit, "0")
 

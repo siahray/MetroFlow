@@ -23,6 +23,7 @@ import pytest
 from evidence import build_jpeg
 from fastapi.testclient import TestClient
 
+import river_discharge
 import weather
 from config import settings
 from main import app
@@ -2144,6 +2145,38 @@ def test_open_meteo_rain_drives_the_rain_gate_and_the_advisory(client, monkeypat
     finally:
         # Other flood-state tests assert per-edge live coverage; drop the virtual gauge.
         client.delete(f"/api/v1/sensors/{weather.SENSOR_ID}")
+
+
+def test_glofas_discharge_feeds_a_modelled_advisory(client, monkeypatch):
+    """CR-004 revision 1.1: GloFAS discharge is MODELLED, advisory-only, never a closure."""
+    monkeypatch.setattr(settings, "river_discharge_ingest", True)  # the suite disables it
+    monkeypatch.setattr(river_discharge, "_last_fetch", None)
+    # The real river point sits outside the seed grid; borrow its centre and a
+    # radius wide enough to cover it, same approach as weather.py's own gauge.
+    monkeypatch.setattr(river_discharge, "RIVER_LAT", weather.CORRIDOR_LAT)
+    monkeypatch.setattr(river_discharge, "RIVER_LON", weather.CORRIDOR_LON)
+    monkeypatch.setattr(river_discharge, "IMPACT_RADIUS_M", weather.IMPACT_RADIUS_M)
+    monkeypatch.setattr(river_discharge, "fetch_discharge", lambda: (5.0, 3.14))  # over its p75
+    try:
+        state = _flood_state(client)
+        hit = [e for e in state["edges"] if e["source"] == f"SENSOR:{river_discharge.SENSOR_ID}"]
+        assert hit
+        assert all(
+            e["basis"] == "LIVE_ADVISORY"
+            and e["kind"] == "MODELLED"
+            and e["advisory"] is True
+            and e["closes_road"] is False
+            for e in hit
+        )
+
+        # Under its p75: the next ingest writes a quiet reading and the advisory clears.
+        monkeypatch.setattr(river_discharge, "_last_fetch", None)
+        monkeypatch.setattr(river_discharge, "fetch_discharge", lambda: (1.0, 3.14))
+        cleared = _by_edge(_flood_state(client))
+        assert cleared[hit[0]["edge_id"]]["basis"] == "NONE"
+        assert cleared[hit[0]["edge_id"]]["has_live_data"] is True
+    finally:
+        client.delete(f"/api/v1/sensors/{river_discharge.SENSOR_ID}")
 
 
 def test_flood_state_requires_a_session(client):

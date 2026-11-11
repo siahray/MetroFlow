@@ -23,6 +23,7 @@ import flood_state
 import models
 import network_seed
 import reports
+import river_discharge
 import weather
 from auth_utils import get_current_user, require_roles
 from config import settings
@@ -2748,10 +2749,19 @@ def _record_sensor_reading(
     value: float,
     unit: str,
     recorded_at: datetime,
+    *,
+    kind: str | None = None,
 ) -> tuple[models.SensorReading, list[int]]:
-    """Shared by the sensor gateway and the weather ingest: write one reading
-    and stamp its advisory state on every edge in range (BRULE-012)."""
+    """Shared by the sensor gateway, the weather ingest and the river-discharge
+    ingest: write one reading and stamp its advisory state on every edge in
+    range (BRULE-012).
+
+    ``kind`` defaults to the gateway's own OBSERVED/SIMULATED split; a system
+    ingest that already knows its CR-004 kind (e.g. MODELLED) passes it
+    explicitly rather than being mislabelled as an observation.
+    """
     is_breach = value >= sensor.threshold_value
+    kind = kind or (flood_state.SIMULATED if sensor.simulated else flood_state.OBSERVED)
 
     # Every reading is written to the roads in range, flagged or not, so the flood-state
     # resolver can tell "covered and quiet" from "not covered" (CR-004, FSD-FR-091).
@@ -2784,7 +2794,7 @@ def _record_sensor_reading(
         db,
         edge_ids,
         source=f"SENSOR:{sensor.sensor_id}",
-        kind=flood_state.SIMULATED if sensor.simulated else flood_state.OBSERVED,
+        kind=kind,
         flagged=is_breach,
         as_of=recorded_at.astimezone(UTC).replace(tzinfo=None),
     )
@@ -2818,6 +2828,42 @@ def _ingest_weather(db: Session) -> None:
         db.add(sensor)
         db.flush()
     _record_sensor_reading(db, sensor, value, "mm_hr", recorded_at)
+    db.commit()
+
+
+def _ingest_river_discharge(db: Session) -> None:
+    """Record the latest Open-Meteo Flood API (GloFAS) discharge (CR-004, FSD-FR-117).
+
+    Same no-audit rationale as ``_ingest_weather``. The threshold is the
+    model's own daily p75 for this river, which drifts day to day, so it is
+    refreshed on the sensor row before recording the reading rather than set
+    once at creation like the rain gauge's fixed mm/hr threshold.
+    """
+    result = river_discharge.fetch_discharge()
+    if result is None:
+        return
+    value, threshold = result
+    recorded_at = datetime.now(UTC)
+    sensor = (
+        db.query(models.Sensor).filter(models.Sensor.sensor_id == river_discharge.SENSOR_ID).first()
+    )
+    if sensor is None:
+        sensor = models.Sensor(
+            sensor_id=river_discharge.SENSOR_ID,
+            sensor_type="RIVER_GAUGE",
+            name=river_discharge.RIVER_NAME,
+            geom=_point(river_discharge.RIVER_LAT, river_discharge.RIVER_LON),
+            threshold_value=threshold,
+            threshold_unit="m3_s",
+            impact_radius_m=river_discharge.IMPACT_RADIUS_M,
+            active=True,
+            simulated=False,
+        )
+        db.add(sensor)
+        db.flush()
+    else:
+        sensor.threshold_value = threshold
+    _record_sensor_reading(db, sensor, value, "m3_s", recorded_at, kind=flood_state.MODELLED)
     db.commit()
 
 
@@ -2900,6 +2946,8 @@ def get_flood_state(
     # this endpoint, the previous reading just ages out.
     if settings.weather_ingest and weather.due_for_refresh():
         _ingest_weather(db)
+    if settings.river_discharge_ingest and river_discharge.due_for_refresh():
+        _ingest_river_discharge(db)
 
     live: dict[int, list[flood_state.Observation]] = {}
     for adv in db.query(models.EdgeAdvisory).all():
