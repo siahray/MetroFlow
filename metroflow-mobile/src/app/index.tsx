@@ -117,7 +117,7 @@ export default function IndexScreen() {
               style={{ backgroundColor: colors.slate900, paddingVertical: space[15], borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: space[8] }}
               onPress={() => setMode('login')}
             >
-              <Text style={{ color: colors.white, fontWeight: '700', fontSize: fontSize.lead }}>Log In</Text>
+              <Text style={{ color: colors.white, fontWeight: '700', fontSize: fontSize.lead }}>Sign In</Text>
               <ArrowRight size={16} color={colors.white} />
             </TouchableOpacity>
             <TouchableOpacity
@@ -153,7 +153,7 @@ export default function IndexScreen() {
             <Waves size={30} color={colors.sky400} />
           </View>
           <Text style={{ fontSize: fontSize.display, fontWeight: '900', color: colors.slate900 }}>
-            MetroFlow {mode === 'login' ? 'Login' : 'Sign Up'}
+            MetroFlow {mode === 'login' ? 'Sign In' : 'Sign Up'}
           </Text>
           <Text style={{ fontSize: fontSize.body, color: colors.slate500, marginTop: space[4] }}>
             {mode === 'login' ? 'Sign in to access real-time flood navigation' : 'Create your public motorist account'}
@@ -191,7 +191,7 @@ export default function IndexScreen() {
           />
           {mode === 'register' && (
             <PasswordField
-              label="Confirm password"
+              label="Confirm Password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               autoComplete="new-password"

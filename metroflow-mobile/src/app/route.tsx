@@ -744,12 +744,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         </View>
         <View style={styles.signedOutCard}>
           <ShieldAlert size={28} color={c.blue600} />
-          <Text style={styles.signedOutTitle}>Sign in to navigate</Text>
+          <Text style={styles.signedOutTitle}>Sign In to Navigate</Text>
           <Text style={styles.signedOutBody}>
             Flood-safe routes and live hazard alerts are attached to your driver account.
           </Text>
           <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace("/")}>
-            <Text style={styles.primaryButtonText}>Sign in</Text>
+            <Text style={styles.primaryButtonText}>Sign In</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -826,7 +826,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             </TouchableOpacity>
             <View style={[styles.chip, styles.chipOutline]}>
               <ShieldCheck size={13} color={c.blue600} />
-              <Text style={[styles.chipText, { color: c.blue700 }]}>Flood-free routes only</Text>
+              <Text style={[styles.chipText, { color: c.blue700 }]}>Flood-Free Routes Only</Text>
             </View>
             <TouchableOpacity
               accessibilityRole="button"
@@ -836,7 +836,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             >
               <Droplet size={13} color={prefs.hazardAlerts ? c.blue600 : c.slate400} />
               <Text style={[styles.chipText, { color: prefs.hazardAlerts ? c.blue700 : c.slate500 }]}>
-                Water level alerts
+                Water Level Alerts
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -877,7 +877,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   style={styles.dangerButton}
                   onPress={() => void planRoute(selected, true)}
                 >
-                  <Text style={styles.dangerButtonText}>Show unsafe route</Text>
+                  <Text style={styles.dangerButtonText}>Show Unsafe Route</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1282,7 +1282,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           <View style={styles.panelButtons}>
             <TouchableOpacity style={styles.secondaryButton} onPress={resetRoute}>
               <Search size={15} color={c.slate800} />
-              <Text style={styles.secondaryButtonText}>New destination</Text>
+              <Text style={styles.secondaryButtonText}>New Destination</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.endButton}

@@ -45,7 +45,7 @@ export default function OfflineMapsScreen() {
 
         <View style={{ alignItems: 'center', gap: space[8] }}>
           <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: colors.slate900 }}>
-            {saved ? 'Saved for offline use' : 'Nothing saved yet'}
+            {saved ? 'Saved for Offline Use' : 'Nothing Saved Yet'}
           </Text>
           <Text style={{ fontSize: fontSize.label, color: colors.slate500, textAlign: 'center', lineHeight: 20 }}>
             The road graph, active hazards and your last route are saved on this device and used
@@ -58,23 +58,23 @@ export default function OfflineMapsScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
               <HardDrive size={16} color={colors.slate600} />
-              <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate700 }}>On this device</Text>
+              <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate700 }}>On This Device</Text>
             </View>
             <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>{formatBytes(stats?.bytes ?? 0)}</Text>
           </View>
 
           <StatusRow
-            label="Road graph"
+            label="Road Graph"
             value={stats?.network ? 'Saved' : 'Not saved'}
             ok={stats?.network ?? false}
           />
           <StatusRow
-            label="Active hazards"
+            label="Active Hazards"
             value={stats === null ? '—' : String(stats.hazards)}
             ok={(stats?.hazards ?? 0) > 0}
           />
           <StatusRow
-            label="Last route"
+            label="Last Route"
             value={stats?.hasRoute ? 'Saved' : 'Not saved'}
             ok={stats?.hasRoute ?? false}
           />

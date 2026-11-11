@@ -20,7 +20,7 @@ function statusStyle(
   c: ThemeColors,
 ): Record<string, { label: string; color: string; bg: string; Icon: typeof Clock }> {
   return {
-    PENDING: { label: 'Pending review', color: c.amber800, bg: c.amber100, Icon: Clock },
+    PENDING: { label: 'Pending Review', color: c.amber800, bg: c.amber100, Icon: Clock },
     VERIFIED: { label: 'Verified', color: c.green700, bg: c.green50, Icon: CheckCircle2 },
     REJECTED: { label: 'Rejected', color: c.red700, bg: c.red50, Icon: XCircle },
     DUPLICATE: { label: 'Duplicate', color: c.slate600, bg: c.slate100, Icon: FileWarning },
@@ -122,7 +122,7 @@ export default function ReportHistoryScreen() {
           <View style={{ paddingVertical: space[60], alignItems: 'center', gap: space[8] }}>
             <Camera size={28} color={c.slate300} />
             <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate700 }}>
-              No reports yet
+              No Reports Yet
             </Text>
             <Text style={{ fontSize: fontSize.caption, color: c.slate400 }}>
               Field reports you submit will show up here.
@@ -196,7 +196,7 @@ export default function ReportHistoryScreen() {
                   >
                     <RotateCcw size={12} color={c.blue600} />
                     <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.blue600 }}>
-                      Report again
+                      Report Again
                     </Text>
                   </TouchableOpacity>
                 ) : null}

@@ -51,12 +51,12 @@ type Passability = 'all' | 'high' | 'none';
 type LocationState = 'locating' | 'ready' | 'denied' | 'error';
 
 const DEPTH_OPTIONS: { id: Depth; label: string; detail: string; cm: number; api: ReportDepth }[] = [
-  { id: 'ankle', label: 'Ankle deep', detail: 'Around 0.5 ft (15 cm)', cm: 15, api: 'ANKLE' },
-  { id: 'knee',  label: 'Knee deep',  detail: 'Around 1.5 ft (45 cm)', cm: 45, api: 'KNEE' },
-  { id: 'waist', label: 'Waist deep / Submerged', detail: 'Exceeds 3.0 ft (>90 cm) • Severe', cm: 90, api: 'IMPASSABLE' },
+  { id: 'ankle', label: 'Ankle Deep', detail: 'Around 0.5 ft (15 cm)', cm: 15, api: 'ANKLE' },
+  { id: 'knee',  label: 'Knee Deep',  detail: 'Around 1.5 ft (45 cm)', cm: 45, api: 'KNEE' },
+  { id: 'waist', label: 'Waist Deep / Submerged', detail: 'Exceeds 3.0 ft (>90 cm) • Severe', cm: 90, api: 'IMPASSABLE' },
 ];
 
-const QUICK_TAGS = ['+ Fast current', '+ Open manhole', '+ Stalled vehicles'];
+const QUICK_TAGS = ['+ Fast Current', '+ Open Manhole', '+ Stalled Vehicles'];
 
 const PHOTO_MAX_BYTES = 4 * 1024 * 1024;
 
@@ -412,7 +412,7 @@ export default function ReportScreen() {
         <View style={{ gap: space[10] }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>
-              1. Take a photo <Text style={{ color: c.slate400, fontWeight: '400' }}>(optional)</Text>
+              1. Take a Photo <Text style={{ color: c.slate400, fontWeight: '400' }}>(optional)</Text>
             </Text>
             <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.blue600 }}>Speeds up verification</Text>
           </View>
@@ -557,7 +557,7 @@ export default function ReportScreen() {
                   <Waves size={16} color={c.slate500} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Ankle deep</Text>
+                  <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Ankle Deep</Text>
                   <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>Around 0.5 ft (15 cm)</Text>
                 </View>
               </View>
@@ -576,7 +576,7 @@ export default function ReportScreen() {
                   <Waves size={16} color={c.blue600} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Knee deep</Text>
+                  <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Knee Deep</Text>
                   <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>Around 1.5 ft (45 cm)</Text>
                 </View>
               </View>
@@ -595,7 +595,7 @@ export default function ReportScreen() {
                   <Home size={16} color={c.red500} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Waist deep / Submerged</Text>
+                  <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Waist Deep / Submerged</Text>
                   <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>Exceeds 3.0 ft (&gt;90 cm) • Severe</Text>
                 </View>
               </View>
@@ -621,7 +621,7 @@ export default function ReportScreen() {
             >
               <Car size={20} color={passability === 'all' ? c.white : c.slate900} />
               <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: passability === 'all' ? c.white : c.slate900, textAlign: 'center' }}>
-                Passable for all
+                Passable for All
               </Text>
             </TouchableOpacity>
 
@@ -632,7 +632,7 @@ export default function ReportScreen() {
             >
               <Truck size={20} color={passability === 'high' ? c.white : c.slate900} />
               <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: passability === 'high' ? c.white : c.slate900, textAlign: 'center' }}>
-                Passable: high vehicle
+                Passable: High Vehicle
               </Text>
             </TouchableOpacity>
 
@@ -643,7 +643,7 @@ export default function ReportScreen() {
             >
               <Ban size={20} color={passability === 'none' ? c.sky600 : c.slate400} />
               <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: passability === 'none' ? c.sky600 : c.slate500, textAlign: 'center' }}>
-                Not passable
+                Not Passable
               </Text>
             </TouchableOpacity>
           </View>
@@ -652,7 +652,7 @@ export default function ReportScreen() {
         {/* Section 3: Additional Details */}
         <View style={{ gap: space[10] }}>
           <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>
-            3. Additional details <Text style={{ color: c.slate400, fontWeight: '400' }}>(optional)</Text>
+            3. Additional Details <Text style={{ color: c.slate400, fontWeight: '400' }}>(optional)</Text>
           </Text>
 
           <View style={{ borderWidth: 1, borderColor: c.slate200, borderRadius: 18, padding: space[14], backgroundColor: c.white, minHeight: 126 }}>
@@ -684,7 +684,7 @@ export default function ReportScreen() {
         {result ? (
           <View style={{ backgroundColor: c.emerald50, borderWidth: 1, borderColor: c.emerald200, borderRadius: 16, padding: space[14], gap: space[4] }}>
             <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.emerald800 }}>
-              Report submitted
+              Report Submitted
             </Text>
             <Text style={{ fontSize: fontSize.body, color: c.emerald700, lineHeight: 18 }}>
               Reference #{result.report_id.slice(0, 8).toUpperCase()} • {result.depth_label} • waiting for moderation.
@@ -727,7 +727,7 @@ export default function ReportScreen() {
               <>
                 <Send size={16} color={c.white} />
                 <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: c.white }}>
-                  {result ? 'Report submitted' : locationState === 'locating' ? 'Waiting for GPS…' : 'Submit Report'}
+                  {result ? 'Report Submitted' : locationState === 'locating' ? 'Waiting for GPS…' : 'Submit Report'}
                 </Text>
               </>
             )}

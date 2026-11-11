@@ -383,7 +383,7 @@ export default function HomeScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
               <LifeBuoy size={18} color={c.red700} />
               <Text style={{ flex: 1, fontSize: fontSize.label, fontWeight: '800', color: c.red700 }}>
-                Dispatched: incident #{mission.sos_id}
+                Dispatched: Incident #{mission.sos_id}
               </Text>
             </View>
             <Text style={{ fontSize: fontSize.caption, color: c.slate700 }}>
@@ -439,7 +439,7 @@ export default function HomeScreen() {
                 }}
               >
                 <Text style={{ fontSize: fontSize.body, fontWeight: '800', color: c.red700 }}>
-                  {closing ? 'Working…' : sceneMarked ? 'Close incident' : 'Mark arrived'}
+                  {closing ? 'Working…' : sceneMarked ? 'Close Incident' : 'Mark Arrived'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -600,7 +600,7 @@ export default function HomeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.slate900 }}>
-                No active weather advisory
+                No Active Weather Advisory
               </Text>
               <Text style={{ fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] }}>
                 {floodState ? 'Conditions are normal across the monitored network.' : 'Advisory data unavailable right now.'}
@@ -641,6 +641,7 @@ export default function HomeScreen() {
                 fontSize: fontSize.micro,
                 fontWeight: '800',
                 color: VEHICLE_STATUS_COLOR[vehicle.status] ?? c.slate600,
+                textTransform: 'capitalize',
               }}
             >
               {vehicle.status.replace('_', ' ')}

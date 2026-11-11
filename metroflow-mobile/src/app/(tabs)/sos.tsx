@@ -115,11 +115,11 @@ export default function SOSScreen() {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
         const openSettings = await confirm({
-          title: 'Location Required',
+          title: 'Location required',
           message:
             'A rescue team needs your exact position to reach you. Enable location access for MetroFlow in Settings and try again.',
           confirmLabel: 'Open Settings',
-          cancelLabel: 'Not now',
+          cancelLabel: 'Not Now',
           tone: 'warning',
         });
         if (openSettings) void Linking.openSettings();
@@ -132,7 +132,7 @@ export default function SOSScreen() {
       const ageMs = Date.now() - loc.timestamp;
       if (ageMs > SOS_LOCATION_MAX_AGE_MS) {
         await notice({
-          title: 'Location Stale',
+          title: 'Location stale',
           message: 'Could not get a fresh GPS fix. Move to open sky and retry.',
           tone: 'warning',
         });
@@ -142,7 +142,7 @@ export default function SOSScreen() {
       coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
     } catch {
       await notice({
-        title: 'GPS Error',
+        title: 'GPS error',
         message: 'Cannot read your location. Check that GPS is enabled and try again.',
         tone: 'danger',
       });
@@ -176,7 +176,7 @@ export default function SOSScreen() {
         ? 'Sign in required'
         : throttled
         ? 'SOS limit reached'
-        : 'Dispatch Alert';
+        : 'Dispatch alert';
       const message = dropped
         ? OFFLINE_MESSAGE
         : needsSignIn
@@ -207,7 +207,7 @@ export default function SOSScreen() {
 
   function handleInfo() {
     void notice({
-      title: 'Priority SOS Protocol',
+      title: 'Priority SOS protocol',
       message:
         'Active Geo-Lock transmits telemetry and sub-meter location directly to the MetroFlow LGU Emergency Operations Center (EOC).',
     });
@@ -229,7 +229,7 @@ export default function SOSScreen() {
                 METROFLOW
               </Text>
               <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900, lineHeight: 20 }}>
-                Sos Rescue Dispatch
+                SOS Rescue Dispatch
               </Text>
             </View>
           </View>

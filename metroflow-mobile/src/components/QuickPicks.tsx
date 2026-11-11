@@ -743,7 +743,7 @@ export function QuickPicks({
                 )}
               </View>
               <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: colors.slate900 }}>
-                {confirmRemove ? 'Remove Quick Pick?' : 'Save Changes?'}
+                {confirmRemove ? 'Remove Quick Pick?' : 'Save changes?'}
               </Text>
               <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>
                 {confirmRemove
