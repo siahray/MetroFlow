@@ -3,12 +3,11 @@
 import { Check, MapPin, Navigation, Pentagon, Route, Spline, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ErrorNotice } from "./error-notice";
 import { NetworkMap, type DrawnGeometry } from "./network-map";
 import { SearchableSelect } from "./searchable-select";
 import { subscribeToHazards } from "@/lib/live-stream";
 import { createHazard, publishHazard, withdrawHazard, type HazardZone } from "@/lib/hazards";
-import { fetchNetworkState, type NetworkSummary } from "@/lib/network";
+import type { NetworkState, NetworkSummary } from "@/lib/network";
 
 type FloodClosureEditorProps = {
   onAction: (message: string) => void;
@@ -37,8 +36,6 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   // add an onError hook to live-stream.ts if the panel must say the feed failed.
   const [hazardsLoading, setHazardsLoading] = useState(true);
   const [segmentsLoading, setSegmentsLoading] = useState(true);
-  const [segmentsError, setSegmentsError] = useState<string | null>(null);
-  const [segmentsReloadKey, setSegmentsReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null);
   const [networkSummary, setNetworkSummary] = useState<NetworkSummary | null>(null);
@@ -55,32 +52,22 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
     setNetworkSummary(summary);
   }, []);
 
-  // The road segments a hazard can be attached to come straight from the network.
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchNetworkState(30, controller.signal)
-      .then((state) => {
-        setSegments(
-          state.edges.features.map((edge) => ({
-            edgeId: edge.properties.edge_id,
-            label: `${edge.properties.start_name ?? `Node ${edge.properties.start_node_id}`} → ${
-              edge.properties.end_name ?? `Node ${edge.properties.end_node_id}`
-            }`,
-          })),
-        );
-        setSegmentsError(null);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setSegments([]);
-          setSegmentsError("Could not load the road segments. Check the connection and retry.");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setSegmentsLoading(false);
-      });
-    return () => controller.abort();
-  }, [segmentsReloadKey]);
+  // The road segments a hazard can be attached to come from the map's own
+  // fetch (`handleNetworkState`) instead of a second full-network request:
+  // on the real OSM network that doubled both the page's load time and the
+  // backend's query/geometry-serialisation cost for data this form never
+  // needed geometry from in the first place.
+  const handleNetworkState = useCallback((state: NetworkState) => {
+    setSegments(
+      state.edges.features.map((edge) => ({
+        edgeId: edge.properties.edge_id,
+        label: `${edge.properties.start_name ?? `Node ${edge.properties.start_node_id}`} → ${
+          edge.properties.end_name ?? `Node ${edge.properties.end_node_id}`
+        }`,
+      })),
+    );
+    setSegmentsLoading(false);
+  }, []);
 
   // Live hazard list (FSD-FR-086): the stream pushes each change once and the snapshot covers
   // whatever happened while this tab was disconnected.
@@ -190,6 +177,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
           showGraph
           onAction={onAction}
           onSummary={handleNetworkSummary}
+          onNetworkState={handleNetworkState}
           drawMode={shape === "segment" ? null : shape}
           onDrawComplete={(geometry) => {
             setDrawnGeometry(geometry);
@@ -260,22 +248,17 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
             >
               Road segment
             </label>
-            {segmentsError ? (
-              <ErrorNotice
-                message={segmentsError}
-                onRetry={() => {
-                  setSegmentsError(null);
-                  setSegmentsLoading(true);
-                  setSegmentsReloadKey((key) => key + 1);
-                }}
-              />
+            {segmentsLoading && segments.length === 0 ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+                Loading segments from the map…
+              </p>
             ) : (
               <SearchableSelect
                 id="hazard-segment"
                 options={segmentOptions}
                 value={edgeId}
                 onChange={setEdgeId}
-                placeholder={segmentsLoading ? "Loading segments…" : "Road name or node id…"}
+                placeholder="Road name or node id…"
                 aria-label="Road segment"
               />
             )}

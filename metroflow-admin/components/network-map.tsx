@@ -222,6 +222,14 @@ type NetworkMapProps = {
   /** Called whenever the rendered verdicts or the active route change. */
   onSummary: (summary: NetworkSummary) => void;
   /**
+   * Called with the raw network state whenever a fresh fetch lands, so a
+   * caller that just needs edge/node data (e.g. the hazard form's segment
+   * picker) can reuse this fetch instead of requesting the whole network a
+   * second time -- on the real OSM network that doubled both the page's load
+   * time and the backend's query/geometry-serialisation cost.
+   */
+  onNetworkState?: (state: NetworkState) => void;
+  /**
    * Hazard-shape drawing (FSD-FR-082, FSD-FR-083): "polygon" collects a flood
    * area, "line" a closure line. `null` (the default) leaves ordinary map
    * clicks alone.
@@ -272,6 +280,7 @@ export function NetworkMap({
   showGraph,
   onAction,
   onSummary,
+  onNetworkState,
   drawMode = null,
   onDrawComplete,
 }: NetworkMapProps) {
@@ -677,6 +686,7 @@ export function NetworkMap({
           if (cancelled) return;
           setNetwork(state);
           setError(null);
+          onNetworkState?.(state);
         })
         .catch((err: unknown) => {
           if (cancelled) return;
@@ -692,7 +702,7 @@ export function NetworkMap({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [ready, clearanceCm]);
+  }, [ready, clearanceCm, onNetworkState]);
 
   useEffect(() => {
     const map = mapRef.current;
