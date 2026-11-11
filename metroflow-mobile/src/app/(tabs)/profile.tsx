@@ -14,10 +14,6 @@ import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
 import {
   Mail,
-  Car,
-  CarFront,
-  Bike,
-  Truck,
   Map,
   MapPin,
   ChevronRight,
@@ -36,23 +32,11 @@ import { updateMyName } from '../../api';
 import { useAuth } from '../../auth';
 import { QuickPicks } from '../../components/QuickPicks';
 import { useDialog } from '../../components/Dialog';
-import { loadMyVehicle, saveMyVehicle, type MyVehicle, type VehicleType } from '../../myVehicle';
+import { VehicleGarage } from '../../components/VehicleGarage';
+import { loadMyVehicle, type MyVehicle } from '../../myVehicle';
 import { savePrefs, usePrefs, type DriverPrefs } from '../../prefs';
 
 import { fontSize, space, colors, useTheme } from '../../theme';
-
-const VEHICLE_TYPE_ICON: Record<VehicleType, typeof Car> = {
-  motorcycle: Bike,
-  sedan: Car,
-  suv: CarFront,
-  truck: Truck,
-};
-const VEHICLE_TYPE_LABEL: Record<VehicleType, string> = {
-  motorcycle: 'Motorcycle',
-  sedan: 'Sedan',
-  suv: 'SUV / Van',
-  truck: 'Truck',
-};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -69,34 +53,13 @@ export default function ProfileScreen() {
   const [savingName, setSavingName] = useState(false);
 
   const [vehicle, setVehicle] = useState<MyVehicle | null>(null);
-  const [editingVehicle, setEditingVehicle] = useState(false);
-  const [clearanceDraft, setClearanceDraft] = useState('');
   const [showQuickPicks, setShowQuickPicks] = useState(false);
 
+  const refreshActiveVehicle = () => void loadMyVehicle().then(setVehicle);
+
   useEffect(() => {
-    void loadMyVehicle().then(setVehicle);
+    refreshActiveVehicle();
   }, []);
-
-  async function handlePickType(type: VehicleType) {
-    const next = { type, clearanceCm: vehicle?.clearanceCm ?? 28 };
-    setVehicle(next);
-    await saveMyVehicle(next);
-  }
-
-  function handleEditClearance() {
-    setClearanceDraft(String(vehicle?.clearanceCm ?? 28));
-    setEditingVehicle(true);
-  }
-
-  async function handleSaveClearance() {
-    const parsed = Math.round(Number(clearanceDraft));
-    if (Number.isFinite(parsed) && parsed > 0 && vehicle) {
-      const next = { ...vehicle, clearanceCm: parsed };
-      setVehicle(next);
-      await saveMyVehicle(next);
-    }
-    setEditingVehicle(false);
-  }
 
   async function handleSaveName() {
     const trimmed = nameDraft.trim();
@@ -222,61 +185,8 @@ export default function ProfileScreen() {
               </View>
             </View>
             <View style={{ paddingHorizontal: space[16], paddingVertical: space[12], borderTopWidth: 1, borderColor: colors.slate50, gap: space[10] }}>
-              <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>My vehicle (for flood-aware routing)</Text>
-              <View style={{ flexDirection: 'row', gap: space[8] }}>
-                {(Object.keys(VEHICLE_TYPE_ICON) as VehicleType[]).map((type) => {
-                  const Icon = VEHICLE_TYPE_ICON[type];
-                  const selected = vehicle?.type === type;
-                  return (
-                    <TouchableOpacity
-                      key={type}
-                      accessibilityRole="button"
-                      accessibilityLabel={VEHICLE_TYPE_LABEL[type]}
-                      onPress={() => void handlePickType(type)}
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        gap: space[4],
-                        paddingVertical: space[10],
-                        borderRadius: 10,
-                        backgroundColor: selected ? colors.slate900 : colors.slate100,
-                      }}
-                    >
-                      <Icon size={16} color={selected ? colors.white : colors.slate600} />
-                      <Text style={{ fontSize: fontSize.tiny, fontWeight: '700', color: selected ? colors.white : colors.slate600 }}>
-                        {VEHICLE_TYPE_LABEL[type]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {editingVehicle ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
-                  <TextInput
-                    value={clearanceDraft}
-                    onChangeText={setClearanceDraft}
-                    keyboardType="number-pad"
-                    autoFocus
-                    style={{ flex: 1, fontSize: fontSize.label, fontWeight: '600', color: colors.slate900, borderWidth: 1, borderColor: colors.slate300, borderRadius: 8, paddingHorizontal: space[10], paddingVertical: space[6] }}
-                  />
-                  <Text style={{ fontSize: fontSize.body, color: colors.slate500 }}>cm</Text>
-                  <TouchableOpacity onPress={() => void handleSaveClearance()} hitSlop={8}>
-                    <Check size={20} color={colors.green600} />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Edit routing clearance"
-                  onPress={handleEditClearance}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: space[6] }}
-                >
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>
-                    Ground clearance: {vehicle?.clearanceCm ?? 28} cm
-                  </Text>
-                  <Pencil size={12} color={colors.slate400} />
-                </TouchableOpacity>
-              )}
+              <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>My garage (for flood-aware routing)</Text>
+              <VehicleGarage onActiveChange={refreshActiveVehicle} />
             </View>
           </View>
 
@@ -325,7 +235,7 @@ export default function ProfileScreen() {
                   <Moon size={15} color={colors.slate500} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Night / storm theme</Text>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Night / Storm Theme</Text>
                   <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Low-glare navigation screen</Text>
                 </View>
               </View>
@@ -363,7 +273,7 @@ export default function ProfileScreen() {
                   <BellRing size={15} color={colors.slate500} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Hazard proximity alerts</Text>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Hazard Proximity Alerts</Text>
                   <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Warn me when a verified hazard is ahead</Text>
                 </View>
               </View>
@@ -379,7 +289,7 @@ export default function ProfileScreen() {
                   <Gauge size={15} color={colors.slate500} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Share location telemetry</Text>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: colors.slate900 }}>Share Location Telemetry</Text>
                   <Text style={{ fontSize: fontSize.micro, color: colors.slate400 }}>Send speed and position while navigating</Text>
                 </View>
               </View>
