@@ -4,7 +4,7 @@ import MapView, { Marker, Polygon, Polyline, UrlTile, type Region } from "react-
 
 import type { EdgeFeature, HazardInfo, RoutePlan } from "../api";
 import { polygonRing, routeCoordinates, type LatLng } from "./geo";
-import { basemap } from "./tiles";
+import { basemapFor } from "./tiles";
 
 import { fontSize, space, useTheme, type ThemeColors } from "../theme";
 
@@ -80,6 +80,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   clearanceCm,
 }, ref) {
   const { c, mode } = useTheme();
+  const basemap = basemapFor(mode);
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
   const statusColor = useMemo(() => STATUS_COLOR(c), [c]);
   const mapRef = useRef<MapView>(null);
@@ -151,7 +152,14 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
         // The basemap comes from our own raster tiles, not Google's.
         mapType="none"
       >
-        <UrlTile urlTemplate={basemap.urlTemplate} maximumZ={basemap.maximumZ} tileSize={256} zIndex={-1} />
+        {/* Keyed by template so flipping the theme rebuilds the tile layer. */}
+        <UrlTile
+          key={basemap.urlTemplate}
+          urlTemplate={basemap.urlTemplate}
+          maximumZ={basemap.maximumZ}
+          tileSize={256}
+          zIndex={-1}
+        />
 
         {roads.map((road) => (
           <Polyline
