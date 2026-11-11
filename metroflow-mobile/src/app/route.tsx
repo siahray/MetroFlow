@@ -66,7 +66,7 @@ import { useAuth } from "../auth";
 import { Avatar } from "../components/Avatar";
 import { BackButton } from "../components/BackButton";
 import { useDialog } from "../components/Dialog";
-import { RouteMap, type RouteMapHandle } from "../navigation/RouteMap";
+import { congestionFromSpeeds, RouteMap, type MapViewMode, type RouteMapHandle } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
 import { loadCache, saveCache, useOnline } from "../offline";
@@ -156,13 +156,12 @@ const SEGMENT_STATUS_LABEL: Record<string, string> = {
   SUBMERGED: "Submerged",
 };
 
-/** Flow label from real recorded speed vs. the road's posted limit — never a fabricated traffic feed. */
-function congestionFromSpeeds(avgKmh: number, maxKmh: number): { label: string; tone: "success" | "warning" | "danger" } {
-  const ratio = maxKmh > 0 ? avgKmh / maxKmh : 1;
-  if (ratio >= 0.8) return { label: "Flowing", tone: "success" };
-  if (ratio >= 0.5) return { label: "Moderate", tone: "warning" };
-  return { label: "Congested", tone: "danger" };
-}
+const MAP_VIEW_CYCLE: MapViewMode[] = ["passability", "traffic", "both"];
+const MAP_VIEW_LABEL: Record<MapViewMode, string> = {
+  passability: "Flood passability",
+  traffic: "Traffic",
+  both: "Flood + traffic",
+};
 
 export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const router = useRouter();
@@ -208,6 +207,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Bottom-sheet presentation (Google-Maps-style): expanded shows the full route
   // preview, compact shows only the floating turn card and a slim summary.
   const [expanded, setExpanded] = useState(true);
+  // Map colouring: flood passability (default), live traffic, or both (flood
+  // status wins on a flagged segment; traffic shows through on a clear one).
+  const [mapView, setMapView] = useState<MapViewMode>("passability");
 
   const mapRef = useRef<RouteMapHandle>(null);
   const routeRef = useRef<RoutePlan | null>(null);
@@ -956,6 +958,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           hazards={mapHazards}
           edges={network?.edges.features}
           clearanceCm={clearanceCm}
+          viewMode={mapView}
         />
 
         {route && !expanded ? (
@@ -988,7 +991,14 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Centre on my location" onPress={() => mapRef.current?.recenter()} style={styles.controlButton}>
               <LocateFixed size={18} color={c.slate800} />
             </TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Toggle map theme" onPress={toggleTheme} style={styles.controlButton}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`Map view: ${MAP_VIEW_LABEL[mapView]}. Tap to change.`}
+              onPress={() =>
+                setMapView((current) => MAP_VIEW_CYCLE[(MAP_VIEW_CYCLE.indexOf(current) + 1) % MAP_VIEW_CYCLE.length])
+              }
+              style={styles.controlButton}
+            >
               <Layers size={18} color={c.slate800} />
             </TouchableOpacity>
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => mapRef.current?.zoomIn()} style={styles.controlButton}>

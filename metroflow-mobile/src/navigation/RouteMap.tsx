@@ -28,6 +28,32 @@ const STATUS_COLOR = (c: ThemeColors): Record<StatusKey, string> => ({
   SUBMERGED: c.rose600,
 });
 
+/** Flow label from real recorded speed vs. the road's posted limit — never a fabricated traffic feed. */
+export function congestionFromSpeeds(
+  avgKmh: number,
+  maxKmh: number,
+): { label: string; tone: "success" | "warning" | "danger" } {
+  const ratio = maxKmh > 0 ? avgKmh / maxKmh : 1;
+  if (ratio >= 0.8) return { label: "Flowing", tone: "success" };
+  if (ratio >= 0.5) return { label: "Moderate", tone: "warning" };
+  return { label: "Congested", tone: "danger" };
+}
+
+const TRAFFIC_STYLE = {
+  success: { label: "Flowing" },
+  warning: { label: "Moderate" },
+  danger: { label: "Congested" },
+} as const;
+const TRAFFIC_COLOR = (c: ThemeColors): Record<"success" | "warning" | "danger", string> => ({
+  success: c.green600,
+  warning: c.amber600,
+  danger: c.red600,
+});
+
+/** Flood passability only, traffic flow only, or flood status with traffic as the fallback
+ * for passable roads (flood safety is the more critical signal, so it always wins). */
+export type MapViewMode = "passability" | "traffic" | "both";
+
 type MapHazard = Pick<HazardInfo, "hazard_id" | "name" | "obstruction_level" | "geometry">;
 
 type Props = {
@@ -39,6 +65,7 @@ type Props = {
   edges?: EdgeFeature[];
   /** The driver's own vehicle clearance, for the flood-depth marker labels (safe vs. exceeds). */
   clearanceCm?: number;
+  viewMode?: MapViewMode;
 };
 
 function blocking(level: string) {
@@ -78,11 +105,13 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   hazards,
   edges = [],
   clearanceCm,
+  viewMode = "passability",
 }, ref) {
   const { c, mode } = useTheme();
   const basemap = basemapFor(mode);
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
   const statusColor = useMemo(() => STATUS_COLOR(c), [c]);
+  const trafficColor = useMemo(() => TRAFFIC_COLOR(c), [c]);
   const mapRef = useRef<MapView>(null);
 
   useImperativeHandle(ref, () => ({
@@ -110,12 +139,22 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   );
   const roads = useMemo(
     () =>
-      edges.map((edge) => ({
-        id: edge.properties.edge_id,
-        status: edge.properties.status,
-        points: edge.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
-      })),
-    [edges],
+      edges.map((edge) => {
+        const traffic = congestionFromSpeeds(edge.properties.avg_speed_kmh, edge.properties.max_speed_kmh);
+        const floodColor = statusColor[edge.properties.status as StatusKey] ?? c.slate600;
+        const color =
+          viewMode === "traffic"
+            ? trafficColor[traffic.tone]
+            : viewMode === "both" && edge.properties.status === "PASSABLE"
+              ? trafficColor[traffic.tone]
+              : floodColor;
+        return {
+          id: edge.properties.edge_id,
+          color,
+          points: edge.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
+        };
+      }),
+    [edges, viewMode, statusColor, trafficColor, c.slate600],
   );
   // With no fix and no route, frame the whole road network instead of leaving the map blank.
   const idleRegion = useMemo(
@@ -165,7 +204,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
           <Polyline
             key={road.id}
             coordinates={road.points}
-            strokeColor={statusColor[road.status as StatusKey] ?? c.slate600}
+            strokeColor={road.color}
             strokeWidth={3}
             lineCap="round"
             lineJoin="round"
@@ -227,12 +266,30 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
       </MapView>
       {roads.length > 0 ? (
         <View style={styles.legend}>
-          {Object.entries(STATUS_STYLE).map(([key, item]) => (
-            <View key={item.label} style={styles.legendRow}>
-              <View style={[styles.swatch, { backgroundColor: statusColor[key as StatusKey] }]} />
-              <Text style={styles.legendText}>{item.label}</Text>
-            </View>
-          ))}
+          {viewMode !== "traffic"
+            ? Object.entries(STATUS_STYLE).map(([key, item]) => (
+                <View key={item.label} style={styles.legendRow}>
+                  <View style={[styles.swatch, { backgroundColor: statusColor[key as StatusKey] }]} />
+                  <Text style={styles.legendText}>{item.label}</Text>
+                </View>
+              ))
+            : null}
+          {viewMode !== "passability"
+            ? Object.entries(TRAFFIC_STYLE).map(([key, item]) => (
+                <View key={item.label} style={styles.legendRow}>
+                  <View
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: trafficColor[key as keyof typeof TRAFFIC_STYLE] },
+                    ]}
+                  />
+                  <Text style={styles.legendText}>
+                    {item.label}
+                    {viewMode === "both" ? " (clear roads)" : ""}
+                  </Text>
+                </View>
+              ))
+            : null}
         </View>
       ) : null}
       <Text style={styles.attribution}>{basemap.attribution}</Text>
