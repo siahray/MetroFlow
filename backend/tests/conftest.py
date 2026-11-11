@@ -21,6 +21,9 @@ for _limit in (
     "METROFLOW_RATE_LIMIT_SOS_PER_MIN",
     "METROFLOW_RATE_LIMIT_SIMULATION_PER_MIN",
     "METROFLOW_RATE_LIMIT_REPORTS_PER_MIN",
+    # The flood-state endpoint would otherwise reach api.open-meteo.com from
+    # the suite: network-dependent, and it would flag every seeded edge.
+    "METROFLOW_WEATHER_INGEST",
 ):
     os.environ.setdefault(_limit, "0")
 

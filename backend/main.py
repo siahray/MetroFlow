@@ -22,6 +22,7 @@ import flood_state
 import models
 import network_seed
 import reports
+import weather
 from auth_utils import get_current_user, require_roles
 from config import settings
 from database import SessionLocal, get_db
@@ -2690,7 +2691,38 @@ def create_sensor_reading(
         raise HTTPException(status_code=422, detail="Recorded timestamp cannot be in the future")
 
     # BRULE-012: a breach is advisory until a dispatcher confirms it.
-    is_breach = reading.value >= sensor.threshold_value
+    new_reading, edge_ids = _record_sensor_reading(
+        db, sensor, reading.value, reading.unit, reading.recorded_at
+    )
+    if new_reading.breach:
+        audit.record(
+            db,
+            user=_user,
+            action_type=audit.SENSOR_BREACH,
+            payload={
+                "sensor_id": reading.sensor_id,
+                "value": reading.value,
+                "threshold": sensor.threshold_value,
+                "impact_radius_m": sensor.impact_radius_m,
+                "impacted_edge_ids": edge_ids,
+                "actor": _user.name or _user.email,
+            },
+        )
+    db.commit()
+    db.refresh(new_reading)
+    return new_reading
+
+
+def _record_sensor_reading(
+    db: Session,
+    sensor: models.Sensor,
+    value: float,
+    unit: str,
+    recorded_at: datetime,
+) -> tuple[models.SensorReading, list[int]]:
+    """Shared by the sensor gateway and the weather ingest: write one reading
+    and stamp its advisory state on every edge in range (BRULE-012)."""
+    is_breach = value >= sensor.threshold_value
 
     # Every reading is written to the roads in range, flagged or not, so the flood-state
     # resolver can tell "covered and quiet" from "not covered" (CR-004, FSD-FR-091).
@@ -2711,10 +2743,10 @@ def create_sensor_reading(
         ]
 
     new_reading = models.SensorReading(
-        sensor_id=reading.sensor_id,
-        value=reading.value,
-        unit=reading.unit,
-        recorded_at=reading.recorded_at,
+        sensor_id=sensor.sensor_id,
+        value=value,
+        unit=unit,
+        recorded_at=recorded_at,
         received_at=datetime.now(UTC),
         breach=is_breach,
     )
@@ -2725,25 +2757,39 @@ def create_sensor_reading(
         source=f"SENSOR:{sensor.sensor_id}",
         kind=flood_state.SIMULATED if sensor.simulated else flood_state.OBSERVED,
         flagged=is_breach,
-        as_of=reading.recorded_at.astimezone(UTC).replace(tzinfo=None),
+        as_of=recorded_at.astimezone(UTC).replace(tzinfo=None),
     )
-    if is_breach:
-        audit.record(
-            db,
-            user=_user,
-            action_type=audit.SENSOR_BREACH,
-            payload={
-                "sensor_id": reading.sensor_id,
-                "value": reading.value,
-                "threshold": sensor.threshold_value,
-                "impact_radius_m": sensor.impact_radius_m,
-                "impacted_edge_ids": edge_ids,
-                "actor": _user.name or _user.email,
-            },
+    return new_reading, edge_ids
+
+
+def _ingest_weather(db: Session) -> None:
+    """Record the latest Open-Meteo rain through the sensor interface (CR-004).
+
+    The system performs this on its own, so unlike a gateway post there is no
+    audit entry: the reading row and the advisory state it writes are the
+    record, and a dispatcher confirming a real flood is still the audited step.
+    """
+    result = weather.fetch_rain_rate()
+    if result is None:
+        return
+    value, recorded_at = result
+    sensor = db.query(models.Sensor).filter(models.Sensor.sensor_id == weather.SENSOR_ID).first()
+    if sensor is None:
+        sensor = models.Sensor(
+            sensor_id=weather.SENSOR_ID,
+            sensor_type="RAIN_GAUGE",
+            name="Open-Meteo rain over the pilot corridor",
+            geom=_point(weather.CORRIDOR_LAT, weather.CORRIDOR_LON),
+            threshold_value=weather.RAIN_THRESHOLD_MM_HR,
+            threshold_unit="mm_hr",
+            impact_radius_m=weather.IMPACT_RADIUS_M,
+            active=True,
+            simulated=False,
         )
+        db.add(sensor)
+        db.flush()
+    _record_sensor_reading(db, sensor, value, "mm_hr", recorded_at)
     db.commit()
-    db.refresh(new_reading)
-    return new_reading
 
 
 def _upsert_advisories(
@@ -2818,6 +2864,13 @@ def get_flood_state(
     """
     now = datetime.now(UTC).replace(tzinfo=None)
     window = timedelta(minutes=settings.flood_fresh_minutes)
+
+    # CR-004 live weather: refresh the Open-Meteo rain reading at most once per
+    # refresh window so the rain gate and the advisories are current. Disabled
+    # by configuration (tests, blocked egress); a failed fetch never fails
+    # this endpoint, the previous reading just ages out.
+    if settings.weather_ingest and weather.due_for_refresh():
+        _ingest_weather(db)
 
     live: dict[int, list[flood_state.Observation]] = {}
     for adv in db.query(models.EdgeAdvisory).all():

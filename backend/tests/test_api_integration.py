@@ -17,11 +17,13 @@ test_routing.py / test_hydrology.py cover the algorithms; neither would catch a
 
 import json
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 import pytest
 from evidence import build_jpeg
 from fastapi.testclient import TestClient
 
+import weather
 from config import settings
 from main import app
 from network_seed import build_network
@@ -2112,6 +2114,36 @@ def test_only_flagged_leaves_out_segments_with_nothing_to_report(client):
         assert all(e["basis"] != "NONE" or e["stale"] for e in flagged)
     finally:
         client.delete("/api/v1/sensors/TEST_FS_FILTER")
+
+
+def test_open_meteo_rain_drives_the_rain_gate_and_the_advisory(client, monkeypatch):
+    """CR-004: the live weather source feeds the sensor interface, then clears it."""
+    monkeypatch.setattr(settings, "weather_ingest", True)  # the suite disables it
+    monkeypatch.setattr(weather, "_last_fetch", None)
+    monkeypatch.setattr(
+        weather, "fetch_rain_rate", lambda: (2.5, datetime.now(UTC).replace(microsecond=0))
+    )
+    try:
+        raining = _flood_state(client)
+        assert raining["raining"] is True
+        hit = [e for e in raining["edges"] if e["source"] == f"SENSOR:{weather.SENSOR_ID}"]
+        assert hit
+        assert all(
+            e["basis"] == "LIVE_ADVISORY" and e["advisory"] is True and e["closes_road"] is False
+            for e in hit
+        )
+
+        # Rain stops: the next ingest writes a quiet reading and the advisory clears.
+        monkeypatch.setattr(weather, "_last_fetch", None)
+        monkeypatch.setattr(
+            weather, "fetch_rain_rate", lambda: (0.0, datetime.now(UTC).replace(microsecond=0))
+        )
+        cleared = _by_edge(_flood_state(client))
+        assert cleared[hit[0]["edge_id"]]["basis"] == "NONE"
+        assert cleared[hit[0]["edge_id"]]["has_live_data"] is True
+    finally:
+        # Other flood-state tests assert per-edge live coverage; drop the virtual gauge.
+        client.delete(f"/api/v1/sensors/{weather.SENSOR_ID}")
 
 
 def test_flood_state_requires_a_session(client):

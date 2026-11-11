@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # reading is stale and the segment falls back to the next source; silence is
     # never treated as "safe".
     flood_fresh_minutes: int = 30
+    # Fetch Open-Meteo rain for the corridor when flood-state is polled (at most
+    # once per 10 minutes). The suite and any deployment whose egress to
+    # api.open-meteo.com is blocked turn this off.
+    weather_ingest: bool = True
 
     # --- Bootstrap dispatcher --------------------------------------------------
     # Registration only ever creates driver accounts, so the first LGU

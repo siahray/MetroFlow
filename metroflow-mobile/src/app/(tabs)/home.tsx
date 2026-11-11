@@ -94,6 +94,11 @@ const BASIS_LABEL: Record<string, string> = {
   NOAH_LAYER: 'Flood Caution Advisory',
 };
 
+/** Friendly names for the raw source ids the API reports. */
+const SOURCE_LABEL: Record<string, string> = {
+  'SENSOR:OPEN-METRO-RAIN': 'Open-Meteo Rain',
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -256,9 +261,11 @@ export default function HomeScreen() {
     (latest, edge) => (!latest || !latest.as_of || (edge.as_of ?? '') > latest.as_of ? edge : latest),
     null,
   );
-  const advisorySourceLabel =
-    latestAdvisory?.source ??
-    (latestAdvisory?.basis.startsWith('NOAH') ? 'Project NOAH' : 'MetroFlow Network');
+  const advisorySourceLabel = latestAdvisory?.source
+    ? SOURCE_LABEL[latestAdvisory.source] ?? latestAdvisory.source.replace(/^SENSOR:/, '')
+    : latestAdvisory?.basis.startsWith('NOAH')
+      ? 'Project NOAH'
+      : 'MetroFlow Network';
 
   const card = {
     backgroundColor: c.white,
