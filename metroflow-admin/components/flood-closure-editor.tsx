@@ -1,10 +1,11 @@
 "use client";
 
 import { Check, MapPin, Navigation, Pentagon, Route, Spline, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorNotice } from "./error-notice";
 import { NetworkMap, type DrawnGeometry } from "./network-map";
+import { SearchableSelect } from "./searchable-select";
 import { subscribeToHazards } from "@/lib/live-stream";
 import { createHazard, publishHazard, withdrawHazard, type HazardZone } from "@/lib/hazards";
 import { fetchNetworkState, type NetworkSummary } from "@/lib/network";
@@ -149,6 +150,12 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   }
 
   const segmentLabel = (id: number | null) => segments.find((s) => s.edgeId === id)?.label;
+  // Flattened once for the searchable picker (the real network has ~10,876
+  // edges; a plain <select> full of options was the page's worst lag source).
+  const segmentOptions = useMemo(
+    () => segments.map((s) => ({ value: s.edgeId, label: s.label })),
+    [segments],
+  );
 
   return (
     <div className="space-y-4">
@@ -263,21 +270,14 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
                 }}
               />
             ) : (
-              <select
+              <SearchableSelect
                 id="hazard-segment"
-                value={edgeId ?? ""}
-                onChange={(e) => setEdgeId(e.target.value === "" ? null : Number(e.target.value))}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium focus:border-slate-900 focus:outline-none"
-              >
-                <option value="">
-                  {segmentsLoading ? "Loading segments…" : "Choose a segment"}
-                </option>
-                {segments.map((s) => (
-                  <option key={s.edgeId} value={s.edgeId}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+                options={segmentOptions}
+                value={edgeId}
+                onChange={setEdgeId}
+                placeholder={segmentsLoading ? "Loading segments…" : "Road name or node id…"}
+                aria-label="Road segment"
+              />
             )}
           </div>
         ) : (

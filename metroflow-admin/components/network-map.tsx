@@ -31,6 +31,7 @@ import {
   type NetworkSummary,
   type RouteResult,
 } from "@/lib/network";
+import { SearchableSelect } from "./searchable-select";
 import { listSOS } from "@/lib/sos-live";
 import { listSensors, type Sensor } from "@/lib/sensors";
 import { listVehiclesLive } from "@/lib/vehicles-live";
@@ -904,12 +905,24 @@ export function NetworkMap({
   // is the Market Market end of C5 and the last is the Amang Rodriguez corner.
   // Deriving keeps a refetch from needing an effect to repair stale ids.
   const nodeIds = useMemo(() => nodeOptions.map((node) => node.properties.node_id), [nodeOptions]);
+  const nodeIdSet = useMemo(() => new Set(nodeIds), [nodeIds]);
+  // Flattened once for the searchable From/To pickers (SearchableSelect only
+  // renders the matched slice, so this never puts thousands of DOM nodes in
+  // the tree the way two plain <select>s full of options would).
+  const nodeSelectOptions = useMemo(
+    () =>
+      nodeOptions.map((node) => ({
+        value: node.properties.node_id,
+        label: `${node.properties.node_id} · ${node.properties.name ?? "Unnamed"}`,
+      })),
+    [nodeOptions],
+  );
   const fallbackStart = nodeIds.length > 0 ? nodeIds[0] : null;
   const fallbackTarget = nodeIds.length > 0 ? nodeIds[nodeIds.length - 1] : null;
   const effectiveStart =
-    startNodeId !== null && nodeIds.includes(startNodeId) ? startNodeId : fallbackStart;
+    startNodeId !== null && nodeIdSet.has(startNodeId) ? startNodeId : fallbackStart;
   const effectiveTarget =
-    targetNodeId !== null && nodeIds.includes(targetNodeId) ? targetNodeId : fallbackTarget;
+    targetNodeId !== null && nodeIdSet.has(targetNodeId) ? targetNodeId : fallbackTarget;
 
   const summary = useMemo(
     () => (network ? summariseNetwork(network, route) : null),
@@ -1159,35 +1172,27 @@ export function NetworkMap({
                   <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
                     From
                   </span>
-                  <select
-                    value={effectiveStart ?? ""}
-                    onChange={(event) => setStartNodeId(Number(event.target.value))}
+                  <SearchableSelect
+                    variant="dark"
+                    options={nodeSelectOptions}
+                    value={effectiveStart}
+                    onChange={setStartNodeId}
+                    placeholder="Node id or name…"
                     aria-label="Route start node"
-                    className="w-full rounded border border-slate-700 bg-brand-primary px-1.5 py-1 text-[11px] text-slate-100 focus:border-sky-500 focus:outline-none"
-                  >
-                    {nodeOptions.map((node) => (
-                      <option key={node.properties.node_id} value={node.properties.node_id}>
-                        {node.properties.node_id} · {node.properties.name ?? "Unnamed"}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 <label className="space-y-1">
                   <span className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
                     To
                   </span>
-                  <select
-                    value={effectiveTarget ?? ""}
-                    onChange={(event) => setTargetNodeId(Number(event.target.value))}
+                  <SearchableSelect
+                    variant="dark"
+                    options={nodeSelectOptions}
+                    value={effectiveTarget}
+                    onChange={setTargetNodeId}
+                    placeholder="Node id or name…"
                     aria-label="Route target node"
-                    className="w-full rounded border border-slate-700 bg-brand-primary px-1.5 py-1 text-[11px] text-slate-100 focus:border-sky-500 focus:outline-none"
-                  >
-                    {nodeOptions.map((node) => (
-                      <option key={node.properties.node_id} value={node.properties.node_id}>
-                        {node.properties.node_id} · {node.properties.name ?? "Unnamed"}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
               </div>
               <button
