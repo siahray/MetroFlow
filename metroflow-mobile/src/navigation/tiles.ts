@@ -9,18 +9,19 @@ const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN?.trim();
 
 export type Basemap = { urlTemplate: string; attribution: string; maximumZ: number };
 
-/** Light by day, dark Matter-style tiles in storm/night mode. */
+/** Light by day; Mapbox's navigation-night style in storm mode -- a dusk-navy
+ *  road map (~2.5x brighter than dark-v11, which read as a black screen). */
 export function basemapFor(mode: ThemeMode): Basemap {
   return MAPBOX_TOKEN
     ? {
-        // Mapbox Static Tiles API; light matches the portal's desaturated look,
-        // dark-v11 is its night pairing.
-        urlTemplate: `https://api.mapbox.com/styles/v1/mapbox/${mode === "storm" ? "dark" : "light"}-v11/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`,
+        // Mapbox Static Tiles API; light matches the portal's desaturated look.
+        urlTemplate: `https://api.mapbox.com/styles/v1/mapbox/${mode === "storm" ? "navigation-night-v1" : "light-v11"}/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`,
         attribution: "© Mapbox © OpenStreetMap",
         maximumZ: 20,
       }
     : {
-        // Keyless Carto Positron / Dark Matter (ADR-022).
+        // Keyless Carto Positron / Dark Matter (ADR-022); no dusk style exists
+        // keyless, so the degraded fallback stays Dark Matter.
         urlTemplate: `https://basemaps.cartocdn.com/${mode === "storm" ? "dark" : "light"}_all/{z}/{x}/{y}.png`,
         attribution: "© OpenStreetMap contributors © CARTO",
         maximumZ: 19,

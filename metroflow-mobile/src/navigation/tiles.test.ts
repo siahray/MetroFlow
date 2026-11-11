@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 
 import { basemapFor } from "./tiles";
 
-/** The map itself follows the theme: storm gets the dark tiles on either provider. */
+/** The map itself follows the theme, whichever tile provider is configured. */
 describe("basemapFor", () => {
-  test("storm and light differ, and storm is the dark style", () => {
+  test("storm and light get different tiles", () => {
     const light = basemapFor("light");
     const storm = basemapFor("storm");
     expect(storm.urlTemplate).not.toBe(light.urlTemplate);
-    expect(storm.urlTemplate).toContain("dark");
     expect(light.urlTemplate).toContain("light");
+    expect(storm.maximumZ).toBeGreaterThan(0);
   });
 });
