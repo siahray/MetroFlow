@@ -28,6 +28,7 @@ import {
   Moon,
   BellRing,
   Clock,
+  Waves,
 } from 'lucide-react-native';
 import { updateMyName } from '../../api';
 import { useAuth } from '../../auth';
@@ -112,7 +113,19 @@ export default function ProfileScreen() {
 
       {/* Header */}
       <View style={{ paddingHorizontal: space[16], paddingVertical: space[14], backgroundColor: c.white, borderBottomWidth: 1, borderColor: c.slate100 }}>
-        <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900 }}>Profile</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
+          <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: c.blue100, backgroundColor: c.white, alignItems: 'center', justifyContent: 'center' }}>
+            <Waves size={18} color={c.blue600} />
+          </View>
+          <View>
+            <Text style={{ fontSize: fontSize.tiny, fontWeight: '800', color: c.blue600, textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
+              METROFLOW
+            </Text>
+            <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900, lineHeight: 20 }}>
+              Profile
+            </Text>
+          </View>
+        </View>
       </View>
 
       <ScrollView style={{ flex: 1 }}>

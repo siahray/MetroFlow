@@ -301,6 +301,7 @@ export default function HomeScreen() {
               borderRadius: 17,
               borderWidth: 1,
               borderColor: c.blue100,
+              backgroundColor: c.white,
               alignItems: 'center',
               justifyContent: 'center',
             }}

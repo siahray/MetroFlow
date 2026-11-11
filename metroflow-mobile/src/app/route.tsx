@@ -42,6 +42,7 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
+  Waves,
   Wifi,
   WifiOff,
   X,
@@ -62,6 +63,7 @@ import {
   postTelemetry,
 } from "../api";
 import { useAuth } from "../auth";
+import { Avatar } from "../components/Avatar";
 import { BackButton } from "../components/BackButton";
 import { useDialog } from "../components/Dialog";
 import { RouteMap, type RouteMapHandle } from "../navigation/RouteMap";
@@ -731,16 +733,28 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       <SafeAreaView edges={edges} style={styles.screen}>
         <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
         <View style={styles.header}>
-          <BackButton />
-          <Text style={styles.headerTitle}>Active Navigation</Text>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
-            onPress={toggleTheme}
-            style={styles.backButton}
-          >
-            {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[10] }}>
+              <View style={styles.brandIcon}>
+                <Waves size={18} color={c.blue600} />
+              </View>
+              <View>
+                <Text style={styles.brandEyebrow}>METROFLOW</Text>
+                <Text style={styles.headerTitle}>Active Navigation</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
+              <BackButton />
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+                onPress={toggleTheme}
+                style={styles.themeToggle}
+              >
+                {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
         <View style={styles.signedOutCard}>
           <ShieldAlert size={28} color={c.blue600} />
@@ -761,22 +775,39 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
 
       <View style={styles.header}>
-        <BackButton />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Active Navigation</Text>
-          <Text style={styles.headerSubtitle}>
-            {clearanceCm} cm clearance • live hazards
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space[12] }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[10] }}>
+            <View style={styles.brandIcon}>
+              <Waves size={18} color={c.blue600} />
+            </View>
+            <View>
+              <Text style={styles.brandEyebrow}>METROFLOW</Text>
+              <Text style={styles.headerTitle}>Active Navigation</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[12] }}>
+            {streamError ? <AlertTriangle size={16} color={c.red600} /> : null}
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+              onPress={toggleTheme}
+              style={styles.themeToggle}
+            >
+              {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
+            </TouchableOpacity>
+            <Avatar name={user?.name || user?.email} size={32} />
+          </View>
         </View>
-        {streamError ? <AlertTriangle size={16} color={c.red600} /> : null}
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
-          onPress={toggleTheme}
-          style={styles.backButton}
-        >
-          {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
-        </TouchableOpacity>
+
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <BackButton />
+          <View style={styles.headerPill}>
+            <Gauge size={12} color={c.blue600} />
+            <Text style={styles.headerPillText}>
+              {clearanceCm} cm clearance • live hazards
+            </Text>
+          </View>
+        </View>
       </View>
 
       {!route ? (
@@ -1313,26 +1344,50 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.white },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space[12],
     paddingHorizontal: space[16],
     paddingVertical: space[12],
     borderBottomWidth: 1,
     borderColor: c.slate100,
   },
-  backButton: {
-    width: 36,
-    height: 36,
+  brandIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: c.blue100,
+    backgroundColor: c.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandEyebrow: {
+    fontSize: fontSize.tiny,
+    fontWeight: "800",
+    color: c.blue600,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    lineHeight: 12,
+  },
+  themeToggle: {
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: c.slate50,
-    borderRadius: 10,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: c.slate200,
   },
-  headerTitle: { fontSize: fontSize.subtitle, fontWeight: "800", color: c.slate900 },
-  headerSubtitle: { fontSize: fontSize.micro, color: c.slate500, marginTop: space[1] },
+  headerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[6],
+    backgroundColor: c.blue50,
+    paddingHorizontal: space[12],
+    paddingVertical: space[6],
+    borderRadius: 999,
+  },
+  headerPillText: { fontSize: fontSize.caption, fontWeight: "700", color: c.blue800 },
+  headerTitle: { fontSize: fontSize.heading, fontWeight: "800", color: c.slate900, lineHeight: 20 },
   mapArea: { flex: 1, position: "relative" },
   banner: {
     position: "absolute",
