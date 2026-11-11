@@ -218,7 +218,21 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.5)' }}
           />
           <View style={{ flex: 1, justifyContent: 'center', padding: space[20] }} pointerEvents="box-none">
-            <View style={{ backgroundColor: c.white, borderRadius: 18, padding: space[20], gap: space[14] }}>
+            <View
+              style={{
+                backgroundColor: c.surfaceHigh,
+                borderWidth: 1,
+                borderColor: c.slate200,
+                borderRadius: 18,
+                padding: space[20],
+                gap: space[14],
+                shadowColor: c.black,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.2,
+                shadowRadius: 24,
+                elevation: 10,
+              }}
+            >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900 }}>
                   {draft?.vehicle ? 'Edit Vehicle' : 'Add Vehicle'}

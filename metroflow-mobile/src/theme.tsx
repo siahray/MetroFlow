@@ -72,6 +72,8 @@ export const lightColors = {
   /** Off-white card/surface tints used on the report form. */
   surface: "#fafbfc",
   surfaceAlt: "#f4f7fa",
+  /** Modal/dialog surface: a step above cards so pop-ups read as elevated. */
+  surfaceHigh: "#ffffff",
   /** Backgrounds for a chip/button that needs to read as "ink" regardless of theme. */
   inkBg: "#0f172a",
   /** Text on a permanently dark surface (turn card, ink button): light in every theme. */
@@ -134,6 +136,7 @@ export const stormColors: Partial<ThemeColors> = {
   amberSurface: "#3a2a06",
   surface: "#111c2e",
   surfaceAlt: "#0a1220",
+  surfaceHigh: "#223046",
   green50: "#052e1b",
   inkBg: "#1d4ed8",
   onInk: "#ffffff",
