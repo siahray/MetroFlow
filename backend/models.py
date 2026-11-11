@@ -76,6 +76,12 @@ class RoadEdge(Base):
         nullable=True,
         comment="Arterial the edge runs along, used for spoken instructions",
     )
+    direction = Column(
+        String(10),
+        nullable=False,
+        default="BOTH",
+        comment="BOTH, FORWARD (start to end only) or BACKWARD (end to start only)",
+    )
     geom = Column(Geometry(geometry_type="LINESTRING", srid=4326))
 
     state = relationship("LiveEdgeState", back_populates="edge", uselist=False)

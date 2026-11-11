@@ -61,6 +61,7 @@ class EdgeProperties(BaseModel):
     start_name: str | None = None
     end_name: str | None = None
     road_name: str | None = None
+    direction: Literal["BOTH", "FORWARD", "BACKWARD"] = "BOTH"
     distance_m: float
     max_speed_kmh: float
     avg_speed_kmh: float

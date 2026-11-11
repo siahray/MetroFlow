@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import bcrypt
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import Response, StreamingResponse
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func
@@ -220,6 +221,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# The real road network makes /network/state a multi-megabyte GeoJSON; gzip
+# cuts it ~10x and every HTTP client (fetch included) negotiates it silently.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.middleware("http")
@@ -372,6 +376,7 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
                     start_name=start.name,
                     end_name=end.name,
                     road_name=edge.road_name,
+                    direction=edge.direction,
                     distance_m=edge.distance_meters,
                     max_speed_kmh=edge.max_speed_kmh,
                     avg_speed_kmh=float(state.avg_speed_kmh) if state else edge.max_speed_kmh,
@@ -530,6 +535,56 @@ def trigger_rainfall_simulation(
     )
 
 
+def _routing_graph(
+    nodes: dict[int, models.RoadNode],
+    edges: list[models.RoadEdge],
+    states: dict[int, models.LiveEdgeState],
+    blocked_edges: set[int],
+    flagged_edges: set[int],
+) -> tuple[
+    dict[int, tuple[float, float]],
+    dict[int, list[tuple[int, float, float, float, bool]]],
+    dict[tuple[int, int], models.RoadEdge],
+]:
+    """Adjacency for A* plus the ordered pair index used to rebuild geometry.
+
+    A BOTH edge joins the graph in both directions, so a flooded evacuation
+    corridor stays usable either way; a one-way edge only in its legal
+    direction. The pair index is keyed on the ordered traversal, because two
+    carriageways of a divided road connect the same junctions in opposite
+    orders.
+    """
+    graph_nodes = {node_id: (node.latitude, node.longitude) for node_id, node in nodes.items()}
+    graph_edges: dict[int, list[tuple[int, float, float, float, bool]]] = {}
+    pair_index: dict[tuple[int, int], models.RoadEdge] = {}
+
+    for edge in edges:
+        if edge.edge_id in blocked_edges:
+            continue
+
+        state = states.get(edge.edge_id)
+        water_cm = float(state.water_depth_cm) if state else 0.0
+        advisory_flagged = edge.edge_id in flagged_edges
+
+        traversals = (
+            [(edge.start_node_id, edge.end_node_id)]
+            if edge.direction == "FORWARD"
+            else [(edge.end_node_id, edge.start_node_id)]
+            if edge.direction == "BACKWARD"
+            else [
+                (edge.start_node_id, edge.end_node_id),
+                (edge.end_node_id, edge.start_node_id),
+            ]
+        )
+        for origin, destination in traversals:
+            pair_index[(origin, destination)] = edge
+            graph_edges.setdefault(origin, []).append(
+                (destination, edge.distance_meters, edge.max_speed_kmh, water_cm, advisory_flagged)
+            )
+
+    return graph_nodes, graph_edges, pair_index
+
+
 @app.get("/api/v1/routing/navigate", response_model=RouteResponse)
 def get_optimal_route(
     start_node: Annotated[int, Query(description="Origin node id")],
@@ -570,35 +625,9 @@ def get_optimal_route(
                 blocked_edges |= hazard_edges.get(hazard.hazard_id, set())
     flagged_edges = _load_flagged_advisory_edges(db)
 
-    graph_nodes: dict[int, tuple[float, float]] = {
-        node_id: (node.latitude, node.longitude) for node_id, node in nodes.items()
-    }
-
-    # Roads are treated as bidirectional: a flooded evacuation corridor is
-    # usable in both directions, and a one-way seed made reverse trips 404.
-    graph_edges: dict[int, list[tuple[int, float, float, float, bool]]] = {}
-    pair_index: dict[tuple[int, int], models.RoadEdge] = {}
-
-    for edge in edges:
-        if edge.edge_id in blocked_edges:
-            continue
-
-        state = states.get(edge.edge_id)
-        water_cm = float(state.water_depth_cm) if state else 0.0
-        advisory_flagged = edge.edge_id in flagged_edges
-        pair = (
-            min(edge.start_node_id, edge.end_node_id),
-            max(edge.start_node_id, edge.end_node_id),
-        )
-        pair_index[pair] = edge
-
-        for origin, destination in (
-            (edge.start_node_id, edge.end_node_id),
-            (edge.end_node_id, edge.start_node_id),
-        ):
-            graph_edges.setdefault(origin, []).append(
-                (destination, edge.distance_meters, edge.max_speed_kmh, water_cm, advisory_flagged)
-            )
+    graph_nodes, graph_edges, pair_index = _routing_graph(
+        nodes, edges, states, blocked_edges, flagged_edges
+    )
 
     path, travel_time_s = td_a_star_search(
         graph_nodes,
@@ -628,7 +657,7 @@ def get_optimal_route(
         coordinates = [point, point]
     else:
         for origin_id, destination_id in zip(path, path[1:], strict=False):
-            edge = pair_index.get((min(origin_id, destination_id), max(origin_id, destination_id)))
+            edge = pair_index.get((origin_id, destination_id))
             hop_distance = 0.0
             hop_road_name: str | None = None
 
