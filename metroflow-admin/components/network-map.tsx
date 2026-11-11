@@ -2,7 +2,16 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { CloudRain, Gauge, Route as RouteIcon, ShieldAlert, Truck, Waves } from "lucide-react";
+import {
+  CloudRain,
+  Gauge,
+  Route as RouteIcon,
+  ShieldAlert,
+  SlidersHorizontal,
+  Truck,
+  Waves,
+  X,
+} from "lucide-react";
 import type {
   GeoJSONSource,
   Map as MapLibreMap,
@@ -10,7 +19,6 @@ import type {
   Popup as MapLibrePopup,
 } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -221,12 +229,6 @@ type NetworkMapProps = {
   drawMode?: "polygon" | "line" | null;
   /** Fired with the finished shape on "Finish", or `null` on "Cancel". */
   onDrawComplete?: (geometry: DrawnGeometry | null) => void;
-  /**
-   * Where to render the clearance/rainfall/routing controls. Omitted, they
-   * float over the map as before; passed, they portal into that element
-   * instead, so a caller can place them outside the map canvas.
-   */
-  controlsContainer?: HTMLElement | null;
 };
 
 function errorMessage(error: unknown): string {
@@ -272,7 +274,6 @@ export function NetworkMap({
   onSummary,
   drawMode = null,
   onDrawComplete,
-  controlsContainer = null,
 }: NetworkMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -301,6 +302,18 @@ export function NetworkMap({
     sos: true,
     sensors: true,
   });
+  // The simulation/routing controls open as a modal instead of a permanent
+  // floating panel, so they don't sit over the map except when in use.
+  const [simulationOpen, setSimulationOpen] = useState(false);
+
+  useEffect(() => {
+    if (!simulationOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSimulationOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [simulationOpen]);
 
   // --- Map lifecycle -------------------------------------------------------
   // MapLibre touches `window`, so it is imported inside the effect and the
@@ -1071,22 +1084,50 @@ export function NetworkMap({
         </div>
       </div>
 
-      {/* Simulation + routing controls: float over the map unless the caller
-          gave us somewhere else to put them (`controlsContainer`). */}
-      {(() => {
-        const panel = (
-          <>
+      {/* Simulation + routing controls: a button so they only cover the map
+          while actually in use, instead of a permanent floating panel. */}
+      <button
+        type="button"
+        onClick={() => setSimulationOpen(true)}
+        className="absolute right-4 bottom-24 z-30 flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/95 px-3 py-2 text-[11px] font-semibold text-slate-200 shadow-sm backdrop-blur hover:border-sky-500 hover:text-sky-300"
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" />
+        Live Network Model
+      </button>
+
+      {simulationOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Live Network Model"
+          className="absolute inset-0 z-40 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setSimulationOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm animate-modal-in space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
                 Live Network Model
               </span>
-              <span className="font-mono text-[10px] text-emerald-400">
-                {loading
-                  ? "syncing…"
-                  : summary
-                    ? `${summary.nodeCount} nodes · ${summary.edgeCount} edges`
-                    : "…"}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-emerald-400">
+                  {loading
+                    ? "syncing…"
+                    : summary
+                      ? `${summary.nodeCount} nodes · ${summary.edgeCount} edges`
+                      : "…"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSimulationOpen(false)}
+                  aria-label="Close"
+                  className="rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
 
             <label className="block space-y-1.5">
@@ -1220,23 +1261,9 @@ export function NetworkMap({
                 </p>
               )}
             </div>
-          </>
-        );
-
-        if (controlsContainer) {
-          return createPortal(
-            <div className="w-full space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-sm">
-              {panel}
-            </div>,
-            controlsContainer,
-          );
-        }
-        return (
-          <div className="absolute right-4 bottom-24 z-30 w-[272px] space-y-3 rounded-xl border border-slate-800 bg-slate-950/95 p-3.5 text-slate-100 shadow-sm backdrop-blur">
-            {panel}
           </div>
-        );
-      })()}
+        </div>
+      ) : null}
     </div>
   );
 }
