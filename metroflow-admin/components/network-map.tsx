@@ -230,6 +230,14 @@ type NetworkMapProps = {
    */
   onNetworkState?: (state: NetworkState) => void;
   /**
+   * Called whenever the live hazard list changes, so a caller that just wants
+   * the rows (e.g. the hazard form's "Active hazards" list) can reuse this
+   * component's own SSE subscription instead of opening a second one -- on a
+   * long-running dev server, each open stream holds a pooled DB connection
+   * for up to `event_stream_lifetime_seconds`, and the pool is small.
+   */
+  onHazards?: (hazards: HazardZone[]) => void;
+  /**
    * Hazard-shape drawing (FSD-FR-082, FSD-FR-083): "polygon" collects a flood
    * area, "line" a closure line. `null` (the default) leaves ordinary map
    * clicks alone.
@@ -281,6 +289,7 @@ export function NetworkMap({
   onAction,
   onSummary,
   onNetworkState,
+  onHazards,
   drawMode = null,
   onDrawComplete,
 }: NetworkMapProps) {
@@ -849,12 +858,15 @@ export function NetworkMap({
     if (!ready) return;
     const controller = new AbortController();
 
-    void subscribeToHazards(setHazards, controller.signal);
+    void subscribeToHazards((rows) => {
+      setHazards(rows);
+      onHazards?.(rows);
+    }, controller.signal);
     void subscribeToVehicles(setVehicles, controller.signal);
     void subscribeToSOS(setSosRequests, controller.signal);
 
     return () => controller.abort();
-  }, [ready]);
+  }, [ready, onHazards]);
 
   useEffect(() => {
     if (!ready) return;

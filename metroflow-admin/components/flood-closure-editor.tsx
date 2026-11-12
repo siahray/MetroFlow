@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { NetworkMap, type DrawnGeometry } from "./network-map";
 import { SearchableSelect } from "./searchable-select";
-import { subscribeToHazards } from "@/lib/live-stream";
 import { createHazard, publishHazard, withdrawHazard, type HazardZone } from "@/lib/hazards";
 import type { NetworkState, NetworkSummary } from "@/lib/network";
 
@@ -69,15 +68,13 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
     setSegmentsLoading(false);
   }, []);
 
-  // Live hazard list (FSD-FR-086): the stream pushes each change once and the snapshot covers
-  // whatever happened while this tab was disconnected.
-  useEffect(() => {
-    const controller = new AbortController();
-    void subscribeToHazards((rows) => {
-      setHazards([...rows].sort((a, b) => b.hazard_id - a.hazard_id));
-      setHazardsLoading(false);
-    }, controller.signal);
-    return () => controller.abort();
+  // Live hazard list (FSD-FR-086): reuses the map's own hazard subscription
+  // (`onHazards`) instead of opening a second SSE stream for the same data --
+  // a long-running dev server has only a handful of pooled DB connections,
+  // and each open stream holds one for a while.
+  const handleHazards = useCallback((rows: HazardZone[]) => {
+    setHazards([...rows].sort((a, b) => b.hazard_id - a.hazard_id));
+    setHazardsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -178,6 +175,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
           onAction={onAction}
           onSummary={handleNetworkSummary}
           onNetworkState={handleNetworkState}
+          onHazards={handleHazards}
           drawMode={shape === "segment" ? null : shape}
           onDrawComplete={(geometry) => {
             setDrawnGeometry(geometry);

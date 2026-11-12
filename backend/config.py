@@ -132,6 +132,19 @@ class Settings(BaseSettings):
     # batches on the next pass instead of buffering the whole backlog in memory.
     event_stream_batch: int = 200
 
+    # --- Database pool --------------------------------------------------------
+    # Sized for a serverless deployment: many short-lived function instances each
+    # hold their own small pool, so keeping this low avoids the sum exhausting
+    # the hosted DB's own connection limit. A single long-running process (the
+    # local `uvicorn --reload` dev server) is a different shape -- it alone opens
+    # one SSE stream per live overlay (hazards, fleet, SOS), each holding a
+    # pooled connection for up to `event_stream_lifetime_seconds`, so a couple of
+    # open browser tabs can exhaust 5 total connections and start timing out
+    # ordinary requests. Override both via the environment for local dev;
+    # production keeps these defaults.
+    db_pool_size: int = 2
+    db_max_overflow: int = 3
+
     @property
     def is_production(self) -> bool:
         """True only for ``FASTAPI_ENV=production``, case and padding aside."""
