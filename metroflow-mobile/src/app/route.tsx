@@ -41,13 +41,10 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
-  ShieldCheck,
   Waves,
   Wifi,
   WifiOff,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react-native";
 
 import {
@@ -63,7 +60,6 @@ import {
   postTelemetry,
 } from "../api";
 import { useAuth } from "../auth";
-import { Avatar } from "../components/Avatar";
 import { BackButton } from "../components/BackButton";
 import { useDialog } from "../components/Dialog";
 import { congestionFromSpeeds, RouteMap, type MapViewMode, type RouteMapHandle } from "../navigation/RouteMap";
@@ -71,7 +67,7 @@ import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
 import { loadCache, saveCache, useOnline } from "../offline";
 import { loadMyVehicle } from "../myVehicle";
-import { usePrefs, savePrefs } from "../prefs";
+import { usePrefs } from "../prefs";
 import {
   distanceToPolygonMeters,
   formatDistance,
@@ -158,8 +154,8 @@ const SEGMENT_STATUS_LABEL: Record<string, string> = {
 
 const MAP_VIEW_CYCLE: MapViewMode[] = ["passability", "traffic", "both"];
 const MAP_VIEW_LABEL: Record<MapViewMode, string> = {
-  passability: "Flood passability",
-  traffic: "Traffic",
+  passability: "Flood map",
+  traffic: "Normal map",
   both: "Flood + traffic",
 };
 
@@ -204,12 +200,16 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const [refusal, setRefusal] = useState(false);
   const [unsafeRoute, setUnsafeRoute] = useState(false);
   const [arrived, setArrived] = useState(false);
-  // Bottom-sheet presentation (Google-Maps-style): expanded shows the full route
-  // preview, compact shows only the floating turn card and a slim summary.
-  const [expanded, setExpanded] = useState(true);
+  // Bottom-sheet presentation (Google-Maps-style): collapsed shows only the turn
+  // card and a slim route summary; expanded reveals the full route detail.
+  const [expanded, setExpanded] = useState(false);
   // Map colouring: flood passability (default), live traffic, or both (flood
   // status wins on a flagged segment; traffic shows through on a clear one).
   const [mapView, setMapView] = useState<MapViewMode>("passability");
+  // Normal map mode plans like a general-purpose map app: fastest path, flood
+  // cost ignored (the clearance gate still refuses a road under water).
+  const routingMode = mapView === "traffic" ? ("FASTEST" as const) : undefined;
+  const routingModeRef = useRef(routingMode);
 
   const mapRef = useRef<RouteMapHandle>(null);
   const routeRef = useRef<RoutePlan | null>(null);
@@ -218,7 +218,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const hazardsRef = useRef<HazardInfo[]>([]);
   const unsafeRef = useRef(false);
   const prefsRef = useRef(prefs);
-  const plannedFor = useRef<number | null>(null);
+  const plannedFor = useRef<string | null>(null);
   const initialDestinationHandled = useRef(false);
   const hazardsInitialised = useRef(false);
   const arrivedRef = useRef(false);
@@ -247,13 +247,16 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   useEffect(() => {
     prefsRef.current = prefs;
   }, [prefs]);
+  useEffect(() => {
+    routingModeRef.current = routingMode;
+  }, [routingMode]);
 
   // --- Offline fallback (FSD-FR-071) ---------------------------------------
   // The API call fails outright with no connection; a real routing refusal
   // (404) must still surface as "no safe route" rather than retry locally.
   const requestRoute = useCallback(
     (params: { start_node: number; target_node: number; clearance_cm: number; ignore_hazards?: boolean }) =>
-      getRoute(params).catch((cause: unknown) => {
+      getRoute({ ...params, routing_mode: routingModeRef.current }).catch((cause: unknown) => {
         if (cause instanceof ApiError) throw cause;
         const net = networkRef.current;
         const plan = net
@@ -264,6 +267,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               params.target_node,
               params.clearance_cm,
               params.ignore_hazards ?? false,
+              routingModeRef.current,
             )
           : null;
         if (!plan) {
@@ -360,11 +364,14 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+
+    const applyNetwork = (state: NetworkState) => {
+      void saveCache("network", state);
+      if (!cancelled) setNetwork(state);
+    };
+
     getNetworkState(clearanceCm)
-      .then((state) => {
-        void saveCache("network", state);
-        if (!cancelled) setNetwork(state);
-      })
+      .then(applyNetwork)
       .catch(async (cause: unknown) => {
         // Offline: fall back to the last graph and route (FSD-FR-070, 071).
         const cached = await loadCache<NetworkState>("network");
@@ -379,8 +386,19 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           setError(cause instanceof Error ? cause.message : "Could not load the road network.");
         }
       });
+
+    // A dispatcher's rainfall simulation or a published hazard changes live
+    // flood depth and passability server-side; poll so a driver already on
+    // this screen sees it without restarting the app. Silent on failure --
+    // the initial load above already covers "no network at all" with the
+    // offline fallback, and the next poll just retries.
+    const timer = setInterval(() => {
+      getNetworkState(clearanceCm).then(applyNetwork).catch(() => {});
+    }, 30000);
+
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, [user, clearanceCm]);
 
@@ -428,6 +446,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   }, [network, destinationParam]);
 
   // --- Planning ------------------------------------------------------------
+  // A plan is reused only for the same destination and routing personality, so
+  // switching the map view re-plans instead of showing a stale mode.
+  const planKey = useCallback(
+    (targetId: number) => `${targetId}:${routingMode ?? "auto"}`,
+    [routingMode],
+  );
+
   const planRoute = useCallback(
     async (target: NodeFeature, unsafe = false) => {
       if (!network || !position) return;
@@ -437,7 +462,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         return;
       }
 
-      plannedFor.current = target.id;
+      plannedFor.current = planKey(target.id);
       setPlanning(true);
       setError(null);
       setRefusal(false);
@@ -469,15 +494,18 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setPlanning(false);
       }
     },
-    [network, position, requestRoute, clearanceCm],
+    [network, position, requestRoute, clearanceCm, planKey],
   );
 
   useEffect(() => {
     if (!selected || !network || !position) return;
-    if (plannedFor.current === selected.id) return;
-    plannedFor.current = selected.id;
+    // Re-plan when the map view changes too: normal mode asks for the fastest
+    // route, the flood views ask for the water-aware one.
+    const key = planKey(selected.id);
+    if (plannedFor.current === key) return;
+    plannedFor.current = key;
     void planRoute(selected);
-  }, [selected, network, position, planRoute]);
+  }, [selected, network, position, planRoute, mapView, planKey]);
 
   // --- Auto reroute (FSD-FR-060, FSD-FR-061) -------------------------------
   useEffect(() => {
@@ -664,11 +692,16 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       : null;
 
   const mapHazards = hazards.length > 0 ? hazards : (route?.hazards ?? []);
-  const destinationCoordinate = selected
-    ? toLatLng(selected.geometry.coordinates)
-    : route
-      ? toLatLng(route.geometry.coordinates[route.geometry.coordinates.length - 1])
-      : null;
+  // Memoized so a GPS tick does not hand the Marker a new coordinate object.
+  const destinationCoordinate = useMemo(
+    () =>
+      selected
+        ? toLatLng(selected.geometry.coordinates)
+        : route
+          ? toLatLng(route.geometry.coordinates[route.geometry.coordinates.length - 1])
+          : null,
+    [selected, route],
+  );
 
   function resetRoute() {
     setRoute(null);
@@ -776,178 +809,6 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     <SafeAreaView edges={edges} style={styles.screen}>
       <StatusBar barStyle={mode === "storm" ? "light-content" : "dark-content"} />
 
-      <View style={styles.header}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space[12] }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space[10] }}>
-            <View style={styles.brandIcon}>
-              <Waves size={18} color={c.blue600} />
-            </View>
-            <View>
-              <Text style={styles.brandEyebrow}>METROFLOW</Text>
-              <Text style={styles.headerTitle}>Active Navigation</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space[12] }}>
-            {streamError ? <AlertTriangle size={16} color={c.red600} /> : null}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
-              onPress={toggleTheme}
-              style={styles.themeToggle}
-            >
-              {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
-            </TouchableOpacity>
-            <Avatar name={user?.name || user?.email} size={32} />
-          </View>
-        </View>
-
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <BackButton />
-          <View style={styles.headerPill}>
-            <Gauge size={12} color={c.blue600} />
-            <Text style={styles.headerPillText}>
-              {clearanceCm} cm clearance • live hazards
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {!route ? (
-        <View style={styles.searchPanel}>
-          <View style={styles.searchBox}>
-            <MapPin size={16} color={c.blue600} />
-            <TextInput
-              value={destinationQuery}
-              onChangeText={(value) => {
-                setDestinationQuery(value);
-                setSelected(null);
-                plannedFor.current = null;
-              }}
-              placeholder="Search a road or intersection"
-              placeholderTextColor={c.slate400}
-              style={styles.searchInput}
-              autoCorrect={false}
-            />
-            {destinationQuery ? (
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Clear destination"
-                onPress={() => {
-                  setDestinationQuery("");
-                  setSelected(null);
-                }}
-                hitSlop={8}
-              >
-                <X size={16} color={c.slate400} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-          >
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Edit vehicle clearance in Profile"
-              onPress={() => router.push('/(tabs)/profile')}
-              style={[styles.chip, styles.chipDark]}
-            >
-              <Gauge size={13} color={c.white} />
-              <Text style={[styles.chipText, { color: c.white }]}>{clearanceCm} cm clearance</Text>
-            </TouchableOpacity>
-            <View style={[styles.chip, styles.chipOutline]}>
-              <ShieldCheck size={13} color={c.blue600} />
-              <Text style={[styles.chipText, { color: c.blue700 }]}>Flood-Free Routes Only</Text>
-            </View>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={prefs.hazardAlerts ? "Turn off water level alerts" : "Turn on water level alerts"}
-              onPress={() => void savePrefs({ ...prefs, hazardAlerts: !prefs.hazardAlerts })}
-              style={[styles.chip, prefs.hazardAlerts ? styles.chipOutline : styles.chipMuted]}
-            >
-              <Droplet size={13} color={prefs.hazardAlerts ? c.blue600 : c.slate400} />
-              <Text style={[styles.chipText, { color: prefs.hazardAlerts ? c.blue700 : c.slate500 }]}>
-                Water Level Alerts
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-
-          {planning ? (
-            <View style={styles.planningRow}>
-              <ActivityIndicator color={c.blue600} />
-              <Text style={styles.planningText}>Planning a flood-safe route…</Text>
-            </View>
-          ) : null}
-
-          {error ? (
-            <View style={styles.errorRow}>
-              <Text style={styles.errorText}>{error}</Text>
-              {selected ? (
-                <TouchableOpacity onPress={() => void planRoute(selected)} hitSlop={8}>
-                  <Text style={styles.errorRetry}>Retry</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : null}
-
-          {refusal && selected ? (
-            <View style={styles.refusalCard}>
-              <Text style={styles.refusalTitle}>No safe route</Text>
-              <Text style={styles.refusalBody}>
-                Every verified route to {selected.properties.name ?? "this destination"} is blocked
-                for your {clearanceCm} cm clearance.
-              </Text>
-              <View style={styles.panelButtons}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => void planRoute(selected)}
-                >
-                  <Text style={styles.secondaryButtonText}>Retry</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dangerButton}
-                  onPress={() => void planRoute(selected, true)}
-                >
-                  <Text style={styles.dangerButtonText}>Show Unsafe Route</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-
-          {matches.length > 0 ? (
-            <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
-              {matches.map((node) => (
-                <TouchableOpacity
-                  key={node.id}
-                  style={styles.resultRow}
-                  onPress={() => {
-                    setSelected(node);
-                    setDestinationQuery(node.properties.name ?? "");
-                    setError(null);
-                  }}
-                >
-                  <View style={styles.resultIcon}>
-                    <MapPin size={14} color={c.blue600} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.resultName}>{node.properties.name}</Text>
-                    <Text style={styles.resultMeta}>Road node {node.properties.node_id}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : destinationQuery && !planning && !refusal ? (
-            <Text style={styles.emptyText}>No seeded road node matches that search.</Text>
-          ) : (
-            <Text style={styles.hintText}>
-              Search the seeded corridor by arterial or intersection, for example “C5” or “Shaw”.
-            </Text>
-          )}
-        </View>
-      ) : null}
-
       <View style={styles.mapArea}>
         <RouteMap
           ref={mapRef}
@@ -961,122 +822,198 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           viewMode={mapView}
         />
 
-        {route && !expanded ? (
-          <View style={styles.statusPill}>
-            <View style={styles.statusPillClearance}>
-              <Text style={styles.statusPillClearanceText}>{clearanceCm} cm clearance</Text>
-            </View>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[4] }}>
-              <View style={[styles.statusDot, { backgroundColor: mapHazards.length > 0 ? c.red500 : c.green600 }]} />
-              <Text style={styles.statusPillText}>
-                {mapHazards.length > 0 ? "Live hazards active" : "No hazards nearby"}
-              </Text>
-            </View>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Hazard details" onPress={() => setSheetExpanded(true)} hitSlop={6}>
-              <AlertTriangle size={14} color={c.red600} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
-              onPress={toggleTheme}
-              hitSlop={6}
-            >
-              {mode === "storm" ? <Sun size={14} color={c.slate700} /> : <Moon size={14} color={c.slate700} />}
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        {!route || expanded ? (
-          <View style={styles.vControls}>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Centre on my location" onPress={() => mapRef.current?.recenter()} style={styles.controlButton}>
-              <LocateFixed size={18} color={c.slate800} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={`Map view: ${MAP_VIEW_LABEL[mapView]}. Tap to change.`}
-              onPress={() =>
-                setMapView((current) => MAP_VIEW_CYCLE[(MAP_VIEW_CYCLE.indexOf(current) + 1) % MAP_VIEW_CYCLE.length])
-              }
-              style={styles.controlButton}
-            >
-              <Layers size={18} color={c.slate800} />
-            </TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom in" onPress={() => mapRef.current?.zoomIn()} style={styles.controlButton}>
-              <ZoomIn size={18} color={c.slate800} />
-            </TouchableOpacity>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Zoom out" onPress={() => mapRef.current?.zoomOut()} style={styles.controlButton}>
-              <ZoomOut size={18} color={c.slate800} />
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        {banner ? (
-          <View
-            style={[
-              styles.banner,
-              {
-                backgroundColor: BANNER_COLORS[banner.tone].background,
-                borderColor: BANNER_COLORS[banner.tone].border,
-              },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.bannerTitle, { color: BANNER_COLORS[banner.tone].text }]}>
-                {banner.title}
-              </Text>
-              <Text style={[styles.bannerBody, { color: BANNER_COLORS[banner.tone].text }]}>
-                {banner.body}
-              </Text>
-            </View>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss alert" onPress={() => setBanner(null)} hitSlop={8}>
-              <X size={16} color={BANNER_COLORS[banner.tone].text} />
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
-        {route && instruction && !expanded ? (
-          <View style={styles.instructionCard}>
-            <View style={styles.instructionIcon}>
-              {(() => {
-                const ManoeuvreIcon = MANOEUVRE_ICON[instruction.manoeuvre] ?? Navigation;
-                return <ManoeuvreIcon size={20} color={c.white} />;
-              })()}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.instructionText}>{instruction.text}</Text>
-              <Text style={styles.instructionMeta}>
-                {instruction.manoeuvre === "ARRIVE"
-                  ? "Destination ahead"
-                  : stepRemaining !== null
-                    ? `in ${formatDistance(stepRemaining)}`
-                    : ""}
-                {instruction.road_name ? ` • ${instruction.road_name}` : ""}
-                {remainingMinutes !== null ? ` • ETA ${formatEta(remainingMinutes)}` : ""}
-              </Text>
-            </View>
-            {speedKmh !== null ? (
-              <View style={styles.speedBadge}>
-                <Text style={styles.speedBadgeValue}>{Math.round(speedKmh)}</Text>
-                <Text style={styles.speedBadgeUnit}>km/h</Text>
+        {/* Floating chrome, Google-Maps style: the search box before a route, the
+            next manoeuvre during one. Everything else lives in the bottom sheet. */}
+        <View style={styles.topStack} pointerEvents="box-none">
+          {route ? (
+            instruction ? (
+              <View style={styles.instructionCard}>
+                <View style={styles.instructionIcon}>
+                  {(() => {
+                    const ManoeuvreIcon = MANOEUVRE_ICON[instruction.manoeuvre] ?? Navigation;
+                    return <ManoeuvreIcon size={20} color={c.white} />;
+                  })()}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.instructionText}>{instruction.text}</Text>
+                  <Text style={styles.instructionMeta}>
+                    {instruction.manoeuvre === "ARRIVE"
+                      ? "Destination ahead"
+                      : stepRemaining !== null
+                        ? `in ${formatDistance(stepRemaining)}`
+                        : ""}
+                    {instruction.road_name ? ` • ${instruction.road_name}` : ""}
+                    {remainingMinutes !== null ? ` • ETA ${formatEta(remainingMinutes)}` : ""}
+                    {streamError ? " • live alerts offline" : ""}
+                  </Text>
+                </View>
+                {speedKmh !== null ? (
+                  <View style={styles.speedBadge}>
+                    <Text style={styles.speedBadgeValue}>{Math.round(speedKmh)}</Text>
+                    <Text style={styles.speedBadgeUnit}>km/h</Text>
+                  </View>
+                ) : null}
               </View>
-            ) : null}
-          </View>
-        ) : null}
+            ) : null
+          ) : (
+            <View style={styles.searchRow}>
+              <BackButton />
+              <View style={styles.searchBox}>
+                <MapPin size={16} color={c.blue600} />
+                <TextInput
+                  value={destinationQuery}
+                  onChangeText={(value) => {
+                    setDestinationQuery(value);
+                    setSelected(null);
+                    plannedFor.current = null;
+                  }}
+                  placeholder="Where to?"
+                  placeholderTextColor={c.slate400}
+                  style={styles.searchInput}
+                  autoCorrect={false}
+                />
+                {destinationQuery ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear destination"
+                    onPress={() => {
+                      setDestinationQuery("");
+                      setSelected(null);
+                    }}
+                    hitSlop={8}
+                  >
+                    <X size={16} color={c.slate400} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          )}
 
-        {route && !expanded ? (
-          <View style={styles.vControlsCompact}>
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={() => mapRef.current?.recenter()}
-              accessibilityLabel="Centre on my location"
+          {!route && (destinationQuery || planning || error || refusal) ? (
+            <View style={styles.searchPanel}>
+              {planning ? (
+                <View style={styles.planningRow}>
+                  <ActivityIndicator color={c.blue600} />
+                  <Text style={styles.planningText}>Planning a flood-safe route…</Text>
+                </View>
+              ) : null}
+
+              {error ? (
+                <View style={styles.errorRow}>
+                  <Text style={styles.errorText}>{error}</Text>
+                  {selected ? (
+                    <TouchableOpacity onPress={() => void planRoute(selected)} hitSlop={8}>
+                      <Text style={styles.errorRetry}>Retry</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {refusal && selected ? (
+                <View style={styles.refusalCard}>
+                  <Text style={styles.refusalTitle}>No safe route</Text>
+                  <Text style={styles.refusalBody}>
+                    Every verified route to {selected.properties.name ?? "this destination"} is blocked
+                    for your {clearanceCm} cm clearance.
+                  </Text>
+                  <View style={styles.panelButtons}>
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={() => void planRoute(selected)}
+                    >
+                      <Text style={styles.secondaryButtonText}>Retry</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.dangerButton}
+                      onPress={() => void planRoute(selected, true)}
+                    >
+                      <Text style={styles.dangerButtonText}>Show Unsafe Route</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+
+              {matches.length > 0 ? (
+                <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
+                  {matches.map((node) => (
+                    <TouchableOpacity
+                      key={node.id}
+                      style={styles.resultRow}
+                      onPress={() => {
+                        setSelected(node);
+                        setDestinationQuery(node.properties.name ?? "");
+                        setError(null);
+                      }}
+                    >
+                      <View style={styles.resultIcon}>
+                        <MapPin size={14} color={c.blue600} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.resultName}>{node.properties.name}</Text>
+                        <Text style={styles.resultMeta}>Road node {node.properties.node_id}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : destinationQuery && !planning && !refusal ? (
+                <Text style={styles.emptyText}>No seeded road node matches that search.</Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          {banner ? (
+            <View
+              style={[
+                styles.banner,
+                {
+                  backgroundColor: BANNER_COLORS[banner.tone].background,
+                  borderColor: BANNER_COLORS[banner.tone].border,
+                },
+              ]}
             >
-              <LocateFixed size={18} color={c.slate800} />
-            </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.bannerTitle, { color: BANNER_COLORS[banner.tone].text }]}>
+                  {banner.title}
+                </Text>
+                <Text style={[styles.bannerBody, { color: BANNER_COLORS[banner.tone].text }]}>
+                  {banner.body}
+                </Text>
+              </View>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss alert" onPress={() => setBanner(null)} hitSlop={8}>
+                <X size={16} color={BANNER_COLORS[banner.tone].text} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+
+        {/* One control stack, bottom-right, like Google Maps. Pinch zooms. */}
+        <View style={styles.vControls}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+            onPress={toggleTheme}
+            style={styles.controlButton}
+          >
+            {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={`Map view: ${MAP_VIEW_LABEL[mapView]}. Tap to change.`}
+            onPress={() =>
+              setMapView((current) => MAP_VIEW_CYCLE[(MAP_VIEW_CYCLE.indexOf(current) + 1) % MAP_VIEW_CYCLE.length])
+            }
+            style={styles.viewButton}
+          >
+            <Layers size={16} color={c.slate800} />
+            <Text style={styles.viewButtonText}>{MAP_VIEW_LABEL[mapView]}</Text>
+          </TouchableOpacity>
+          {route ? (
             <TouchableOpacity
-              style={styles.controlButton}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh route and alternatives"
               onPress={() => void refreshRoute()}
               disabled={refreshing}
-              accessibilityLabel="Refresh route and alternatives"
+              style={styles.controlButton}
             >
               {refreshing ? (
                 <ActivityIndicator size="small" color={c.blue600} />
@@ -1084,8 +1021,16 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 <RefreshCw size={17} color={c.blue600} />
               )}
             </TouchableOpacity>
-          </View>
-        ) : null}
+          ) : null}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Centre on my location"
+            onPress={() => mapRef.current?.recenter()}
+            style={styles.controlButton}
+          >
+            <LocateFixed size={18} color={c.slate800} />
+          </TouchableOpacity>
+        </View>
 
         {!position && !locationError ? (
           <View style={styles.mapNotice}>
@@ -1137,35 +1082,6 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           </View>
 
           <ScrollView style={expanded ? styles.sheetScroll : undefined} contentContainerStyle={{ gap: space[10] }}>
-          {expanded && instruction ? (
-            <View style={styles.sheetInstructionRow}>
-              <View style={styles.sheetInstructionIcon}>
-                {(() => {
-                  const ManoeuvreIcon = MANOEUVRE_ICON[instruction.manoeuvre] ?? Navigation;
-                  return <ManoeuvreIcon size={18} color={c.white} />;
-                })()}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.routeDestination} numberOfLines={1}>{instruction.text}</Text>
-                <Text style={styles.routeMeta}>
-                  {instruction.manoeuvre === "ARRIVE"
-                    ? "Destination ahead"
-                    : stepRemaining !== null
-                      ? `in ${formatDistance(stepRemaining)}`
-                      : ""}
-                  {instruction.road_name ? ` • ${instruction.road_name}` : ""}
-                  {remainingMinutes !== null ? ` • ETA ${formatEta(remainingMinutes)}` : ""}
-                </Text>
-              </View>
-              {speedKmh !== null ? (
-                <View style={styles.sheetSpeedBadge}>
-                  <Text style={styles.metricValue}>{Math.round(speedKmh)}</Text>
-                  <Text style={styles.metricSub}>km/h</Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-
           <View style={styles.routeSummary}>
             <View style={{ flex: 1 }}>
               <Text style={styles.routeDestination} numberOfLines={1}>
@@ -1176,6 +1092,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   remaining !== null ? `${formatDistance(remaining)} remaining` : null,
                   formatDuration(route.estimated_travel_time_minutes),
                   remainingMinutes !== null ? `ETA ${formatEta(remainingMinutes)}` : null,
+                  `${clearanceCm} cm clearance`,
                 ]
                   .filter(Boolean)
                   .join(" • ")}
@@ -1191,7 +1108,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             ) : (
               <View style={styles.safeChip}>
                 <CheckCircle2 size={12} color={c.green700} />
-                <Text style={styles.safeChipText}>Hazard-free</Text>
+                <Text style={styles.safeChipText}>
+                  {route.routing_mode === "FASTEST" ? "Fastest route" : "Flood-safe route"}
+                </Text>
               </View>
             )}
           </View>
@@ -1351,6 +1270,14 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 }
 
 function makeStyles(c: ThemeColors, mode: ThemeMode) {
+  // Floating-card lift, the one thing that makes map chrome read as "on top".
+  const shadow = {
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  };
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.white },
   header: {
@@ -1399,31 +1326,35 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   headerPillText: { fontSize: fontSize.caption, fontWeight: "700", color: c.blue800 },
   headerTitle: { fontSize: fontSize.heading, fontWeight: "800", color: c.slate900, lineHeight: 20 },
   mapArea: { flex: 1, position: "relative" },
-  banner: {
+  // Floating chrome sits over the map; `box-none` on the container lets map
+  // gestures through everywhere except the cards themselves.
+  topStack: {
     position: "absolute",
     top: 12,
     left: 12,
     right: 12,
+    gap: space[8],
+  },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: space[8] },
+  banner: {
     borderWidth: 1,
     borderRadius: 14,
     padding: space[12],
     flexDirection: "row",
     alignItems: "flex-start",
     gap: space[10],
+    ...shadow,
   },
   bannerTitle: { fontSize: fontSize.body, fontWeight: "800" },
   bannerBody: { fontSize: fontSize.caption, marginTop: space[2], lineHeight: 15 },
   instructionCard: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
     backgroundColor: "rgba(15,23,42,0.94)",
     borderRadius: 16,
     padding: space[14],
     flexDirection: "row",
     alignItems: "center",
     gap: space[12],
+    ...shadow,
   },
   instructionIcon: {
     width: 36,
@@ -1478,86 +1409,32 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     justifyContent: "center",
     borderWidth: 1,
     borderColor: c.slate200,
+    ...shadow,
   },
   vControls: {
     position: "absolute",
     right: 12,
-    top: "38%",
+    bottom: space[16],
     gap: space[10],
+    alignItems: "flex-end",
   },
-  vControlsCompact: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
-    gap: space[10],
-  },
-  statusPill: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    right: 12,
+  viewButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space[10],
-    backgroundColor: mode === "storm" ? "rgba(11,18,32,0.92)" : "rgba(255,255,255,0.95)",
-    borderRadius: 999,
-    paddingHorizontal: space[12],
-    paddingVertical: space[8],
+    gap: space[6],
+    height: 42,
+    paddingHorizontal: space[10],
+    borderRadius: 21,
+    backgroundColor: c.white,
     borderWidth: 1,
     borderColor: c.slate200,
+    ...shadow,
   },
-  statusPillClearance: {
-    backgroundColor: c.inkBg,
-    borderRadius: 999,
-    paddingHorizontal: space[8],
-    paddingVertical: space[3],
-  },
-  statusPillClearanceText: { fontSize: fontSize.micro, fontWeight: "800", color: c.onInk },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusPillText: { fontSize: fontSize.micro, fontWeight: "700", color: c.slate700, flexShrink: 1 },
-  chipRow: { flexDirection: "row", gap: space[8], paddingTop: space[2] },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space[5],
-    borderRadius: 999,
-    paddingHorizontal: space[10],
-    paddingVertical: space[6],
-    borderWidth: 1,
-  },
-  chipDark: { backgroundColor: c.inkBg, borderColor: c.inkBg },
-  chipOutline: { backgroundColor: c.blue50, borderColor: c.blue200 },
-  chipMuted: { backgroundColor: c.slate50, borderColor: c.slate200 },
-  chipText: { fontSize: fontSize.caption, fontWeight: "700" },
+  viewButtonText: { fontSize: fontSize.caption, fontWeight: "600", color: c.slate800 },
   dragHandleArea: { alignItems: "center", paddingBottom: space[8] },
   dragHandleBar: { width: 36, height: 4, borderRadius: 2, backgroundColor: c.slate200 },
   dragHandleButton: { position: "absolute", right: 0, top: -4, padding: space[4] },
   sheetScroll: { maxHeight: 420 },
-  sheetInstructionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space[10],
-    backgroundColor: c.slate50,
-    borderRadius: 14,
-    padding: space[12],
-  },
-  sheetInstructionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    backgroundColor: c.blue600,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sheetSpeedBadge: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.slate200,
-    paddingHorizontal: space[8],
-    paddingVertical: space[4],
-  },
   metricsGrid: { flexDirection: "row", gap: space[8] },
   metricCell: {
     flex: 1,
@@ -1581,11 +1458,16 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   alertCardBody: { fontSize: fontSize.caption, color: c.slate600, marginTop: space[1] },
   alertCardAction: { fontSize: fontSize.caption, fontWeight: "800", color: c.blue700 },
   routePanel: {
-    borderTopWidth: 1,
-    borderColor: c.slate200,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: space[16],
     gap: space[10],
     backgroundColor: c.white,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 8,
   },
   routeSummary: { flexDirection: "row", alignItems: "center", gap: space[10] },
   routeDestination: { fontSize: fontSize.lead, fontWeight: "800", color: c.slate900 },
@@ -1649,22 +1531,24 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   },
   endButtonText: { fontSize: fontSize.body, fontWeight: "800", color: c.onInk },
   searchPanel: {
-    borderBottomWidth: 1,
-    borderColor: c.slate200,
-    padding: space[16],
-    gap: space[10],
     backgroundColor: c.white,
+    borderRadius: 14,
+    padding: space[12],
+    gap: space[10],
+    ...shadow,
   },
   searchBox: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: space[8],
-    backgroundColor: c.slate50,
+    backgroundColor: c.white,
     borderWidth: 1,
     borderColor: c.slate200,
-    borderRadius: 14,
-    paddingHorizontal: space[12],
-    paddingVertical: space[10],
+    borderRadius: 999,
+    paddingHorizontal: space[16],
+    paddingVertical: space[12],
+    ...shadow,
   },
   searchInput: { flex: 1, fontSize: fontSize.label, color: c.slate900 },
   planningRow: { flexDirection: "row", alignItems: "center", gap: space[8] },

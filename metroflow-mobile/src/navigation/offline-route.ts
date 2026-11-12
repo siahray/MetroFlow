@@ -49,7 +49,11 @@ function buildAdjacency(network: NetworkState, blocked: Set<number>): Map<number
   return adjacency;
 }
 
-/** Time-Dependent A*, ported from backend/routing.py::td_a_star_search. */
+/** Time-Dependent A*, ported from backend/routing.py::td_a_star_search.
+ *
+ * ``floodAware`` mirrors the server's two modes: with no flood anywhere the
+ * planner uses the posted speed limit alone, exactly like a normal map app.
+ */
 function aStarSearch(
   network: NetworkState,
   adjacency: Map<number, Hop[]>,
@@ -57,6 +61,7 @@ function aStarSearch(
   startNode: number,
   targetNode: number,
   clearanceCm: number,
+  floodAware: boolean,
 ): { path: number[]; hops: Hop[]; seconds: number } | null {
   if (!nodeCoords.has(startNode) || !nodeCoords.has(targetNode)) return null;
   if (startNode === targetNode) return { path: [startNode], hops: [], seconds: 0 };
@@ -100,7 +105,7 @@ function aStarSearch(
     for (const hop of adjacency.get(current.id) ?? []) {
       const { water_depth_cm, max_speed_kmh, distance_m } = hop.edge.properties;
       if (water_depth_cm >= clearanceCm) continue;
-      const waterPenalty = 1.0 + Math.pow(water_depth_cm / 10.0, 1.8);
+      const waterPenalty = floodAware ? 1.0 + Math.pow(water_depth_cm / 10.0, 1.8) : 1.0;
       const effectiveSpeedMs = Math.max(max_speed_kmh / 3.6 / waterPenalty, 0.5);
       const tentative = current.g + distance_m / effectiveSpeedMs;
       if (tentative < (g.get(hop.neighbor) ?? Infinity)) {
@@ -259,8 +264,19 @@ export function planRouteOffline(
   targetNode: number,
   clearanceCm: number,
   ignoreHazards = false,
+  forcedMode?: "FASTEST" | "FLOOD_SAFE",
 ): RoutePlan | null {
-  const blocked = ignoreHazards ? new Set<number>() : blockedEdgeIds(hazards);
+  const allBlocked = blockedEdgeIds(hazards);
+  const blocked = ignoreHazards ? new Set<number>() : allBlocked;
+  // Mirrors backend routing.routing_mode: any non-passable segment (which is
+  // what the cached status means) or a closure keeps the flood-aware cost, even
+  // when the caller asks to route through the closure. A caller that forced a
+  // mode (normal map view) gets exactly that mode.
+  const floodAware =
+    forcedMode === undefined
+      ? allBlocked.size > 0 ||
+        network.edges.features.some((edge) => edge.properties.status !== "PASSABLE")
+      : forcedMode === "FLOOD_SAFE";
   const adjacency = buildAdjacency(network, blocked);
   const nodeCoords = new Map<number, LatLng>();
   const nodeNames = new Map<number, string | null>();
@@ -269,7 +285,15 @@ export function planRouteOffline(
     nodeNames.set(node.properties.node_id, node.properties.name);
   }
 
-  const result = aStarSearch(network, adjacency, nodeCoords, startNode, targetNode, clearanceCm);
+  const result = aStarSearch(
+    network,
+    adjacency,
+    nodeCoords,
+    startNode,
+    targetNode,
+    clearanceCm,
+    floodAware,
+  );
   if (!result) return null;
   const { path, hops: searchHops, seconds } = result;
 
@@ -343,5 +367,6 @@ export function planRouteOffline(
     hazards: routeHazards,
     total_distance_m: Math.round(hops.reduce((sum, hop) => sum + hop.distanceM, 0) * 100) / 100,
     estimated_travel_time_minutes: Math.round((seconds / 60) * 100) / 100,
+    routing_mode: floodAware ? "FLOOD_SAFE" : "FASTEST",
   };
 }

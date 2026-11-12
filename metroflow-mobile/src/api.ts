@@ -344,6 +344,11 @@ export type RoutePlan = {
   hazards: RouteHazard[];
   total_distance_m: number;
   estimated_travel_time_minutes: number;
+  /**
+   * FASTEST when the network has no flood, advisory or closure (a plain
+   * fastest path, like any map app); FLOOD_SAFE when water is avoided.
+   */
+  routing_mode: "FASTEST" | "FLOOD_SAFE";
 };
 
 export function getNetworkState(clearanceCm: number): Promise<NetworkState> {
@@ -357,6 +362,8 @@ export function getRoute(params: {
   target_node: number;
   clearance_cm: number;
   ignore_hazards?: boolean;
+  /** Force a personality; omitted means the network decides. */
+  routing_mode?: "FASTEST" | "FLOOD_SAFE";
 }): Promise<RoutePlan> {
   const query = new URLSearchParams({
     start_node: String(params.start_node),
@@ -364,6 +371,7 @@ export function getRoute(params: {
     clearance_cm: String(params.clearance_cm),
   });
   if (params.ignore_hazards) query.set("ignore_hazards", "true");
+  if (params.routing_mode) query.set("routing_mode", params.routing_mode);
   return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`);
 }
 

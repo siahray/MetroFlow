@@ -164,4 +164,34 @@ describe("planRouteOffline", () => {
   test("an unknown start node is a missing route, not an error", () => {
     expect(planRouteOffline(graph([direct, outbound, inbound]), [], 99, 2, 40)).toBeNull();
   });
+
+  test("reports the same mode the API would use: FASTEST only on a dry network", () => {
+    // Nothing flooded: the plain fastest path, like a normal map app.
+    expect(planRouteOffline(graph([direct, outbound, inbound]), [], 1, 2, 40)?.routing_mode).toBe(
+      "FASTEST",
+    );
+
+    // Any non-passable segment keeps the flood-aware cost.
+    const flooded = { ...direct, depthCm: 10 };
+    expect(
+      planRouteOffline(graph([flooded, outbound, inbound]), [], 1, 2, 40)?.routing_mode,
+    ).toBe("FLOOD_SAFE");
+  });
+
+  test("a forced FASTEST mode takes the flooded short road, like a normal map app", () => {
+    // 30 cm is under the 40 cm clearance, so the road is drivable but expensive
+    // to the flood-aware cost -- it detours. Normal-map mode does not.
+    const deep = { ...direct, depthCm: 30 };
+    const network = graph([deep, outbound, inbound]);
+
+    expect(planRouteOffline(network, [], 1, 2, 40)?.optimal_path_nodes).toEqual([1, 3, 2]);
+
+    const fastest = planRouteOffline(network, [], 1, 2, 40, false, "FASTEST");
+    expect(fastest?.optimal_path_nodes).toEqual([1, 2]);
+    expect(fastest?.routing_mode).toBe("FASTEST");
+
+    expect(planRouteOffline(network, [], 1, 2, 40, false, "FLOOD_SAFE")?.optimal_path_nodes).toEqual(
+      [1, 3, 2],
+    );
+  });
 });

@@ -1,10 +1,9 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Polygon, Polyline, UrlTile, type Region } from "react-native-maps";
+import MapView, { Marker, Polygon, Polyline, type Region } from "react-native-maps";
 
 import type { EdgeFeature, HazardInfo, RoutePlan } from "../api";
 import { polygonRing, routeCoordinates, type LatLng } from "./geo";
-import { basemapFor } from "./tiles";
 
 import { fontSize, space, useTheme, type ThemeColors } from "../theme";
 
@@ -51,7 +50,8 @@ const TRAFFIC_COLOR = (c: ThemeColors): Record<"success" | "warning" | "danger",
 });
 
 /** Flood passability only, traffic flow only, or flood status with traffic as the fallback
- * for passable roads (flood safety is the more critical signal, so it always wins). */
+ * for passable roads (flood safety is the more critical signal, so it always wins).
+ * ``traffic`` is the normal-map view: congestion only, with no flood overlay. */
 export type MapViewMode = "passability" | "traffic" | "both";
 
 type MapHazard = Pick<HazardInfo, "hazard_id" | "name" | "obstruction_level" | "geometry">;
@@ -83,12 +83,18 @@ function regionFor(coordinates: LatLng[], fallback: LatLng | null): Region | nul
     return fallback ? { ...fallback, latitudeDelta: 0.02, longitudeDelta: 0.02 } : null;
   }
 
-  const latitudes = coordinates.map((point) => point.latitude);
-  const longitudes = coordinates.map((point) => point.longitude);
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLon = Math.min(...longitudes);
-  const maxLon = Math.max(...longitudes);
+  // A loop, not Math.min(...points): the real OSM network has far more points
+  // than a spread call can take on the JS stack.
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  for (const point of coordinates) {
+    if (point.latitude < minLat) minLat = point.latitude;
+    if (point.latitude > maxLat) maxLat = point.latitude;
+    if (point.longitude < minLon) minLon = point.longitude;
+    if (point.longitude > maxLon) maxLon = point.longitude;
+  }
   return {
     latitude: (minLat + maxLat) / 2,
     longitude: (minLon + maxLon) / 2,
@@ -108,7 +114,6 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   viewMode = "passability",
 }, ref) {
   const { c, mode } = useTheme();
-  const basemap = basemapFor(mode);
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
   const statusColor = useMemo(() => STATUS_COLOR(c), [c]);
   const trafficColor = useMemo(() => TRAFFIC_COLOR(c), [c]);
@@ -128,11 +133,9 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
         ?.getCamera()
         .then((cam) => mapRef.current?.animateCamera({ ...cam, zoom: (cam.zoom ?? 15) - 1 }, { duration: 200 }));
     },
-  }));
+  }), [position]);
 
-  // A route determines the framing; between routes the map follows the driver.
-  // Computing it during render avoids a state round-trip that would otherwise
-  // animate the camera twice for every plan.
+  // The route bounds frame the map when a plan exists.
   const routeRegion = useMemo(
     () => (route ? regionFor(routeCoordinates(route), null) : null),
     [route],
@@ -141,66 +144,58 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
     () =>
       edges.map((edge) => {
         const traffic = congestionFromSpeeds(edge.properties.avg_speed_kmh, edge.properties.max_speed_kmh);
-        const floodColor = statusColor[edge.properties.status as StatusKey] ?? c.slate600;
-        const color =
-          viewMode === "traffic"
-            ? trafficColor[traffic.tone]
-            : viewMode === "both" && edge.properties.status === "PASSABLE"
-              ? trafficColor[traffic.tone]
-              : floodColor;
+        const flooded = edge.properties.status !== "PASSABLE";
+        const congested = traffic.tone !== "success";
+        // The basemap already draws every road, so only a segment that differs
+        // from it gets an overlay. Painting all ~11k passable ones is what made
+        // panning and first load stutter.
+        const painted =
+          viewMode === "traffic" ? congested : viewMode === "both" ? flooded || congested : flooded;
         return {
           id: edge.properties.edge_id,
-          color,
+          painted,
+          color:
+            viewMode === "traffic" || (viewMode === "both" && !flooded)
+              ? trafficColor[traffic.tone]
+              : (statusColor[edge.properties.status as StatusKey] ?? c.slate600),
           points: edge.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
         };
       }),
     [edges, viewMode, statusColor, trafficColor, c.slate600],
   );
   // With no fix and no route, frame the whole road network instead of leaving the map blank.
-  const idleRegion = useMemo(
-    () => (position ? regionFor([], position) : regionFor(roads.flatMap((r) => r.points), null)),
-    [position, roads],
+  const networkRegion = useMemo(() => regionFor(roads.flatMap((r) => r.points), null), [roads]);
+  // The camera is framed once, then left alone. A controlled `region` prop would
+  // re-apply on every GPS tick and yank the map back, fighting the driver's panning.
+  const [initialRegion] = useState<Region | undefined>(
+    () => routeRegion ?? (position ? regionFor([], position) : undefined) ?? undefined,
   );
-  const region = routeRegion ?? idleRegion;
+  const framed = useRef(initialRegion !== undefined);
+  useEffect(() => {
+    // A newly planned route is the one thing that always re-frames the map.
+    if (routeRegion) {
+      framed.current = true;
+      mapRef.current?.animateToRegion(routeRegion, 500);
+      return;
+    }
+    if (framed.current) return;
+    const target = position ? regionFor([], position) : networkRegion;
+    if (!target) return;
+    framed.current = true;
+    mapRef.current?.animateToRegion(target, 0);
+  }, [routeRegion, networkRegion, position]);
 
-  const line = route ? routeCoordinates(route) : [];
+  // Rebuilt only when the plan changes: the route line is the most visible thing
+  // on screen, so it must not be re-derived on every GPS tick.
+  const routeLine = useMemo(() => (route ? routeCoordinates(route) : []), [route]);
 
-  // Depth-callout pills for flagged segments only (PASSABLE roads need no label).
-  const depthMarkers = useMemo(
+  // Built once per road set. Only the deviating segments become overlays, so a
+  // dry network is a handful of polylines instead of ~11k.
+  const roadLines = useMemo(
     () =>
-      edges
-        .filter((edge) => edge.properties.status !== "PASSABLE")
-        .map((edge) => ({
-          id: edge.properties.edge_id,
-          point: midpoint(edge.geometry.coordinates),
-          depthCm: edge.properties.water_depth_cm,
-          safe: clearanceCm === undefined || edge.properties.water_depth_cm <= clearanceCm,
-        }))
-        .filter((m): m is typeof m & { point: LatLng } => m.point !== null),
-    [edges, clearanceCm],
-  );
-
-  return (
-    <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        region={region ?? undefined}
-        showsUserLocation={false}
-        toolbarEnabled={false}
-        // The basemap comes from our own raster tiles, not Google's.
-        mapType="none"
-      >
-        {/* Keyed by template so flipping the theme rebuilds the tile layer. */}
-        <UrlTile
-          key={basemap.urlTemplate}
-          urlTemplate={basemap.urlTemplate}
-          maximumZ={basemap.maximumZ}
-          tileSize={256}
-          zIndex={-1}
-        />
-
-        {roads.map((road) => (
+      roads
+        .filter((road) => road.painted)
+        .map((road) => (
           <Polyline
             key={road.id}
             coordinates={road.points}
@@ -209,50 +204,110 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
             lineCap="round"
             lineJoin="round"
           />
-        ))}
+        )),
+    [roads],
+  );
 
-        {line.length > 1 ? (
-          <Polyline
-            coordinates={line}
-            strokeColor={c.blue600}
-            strokeWidth={5}
-            lineCap="round"
-            lineJoin="round"
+  // Hazard outlines, rebuilt only when the hazard set changes rather than on
+  // every GPS tick.
+  const hazardShapes = useMemo(
+    () =>
+      hazards.map((hazard) => {
+        const ring = polygonRing(hazard.geometry);
+        if (ring.length < 3) return null;
+        const closed = blocking(hazard.obstruction_level);
+        return (
+          <Polygon
+            key={hazard.hazard_id}
+            coordinates={ring}
+            fillColor={closed ? "rgba(220,38,38,0.25)" : "rgba(245,158,11,0.22)"}
+            strokeColor={closed ? c.red600 : c.amber500}
+            strokeWidth={2}
           />
+        );
+      }),
+    [hazards, c.red600, c.amber500],
+  );
+
+  // Depth-callout pills for flagged segments only (PASSABLE roads need no label).
+  // Built as elements, not data: a custom-view Marker with tracksViewChanges on
+  // re-snapshots itself continuously, which is the classic map-jank cause.
+  const depthPills = useMemo(
+    () =>
+      edges
+        .filter((edge) => edge.properties.status !== "PASSABLE")
+        .map((edge) => {
+          const point = midpoint(edge.geometry.coordinates);
+          if (!point) return null;
+          const safe = clearanceCm === undefined || edge.properties.water_depth_cm <= clearanceCm;
+          return (
+            <Marker
+              key={edge.properties.edge_id}
+              coordinate={point}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+            >
+              <View style={[styles.depthPill, { borderColor: safe ? c.blue500 : c.red600 }]}>
+                <Text style={[styles.depthPillText, { color: safe ? c.blue700 : c.red700 }]}>
+                  {edge.properties.water_depth_cm} cm {safe ? "· Safe" : "Water"}
+                </Text>
+              </View>
+            </Marker>
+          );
+        }),
+    [edges, clearanceCm, styles, c.blue500, c.blue700, c.red600, c.red700],
+  );
+
+  // The normal-map view is congestion only: no flood polygons, no depth pills.
+  const floodOverlay = viewMode !== "traffic";
+
+  return (
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={StyleSheet.absoluteFill}
+        initialRegion={initialRegion}
+        showsUserLocation={false}
+        toolbarEnabled={false}
+      >
+        {roadLines}
+
+        {routeLine.length > 1 ? (
+          <>
+            {/* White casing under the blue line: the Google-Maps route look. */}
+            <Polyline
+              coordinates={routeLine}
+              strokeColor="#ffffff"
+              strokeWidth={9}
+              lineCap="round"
+              lineJoin="round"
+            />
+            <Polyline
+              coordinates={routeLine}
+              strokeColor={c.blue600}
+              strokeWidth={5}
+              lineCap="round"
+              lineJoin="round"
+            />
+          </>
         ) : null}
 
-        {hazards.map((hazard) => {
-          const ring = polygonRing(hazard.geometry);
-          if (ring.length < 3) return null;
-          const closed = blocking(hazard.obstruction_level);
-          return (
-            <Polygon
-              key={hazard.hazard_id}
-              coordinates={ring}
-              fillColor={closed ? "rgba(220,38,38,0.25)" : "rgba(245,158,11,0.22)"}
-              strokeColor={closed ? c.red600 : c.amber500}
-              strokeWidth={2}
-            />
-          );
-        })}
+        {floodOverlay ? hazardShapes : null}
 
-        {depthMarkers.map((marker) => (
-          <Marker key={marker.id} coordinate={marker.point} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={[styles.depthPill, { borderColor: marker.safe ? c.blue500 : c.red600 }]}>
-              <Text style={[styles.depthPillText, { color: marker.safe ? c.blue700 : c.red700 }]}>
-                {marker.depthCm} cm {marker.safe ? "· Safe" : "Water"}
-              </Text>
-            </View>
-          </Marker>
-        ))}
+        {floodOverlay ? depthPills : null}
 
         {position ? (
           <Marker
             coordinate={position}
             title="Your location"
-            pinColor={c.blue600}
+            anchor={{ x: 0.5, y: 0.5 }}
             tracksViewChanges={false}
-          />
+          >
+            {/* The blue "you are here" dot, not a pin. */}
+            <View style={styles.meHalo}>
+              <View style={[styles.meDot, { backgroundColor: c.blue600 }]} />
+            </View>
+          </Marker>
         ) : null}
 
         {destination ? (
@@ -264,35 +319,38 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
           />
         ) : null}
       </MapView>
-      {roads.length > 0 ? (
+      {roadLines.length > 0 ? (
         <View style={styles.legend}>
           {viewMode !== "traffic"
-            ? Object.entries(STATUS_STYLE).map(([key, item]) => (
-                <View key={item.label} style={styles.legendRow}>
-                  <View style={[styles.swatch, { backgroundColor: statusColor[key as StatusKey] }]} />
-                  <Text style={styles.legendText}>{item.label}</Text>
-                </View>
-              ))
+            ? Object.entries(STATUS_STYLE)
+                .filter(([key]) => key !== "PASSABLE")
+                .map(([key, item]) => (
+                  <View key={item.label} style={styles.legendRow}>
+                    <View style={[styles.swatch, { backgroundColor: statusColor[key as StatusKey] }]} />
+                    <Text style={styles.legendText}>{item.label}</Text>
+                  </View>
+                ))
             : null}
           {viewMode !== "passability"
-            ? Object.entries(TRAFFIC_STYLE).map(([key, item]) => (
-                <View key={item.label} style={styles.legendRow}>
-                  <View
-                    style={[
-                      styles.swatch,
-                      { backgroundColor: trafficColor[key as keyof typeof TRAFFIC_STYLE] },
-                    ]}
-                  />
-                  <Text style={styles.legendText}>
-                    {item.label}
-                    {viewMode === "both" ? " (clear roads)" : ""}
-                  </Text>
-                </View>
-              ))
+            ? Object.entries(TRAFFIC_STYLE)
+                .filter(([key]) => key !== "success")
+                .map(([key, item]) => (
+                  <View key={item.label} style={styles.legendRow}>
+                    <View
+                      style={[
+                        styles.swatch,
+                        { backgroundColor: trafficColor[key as keyof typeof TRAFFIC_STYLE] },
+                      ]}
+                    />
+                    <Text style={styles.legendText}>
+                      {item.label}
+                      {viewMode === "both" ? " (clear roads)" : ""}
+                    </Text>
+                  </View>
+                ))
             : null}
         </View>
       ) : null}
-      <Text style={styles.attribution}>{basemap.attribution}</Text>
     </View>
   );
 });
@@ -312,6 +370,15 @@ function makeStyles(c: ThemeColors, mode: "light" | "storm") {
       gap: space[3],
     },
     legendRow: { flexDirection: "row", alignItems: "center", gap: space[6] },
+    meHalo: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: "rgba(37,99,235,0.22)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    meDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: "#ffffff" },
     swatch: { width: 14, height: 4, borderRadius: 2 },
     legendText: { fontSize: fontSize.micro, color: c.slate600 },
     depthPill: {
@@ -322,15 +389,5 @@ function makeStyles(c: ThemeColors, mode: "light" | "storm") {
       paddingVertical: space[3],
     },
     depthPillText: { fontSize: fontSize.tiny, fontWeight: "700" },
-    attribution: {
-      position: "absolute",
-      right: 6,
-      bottom: 4,
-      fontSize: fontSize.tiny,
-      color: c.slate600,
-      backgroundColor: chromeBg,
-      paddingHorizontal: space[4],
-      borderRadius: 3,
-    },
   });
 }
