@@ -818,7 +818,6 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           destinationName={selected?.properties.name ?? route?.destination_name ?? null}
           hazards={mapHazards}
           edges={network?.edges.features}
-          clearanceCm={clearanceCm}
           viewMode={mapView}
         />
 
