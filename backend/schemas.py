@@ -189,6 +189,13 @@ class RouteResponse(BaseModel):
     hazards: list[RouteHazard] = Field(default_factory=list)
     total_distance_m: float = 0.0
     estimated_travel_time_minutes: float
+    routing_mode: str = Field(
+        default="FLOOD_SAFE",
+        description=(
+            "FASTEST when the network has no flood, advisory or closure and the "
+            "route is the plain fastest path; FLOOD_SAFE when water is avoided."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

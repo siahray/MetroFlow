@@ -3,7 +3,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import bcrypt
@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import Response, StreamingResponse
 from geoalchemy2 import Geography
-from sqlalchemy import cast, func
+from sqlalchemy import DateTime, Float, Integer, cast, column, func, update, values
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, defer
@@ -32,7 +32,14 @@ from geometry import backfill_geometry
 from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
 from rate_limit import prune as prune_rate_limits
 from rate_limit import rate_limit
-from routing import build_instructions, classify_passability, hazard_blocks, td_a_star_search
+from routing import (
+    FLOOD_SAFE,
+    build_instructions,
+    classify_passability,
+    hazard_blocks,
+    routing_mode,
+    td_a_star_search,
+)
 from schemas import (
     AssignRequest,
     AuditResponse,
@@ -256,9 +263,24 @@ async def add_security_headers(request: Request, call_next):
 
 
 def _load_graph(db: Session):
-    """Load nodes, edges and live state in three fixed queries (no N+1)."""
-    nodes = {n.node_id: n for n in db.query(models.RoadNode).all()}
-    edges = db.query(models.RoadEdge).order_by(models.RoadEdge.edge_id).all()
+    """Load nodes, edges and live state in three fixed queries (no N+1).
+
+    ``geom`` is deferred on both: every caller that wants geometry reads it
+    from ``_load_edge_geometry``'s own ``ST_AsGeoJSON`` query instead, so
+    loading the raw PostGIS column here only pays its transfer and WKB-parse
+    cost for nothing. On the real OSM network (~8,950 nodes, ~10,876
+    multi-vertex edges) that column dominates the query: deferring it took
+    the edges query from ~4.2s to a small fraction of that.
+    """
+    nodes = {
+        n.node_id: n for n in db.query(models.RoadNode).options(defer(models.RoadNode.geom)).all()
+    }
+    edges = (
+        db.query(models.RoadEdge)
+        .options(defer(models.RoadEdge.geom))
+        .order_by(models.RoadEdge.edge_id)
+        .all()
+    )
     states = {s.edge_id: s for s in db.query(models.LiveEdgeState).all()}
     return nodes, edges, states
 
@@ -351,10 +373,28 @@ def _edge_coordinates(
     return _straight_line(start, end)
 
 
-def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateResponse:
-    """Assemble the renderable road network for one vehicle clearance profile."""
-    nodes, edges, states = _load_graph(db)
+def _build_network_state(
+    db: Session,
+    clearance_cm: float,
+    *,
+    preloaded: tuple[
+        dict[int, models.RoadNode], list[models.RoadEdge], dict[int, models.LiveEdgeState]
+    ]
+    | None = None,
+    overrides: dict[int, tuple[float, float]] | None = None,
+) -> NetworkStateResponse:
+    """Assemble the renderable road network for one vehicle clearance profile.
+
+    ``preloaded`` lets a caller that already ran ``_load_graph`` in the same
+    request (e.g. the rainfall simulation) reuse it instead of a second
+    ~10,876-edge query. ``overrides`` (edge_id -> (water_depth_cm,
+    avg_speed_kmh)) covers the case where that caller also just wrote new
+    values straight to the DB with a bulk statement that bypassed the ORM, so
+    the preloaded ``LiveEdgeState`` objects are stale for the edges it touched.
+    """
+    nodes, edges, states = preloaded if preloaded is not None else _load_graph(db)
     geometry = _load_edge_geometry(db)
+    overrides = overrides or {}
 
     edge_features: list[EdgeFeature] = []
     for edge in edges:
@@ -364,7 +404,10 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
             continue
 
         state = states.get(edge.edge_id)
-        water_depth_cm = float(state.water_depth_cm) if state else 0.0
+        override = overrides.get(edge.edge_id)
+        water_depth_cm = (
+            override[0] if override else (float(state.water_depth_cm) if state else 0.0)
+        )
 
         edge_features.append(
             EdgeFeature(
@@ -383,7 +426,9 @@ def _build_network_state(db: Session, clearance_cm: float) -> NetworkStateRespon
                     direction=edge.direction,
                     distance_m=edge.distance_meters,
                     max_speed_kmh=edge.max_speed_kmh,
-                    avg_speed_kmh=float(state.avg_speed_kmh) if state else edge.max_speed_kmh,
+                    avg_speed_kmh=override[1]
+                    if override
+                    else (float(state.avg_speed_kmh) if state else edge.max_speed_kmh),
                     water_depth_cm=round(water_depth_cm, 2),
                     status=classify_passability(water_depth_cm, clearance_cm),
                     is_override=bool(state.is_override) if state else False,
@@ -502,7 +547,14 @@ def trigger_rainfall_simulation(
     runoff_mm = calculate_scs_cn_runoff(rainfall_mm_hr)
     nodes, edges, states = _load_graph(db)
 
-    affected_edges = 0
+    # Built as plain rows and sent as one UPDATE...FROM (VALUES ...) rather
+    # than mutating each LiveEdgeState ORM object or using an executemany
+    # UPDATE: on the real OSM network (~10,876 edges), both of those send one
+    # round trip per row over the hosted DB's connection (psycopg2 batches
+    # executemany for INSERT, not UPDATE) -- minutes, not seconds. A single
+    # VALUES-driven statement updates every row in one round trip.
+    now = datetime.now(UTC).replace(tzinfo=None)
+    changed: list[tuple[int, float, float, datetime]] = []
     for edge in edges:
         state = states.get(edge.edge_id)
         if state is None or state.is_override:
@@ -512,9 +564,48 @@ def trigger_rainfall_simulation(
         elevation_m = start.elevation_m if start else 5.0
         water_depth = compute_node_water_depth(runoff_mm, elevation_m=elevation_m)
 
-        state.water_depth_cm = water_depth
-        state.avg_speed_kmh = max(10.0, edge.max_speed_kmh - (water_depth * 0.8))
-        affected_edges += 1
+        changed.append(
+            (
+                edge.edge_id,
+                water_depth,
+                max(10.0, edge.max_speed_kmh - (water_depth * 0.8)),
+                now,
+            )
+        )
+
+    affected_edges = len(changed)
+    # One statement per BATCH_SIZE rows rather than one giant statement for
+    # all ~10,876: a single UPDATE with tens of thousands of bound parameters
+    # is itself a plausible source of slowness/instability over a remote
+    # pooled connection, independent of the per-row-round-trip problem this
+    # replaced. A handful of batched round trips is still a world away from
+    # one round trip per row.
+    BATCH_SIZE = 1000
+    for i in range(0, len(changed), BATCH_SIZE):
+        batch = changed[i : i + BATCH_SIZE]
+        # The WHERE is on edge_id, not the primary key, so ORM-level bulk
+        # UPDATE (what update(MappedClass) + a param list auto-detects) does
+        # not apply -- it demands primary-key values per row. The `states`
+        # objects go stale for the edges this touches, but _build_network_state
+        # below is given `changed` as an explicit override rather than re-
+        # reading them, so skipping session sync is safe.
+        rows = values(
+            column("edge_id", Integer),
+            column("water_depth_cm", Float),
+            column("avg_speed_kmh", Float),
+            column("updated_at", DateTime),
+            name="v",
+        ).data(batch)
+        db.execute(
+            update(models.LiveEdgeState)
+            .values(
+                water_depth_cm=rows.c.water_depth_cm,
+                avg_speed_kmh=rows.c.avg_speed_kmh,
+                updated_at=rows.c.updated_at,
+            )
+            .where(models.LiveEdgeState.edge_id == rows.c.edge_id)
+            .execution_options(synchronize_session=False)
+        )
 
     audit.record(
         db,
@@ -529,7 +620,12 @@ def trigger_rainfall_simulation(
     )
     db.commit()
 
-    network = _build_network_state(db, clearance_cm)
+    overrides = {
+        edge_id: (water_depth, avg_speed) for edge_id, water_depth, avg_speed, _ in changed
+    }
+    network = _build_network_state(
+        db, clearance_cm, preloaded=(nodes, edges, states), overrides=overrides
+    )
     return SimulationResponse(
         **network.model_dump(),
         rainfall_mm_hr=rainfall_mm_hr,
@@ -605,6 +701,16 @@ def get_optimal_route(
             )
         ),
     ] = False,
+    requested_mode: Annotated[
+        Literal["FASTEST", "FLOOD_SAFE"] | None,
+        Query(
+            alias="routing_mode",
+            description=(
+                "Force a routing personality. Omit to let the network decide "
+                "(FASTEST when nothing is flooded, else FLOOD_SAFE)."
+            ),
+        ),
+    ] = None,
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -622,16 +728,24 @@ def get_optimal_route(
     _require_node(nodes, target_node, "target_node")
 
     hazards, hazard_edges = _load_hazard_coverage(db)
+    # A published closure is a flood even when the caller asks to route through
+    # it: the unsafe alternative still avoids water everywhere else.
+    closures = [h for h in hazards if hazard_blocks(h.obstruction_level)]
     blocked_edges: set[int] = set()
     if not ignore_hazards:
-        for hazard in hazards:
-            if hazard_blocks(hazard.obstruction_level):
-                blocked_edges |= hazard_edges.get(hazard.hazard_id, set())
+        for hazard in closures:
+            blocked_edges |= hazard_edges.get(hazard.hazard_id, set())
     flagged_edges = _load_flagged_advisory_edges(db)
 
     graph_nodes, graph_edges, pair_index = _routing_graph(
         nodes, edges, states, blocked_edges, flagged_edges
     )
+
+    # A dry network has nothing to avoid, so it plans the plain fastest path a
+    # general-purpose map would give; any flood, advisory or closure switches
+    # back to the water-aware cost. See routing.routing_mode. A client that
+    # shows the map in normal (traffic-only) mode asks for FASTEST explicitly.
+    mode = requested_mode or routing_mode(graph_edges, road_closure=bool(closures))
 
     path, travel_time_s = td_a_star_search(
         graph_nodes,
@@ -639,6 +753,7 @@ def get_optimal_route(
         start_node,
         target_node,
         vehicle_clearance_cm=clearance_cm,
+        flood_aware=mode == FLOOD_SAFE,
     )
 
     if not path:
@@ -745,6 +860,7 @@ def get_optimal_route(
         hazards=route_hazards,
         total_distance_m=round(sum(hop[2] for hop in hops), 2),
         estimated_travel_time_minutes=round(travel_time_s / 60.0, 2),
+        routing_mode=mode,
     )
 
 

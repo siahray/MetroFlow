@@ -439,6 +439,12 @@ requested clearance.
 | `start_node`   | query | integer | **yes**  | —       | Must exist      |
 | `target_node`  | query | integer | **yes**  | —       | Must exist      |
 | `clearance_cm` | query | number  | no       | `30`    | `> 0`, `<= 200` |
+| `routing_mode` | query | string  | no       | auto    | `FASTEST` or `FLOOD_SAFE` |
+
+`routing_mode` forces a personality from §4.3 instead of letting the network
+decide — the driver app sends `FASTEST` while its map is in normal
+(traffic-only) view, so the plan is the fastest path a general-purpose map app
+would give. The clearance gate still applies in both modes.
 
 ### 4.2 Response `200`
 
@@ -451,6 +457,7 @@ requested clearance.
 | `geometry`                      | object    | GeoJSON `LineString`, oriented along travel                 |
 | `segments`                      | object[]  | One entry per traversed edge                                |
 | `estimated_travel_time_minutes` | number    | Travel time under current depth penalties, 2 decimal places |
+| `routing_mode`                  | string    | `FASTEST` or `FLOOD_SAFE`; see §4.3                         |
 
 **Segment**
 
@@ -476,6 +483,17 @@ cost      = distance_m / speed_m_s          (seconds)
 An edge is skipped entirely when `depth_cm >= clearance_cm`. The heuristic is
 `haversine(node, target) / fastest_graph_speed`, which never overestimates, so
 the returned path is optimal for this cost function (TSD §6.4).
+
+The router runs in one of two modes, reported as `routing_mode`:
+
+- **`FASTEST`** — nothing in the network is flooded (no edge at or above the
+  caution depth), advised, or closed. The cost above collapses to
+  `distance_m / speed_m_s`: the plain fastest path any map app would give, so a
+  damp-but-drivable road or a dry sensor advisory is not a detour.
+- **`FLOOD_SAFE`** — any water at or above the caution depth, a fresh flagged
+  sensor advisory, or a published blocking hazard. The full cost above applies.
+
+The clearance gate holds in both modes: a road under water is never traversable.
 
 ### 4.4 Example — dry network
 
@@ -522,7 +540,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
       "status": "PASSABLE"
     }
   ],
-  "estimated_travel_time_minutes": 3.32
+  "estimated_travel_time_minutes": 3.32,
+  "routing_mode": "FASTEST"
 }
 ```
 
@@ -549,7 +568,8 @@ The direct edge 1 → 4 survives at `18.67 cm`, so the response becomes:
       "status": "LIGHT_FLOOD"
     }
   ],
-  "estimated_travel_time_minutes": 17.12
+  "estimated_travel_time_minutes": 17.12,
+  "routing_mode": "FLOOD_SAFE"
 }
 ```
 

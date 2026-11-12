@@ -15,6 +15,41 @@ PASSABLE = "PASSABLE"
 LIGHT_FLOOD = "LIGHT_FLOOD"
 SUBMERGED = "SUBMERGED"
 
+# ---------------------------------------------------------------------------
+# Routing mode
+# ---------------------------------------------------------------------------
+# The router has two personalities. With no flood anywhere in the graph there is
+# nothing to avoid, so it plans the plain fastest path a general-purpose map
+# would give: no water or advisory cost terms, a wet-but-drivable road is just a
+# road. Any flood at all -- water at or above the caution depth, a live sensor
+# advisory, or a published closure -- switches it to the time-dependent cost.
+# Both share one search; only the cost of a hop differs.
+
+FASTEST = "FASTEST"
+FLOOD_SAFE = "FLOOD_SAFE"
+
+
+def routing_mode(
+    graph_edges: dict[int, list[tuple[int, float, float, float, bool]]],
+    *,
+    road_closure: bool = False,
+    caution_depth_cm: float | None = None,
+) -> str:
+    """``FASTEST`` when nothing in the graph is flooded or advised, else ``FLOOD_SAFE``.
+
+    ``graph_edges`` is the adjacency the search will run on, so this asks exactly
+    the graph the router will see. ``road_closure`` carries the fact that a
+    blocking hazard removed edges, which the adjacency no longer shows.
+    """
+    if road_closure:
+        return FLOOD_SAFE
+    caution = settings.caution_depth_cm if caution_depth_cm is None else caution_depth_cm
+    for adjacency in graph_edges.values():
+        for _, _, _, water_depth_cm, advisory_flagged in adjacency:
+            if advisory_flagged or water_depth_cm >= caution:
+                return FLOOD_SAFE
+    return FASTEST
+
 
 def classify_passability(
     water_depth_cm: float,
@@ -245,11 +280,16 @@ def td_a_star_search(
     start_node: int,
     target_node: int,
     vehicle_clearance_cm: float = 30.0,
+    flood_aware: bool = True,
 ) -> tuple[list[int], float]:
     """
     Time-Dependent A* Pathfinding Engine with Min-Heap Priority Queue.
     Incorporate dynamic water depth penalties Omega(d_e), vehicle clearance
     thresholds, and a soft penalty for edges under a flagged sensor advisory.
+
+    ``flood_aware=False`` is the dry-network personality (``FASTEST``): the same
+    search on the posted speed limit alone. The clearance gate stays in both,
+    because a road under water is never drivable whatever the mode says.
 
     Time Complexity: O(E log V)  -- guaranteed by the settled set below.
     Optimality:    guaranteed -- the heuristic divides by the fastest speed in
@@ -309,15 +349,17 @@ def td_a_star_search(
             current, []
         ):
             # Passability threshold: infinite penalty if water exceeds clearance.
+            # Both modes keep it -- see the docstring.
             if water_depth_cm >= vehicle_clearance_cm:
                 continue
 
-            # Exponential speed degradation as standing water deepens.
-            water_penalty = 1.0 + math.pow(water_depth_cm / 10.0, 1.8)
+            # Exponential speed degradation as standing water deepens; FASTEST
+            # mode is the posted limit alone.
+            water_penalty = 1.0 + math.pow(water_depth_cm / 10.0, 1.8) if flood_aware else 1.0
             effective_speed_m_s = max((speed_kmh / 3.6) / water_penalty, 0.5)
 
             traversal_time_s = length_m / effective_speed_m_s
-            if advisory_flagged:
+            if flood_aware and advisory_flagged:
                 traversal_time_s *= ADVISORY_PENALTY
             tentative_g = current_g + traversal_time_s
 

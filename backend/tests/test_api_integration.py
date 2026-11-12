@@ -350,10 +350,22 @@ def test_route_returns_line_geometry_and_segments(client):
     assert body["segments"], "route should report the edges it traverses"
     assert all(segment["status"] in ALLOWED_STATUSES for segment in body["segments"])
     assert body["estimated_travel_time_minutes"] > 0
+    assert body["routing_mode"] == "FLOOD_SAFE"
 
     for longitude, latitude in body["geometry"]["coordinates"]:
         assert LON_RANGE[0] <= longitude <= LON_RANGE[1]
         assert LAT_RANGE[0] <= latitude <= LAT_RANGE[1]
+
+
+def test_route_reports_fastest_mode_when_the_network_is_dry(client):
+    """No flood anywhere: the plain fastest path, not the water-aware one."""
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 35},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["routing_mode"] == "FASTEST"
 
 
 def test_route_returns_404_when_every_edge_is_submerged(client):

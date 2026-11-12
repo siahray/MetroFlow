@@ -18,6 +18,8 @@ from routing import (
     ADVISORY_PENALTY,
     ARRIVE,
     DEPART,
+    FASTEST,
+    FLOOD_SAFE,
     LIGHT_FLOOD,
     PASSABLE,
     SLIGHT_LEFT,
@@ -33,6 +35,7 @@ from routing import (
     classify_turn,
     compass_point,
     hazard_blocks,
+    routing_mode,
     td_a_star_search,
 )
 
@@ -226,6 +229,52 @@ def test_advisory_penalty_prefers_the_unflagged_detour_but_never_blocks():
     assert path == [1, 2] and seconds < math.inf, (
         "a flagged edge with no alternative must still route"
     )
+
+
+# ---------------------------------------------------------------------------
+# Dry-network mode (FASTEST) vs flood-safe mode
+# ---------------------------------------------------------------------------
+
+
+def test_routing_mode_is_fastest_only_when_nothing_is_flooded_or_advised():
+    assert routing_mode(build_graph([0.0, 0.0, 0.0, 0.0])) == FASTEST
+    # A damp road under the caution depth is still just a road.
+    assert routing_mode(build_graph([0.0, 5.0, 0.0, 0.0])) == FASTEST
+    # At the caution depth the network is flooding.
+    assert routing_mode(build_graph([0.0, 10.0, 0.0, 0.0])) == FLOOD_SAFE
+    # A live advisory counts even with dry tarmac: the reading is not trusted.
+    flagged = build_graph([0.0, 0.0, 0.0, 0.0])
+    flagged[1] = [(v[0], v[1], v[2], v[3], True) for v in flagged[1]]
+    assert routing_mode(flagged) == FLOOD_SAFE
+    # A published closure removes its edges before the search, so it is passed in.
+    assert routing_mode(build_graph([0.0, 0.0, 0.0, 0.0]), road_closure=True) == FLOOD_SAFE
+
+
+# Two ways from 1 to 4: 1000 m direct, or a 1200 m detour via 2. The nodes sit
+# almost on top of each other so the heuristic cannot change the answer.
+DRY_NODES = {1: (14.6000, 121.0000), 2: (14.6005, 121.0005), 4: (14.6010, 121.0010)}
+
+
+def dry_graph(direct_depth_cm):
+    return {
+        1: [(2, 800.0, 50.0, 0.0, False), (4, 1000.0, 50.0, direct_depth_cm, False)],
+        2: [(4, 400.0, 50.0, 0.0, False)],
+    }
+
+
+def test_fastest_mode_does_not_detour_around_a_shallow_puddle():
+    """5 cm is under the caution depth: passable, so a normal map drives through it."""
+    assert td_a_star_search(DRY_NODES, dry_graph(5.0), 1, 4, CLEARANCE)[0] == [1, 2, 4]
+    assert td_a_star_search(DRY_NODES, dry_graph(5.0), 1, 4, CLEARANCE, flood_aware=False)[0] == [
+        1,
+        4,
+    ]
+
+
+def test_fastest_mode_still_refuses_a_submerged_road():
+    """The clearance gate is not a flood penalty; it holds in every mode."""
+    graph = {1: [(4, 1000.0, 50.0, 40.0, False)], 4: []}
+    assert td_a_star_search(DRY_NODES, graph, 1, 4, CLEARANCE, flood_aware=False) == ([], math.inf)
 
 
 def test_unreachable_returns_empty_path():
