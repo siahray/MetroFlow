@@ -62,6 +62,7 @@ import {
 import { useAuth } from "../auth";
 import { BackButton } from "../components/BackButton";
 import { useDialog } from "../components/Dialog";
+import { boundingBoxOf, searchAddress, type GeocodeResult } from "../geocode";
 import { congestionFromSpeeds, RouteMap, type MapViewMode, type RouteMapHandle } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
@@ -189,6 +190,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Bumped by the Retry action so the one-shot location effect runs again.
   const [locationAttempt, setLocationAttempt] = useState(0);
   const [destinationQuery, setDestinationQuery] = useState("");
+  // Address search (Nominatim), alongside the instant road-node name match
+  // below -- a driver can type either a junction name or a real address.
+  const [addressResults, setAddressResults] = useState<GeocodeResult[]>([]);
+  const [geocoding, setGeocoding] = useState(false);
   const [selected, setSelected] = useState<NodeFeature | null>(null);
   const [route, setRoute] = useState<RoutePlan | null>(null);
   const [hazards, setHazards] = useState<HazardInfo[]>([]);
@@ -680,6 +685,41 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       .slice(0, 8);
   }, [destinationQuery, network, route]);
 
+  // Address search (Nominatim), debounced well under its ~1 req/sec usage
+  // policy and restricted to the loaded network's own extent so a result is
+  // actually somewhere this app can route to.
+  const searchBox = useMemo(
+    () => (network ? boundingBoxOf(network.nodes.features.map((n) => toLatLng(n.geometry.coordinates))) : null),
+    [network],
+  );
+  // No search applies: render time ignores whatever addressResults/geocoding
+  // are still holding from a previous query, rather than resetting them
+  // synchronously from the effect body below.
+  const addressSearchActive = destinationQuery.trim().length >= 3 && searchBox !== null && !route;
+  const visibleAddressResults = addressSearchActive ? addressResults : [];
+  useEffect(() => {
+    if (!addressSearchActive || !searchBox) return;
+    const needle = destinationQuery.trim();
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setGeocoding(true);
+      searchAddress(needle, searchBox, controller.signal)
+        .then((results) => {
+          if (!controller.signal.aborted) setAddressResults(results);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setAddressResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setGeocoding(false);
+        });
+    }, 500);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [addressSearchActive, destinationQuery, searchBox]);
+
   const instruction = route?.instructions[currentStep];
   const remaining = progress ? Math.max(progress.totalM - progress.progressM, 0) : null;
   const remainingMinutes =
@@ -932,11 +972,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 </View>
               ) : null}
 
-              {matches.length > 0 ? (
+              {matches.length > 0 || visibleAddressResults.length > 0 ? (
                 <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
                   {matches.map((node) => (
                     <TouchableOpacity
-                      key={node.id}
+                      key={`node-${node.id}`}
                       style={styles.resultRow}
                       onPress={() => {
                         setSelected(node);
@@ -953,9 +993,39 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                       </View>
                     </TouchableOpacity>
                   ))}
+                  {visibleAddressResults.map((result, index) => (
+                    <TouchableOpacity
+                      key={`address-${index}`}
+                      style={styles.resultRow}
+                      onPress={() => {
+                        const nearest = network
+                          ? nearestNode(network.nodes.features, {
+                              latitude: result.latitude,
+                              longitude: result.longitude,
+                            })
+                          : null;
+                        if (!nearest) return;
+                        setSelected(nearest);
+                        setDestinationQuery(result.label);
+                        setError(null);
+                      }}
+                    >
+                      <View style={styles.resultIcon}>
+                        <Search size={14} color={c.blue600} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.resultName} numberOfLines={1}>
+                          {result.label}
+                        </Text>
+                        <Text style={styles.resultMeta}>Address · nearest road</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
                 </ScrollView>
+              ) : addressSearchActive && geocoding ? (
+                <Text style={styles.emptyText}>Searching…</Text>
               ) : destinationQuery && !planning && !refusal ? (
-                <Text style={styles.emptyText}>No seeded road node matches that search.</Text>
+                <Text style={styles.emptyText}>No road node or address matches that search.</Text>
               ) : null}
             </View>
           ) : null}
