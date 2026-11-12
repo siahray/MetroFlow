@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { EMPTY_ADVANCED_FILTERS } from "@/lib/advanced-filters";
 import type { Incident } from "@/lib/incidents";
@@ -76,7 +76,7 @@ test("lists incidents with masked reporter and urgency badges", () => {
   expect(screen.getAllByText(/\+63 91\*\* \*\*\* \*\*\*\*/).length).toBeGreaterThan(0);
 });
 
-test("Open and Dismiss buttons fire their callbacks without selecting", () => {
+test("the row selects and its dismiss control asks before dismissing", async () => {
   const calls: string[] = [];
   render(
     <IncidentQueue
@@ -87,13 +87,18 @@ test("Open and Dismiss buttons fire their callbacks without selecting", () => {
     />,
   );
 
-  fireEvent.click(screen.getAllByRole("button", { name: "Open" })[1]);
-  fireEvent.click(screen.getAllByRole("button", { name: "Dismiss" })[0]);
+  fireEvent.click(screen.getByText("#rep-1"));
+  expect(calls).toEqual(["select:rep-1"]);
 
-  expect(calls).toEqual(["select:rep-1", "dismiss:sos-1"]);
+  fireEvent.click(screen.getAllByRole("button", { name: "Dismiss" })[0]);
+  expect(calls).toEqual(["select:rep-1"]);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss incident" }));
+  await waitFor(() => expect(calls).toEqual(["select:rep-1", "dismiss:sos-1"]));
 });
 
-test("dismissed view offers Restore and shows the purge countdown", () => {
+test("dismissed view offers Restore and shows the purge countdown", async () => {
   const calls: string[] = [];
   render(
     <IncidentQueue
@@ -112,7 +117,8 @@ test("dismissed view offers Restore and shows the purge countdown", () => {
 
   expect(screen.getByText(/Deleted in \d+h/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Restore" }));
-  expect(calls).toEqual(["restore:old-1"]);
+  fireEvent.click(screen.getByRole("button", { name: "Restore incident" }));
+  await waitFor(() => expect(calls).toEqual(["restore:old-1"]));
 });
 
 test("queue tabs, quick filters and search all report changes upward", () => {
@@ -199,7 +205,7 @@ test("bulk select dismisses every checked incident after confirmation", async ()
   expect(screen.getByText("2 selected")).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: /Dismiss selected/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss 2 incidents" }));
 
   await screen.findByText("Incoming Queue");
   expect(dismissed.sort()).toEqual(["rep-1", "sos-1"]);

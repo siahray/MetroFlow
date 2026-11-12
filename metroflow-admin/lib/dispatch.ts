@@ -5,6 +5,10 @@ export type SOSRequest = {
   latitude: number;
   longitude: number;
   note: string | null;
+  /** The reporter's number at the moment the SOS was raised; null if they never set one. */
+  reporter_phone?: string | null;
+  /** Plate the driver's garage reported, for picking the right vehicle out of a flooded street. */
+  plate_number?: string | null;
   vehicle_id: number | null;
   status: string;
   created_at: string | null;

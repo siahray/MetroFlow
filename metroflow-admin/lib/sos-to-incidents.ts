@@ -100,6 +100,8 @@ export function sosToIncident(
     latitude: sos.latitude,
     longitude: sos.longitude,
     waterDepthCm: depthCm,
+    reporterPhone: sos.reporter_phone ?? null,
+    plateNumber: sos.plate_number ?? null,
     nearestUnit,
   };
 }

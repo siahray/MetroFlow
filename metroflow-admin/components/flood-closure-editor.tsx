@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { NetworkMap, type DrawnGeometry } from "./network-map";
 import { SearchableSelect } from "./searchable-select";
+import { ConfirmDialog } from "./confirm-dialog";
 import { createHazard, publishHazard, withdrawHazard, type HazardZone } from "@/lib/hazards";
 import type { NetworkState, NetworkSummary } from "@/lib/network";
 
@@ -37,6 +38,8 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
   const [segmentsLoading, setSegmentsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null);
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState<HazardZone | null>(null);
   const [networkSummary, setNetworkSummary] = useState<NetworkSummary | null>(null);
   // FSD-FR-082, FR-083: a hazard can be attached to one road segment (the
   // default) or drawn as a flood polygon / closure line on the map.
@@ -115,6 +118,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
       onAction(`Failed to publish the hazard "${name.trim()}"`);
     } finally {
       setSaving(false);
+      setConfirmingPublish(false);
     }
   }
 
@@ -130,6 +134,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
       onAction(`Failed to withdraw hazard #${hazard.hazard_id}`);
     } finally {
       setWithdrawingId(null);
+      setConfirmingWithdraw(null);
     }
   }
 
@@ -327,7 +332,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
 
         <button
           type="button"
-          onClick={handlePublish}
+          onClick={() => setConfirmingPublish(true)}
           disabled={!canPublish}
           className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-primary py-2.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -363,7 +368,7 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
                     </span>
                     <button
                       type="button"
-                      onClick={() => void handleWithdraw(hazard)}
+                      onClick={() => setConfirmingWithdraw(hazard)}
                       disabled={withdrawingId === hazard.hazard_id}
                       aria-label={`Withdraw hazard ${hazard.name}`}
                       title="Withdraw"
@@ -397,6 +402,33 @@ export function FloodClosureEditor({ onAction }: FloodClosureEditorProps) {
           )}
         </div>
       </div>
+
+      {confirmingPublish ? (
+        <ConfirmDialog
+          title="Publish this hazard to drivers?"
+          confirmLabel="Publish hazard"
+          tone="primary"
+          busy={saving}
+          onConfirm={() => void handlePublish()}
+          onClose={() => setConfirmingPublish(false)}
+        >
+          &ldquo;{name.trim()}&rdquo; becomes live immediately: driver routing avoids the segment
+          from Level 2 up, and warnings appear for every level.
+        </ConfirmDialog>
+      ) : null}
+
+      {confirmingWithdraw ? (
+        <ConfirmDialog
+          title={`Withdraw hazard #${confirmingWithdraw.hazard_id}?`}
+          confirmLabel="Withdraw hazard"
+          busy={withdrawingId === confirmingWithdraw.hazard_id}
+          onConfirm={() => void handleWithdraw(confirmingWithdraw)}
+          onClose={() => setConfirmingWithdraw(null)}
+        >
+          &ldquo;{confirmingWithdraw.name}&rdquo; stops warning drivers and stops closing the
+          segment for routing. Withdrawn hazards cannot be republished.
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

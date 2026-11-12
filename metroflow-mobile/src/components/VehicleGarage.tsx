@@ -22,7 +22,13 @@ const TYPE_LABEL: Record<VehicleType, string> = {
 };
 
 /** In-progress add/edit form. `vehicle` is null while creating a new one. */
-type Draft = { vehicle: GarageVehicle | null; name: string; type: VehicleType; clearance: string };
+type Draft = {
+  vehicle: GarageVehicle | null;
+  name: string;
+  type: VehicleType;
+  clearance: string;
+  plate: string;
+};
 
 export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void }) {
   const { c } = useTheme();
@@ -51,11 +57,17 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
   }
 
   function openAdd() {
-    setDraft({ vehicle: null, name: '', type: 'sedan', clearance: '28' });
+    setDraft({ vehicle: null, name: '', type: 'sedan', clearance: '28', plate: '' });
   }
 
   function openEdit(vehicle: GarageVehicle) {
-    setDraft({ vehicle, name: vehicle.name, type: vehicle.type, clearance: String(vehicle.clearanceCm) });
+    setDraft({
+      vehicle,
+      name: vehicle.name,
+      type: vehicle.type,
+      clearance: String(vehicle.clearanceCm),
+      plate: vehicle.plate ?? '',
+    });
   }
 
   async function removeVehicle(target: GarageVehicle) {
@@ -84,15 +96,24 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
     const name = draft.name.trim();
     const clearance = Math.round(Number(draft.clearance));
     if (!name || !Number.isFinite(clearance) || clearance <= 0) return;
+    const plate = draft.plate.trim().toUpperCase() || undefined;
 
     const list = vehicles ?? [];
     let next: GarageVehicle[];
     let nextActive = activeId;
     if (draft.vehicle) {
       const id = draft.vehicle.id;
-      next = list.map((v) => (v.id === id ? { ...v, name, type: draft.type, clearanceCm: clearance } : v));
+      next = list.map((v) =>
+        v.id === id ? { ...v, name, type: draft.type, clearanceCm: clearance, plate } : v,
+      );
     } else {
-      const created: GarageVehicle = { id: `${Date.now()}`, name, type: draft.type, clearanceCm: clearance };
+      const created: GarageVehicle = {
+        id: `${Date.now()}`,
+        name,
+        type: draft.type,
+        clearanceCm: clearance,
+        plate,
+      };
       next = [...list, created];
       // The first saved vehicle becomes active automatically; later ones need a tap.
       if (!nextActive) nextActive = created.id;
@@ -177,6 +198,11 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
                   Clearance: {vehicle.clearanceCm} cm
                 </Text>
               </View>
+              {vehicle.plate ? (
+                <Text numberOfLines={1} style={{ fontSize: fontSize.caption, color: c.slate500 }}>
+                  {vehicle.plate}
+                </Text>
+              ) : null}
             </TouchableOpacity>
           );
         })}
@@ -252,6 +278,23 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
                 onChangeText={(value) => setDraft((d) => d && { ...d, name: value })}
                 placeholder="Name (e.g. Daily Commuter)"
                 placeholderTextColor={c.slate400}
+                style={{
+                  borderWidth: 1,
+                  borderColor: c.slate200,
+                  borderRadius: 10,
+                  padding: space[10],
+                  fontSize: fontSize.label,
+                  color: c.slate900,
+                }}
+              />
+
+              <TextInput
+                value={draft?.plate ?? ''}
+                onChangeText={(value) => setDraft((d) => d && { ...d, plate: value })}
+                placeholder="Plate number (e.g. ABC 1234)"
+                placeholderTextColor={c.slate400}
+                autoCapitalize="characters"
+                maxLength={16}
                 style={{
                   borderWidth: 1,
                   borderColor: c.slate200,

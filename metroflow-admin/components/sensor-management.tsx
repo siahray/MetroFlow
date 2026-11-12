@@ -17,6 +17,7 @@ import {
   type SensorFormValues,
 } from "@/lib/sensors";
 import { useToast } from "./toast-provider";
+import { ConfirmDialog } from "./confirm-dialog";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
 
@@ -35,6 +36,10 @@ export function SensorManagement() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<Sensor | null>(null);
+  const [removing, setRemoving] = useState<Sensor | null>(null);
+  const [removingBusy, setRemovingBusy] = useState(false);
+  const [toggling, setToggling] = useState<Sensor | null>(null);
+  const [togglingBusy, setTogglingBusy] = useState(false);
   const [form, setForm] = useState<SensorFormValues>(EMPTY_SENSOR_FORM);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -112,24 +117,33 @@ export function SensorManagement() {
     }
   }
 
-  async function handleDelete(sensor: Sensor) {
-    if (!confirm(`Remove sensor "${sensor.name}" (${sensor.sensor_id})? This cannot be undone.`))
-      return;
+  async function handleDelete() {
+    if (!removing || removingBusy) return;
+    setRemovingBusy(true);
     try {
-      await deleteSensor(sensor.sensor_id);
-      show(`Sensor ${sensor.sensor_id} removed`);
+      await deleteSensor(removing.sensor_id);
+      show(`Sensor ${removing.sensor_id} removed`);
+      setRemoving(null);
       await loadSensors();
     } catch (cause) {
       show(cause instanceof ApiError ? cause.message : "Failed to remove the sensor");
+    } finally {
+      setRemovingBusy(false);
     }
   }
 
-  async function handleToggleActive(sensor: Sensor) {
+  async function handleToggleActive() {
+    if (!toggling || togglingBusy) return;
+    setTogglingBusy(true);
     try {
-      await updateSensor(sensor.sensor_id, { active: !sensor.active });
+      await updateSensor(toggling.sensor_id, { active: !toggling.active });
+      show(`Sensor ${toggling.sensor_id} ${toggling.active ? "disabled" : "enabled"}`);
+      setToggling(null);
       await loadSensors();
     } catch (cause) {
       show(cause instanceof ApiError ? cause.message : "Failed to update the sensor");
+    } finally {
+      setTogglingBusy(false);
     }
   }
 
@@ -235,13 +249,13 @@ export function SensorManagement() {
                   Edit
                 </button>
                 <button
-                  onClick={() => void handleToggleActive(sensor)}
+                  onClick={() => setToggling(sensor)}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   {sensor.active ? "Disable" : "Enable"}
                 </button>
                 <button
-                  onClick={() => void handleDelete(sensor)}
+                  onClick={() => setRemoving(sensor)}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -392,6 +406,34 @@ export function SensorManagement() {
           </div>
         </div>
       )}
+
+      {removing ? (
+        <ConfirmDialog
+          title={`Remove sensor "${removing.name}"?`}
+          confirmLabel="Remove sensor"
+          busy={removingBusy}
+          onConfirm={() => void handleDelete()}
+          onClose={() => setRemoving(null)}
+        >
+          Sensor {removing.sensor_id} and its readings stop feeding the flood model. This cannot be
+          undone.
+        </ConfirmDialog>
+      ) : null}
+
+      {toggling ? (
+        <ConfirmDialog
+          title={`${toggling.active ? "Disable" : "Enable"} sensor "${toggling.name}"?`}
+          confirmLabel={toggling.active ? "Disable sensor" : "Enable sensor"}
+          tone={toggling.active ? "danger" : "primary"}
+          busy={togglingBusy}
+          onConfirm={() => void handleToggleActive()}
+          onClose={() => setToggling(null)}
+        >
+          {toggling.active
+            ? "A disabled sensor keeps its history but stops raising threshold breaches until it is enabled again."
+            : "The sensor resumes reporting and can raise threshold breaches again."}
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

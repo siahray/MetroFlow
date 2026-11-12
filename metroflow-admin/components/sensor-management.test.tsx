@@ -54,16 +54,13 @@ function renderSensors() {
 }
 
 let originalFetch: typeof fetch;
-let originalConfirm: typeof window.confirm;
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
-  originalConfirm = window.confirm;
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  window.confirm = originalConfirm;
   cleanup();
 });
 
@@ -129,11 +126,33 @@ test("deleting a sensor asks for confirmation and skips the call when declined",
     }
     return Promise.resolve(jsonResponse(SENSORS));
   }) as typeof fetch;
-  window.confirm = (() => false) as typeof window.confirm;
 
   await act(async () => renderSensors());
   await screen.findByText("Marikina River");
 
   fireEvent.click(screen.getAllByRole("button", { name: /delete/i })[0]);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(deleteCalled).toBe(false);
+});
+
+test("confirming the removal dialog deletes the sensor", async () => {
+  let deleteCalled = false;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    if (init?.method === "DELETE") {
+      deleteCalled = true;
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    return Promise.resolve(jsonResponse(SENSORS));
+  }) as typeof fetch;
+
+  await act(async () => renderSensors());
+  await screen.findByText("Marikina River");
+
+  fireEvent.click(screen.getAllByRole("button", { name: /delete/i })[0]);
+  fireEvent.click(screen.getByRole("button", { name: "Remove sensor" }));
+
+  await waitFor(() => expect(deleteCalled).toBe(true));
 });

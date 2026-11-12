@@ -918,6 +918,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
         "email": current_user.email,
         "role": current_user.role,
         "vehicle_id": current_user.vehicle_id,
+        "mobile_number": current_user.mobile_number,
     }
 
 
@@ -927,8 +928,12 @@ def update_me(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """A signed-in user edits their own display name (portal and driver profile)."""
-    current_user.name = update.name.strip()
+    """A signed-in user edits their own display name and call-back number."""
+    if update.name is not None:
+        current_user.name = update.name.strip()
+    # An explicit null clears the number, so check what was sent, not its value.
+    if "mobile_number" in update.model_fields_set:
+        current_user.mobile_number = update.mobile_number
     db.commit()
     db.refresh(current_user)
     return {
@@ -937,6 +942,7 @@ def update_me(
         "email": current_user.email,
         "role": current_user.role,
         "vehicle_id": current_user.vehicle_id,
+        "mobile_number": current_user.mobile_number,
     }
 
 
@@ -1306,6 +1312,10 @@ def create_sos(
         latitude=sos.latitude,
         longitude=sos.longitude,
         note=sos.note,
+        # Snapshotted from the account, not sent by the client: dispatch needs a
+        # number it can call, and the incident keeps the one that was current.
+        reporter_phone=_user.mobile_number,
+        plate_number=sos.plate_number,
         status="pending",
     )
     db.add(new_sos)

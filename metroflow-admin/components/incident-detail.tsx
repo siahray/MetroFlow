@@ -6,7 +6,6 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
-  ExternalLink,
   FileText,
   MapPin,
   Maximize2,
@@ -19,11 +18,12 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { MissionTimeline } from "@/components/mission-timeline";
+import { ConfirmDialog } from "./confirm-dialog";
 import { cn } from "@/lib/cn";
-import { maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
+import { incidentTagClass, maskPhoneNumber, type Incident, type LogEntry } from "@/lib/incidents";
 import { toUnitStatus, type RescueUnit } from "@/lib/rescue";
 import {
   addSOSNote,
@@ -76,6 +76,27 @@ const BASE_ACTIONS: {
   },
 ];
 
+/** Section label used inside the docket body: sentence case, one icon, optional aside. */
+function SectionHeading({
+  icon: Icon,
+  title,
+  aside,
+}: {
+  icon: typeof Camera;
+  title: string;
+  aside?: ReactNode;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+        <Icon className="h-3.5 w-3.5 text-sky-600" />
+        {title}
+      </h3>
+      {aside}
+    </div>
+  );
+}
+
 export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: IncidentDetailProps) {
   const logRef = useRef<HTMLDivElement | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -100,6 +121,7 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
 
   // FSD-FR-045: Undo window state
   const [undoSeconds, setUndoSeconds] = useState<number | null>(null);
+  const [confirmingUndo, setConfirmingUndo] = useState(false);
 
   // FSD-FR-046: State constraints
   const isDispatched =
@@ -136,15 +158,16 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
   // FSD-FR-036 / FSD-FR-043: the operations log lives in the database; this
   // screen only reads it back, so there is one source of truth per incident.
 
-  // Undo countdown timer (FSD-FR-045)
+  // Undo countdown timer (FSD-FR-045). Paused while the confirmation is open so
+  // the window cannot close mid-decision.
   const isUndoActive = undoSeconds !== null;
   useEffect(() => {
-    if (!isUndoActive) return;
+    if (!isUndoActive || confirmingUndo) return;
     const timer = setInterval(() => {
       setUndoSeconds((prev) => (prev !== null && prev > 1 ? prev - 1 : null));
     }, 1000);
     return () => clearInterval(timer);
-  }, [isUndoActive]);
+  }, [isUndoActive, confirmingUndo]);
 
   useEffect(() => {
     if (!reportId) return;
@@ -329,12 +352,14 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
       try {
         await undoDispatch(sosId);
         setUndoSeconds(null);
+        setConfirmingUndo(false);
         onAction(`Dispatch of unit to #${incident.id} was undone.`);
         const fetched = await fetchIncidentLog(incident);
         if (fetched.length > 0) {
           setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
         }
       } catch {
+        setConfirmingUndo(false);
         onAction("Could not undo dispatch.");
       }
     }
@@ -377,503 +402,437 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
     }
   }
 
-  const rawReporter = incident.reporter.includes("(")
+  // Only mask a phone that is actually in the label. "Citizen Distress Signal
+  // (SOS)" contains a bracket but no number, and masking it invented one.
+  const reporterHasPhone = /\d[\d\s-]{6,}/.test(incident.reporter);
+  const rawReporter = reporterHasPhone
     ? `${incident.reporter.split("(")[0].trim()} (${maskPhoneNumber(incident.reporter)})`
     : incident.reporter;
 
+  const depthLabel =
+    incident.waterDepthCm != null
+      ? `${incident.waterDepthCm} cm (${incident.submersionRange})`
+      : incident.submersionRange || "Not reported";
+
+  const cameraDevice =
+    [incident.exif?.camera_make, incident.exif?.camera_model].filter(Boolean).join(" ") ||
+    "Unknown device";
+
+  const capturedLabel = incident.exif?.captured_at
+    ? new Date(incident.exif.captured_at).toLocaleTimeString()
+    : "Not recorded";
+
+  const nearestUnitLabel = incident.nearestUnit
+    ? `${incident.nearestUnit.callSign} / ${incident.nearestUnit.distanceKm} km / ~${incident.nearestUnit.etaMinutes} min`
+    : selectedUnit
+      ? `${selectedUnit.callSign} (${selectedUnit.type})`
+      : "No unit available";
+
   return (
-    <div className="flex flex-col justify-between space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-7">
-      <div className="space-y-6">
-        {/* Docket Header */}
-        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-rose-800 px-2.5 py-0.5 text-xs font-semibold text-white uppercase tracking-wider">
-                Incident Docket
-              </span>
-              <span className="font-mono text-base font-bold text-slate-900">#{incident.id}</span>
-              <span className="rounded-full border border-rose-200 bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800">
-                {incident.level}
-              </span>
-              <Link
-                href={`/radar?id=${encodeURIComponent(incident.id)}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-100 transition-colors"
-                title="View distress signal on Emergency Dispatch Radar"
-              >
-                <Radar className="h-3 w-3 text-sky-600" />
-                <span>Radar View</span>
-              </Link>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-slate-600">
-              <span>
-                Reported by: <strong className="text-slate-900">{rawReporter}</strong>
-              </span>
-              <span className="text-slate-300">•</span>
-              <span>
-                Filed: <span className="text-slate-500">{incident.reportedAt}</span>
-              </span>
-            </div>
-          </div>
+    <div className="flex h-[620px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:col-span-7 lg:h-[calc(100vh-13rem)] lg:min-h-[560px]">
+      {/* Docket header: identity and place, stated once. */}
+      <header className="flex-shrink-0 border-b border-slate-200 px-5 py-3.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-lg font-bold text-slate-900">#{incident.id}</span>
+          <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+            {incident.level}
+          </span>
+          <span className="rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+            {incident.incidentType === "sos" ? "SOS signal" : "Field report"}
+          </span>
+          <span className="flex-1" />
+          <Link
+            href={`/radar?id=${encodeURIComponent(incident.id)}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            title="View distress signal on Emergency Dispatch Radar"
+          >
+            <Radar className="h-3.5 w-3.5 text-sky-600" />
+            Radar
+          </Link>
         </div>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
+          <span className="font-medium text-slate-700">{incident.barangay}</span>
+          <span className="text-slate-500">/</span>
+          <span>Filed {incident.reportedAt}</span>
+        </p>
+      </header>
 
-        {/* Submission Parameters Card */}
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-          <h3 className="mb-3 flex items-center text-xs font-bold tracking-wider text-slate-500 uppercase">
-            <User className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Submission Parameters &amp;
-            Verification
-          </h3>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <div className="text-[10px] text-slate-500 uppercase">Reporter Identification</div>
-              <div className="text-xs font-bold text-slate-800">{rawReporter}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-500 uppercase">Date &amp; Elapsed Time</div>
-              <div className="text-xs font-semibold text-slate-800">{incident.reportedAt}</div>
-            </div>
-          </div>
-          <div className="flex items-start justify-between rounded-lg border border-slate-200 bg-white p-2.5">
-            <div>
-              <div className="text-xs font-bold text-slate-800">{incident.barangay}</div>
-              <div className="font-mono text-[11px] text-slate-500">
-                {incident.latitude != null && incident.longitude != null
-                  ? `${incident.latitude.toFixed(4)}° N, ${incident.longitude.toFixed(4)}° E`
-                  : "Coordinates not reported"}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-12">
+          {/* Left: who reported it, what they said, and what happened next. */}
+          <div className="space-y-5 lg:col-span-7">
+            <section>
+              <SectionHeading icon={User} title="Reporter" />
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-800">{rawReporter}</span>
+                </div>
+                {incident.incidentType === "sos" ? (
+                  <dl className="mt-2.5 grid grid-cols-2 gap-2 border-t border-slate-200 pt-2.5">
+                    <div>
+                      <dt className="text-[10px] font-medium text-slate-600">Call-back</dt>
+                      <dd className="font-mono text-xs font-semibold text-slate-800">
+                        {incident.reporterPhone ?? "Not provided"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] font-medium text-slate-600">Vehicle plate</dt>
+                      <dd className="font-mono text-xs font-semibold text-slate-800">
+                        {incident.plateNumber ?? "Not provided"}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : null}
               </div>
-            </div>
-            <span className="rounded border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-              {incident.incidentType === "sos" ? "SOS Signal" : "Field Report"}
-            </span>
-          </div>
-        </div>
+            </section>
 
-        {/* Citizen Witness & Field Narrative */}
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 space-y-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
-            <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
-            <span>Citizen Witness Narrative</span>
-          </div>
-          <p className="text-xs font-medium leading-relaxed text-slate-800">
-            {incident.narrative ? (
-              <>&ldquo;{incident.narrative}&rdquo;</>
-            ) : (
-              "No description was given."
-            )}
-          </p>
-        </div>
+            <section>
+              <SectionHeading icon={MessageSquare} title="Witness narrative" />
+              <blockquote className="border-l-2 border-slate-300 pl-3 text-xs leading-relaxed text-slate-700">
+                {incident.narrative ? (
+                  <>&ldquo;{incident.narrative}&rdquo;</>
+                ) : (
+                  <span className="text-slate-500">No description was given.</span>
+                )}
+              </blockquote>
+            </section>
 
-        {/* Attached Telemetry & Evidence Chips */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold tracking-wider text-slate-500 uppercase">
-              Attached Telemetry &amp; Ground Evidence
-            </h3>
-            {photoUrl && (
-              <button
-                type="button"
-                onClick={() => setLightboxOpen(true)}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 hover:text-sky-700"
-              >
-                <ExternalLink className="h-3 w-3" />
-                <span>Open Original Evidence</span>
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {photoUrl ? (
-              <span className="inline-flex items-center rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
-                <Camera className="mr-1.5 h-3 w-3" /> Photo Evidence Loaded
-              </span>
-            ) : incident.reportId ? (
-              <span className="inline-flex items-center rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white shadow-2xs">
-                <Camera className="mr-1.5 h-3 w-3" /> Evidence Linked (#
-                {incident.reportId.slice(0, 8)})
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                <Camera className="mr-1.5 h-3 w-3 text-slate-400" /> No photo attached
-              </span>
-            )}
-            {incident.latitude != null && incident.longitude != null ? (
-              <span className="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                <MapPin className="mr-1.5 h-3 w-3 text-rose-500" /> Coordinates reported
-              </span>
+            {incident.tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {incident.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className={cn(
+                      "rounded border px-2 py-0.5 text-[10px] font-medium",
+                      incidentTagClass(tag),
+                    )}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
             ) : null}
-            {incident.submersionRange && (
-              <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
-                <Waves className="mr-1.5 h-3 w-3 text-amber-600" /> {incident.submersionRange}
-              </span>
-            )}
-          </div>
-        </div>
 
-        {/* Evidence and Location Telemetry */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* Photo Evidence Card (FSD-FR-034, FSD-FR-038) */}
-          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1 font-bold text-slate-800">
-                <Camera className="h-3.5 w-3.5 text-sky-600" /> Incident Ground Evidence
-              </span>
-              <div className="flex items-center gap-1.5">
-                {photoUrl && (
+            {/* Original Evidence Lightbox Modal (FSD-FR-038) */}
+            {lightboxOpen && photoUrl && (
+              <div
+                className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+                onClick={() => setLightboxOpen(false)}
+              >
+                <div
+                  className="relative max-h-[90vh] max-w-4xl animate-modal-in overflow-hidden rounded-2xl border border-slate-700 bg-brand-primary shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-white">
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4 text-sky-400" />
+                      <span className="font-bold text-sm">
+                        Original Field Evidence #{incident.reportId?.slice(0, 8) ?? incident.id}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLightboxOpen(false)}
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[65vh] overflow-auto bg-black p-2 flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrl}
+                      alt="Original Evidence"
+                      className="max-h-[60vh] max-w-full rounded object-contain"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-brand-primary p-4 text-xs font-mono border-t border-slate-800 text-slate-300">
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Submersion Range</div>
+                      <div className="font-bold text-amber-400">
+                        {incident.submersionRange || "Not reported"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Camera Device</div>
+                      <div className="font-bold text-white truncate">
+                        {incident.exif?.camera_make || incident.exif?.camera_model
+                          ? `${incident.exif.camera_make ?? ""} ${incident.exif.camera_model ?? ""}`.trim()
+                          : "Not recorded"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Captured At</div>
+                      <div className="font-bold text-white">
+                        {incident.exif?.captured_at
+                          ? new Date(incident.exif.captured_at).toLocaleTimeString()
+                          : incident.reportedAt}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Coordinates</div>
+                      <div className="font-bold text-emerald-400">
+                        {incident.latitude != null
+                          ? `${incident.latitude.toFixed(4)}, ${incident.longitude?.toFixed(4)}`
+                          : "Not reported"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mission Milestone Timeline (FSD-FR-087 to 089) — refreshes whenever
+            the operations log gains an entry, i.e. after each dispatch action */}
+            {isSosIncident && !isNaN(sosIdNum) && (
+              <MissionTimeline sosId={sosIdNum} refreshKey={liveLogs.length} />
+            )}
+
+            {/* Operations Log (FSD-FR-036, FSD-FR-043) */}
+            <section>
+              <SectionHeading
+                icon={FileText}
+                title="Operations log"
+                aside={
+                  <button
+                    type="button"
+                    onClick={() => setNoteOpen((current) => !current)}
+                    aria-expanded={noteOpen}
+                    className="text-[11px] font-medium text-sky-700 hover:text-sky-800"
+                  >
+                    {noteOpen ? "Cancel" : "+ Add internal note"}
+                  </button>
+                }
+              />
+
+              <div
+                ref={logRef}
+                className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px]"
+              >
+                {liveLogs.length === 0 ? (
+                  <p className="text-slate-600">No entries yet for this incident.</p>
+                ) : null}
+
+                {liveLogs.map((entry, index) => (
+                  <div
+                    key={`${entry.time}-${index}`}
+                    className={cn(
+                      entry.kind === "muted" && "text-slate-500",
+                      entry.kind === "action" && "font-semibold text-slate-700",
+                      entry.kind === "note" && "text-sky-900 font-medium",
+                    )}
+                  >
+                    <span className="font-mono text-slate-600">{entry.time}</span> {entry.text}
+                  </div>
+                ))}
+              </div>
+
+              {noteOpen ? (
+                <form onSubmit={handleAddNote} className="mt-2 flex items-center gap-2">
+                  <input
+                    autoFocus
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    placeholder="Internal note for the dispatch log..."
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-sky-700"
+                  >
+                    Add note
+                  </button>
+                </form>
+              ) : null}
+            </section>
+          </div>
+
+          {/* Right: what the evidence and the ground say about the location. */}
+          <div className="space-y-5 lg:col-span-5">
+            <section>
+              <SectionHeading
+                icon={Camera}
+                title="Ground evidence"
+                aside={
+                  photoUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:text-sky-800"
+                    >
+                      <Maximize2 className="h-3 w-3" /> Enlarge
+                    </button>
+                  ) : null
+                }
+              />
+              <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
+                {photoUrl ? (
                   <button
                     type="button"
                     onClick={() => setLightboxOpen(true)}
-                    className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-200 transition-colors"
-                    title="Open original evidence file"
+                    aria-label="Open original evidence"
+                    className="group relative h-full w-full"
                   >
-                    <Maximize2 className="h-2.5 w-2.5" />
-                    <span>Enlarge</span>
-                  </button>
-                )}
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                  {photoUrl ? "Photo evidence" : "SOS signal"}
-                </span>
-              </div>
-            </div>
-
-            {/* Real photo or fallback representation */}
-            <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
-              {photoUrl ? (
-                <div
-                  className="group relative h-full w-full cursor-pointer"
-                  onClick={() => setLightboxOpen(true)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photoUrl}
-                    alt="Ground Evidence"
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/20 opacity-0 transition-opacity group-hover:opacity-100">
-                    <span className="flex items-center gap-1.5 rounded-full bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                      <Maximize2 className="h-3.5 w-3.5 text-sky-400" />
-                      View Full Evidence
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrl}
+                      alt="Ground evidence"
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center bg-slate-950/25 opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="flex items-center gap-1.5 rounded-full bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                        <Maximize2 className="h-3.5 w-3.5 text-sky-400" />
+                        View full size
+                      </span>
                     </span>
+                  </button>
+                ) : photoLoading ? (
+                  <div className="flex flex-col items-center gap-2 text-xs text-slate-400">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                    <span>Loading evidence…</span>
+                  </div>
+                ) : photoError ? (
+                  <div className="flex flex-col items-center justify-center p-4 text-center">
+                    <Camera className="mb-1 h-6 w-6 text-rose-400" />
+                    <p className="text-xs font-semibold text-rose-300">Evidence unavailable</p>
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      The photo record could not be loaded.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-4 text-center">
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-sky-400">
+                      <Waves className="h-6 w-6" />
+                    </div>
+                    <p className="font-mono text-[11px] font-semibold text-slate-300">
+                      No photo attached
+                    </p>
+                    <p className="mt-1 max-w-[200px] text-[10px] text-slate-400">
+                      This report is a witness statement.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <dl className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
+                <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                  <dt className="text-slate-600">Camera</dt>
+                  <dd className="truncate font-semibold text-slate-700">{cameraDevice}</dd>
+                </div>
+                <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                  <dt className="text-slate-600">Captured</dt>
+                  <dd className="font-semibold text-slate-700">{capturedLabel}</dd>
+                </div>
+              </dl>
+              {incident.photo ? (
+                <p className="mt-1.5 flex flex-wrap gap-x-3 font-mono text-[10px] text-slate-600">
+                  <span>{incident.photo.mime}</span>
+                  <span>{Math.round(incident.photo.bytes / 1024)} KB</span>
+                  {incident.photo.sha256 ? (
+                    <span>sha256 {incident.photo.sha256.slice(0, 12)}…</span>
+                  ) : null}
+                </p>
+              ) : null}
+            </section>
+
+            <section>
+              <SectionHeading icon={MapPin} title="Location and response" />
+              <div className="rounded-xl border border-slate-200 p-3">
+                <div className="relative flex h-28 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-sky-50">
+                  <div className="absolute inset-0 rounded border border-dashed border-sky-200" />
+                  <div className="relative z-10 text-center">
+                    <div className="mx-auto flex h-11 w-11 animate-pulse items-center justify-center rounded-full border-2 border-rose-500 bg-rose-500/20">
+                      <div className="flex h-4 w-4 items-center justify-center rounded-full bg-rose-600 text-white shadow">
+                        <TriangleAlert className="h-2.5 w-2.5" />
+                      </div>
+                    </div>
+                    <p className="mt-1.5 font-mono text-[10px] font-semibold text-slate-600">
+                      {incident.latitude != null && incident.longitude != null
+                        ? `${incident.latitude.toFixed(4)}° N, ${incident.longitude.toFixed(4)}° E`
+                        : "Coordinates not reported"}
+                    </p>
                   </div>
                 </div>
-              ) : photoLoading ? (
-                <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
-                  <span>Loading evidence photo...</span>
-                </div>
-              ) : photoError ? (
-                <div className="flex flex-col items-center justify-center p-4 text-center">
-                  <Camera className="h-6 w-6 text-rose-400 mb-1" />
-                  <p className="text-xs text-rose-300 font-semibold">Evidence unavailable</p>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Photo record could not be loaded from API.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center p-4 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-sky-400 mb-2">
-                    <Waves className="h-6 w-6" />
+
+                <dl className="mt-2.5 space-y-1.5 text-[11px]">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-slate-500">Reported depth</dt>
+                    <dd className="text-right font-semibold text-slate-800">{depthLabel}</dd>
                   </div>
-                  <p className="font-mono text-[11px] font-semibold text-slate-300">
-                    No photo attached
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">
-                    Submersion: {incident.submersionRange || incident.level}
-                  </p>
-                </div>
-              )}
-
-              <div className="absolute bottom-2 left-2 rounded bg-slate-950/80 px-2 py-1 font-mono text-[10px] text-white backdrop-blur">
-                Submersion:{" "}
-                <strong className="text-sky-400">
-                  {incident.submersionRange || incident.level}
-                </strong>
-              </div>
-            </div>
-
-            {/* Photo Metadata 3-Column Block (FSD-FR-034) */}
-            <div className="grid grid-cols-2 gap-1.5 text-center font-mono text-[10px]">
-              <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
-                <div className="text-[9px] text-slate-400 uppercase">Camera / Device</div>
-                <div className="font-semibold text-slate-700 truncate">
-                  {incident.exif?.camera_make || incident.exif?.camera_model
-                    ? `${incident.exif.camera_make ?? ""} ${incident.exif.camera_model ?? ""}`.trim()
-                    : "Unknown device"}
-                </div>
-              </div>
-              <div className="rounded border border-sky-100 bg-sky-50 p-1.5">
-                <div className="text-[9px] text-sky-600 uppercase">Captured</div>
-                <div className="font-bold text-sky-800">
-                  {incident.exif?.captured_at ?? "Not recorded"}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1 rounded border border-slate-100 bg-slate-50 p-2 font-mono text-[10px] text-slate-500">
-              <div className="flex justify-between">
-                <span>Capture Time:</span>
-                <span className="font-semibold text-slate-800">
-                  {incident.exif?.captured_at
-                    ? new Date(incident.exif.captured_at).toLocaleTimeString()
-                    : incident.reportedAt}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Submersion Range:</span>
-                <span className="font-bold text-amber-700">
-                  {incident.submersionRange || "Not reported"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Location & Sensor Telemetry Card (FSD-FR-035) */}
-          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1 font-bold text-slate-800">
-                <MapPin className="h-3.5 w-3.5 text-rose-600" /> Location &amp; Dispatch Status
-              </span>
-              <span className="text-[10px] text-slate-500">{incident.barangay}</span>
-            </div>
-
-            <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 p-2">
-              <div className="absolute inset-0 bg-sky-50 opacity-60" />
-              <div className="absolute inset-0 rounded border border-dashed border-sky-200" />
-
-              <div className="relative z-10 text-center">
-                <div className="mx-auto flex h-14 w-14 animate-pulse items-center justify-center rounded-full border-2 border-rose-500 bg-rose-500/20">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white shadow-lg">
-                    <TriangleAlert className="h-3 w-3" />
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-slate-500">Nearest unit</dt>
+                    <dd className="text-right font-semibold text-sky-700">{nearestUnitLabel}</dd>
                   </div>
-                </div>
-                <span className="mt-2 inline-block rounded bg-white/95 px-2 py-0.5 text-[10px] font-bold text-rose-800 shadow-xs">
-                  {incident.level}
-                </span>
-                <div className="mt-1 font-mono text-[10px] font-semibold text-slate-600">
-                  {incident.latitude != null && incident.longitude != null
-                    ? `${incident.latitude.toFixed(4)}° N, ${incident.longitude.toFixed(4)}° E`
-                    : "Coordinates not reported"}
-                </div>
+                </dl>
               </div>
-            </div>
-
-            <div className="space-y-1.5 rounded border border-slate-100 bg-slate-50 p-2 text-[10px]">
-              {/* Nearest Rescue Unit (FSD-FR-035) */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 font-medium">Nearest Rescue Unit:</span>
-                <span className="font-bold text-sky-700">
-                  {incident.nearestUnit
-                    ? `${incident.nearestUnit.callSign} (${incident.nearestUnit.distanceKm} km • ~${incident.nearestUnit.etaMinutes} min)`
-                    : selectedUnit
-                      ? `${selectedUnit.callSign} (${selectedUnit.type})`
-                      : "No unit available"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600 font-medium">Reported Depth:</span>
-                <span className="font-bold text-slate-800">
-                  {incident.waterDepthCm
-                    ? `${incident.waterDepthCm} cm (${incident.submersionRange})`
-                    : incident.submersionRange || "Not reported"}
-                </span>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
+      </div>
 
-        {/* Original Evidence Lightbox Modal (FSD-FR-038) */}
-        {lightboxOpen && photoUrl && (
-          <div
-            className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
-            onClick={() => setLightboxOpen(false)}
-          >
-            <div
-              className="relative max-h-[90vh] max-w-4xl animate-modal-in overflow-hidden rounded-2xl border border-slate-700 bg-brand-primary shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 text-white">
-                <div className="flex items-center gap-2">
-                  <Camera className="h-4 w-4 text-sky-400" />
-                  <span className="font-bold text-sm">
-                    Original Field Evidence #{incident.reportId?.slice(0, 8) ?? incident.id}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLightboxOpen(false)}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="max-h-[65vh] overflow-auto bg-black p-2 flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photoUrl}
-                  alt="Original Evidence"
-                  className="max-h-[60vh] max-w-full rounded object-contain"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-brand-primary p-4 text-xs font-mono border-t border-slate-800 text-slate-300">
-                <div>
-                  <div className="text-[10px] text-slate-500 uppercase">Submersion Range</div>
-                  <div className="font-bold text-amber-400">
-                    {incident.submersionRange || "Not reported"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-500 uppercase">Camera Device</div>
-                  <div className="font-bold text-white truncate">
-                    {incident.exif?.camera_make || incident.exif?.camera_model
-                      ? `${incident.exif.camera_make ?? ""} ${incident.exif.camera_model ?? ""}`.trim()
-                      : "Not recorded"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-500 uppercase">Captured At</div>
-                  <div className="font-bold text-white">
-                    {incident.exif?.captured_at
-                      ? new Date(incident.exif.captured_at).toLocaleTimeString()
-                      : incident.reportedAt}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-slate-500 uppercase">Coordinates</div>
-                  <div className="font-bold text-emerald-400">
-                    {incident.latitude != null
-                      ? `${incident.latitude.toFixed(4)}, ${incident.longitude?.toFixed(4)}`
-                      : "Not reported"}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Mission Milestone Timeline (FSD-FR-087 to 089) — refreshes whenever
-            the operations log gains an entry, i.e. after each dispatch action */}
-        {isSosIncident && !isNaN(sosIdNum) && (
-          <MissionTimeline sosId={sosIdNum} refreshKey={liveLogs.length} />
-        )}
-
-        {/* Operations Log (FSD-FR-036, FSD-FR-043) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1 text-[11px] font-bold tracking-wider text-slate-700 uppercase">
-              <FileText className="h-3.5 w-3.5 text-slate-400" /> Operations Log & Notes
+      <footer className="flex-shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+        {undoSeconds !== null ? (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-amber-600" />
+              Dispatched. Undo closes in <strong>{undoSeconds}s</strong>
             </span>
             <button
               type="button"
-              onClick={() => setNoteOpen((current) => !current)}
-              aria-expanded={noteOpen}
-              className="text-[11px] font-medium text-sky-600 hover:text-sky-700"
+              onClick={() => setConfirmingUndo(true)}
+              className="rounded-md bg-amber-800 px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-amber-900"
             >
-              {noteOpen ? "Cancel" : "+ Add Internal Note"}
+              Undo dispatch
             </button>
           </div>
+        ) : null}
 
-          <div
-            ref={logRef}
-            className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[11px]"
-          >
-            {liveLogs.length === 0 ? (
-              <p className="text-slate-400">No entries yet for this incident.</p>
-            ) : null}
+        {/* FSD-FR-039 to 046: decisions stay visible without scrolling the docket. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {BASE_ACTIONS.map((action) => (
+            <button
+              key={action.type}
+              type="button"
+              disabled={isDispatched || isRejected}
+              onClick={() => handleOpenActionModal(action.type)}
+              className={cn(
+                "rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                action.className,
+              )}
+            >
+              {action.label}
+            </button>
+          ))}
 
-            {liveLogs.map((entry, index) => (
-              <div
-                key={`${entry.time}-${index}`}
-                className={cn(
-                  entry.kind === "muted" && "text-slate-500",
-                  entry.kind === "action" && "font-semibold text-slate-700",
-                  entry.kind === "note" && "text-sky-900 font-medium",
-                )}
-              >
-                <span className="font-mono text-slate-400">{entry.time}</span> {entry.text}
-              </div>
-            ))}
-          </div>
+          <span className="flex-1" />
 
-          {noteOpen ? (
-            <form onSubmit={handleAddNote} className="flex items-center gap-2">
-              <input
-                autoFocus
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="Internal note for the dispatch log..."
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-sky-700"
-              >
-                Add note
-              </button>
-            </form>
-          ) : null}
-        </div>
-      </div>
-
-      {/* FSD-FR-045: Active Undo Window Banner */}
-      {undoSeconds !== null && (
-        <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-sm animate-pulse">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-amber-600" />
-            <span>
-              Rescue unit dispatched. Undo window: <strong>{undoSeconds}s</strong> remaining
+          {isDispatched ? (
+            <span className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+              Unit dispatched
             </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleUndoDispatch}
-            className="rounded-lg bg-amber-800 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-amber-900 transition-colors"
-          >
-            Undo Dispatch
-          </button>
+          ) : isRejected ? (
+            <span className="flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800">
+              <X className="h-3.5 w-3.5 text-rose-600" />
+              Incident rejected
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setModalStep(1);
+                setDispatchModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-700/20 transition-colors hover:bg-emerald-800"
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+              Approve &amp; dispatch
+            </button>
+          )}
         </div>
-      )}
-
-      {/* Action Buttons (FSD-FR-039 to 046) */}
-      <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-4 md:grid-cols-4">
-        {BASE_ACTIONS.map((action) => (
-          <button
-            key={action.type}
-            type="button"
-            disabled={isDispatched || isRejected}
-            onClick={() => handleOpenActionModal(action.type)}
-            className={cn(
-              "rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-              action.className,
-            )}
-          >
-            {action.label}
-          </button>
-        ))}
-
-        {/* Multi-step dispatch modal trigger with state constraints (FSD-FR-046) */}
-        {isDispatched ? (
-          <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
-            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Unit Dispatched</span>
-          </div>
-        ) : isRejected ? (
-          <div className="flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800">
-            <X className="h-3.5 w-3.5 text-rose-600" />
-            <span>Incident Rejected</span>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setModalStep(1);
-              setDispatchModalOpen(true);
-            }}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-transparent bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition-colors"
-          >
-            <CheckCircle className="h-3.5 w-3.5" />
-            <span>Approve &amp; Dispatch</span>
-          </button>
-        )}
-      </div>
+      </footer>
 
       {/* FSD-FR-044: MANDATORY ACTION REASON MODAL */}
       {actionModalOpen && activeAction && (
@@ -1240,6 +1199,18 @@ export function IncidentDetail({ incident, onAction, onDispatchConfirmed }: Inci
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {confirmingUndo ? (
+        <ConfirmDialog
+          title={`Undo the dispatch to #${incident.id}?`}
+          confirmLabel="Undo dispatch"
+          onConfirm={() => void handleUndoDispatch()}
+          onClose={() => setConfirmingUndo(false)}
+        >
+          The unit returns to available and the incident goes back to awaiting dispatch. Drivers
+          already en route may not see the cancellation.
+        </ConfirmDialog>
       ) : null}
     </div>
   );

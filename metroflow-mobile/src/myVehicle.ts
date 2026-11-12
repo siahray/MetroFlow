@@ -12,6 +12,8 @@ export type GarageVehicle = {
   name: string;
   type: VehicleType;
   clearanceCm: number;
+  /** Plate dispatch reads off the SOS when this vehicle is the active one. */
+  plate?: string;
 };
 
 /** The active vehicle's routing-relevant fields — the shape routing/home already use. */
@@ -53,7 +55,12 @@ export async function setActiveVehicleId(id: string): Promise<void> {
 /** The vehicle driving today's routing clearance: the active garage pick, else the
  * first saved vehicle, else a safe default. */
 export async function loadMyVehicle(): Promise<MyVehicle> {
-  const [vehicles, activeId] = await Promise.all([listGarageVehicles(), getActiveVehicleId()]);
-  const active = vehicles.find((v) => v.id === activeId) ?? vehicles[0] ?? null;
+  const active = await loadActiveGarageVehicle();
   return active ? { type: active.type, clearanceCm: active.clearanceCm } : DEFAULT_MY_VEHICLE;
+}
+
+/** The active garage entry in full, for callers that need more than clearance. */
+export async function loadActiveGarageVehicle(): Promise<GarageVehicle | null> {
+  const [vehicles, activeId] = await Promise.all([listGarageVehicles(), getActiveVehicleId()]);
+  return vehicles.find((v) => v.id === activeId) ?? vehicles[0] ?? null;
 }

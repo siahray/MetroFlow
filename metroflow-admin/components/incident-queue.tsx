@@ -7,6 +7,8 @@ import {
   Inbox,
   FilterX,
   SlidersHorizontal,
+  RotateCcw,
+  Trash2,
   X,
   CheckSquare,
   Square,
@@ -23,10 +25,12 @@ import {
 import {
   QUEUE_FILTERS,
   countByFilter,
+  incidentTagClass,
   maskPhoneNumber,
   type Incident,
   type QueueFilter,
 } from "@/lib/incidents";
+import { ConfirmDialog } from "./confirm-dialog";
 import { IncidentQueueSkeleton } from "./skeleton";
 
 type IncidentQueueProps = {
@@ -84,18 +88,6 @@ function urgencyClass(urgency: number) {
   return "border-sky-200 bg-sky-100 text-sky-700";
 }
 
-function tagClass(tag: string) {
-  if (/impassable|escalated/i.test(tag)) {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-
-  if (/rising|water/i.test(tag)) {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
-
-  return "border-slate-200 bg-white text-slate-600";
-}
-
 const AGE_OPTIONS = [
   { value: "", label: "Any age" },
   { value: "1", label: "Last hour" },
@@ -138,11 +130,14 @@ export function IncidentQueue({
     typeof window === "undefined" ? [] : loadPresets(),
   );
   const [presetName, setPresetName] = useState("");
-  // P3-3: bulk selection. `confirmBulk` holds the pending bulk verb so the
-  // destructive-ish action takes two clicks instead of one.
+  // P3-3: bulk selection. Every dismiss/restore, single or bulk, is committed
+  // through one confirmation dialog so the move is explicit and auditable.
   const [selectMode, setSelectMode] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [confirmBulk, setConfirmBulk] = useState<"dismiss" | "restore" | null>(null);
+  const [pending, setPending] = useState<{ ids: string[]; verb: "dismiss" | "restore" } | null>(
+    null,
+  );
+  const [pendingBusy, setPendingBusy] = useState(false);
 
   const barangays = useMemo(
     () =>
@@ -185,15 +180,25 @@ export function IncidentQueue({
   function exitSelectMode() {
     setSelectMode(false);
     setChecked(new Set());
-    setConfirmBulk(null);
   }
 
-  async function runBulk() {
-    const verb = view === "dismissed" ? "restore" : "dismiss";
-    for (const id of checked) {
-      await (verb === "dismiss" ? onDismiss(id) : onRestore(id));
+  function requestDecision(ids: string[], verb: "dismiss" | "restore") {
+    if (ids.length === 0) return;
+    setPending({ ids, verb });
+  }
+
+  async function confirmDecision() {
+    if (!pending) return;
+    setPendingBusy(true);
+    try {
+      for (const id of pending.ids) {
+        await (pending.verb === "dismiss" ? onDismiss(id) : onRestore(id));
+      }
+      if (selectMode) exitSelectMode();
+    } finally {
+      setPendingBusy(false);
+      setPending(null);
     }
-    exitSelectMode();
   }
   const filters = QUEUE_FILTERS.map((option) => ({
     ...option,
@@ -201,34 +206,32 @@ export function IncidentQueue({
   }));
 
   return (
-    <div className="flex h-[720px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:col-span-5">
+    <div className="flex h-[620px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:col-span-5 lg:h-[calc(100vh-13rem)] lg:min-h-[560px]">
       <div className="space-y-3 border-b border-slate-200 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-slate-900">Incoming Queue</h2>
             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-800">
               {loading ? "..." : incidents.length}
             </span>
-            <button
-              type="button"
-              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-              aria-pressed={selectMode}
-              className={cn(
-                "rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-colors",
-                selectMode
-                  ? "border-sky-600 bg-sky-50 text-sky-800"
-                  : "border-slate-200 text-slate-500 hover:bg-slate-100",
-              )}
-            >
-              {selectMode ? "Done" : "Select"}
-            </button>
           </div>
-          <span className="text-xs text-slate-500">
-            Sort by: <strong className="font-semibold text-slate-700">Urgency Score</strong>
-          </span>
+          <button
+            type="button"
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            aria-pressed={selectMode}
+            className={cn(
+              "rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-colors",
+              selectMode
+                ? "border-sky-600 bg-sky-50 text-sky-800"
+                : "border-slate-200 text-slate-500 hover:bg-slate-100",
+            )}
+          >
+            {selectMode ? "Done" : "Select"}
+          </button>
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+        {/* View and source filters share one row: both narrow the same list. */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {(
             [
               ["active", "Queue"],
@@ -241,7 +244,7 @@ export function IncidentQueue({
               onClick={() => onViewChange(id)}
               aria-pressed={view === id}
               className={cn(
-                "flex-shrink-0 rounded-lg border px-3 py-1 font-semibold transition-colors",
+                "flex-shrink-0 rounded-lg border px-2.5 py-1 font-semibold transition-colors",
                 view === id
                   ? "border-sky-700 bg-sky-50 text-sky-800"
                   : "border-slate-200 text-slate-500 hover:bg-slate-100",
@@ -250,9 +253,9 @@ export function IncidentQueue({
               {label}
             </button>
           ))}
-        </div>
 
-        <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+          <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden="true" />
+
           {filters.map((option) => (
             <button
               key={option.id}
@@ -260,7 +263,7 @@ export function IncidentQueue({
               onClick={() => onFilterChange(option.id)}
               aria-pressed={filter === option.id}
               className={cn(
-                "flex-shrink-0 rounded-lg px-3 py-1 font-medium transition-colors",
+                "flex-shrink-0 rounded-lg px-2.5 py-1 font-medium transition-colors",
                 filter === option.id
                   ? "bg-brand-primary text-white"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200",
@@ -289,37 +292,16 @@ export function IncidentQueue({
               None
             </button>
             <span className="flex-1" />
-            {confirmBulk ? (
-              <>
-                <span className="font-medium text-sky-900">
-                  {view === "dismissed" ? "Restore" : "Dismiss"} {checked.size} incident
-                  {checked.size === 1 ? "" : "s"}?
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void runBulk()}
-                  className="rounded-lg bg-brand-primary px-2.5 py-1 font-bold text-white"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmBulk(null)}
-                  className="rounded-lg border border-sky-300 px-2.5 py-1 font-medium text-sky-800"
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                disabled={checked.size === 0}
-                onClick={() => setConfirmBulk(view === "dismissed" ? "restore" : "dismiss")}
-                className="rounded-lg bg-brand-primary px-2.5 py-1 font-bold text-white disabled:opacity-40"
-              >
-                {view === "dismissed" ? "Restore selected" : "Dismiss selected"}
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={checked.size === 0}
+              onClick={() =>
+                requestDecision([...checked], view === "dismissed" ? "restore" : "dismiss")
+              }
+              className="rounded-lg bg-brand-primary px-2.5 py-1 font-bold text-white disabled:opacity-40"
+            >
+              {view === "dismissed" ? "Restore selected" : "Dismiss selected"}
+            </button>
           </div>
         ) : null}
 
@@ -544,94 +526,139 @@ export function IncidentQueue({
             return (
               <div
                 key={incident.id}
-                onClick={() => (selectMode ? toggleChecked(incident.id) : onSelect(incident.id))}
                 className={cn(
-                  "relative cursor-pointer border-l-4 p-4 transition-colors",
+                  "relative border-l-4 transition-colors",
                   selected
-                    ? "border-sky-600 bg-sky-50/70 hover:bg-sky-50"
+                    ? "border-sky-600 bg-sky-50/70"
                     : "border-transparent hover:bg-slate-50/80",
                   selectMode && isChecked && "bg-sky-100/60",
                 )}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    {selectMode ? (
-                      isChecked ? (
-                        <CheckSquare className="h-4 w-4 flex-shrink-0 text-sky-700" />
-                      ) : (
-                        <Square className="h-4 w-4 flex-shrink-0 text-slate-300" />
-                      )
-                    ) : null}
-                    <span className="font-mono text-xs font-bold text-slate-800">
-                      #{incident.id}
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-full border px-2 py-0.5 text-[10px] font-bold",
-                        incident.urgency === null
-                          ? "border-rose-200 bg-rose-50 text-rose-700"
-                          : urgencyClass(incident.urgency),
-                      )}
-                    >
-                      {incident.urgency === null ? "SOS" : `Urgency ${incident.urgency.toFixed(1)}`}
+                {/* The whole row selects; the dismiss control is a sibling so the
+                    two never nest inside one another. */}
+                <button
+                  type="button"
+                  onClick={() => (selectMode ? toggleChecked(incident.id) : onSelect(incident.id))}
+                  aria-current={selected ? "true" : undefined}
+                  className="block w-full p-4 pr-11 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-inset"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {selectMode ? (
+                        isChecked ? (
+                          <CheckSquare className="h-4 w-4 flex-shrink-0 text-sky-700" />
+                        ) : (
+                          <Square className="h-4 w-4 flex-shrink-0 text-slate-300" />
+                        )
+                      ) : null}
+                      <span className="font-mono text-xs font-bold text-slate-800">
+                        #{incident.id}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[10px] font-bold",
+                          incident.urgency === null
+                            ? "border-rose-200 bg-rose-50 text-rose-700"
+                            : urgencyClass(incident.urgency),
+                        )}
+                      >
+                        {incident.urgency === null
+                          ? "SOS"
+                          : `Urgency ${incident.urgency.toFixed(1)}`}
+                      </span>
+                    </div>
+                    <span className="flex-shrink-0 text-[11px] text-slate-500">
+                      {incident.reportedAt.split("(")[1]?.replace(")", "")}
                     </span>
                   </div>
-                  <span className="text-[11px] text-slate-400">
-                    {incident.reportedAt.split("(")[1]?.replace(")", "")}
-                  </span>
-                </div>
 
-                <h3 className="mt-1 text-xs font-bold text-slate-900">{incident.location}</h3>
-                <p className="mt-0.5 text-[11px] text-slate-500">{reporterDisplay}</p>
-
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
-                  {incident.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className={cn("rounded border px-2 py-0.5 font-medium", tagClass(tag))}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      (view === "dismissed" ? onRestore : onDismiss)(incident.id);
-                    }}
-                    className="rounded border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-200/60 hover:text-slate-800"
-                  >
-                    {view === "dismissed" ? "Restore" : "Dismiss"}
-                  </button>
-                  {incident.dismissedAt ? (
-                    <span className="self-center text-[10px] text-slate-400">
-                      Deleted in {hoursUntilPurge(incident.dismissedAt)}h
-                    </span>
+                  <h3 className="mt-1 text-xs font-bold text-slate-900">{incident.location}</h3>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{reporterDisplay}</p>
+                  {incident.incidentType === "sos" ? (
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      {incident.reporterPhone
+                        ? maskPhoneNumber(incident.reporterPhone)
+                        : "No call-back"}
+                      {incident.plateNumber ? ` · Plate ${incident.plateNumber}` : ""}
+                    </p>
                   ) : null}
+
+                  {incident.tags.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                      {incident.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className={cn(
+                            "rounded border px-1.5 py-0.5 font-medium",
+                            incidentTagClass(tag),
+                          )}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {incident.dismissedAt ? (
+                    <p className="mt-1.5 text-[10px] text-slate-500">
+                      Deleted in {hoursUntilPurge(incident.dismissedAt)}h
+                    </p>
+                  ) : null}
+                </button>
+
+                {!selectMode ? (
                   <button
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onSelect(incident.id);
-                    }}
-                    className={cn(
-                      "rounded px-3 py-1 text-[11px] font-medium",
-                      selected
-                        ? "bg-sky-800 text-white shadow-sm"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200",
-                    )}
+                    onClick={() =>
+                      requestDecision([incident.id], view === "dismissed" ? "restore" : "dismiss")
+                    }
+                    aria-label={view === "dismissed" ? "Restore" : "Dismiss"}
+                    title={view === "dismissed" ? "Restore to queue" : "Dismiss incident"}
+                    className="absolute top-3 right-3 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-700"
                   >
-                    {selected ? "Reviewing Detail" : "Open"}
+                    {view === "dismissed" ? (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
                   </button>
-                </div>
+                ) : null}
               </div>
             );
           })
         )}
       </div>
+
+      {pending ? (
+        <ConfirmDialog
+          title={
+            pending.verb === "dismiss"
+              ? pending.ids.length === 1
+                ? "Dismiss this incident?"
+                : `Dismiss ${pending.ids.length} incidents?`
+              : pending.ids.length === 1
+                ? "Restore this incident?"
+                : `Restore ${pending.ids.length} incidents?`
+          }
+          confirmLabel={
+            pending.verb === "dismiss"
+              ? pending.ids.length === 1
+                ? "Dismiss incident"
+                : `Dismiss ${pending.ids.length} incidents`
+              : pending.ids.length === 1
+                ? "Restore incident"
+                : `Restore ${pending.ids.length} incidents`
+          }
+          tone={pending.verb === "dismiss" ? "danger" : "primary"}
+          busy={pendingBusy}
+          onConfirm={() => void confirmDecision()}
+          onClose={() => setPending(null)}
+        >
+          {pending.verb === "dismiss"
+            ? "It leaves the queue and the dispatch radar. Dismissed incidents stay recoverable for 72 hours, then are permanently deleted."
+            : "It returns to the live queue and the dispatch radar for triage."}
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

@@ -32,6 +32,7 @@ import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
 import { BackButton } from '../../components/BackButton';
 import { isOffline, useOnline } from '../../offline';
+import { loadActiveGarageVehicle } from '../../myVehicle';
 import { useDialog } from '../../components/Dialog';
 import { fontSize, space, useTheme } from '../../theme';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
@@ -154,10 +155,14 @@ export default function SOSScreen() {
     // --- Submit SOS ----------------------------------------------------------
     setSending(true);
     try {
+      // The plate is what lets a crew pick the right vehicle out of a flooded
+      // street; it comes from the garage entry that is active today.
+      const activeVehicle = await loadActiveGarageVehicle().catch(() => null);
       const result = await createSOS({
         latitude: coords.latitude,
         longitude: coords.longitude,
         note: `PRIORITY RESCUE REQUEST: ${situationLabel}. Water hazard level: critical.`,
+        plate_number: activeVehicle?.plate,
       });
 
       setDispatchedSOS(result);
@@ -390,6 +395,20 @@ export default function SOSScreen() {
               <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
                 Coords: {dispatchedSOS.latitude.toFixed(5)}, {dispatchedSOS.longitude.toFixed(5)}
               </Text>
+              {dispatchedSOS.reporter_phone ? (
+                <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
+                  Call-back: {dispatchedSOS.reporter_phone}
+                </Text>
+              ) : (
+                <Text style={{ fontSize: fontSize.body, color: c.amber700 }}>
+                  No call-back number saved. Add one in Profile so dispatch can reach you.
+                </Text>
+              )}
+              {dispatchedSOS.plate_number ? (
+                <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
+                  Vehicle plate: {dispatchedSOS.plate_number}
+                </Text>
+              ) : null}
 
               {/* Refresh status */}
               <TouchableOpacity

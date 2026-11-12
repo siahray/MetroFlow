@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import {
   Mail,
   Map,
@@ -29,16 +29,127 @@ import {
   BellRing,
   Clock,
   Waves,
+  Phone,
+  X,
 } from 'lucide-react-native';
-import { updateMyName } from '../../api';
+import { ApiError, updateMyName, updateMyMobile } from '../../api';
 import { useAuth } from '../../auth';
+import { initialsOf } from '../../components/Avatar';
 import { QuickPicks } from '../../components/QuickPicks';
 import { useDialog } from '../../components/Dialog';
 import { VehicleGarage } from '../../components/VehicleGarage';
 import { loadMyVehicle, type MyVehicle } from '../../myVehicle';
 import { savePrefs, usePrefs, type DriverPrefs } from '../../prefs';
 
-import { fontSize, space, useTheme } from '../../theme';
+import { fontSize, space, useTheme, type ThemeColors } from '../../theme';
+
+type IconComponent = ComponentType<{ size?: number; color?: string }>;
+
+/** The row hairline that separates one setting from the next. */
+function rowStyle(c: ThemeColors) {
+  return {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space[12],
+    paddingHorizontal: space[16],
+    paddingVertical: space[12],
+    borderTopWidth: 1,
+    borderColor: c.slate100,
+  };
+}
+
+/** One settings row: icon tile, title/subtitle, then a chevron or the caller's control. */
+function Row({
+  c,
+  icon: Icon,
+  title,
+  subtitle,
+  onPress,
+  right,
+  a11yLabel,
+}: {
+  c: ThemeColors;
+  icon: IconComponent;
+  title: string;
+  subtitle?: string;
+  onPress?: () => void;
+  right?: ReactNode;
+  /** Read instead of the title when the title is a value, not a name (a phone number, a version). */
+  a11yLabel?: string;
+}) {
+  const body = (
+    <>
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          backgroundColor: c.blue50,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Icon size={16} color={c.blue600} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={1} style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text numberOfLines={2} style={{ fontSize: fontSize.micro, color: c.slate400, marginTop: 1 }}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {right ?? (onPress ? <ChevronRight size={16} color={c.slate300} /> : null)}
+    </>
+  );
+
+  if (!onPress) return <View style={rowStyle(c)}>{body}</View>;
+  return (
+    <TouchableOpacity
+      style={rowStyle(c)}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel ?? title}
+    >
+      {body}
+    </TouchableOpacity>
+  );
+}
+
+/** A titled card of rows; the header hairline is the first row's top border. */
+function Section({ c, title, children }: { c: ThemeColors; title: string; children: ReactNode }) {
+  return (
+    <View
+      style={{
+        backgroundColor: c.white,
+        borderRadius: 18,
+        shadowColor: c.black,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+        elevation: 1,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: fontSize.micro,
+          fontWeight: '800',
+          color: c.slate400,
+          textTransform: 'uppercase',
+          letterSpacing: 0.8,
+          paddingHorizontal: space[16],
+          paddingTop: space[14],
+          paddingBottom: space[10],
+        }}
+      >
+        {title}
+      </Text>
+      {children}
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -53,6 +164,9 @@ export default function ProfileScreen() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(user?.name ?? '');
   const [savingName, setSavingName] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState(user?.mobile_number ?? '');
+  const [savingPhone, setSavingPhone] = useState(false);
 
   const [vehicle, setVehicle] = useState<MyVehicle | null>(null);
   const [showQuickPicks, setShowQuickPicks] = useState(false);
@@ -85,14 +199,44 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleSavePhone() {
+    if (!user) return;
+    const trimmed = phoneDraft.trim();
+    // Checked here so the API's 422 body never reaches the driver as raw JSON.
+    const digits = trimmed.replace(/\D/g, '');
+    if (trimmed && (digits.length < 7 || digits.length > 15)) {
+      await notice({
+        title: 'Check that number',
+        message: 'Enter a mobile number dispatch can call, for example +63 917 555 0100.',
+        tone: 'warning',
+      });
+      return;
+    }
+    setSavingPhone(true);
+    try {
+      signIn(await updateMyMobile(trimmed || null));
+      setEditingPhone(false);
+    } catch (error) {
+      await notice({
+        title: 'Could not save',
+        message:
+          error instanceof ApiError && error.status < 500
+            ? error.message
+            : 'Check your connection and try again.',
+        tone: 'danger',
+      });
+    } finally {
+      setSavingPhone(false);
+    }
+  }
+
   const displayName = user?.name || 'Public Driver';
-  const initials = displayName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((n: string) => n[0])
-    .join('')
-    .toUpperCase() || 'PD';
+  const roleLabel = (user?.role && user.role !== 'EMERGENCY_DRIVER' ? user.role : 'Driver').replace(/_/g, ' ');
+
+  const stats: { label: string; value: string; icon: IconComponent }[] = [
+    { label: 'Clearance', value: `${vehicle?.clearanceCm ?? 28} cm`, icon: Gauge },
+    { label: 'Account', value: user ? 'Signed in' : 'Guest', icon: ShieldCheck },
+  ];
 
   async function handleSignOut() {
     const confirmed = await confirm({
@@ -108,274 +252,361 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.slate50 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.white }}>
       <StatusBar barStyle={themeMode === 'storm' ? 'light-content' : 'dark-content'} />
 
-      {/* Header */}
-      <View style={{ paddingHorizontal: space[16], paddingVertical: space[14], backgroundColor: c.white, borderBottomWidth: 1, borderColor: c.slate100 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-          <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: c.blue100, backgroundColor: c.white, alignItems: 'center', justifyContent: 'center' }}>
-            <Waves size={18} color={c.blue600} />
-          </View>
-          <View>
-            <Text style={{ fontSize: fontSize.tiny, fontWeight: '800', color: c.blue600, textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
-              METROFLOW
-            </Text>
-            <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900, lineHeight: 20 }}>
-              Profile
-            </Text>
-          </View>
+      <View
+        style={{
+          paddingHorizontal: space[20],
+          paddingVertical: space[12],
+          borderBottomWidth: 1,
+          borderColor: c.slate100,
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: c.white,
+        }}
+      >
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: c.blue100,
+            backgroundColor: c.white,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Waves size={22} color={c.blue600} />
+        </View>
+        <View style={{ marginLeft: space[10] }}>
+          <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.blue600, letterSpacing: 0.8 }}>
+            METROFLOW
+          </Text>
+          <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>Profile</Text>
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }}>
-        {/* Avatar card */}
-        <View style={{ backgroundColor: c.white, padding: space[24], alignItems: 'center', borderBottomWidth: 1, borderColor: c.slate100 }}>
-          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: c.slate900, alignItems: 'center', justifyContent: 'center', marginBottom: space[12] }}>
-            <Text style={{ color: c.white, fontSize: fontSize.hero, fontWeight: '800' }}>{initials}</Text>
-          </View>
-          {editingName ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8], width: '100%' }}>
-              <TextInput
-                value={nameDraft}
-                onChangeText={setNameDraft}
-                autoFocus
-                editable={!savingName}
-                style={{ flex: 1, fontSize: fontSize.heading, fontWeight: '700', color: c.slate900, borderBottomWidth: 1, borderColor: c.slate300, textAlign: 'center', paddingVertical: space[4] }}
-              />
-              <TouchableOpacity onPress={() => void handleSaveName()} disabled={savingName} hitSlop={8}>
-                <Check size={20} color={c.green600} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: space[6] }}
-              onPress={() => {
-                if (!user) return;
-                setNameDraft(user.name);
-                setEditingName(true);
+      <ScrollView
+        style={{ flex: 1, backgroundColor: c.slate50 }}
+        contentContainerStyle={{ padding: space[20], gap: space[16], paddingBottom: space[28] }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Identity: the one dark card on the screen, same treatment as Home's route card */}
+        <View style={{ backgroundColor: c.inkBg, borderRadius: 20, padding: space[20], gap: space[16] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[14] }}>
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 36,
+                borderWidth: 2,
+                borderColor: c.blue300,
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
-              disabled={!user}
             >
-              <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>{displayName}</Text>
-              {user ? <Pencil size={13} color={c.slate400} /> : null}
-            </TouchableOpacity>
-          )}
-          <Text style={{ fontSize: fontSize.body, color: c.blue600, fontWeight: '600', marginTop: space[4] }}>
-            {user?.role && user.role !== 'EMERGENCY_DRIVER' ? user.role : 'Driver'}
-          </Text>
+              <Text style={{ fontSize: fontSize.jumbo, fontWeight: '800', color: c.onInk }}>
+                {initialsOf(displayName)}
+              </Text>
+            </View>
 
-          {/* Stats row */}
-          <View style={{ flexDirection: 'row', width: '100%', marginTop: space[20], paddingTop: space[16], borderTopWidth: 1, borderColor: c.slate100, gap: space[0] }}>
-            {[
-              { label: 'Clearance', value: `${vehicle?.clearanceCm ?? 28} cm`, icon: Gauge, color: c.slate900 },
-              { label: 'Account', value: user ? 'Signed in' : 'Guest', icon: ShieldCheck, color: user ? c.green600 : c.slate500 },
-            ].map((stat, i) => {
+            <View style={{ flex: 1, gap: space[6] }}>
+              {editingName ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
+                  <TextInput
+                    value={nameDraft}
+                    onChangeText={setNameDraft}
+                    autoFocus
+                    editable={!savingName}
+                    accessibilityLabel="Display name"
+                    style={{
+                      flex: 1,
+                      fontSize: fontSize.title,
+                      fontWeight: '800',
+                      color: c.onInk,
+                      borderBottomWidth: 1,
+                      borderColor: c.inkMuted,
+                      paddingVertical: space[2],
+                    }}
+                  />
+                  <TouchableOpacity
+                    onPress={() => void handleSaveName()}
+                    disabled={savingName}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save display name"
+                  >
+                    <Check size={20} color={c.green400} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit display name"
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: space[6] }}
+                  onPress={() => {
+                    if (!user) return;
+                    setNameDraft(user.name);
+                    setEditingName(true);
+                  }}
+                  disabled={!user}
+                >
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: fontSize.title, fontWeight: '800', color: c.onInk }}>
+                    {displayName}
+                  </Text>
+                  {user ? <Pencil size={13} color={c.inkMuted} /> : null}
+                </TouchableOpacity>
+              )}
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: space[4],
+                  borderWidth: 1,
+                  borderColor: c.blue300,
+                  borderRadius: 999,
+                  paddingHorizontal: space[10],
+                  paddingVertical: space[3],
+                }}
+              >
+                <ShieldCheck size={12} color={c.onInk} />
+                <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: c.onInk }}>{roleLabel}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: c.slate700, paddingTop: space[14] }}>
+            {stats.map((stat, i) => {
               const Icon = stat.icon;
               return (
-                <View key={stat.label} style={{ flex: 1, alignItems: 'center', borderLeftWidth: i > 0 ? 1 : 0, borderColor: c.slate100 }}>
-                  <Text style={{ fontSize: fontSize.tiny, fontWeight: '700', color: c.slate400, textTransform: 'uppercase', marginBottom: space[4] }}>{stat.label}</Text>
-                  <Icon size={14} color={stat.color} />
-                  <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: stat.color, marginTop: space[4] }}>{stat.value}</Text>
+                <View
+                  key={stat.label}
+                  style={{
+                    flex: 1,
+                    alignItems: 'center',
+                    gap: space[3],
+                    borderLeftWidth: i > 0 ? 1 : 0,
+                    borderColor: c.slate700,
+                  }}
+                >
+                  <Icon size={15} color={c.inkMuted} />
+                  <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.onInk }}>{stat.value}</Text>
+                  <Text
+                    style={{
+                      fontSize: fontSize.tiny,
+                      fontWeight: '700',
+                      color: c.inkMuted,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.6,
+                    }}
+                  >
+                    {stat.label}
+                  </Text>
                 </View>
               );
             })}
           </View>
         </View>
 
-        <View style={{ padding: space[16], gap: space[16] }}>
-          {/* Account details */}
-          <View style={{ backgroundColor: c.white, borderRadius: 16, borderWidth: 1, borderColor: c.slate200, overflow: 'hidden' }}>
-            <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: c.slate400, textTransform: 'uppercase', paddingHorizontal: space[16], paddingTop: space[14], paddingBottom: space[8] }}>
-              Account & Vehicle
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[16], paddingVertical: space[12], borderTopWidth: 1, borderColor: c.slate50, gap: space[10] }}>
-              <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                <Mail size={15} color={c.slate500} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Account Email</Text>
-                <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>{user?.email || '—'}</Text>
-              </View>
-            </View>
-            <View style={{ paddingHorizontal: space[16], paddingVertical: space[12], borderTopWidth: 1, borderColor: c.slate50, gap: space[10] }}>
-              <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>My garage (for flood-aware routing)</Text>
-              <VehicleGarage onActiveChange={refreshActiveVehicle} />
-            </View>
-          </View>
+        <Section c={c} title="Account & Vehicle">
+          <Row c={c} icon={Mail} title={user?.email || '—'} subtitle="Account email" />
 
-          {/* Settings */}
-          <View style={{ backgroundColor: c.white, borderRadius: 16, borderWidth: 1, borderColor: c.slate200, overflow: 'hidden' }}>
-            <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: c.slate400, textTransform: 'uppercase', paddingHorizontal: space[16], paddingTop: space[14], paddingBottom: space[8] }}>
-              Navigation
-            </Text>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}
-              onPress={() => router.push('/offline')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <Map size={15} color={c.slate500} />
-                </View>
-                <View>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Offline Maps</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Saved route data and reports waiting to sync</Text>
-                </View>
+          {editingPhone ? (
+            <View style={{ ...rowStyle(c), flexDirection: 'column', alignItems: 'stretch', gap: space[6] }}>
+              <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Mobile Number (for dispatch)</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
+                <TextInput
+                  value={phoneDraft}
+                  onChangeText={setPhoneDraft}
+                  autoFocus
+                  editable={!savingPhone}
+                  keyboardType="phone-pad"
+                  placeholder="+63 917 555 0100"
+                  placeholderTextColor={c.slate400}
+                  accessibilityLabel="Mobile number"
+                  style={{
+                    flex: 1,
+                    fontSize: fontSize.label,
+                    fontWeight: '600',
+                    color: c.slate900,
+                    borderBottomWidth: 1,
+                    borderColor: c.slate300,
+                    paddingVertical: space[4],
+                  }}
+                />
+                <TouchableOpacity
+                  onPress={() => void handleSavePhone()}
+                  disabled={savingPhone}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save mobile number"
+                >
+                  <Check size={20} color={c.green600} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setEditingPhone(false)}
+                  disabled={savingPhone}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel mobile number edit"
+                >
+                  <X size={18} color={c.slate400} />
+                </TouchableOpacity>
               </View>
-              <ChevronRight size={16} color={c.slate300} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Manage Quick Picks"
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}
-              onPress={() => setShowQuickPicks(true)}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <MapPin size={15} color={c.slate500} />
-                </View>
-                <View>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Quick Picks</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Saved destinations for faster safe routes</Text>
-                </View>
-              </View>
-              <ChevronRight size={16} color={c.slate300} />
-            </TouchableOpacity>
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <Clock size={15} color={c.slate500} />
-                </View>
-                <View>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Theme By Time Of Day</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Light by day, low-glare after dark</Text>
-                </View>
-              </View>
+            </View>
+          ) : (
+            <Row
+              c={c}
+              icon={Phone}
+              title={user?.mobile_number || 'Not set'}
+              subtitle="Call-back number dispatch uses on an active SOS"
+              a11yLabel="Edit mobile number"
+              onPress={() => {
+                if (!user) return;
+                setPhoneDraft(user.mobile_number ?? '');
+                setEditingPhone(true);
+              }}
+              right={user ? <Pencil size={13} color={c.slate400} /> : undefined}
+            />
+          )}
+
+          <View
+            style={{
+              paddingHorizontal: space[16],
+              paddingVertical: space[12],
+              borderTopWidth: 1,
+              borderColor: c.slate100,
+              gap: space[10],
+            }}
+          >
+            <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>My garage (for flood-aware routing)</Text>
+            <VehicleGarage onActiveChange={refreshActiveVehicle} />
+          </View>
+        </Section>
+
+        <Section c={c} title="Navigation">
+          <Row
+            c={c}
+            icon={Map}
+            title="Offline Maps"
+            subtitle="Saved route data and reports waiting to sync"
+            onPress={() => router.push('/offline')}
+          />
+          <Row
+            c={c}
+            icon={MapPin}
+            title="Quick Picks"
+            subtitle="Saved destinations for faster safe routes"
+            onPress={() => setShowQuickPicks(true)}
+          />
+        </Section>
+
+        <Section c={c} title="Alerts & Sharing">
+          <Row
+            c={c}
+            icon={BellRing}
+            title="Hazard Proximity Alerts"
+            subtitle="Warn me when a verified hazard is ahead"
+            right={
+              <Switch
+                value={prefs.hazardAlerts}
+                onValueChange={(v) => void handlePrefChange('hazardAlerts', v)}
+                accessibilityLabel="Hazard proximity alerts"
+              />
+            }
+          />
+          <Row
+            c={c}
+            icon={Gauge}
+            title="Share Location Telemetry"
+            subtitle="Send speed and position while navigating"
+            right={
+              <Switch
+                value={prefs.telemetry}
+                onValueChange={(v) => void handlePrefChange('telemetry', v)}
+                accessibilityLabel="Share location telemetry"
+              />
+            }
+          />
+          <Row
+            c={c}
+            icon={History}
+            title="My Reports"
+            subtitle="Past field reports and review status"
+            onPress={() => router.push('/report-history')}
+          />
+        </Section>
+
+        <Section c={c} title="App">
+          <Row
+            c={c}
+            icon={Clock}
+            title="Theme By Time Of Day"
+            subtitle="Light by day, low-glare after dark"
+            right={
               <Switch
                 value={prefs.autoTheme}
                 onValueChange={(v) => void handlePrefChange('autoTheme', v)}
                 accessibilityLabel="Theme by time of day"
               />
-            </View>
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <Moon size={15} color={c.slate500} />
-                </View>
-                <View>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Night / Storm Theme</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>
-                    {prefs.autoTheme ? 'Currently set by the clock' : 'Low-glare navigation screen'}
-                  </Text>
-                </View>
-              </View>
+            }
+          />
+          <Row
+            c={c}
+            icon={Moon}
+            title="Night / Storm Theme"
+            subtitle={prefs.autoTheme ? 'Currently set by the clock' : 'Low-glare navigation screen'}
+            right={
               <Switch
                 value={themeMode === 'storm'}
                 onValueChange={toggleTheme}
                 disabled={prefs.autoTheme}
                 accessibilityLabel="Night or storm navigation theme"
               />
-            </View>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}
-              onPress={() => router.push('/report-history')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <History size={15} color={c.slate500} />
-                </View>
-                <View>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>My Reports</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Past field reports and review status</Text>
-                </View>
-              </View>
-              <ChevronRight size={16} color={c.slate300} />
-            </TouchableOpacity>
-          </View>
+            }
+          />
+          <Row
+            c={c}
+            icon={HelpCircle}
+            title="Help & Support"
+            onPress={() =>
+              void Linking.openURL('mailto:support@metroflow.lgu?subject=MetroFlow%20Driver%20App')
+            }
+          />
+          <Row
+            c={c}
+            icon={Info}
+            title={Constants.expoConfig?.version ?? '—'}
+            subtitle={
+              Constants.nativeBuildVersion ? `Build ${Constants.nativeBuildVersion}` : 'App version'
+            }
+            a11yLabel="App version"
+          />
+        </Section>
 
-          {/* Alerts */}
-          <View style={{ backgroundColor: c.white, borderRadius: 16, borderWidth: 1, borderColor: c.slate200, overflow: 'hidden' }}>
-            <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: c.slate400, textTransform: 'uppercase', paddingHorizontal: space[16], paddingTop: space[14], paddingBottom: space[8] }}>
-              Alerts &amp; Sharing
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10], flex: 1, paddingRight: space[12] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <BellRing size={15} color={c.slate500} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Hazard Proximity Alerts</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Warn me when a verified hazard is ahead</Text>
-                </View>
-              </View>
-              <Switch
-                value={prefs.hazardAlerts}
-                onValueChange={(v) => void handlePrefChange('hazardAlerts', v)}
-                accessibilityLabel="Hazard proximity alerts"
-              />
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10], flex: 1, paddingRight: space[12] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <Gauge size={15} color={c.slate500} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Share Location Telemetry</Text>
-                  <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Send speed and position while navigating</Text>
-                </View>
-              </View>
-              <Switch
-                value={prefs.telemetry}
-                onValueChange={(v) => void handlePrefChange('telemetry', v)}
-                accessibilityLabel="Share location telemetry"
-              />
-            </View>
-          </View>
-
-          {/* App */}
-          <View style={{ backgroundColor: c.white, borderRadius: 16, borderWidth: 1, borderColor: c.slate200, overflow: 'hidden' }}>
-            <Text style={{ fontSize: fontSize.micro, fontWeight: '700', color: c.slate400, textTransform: 'uppercase', paddingHorizontal: space[16], paddingTop: space[14], paddingBottom: space[8] }}>
-              App
-            </Text>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space[16], paddingVertical: space[13], borderTopWidth: 1, borderColor: c.slate50 }}
-              onPress={() => void Linking.openURL('mailto:support@metroflow.lgu?subject=MetroFlow%20Driver%20App')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-                <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <HelpCircle size={15} color={c.slate500} />
-                </View>
-                <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>Help &amp; Support</Text>
-              </View>
-              <ChevronRight size={16} color={c.slate300} />
-            </TouchableOpacity>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space[16], paddingVertical: space[12], borderTopWidth: 1, borderColor: c.slate50, gap: space[10] }}>
-              <View style={{ width: 32, height: 32, backgroundColor: c.slate100, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                <Info size={15} color={c.slate500} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: fontSize.micro, color: c.slate400 }}>Version</Text>
-                <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.slate900 }}>
-                  {Constants.expoConfig?.version ?? '—'}
-                  {Constants.nativeBuildVersion ? ` (build ${Constants.nativeBuildVersion})` : ''}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Sign out */}
-          <TouchableOpacity
-            style={{ backgroundColor: c.white, paddingVertical: space[14], borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space[8], borderWidth: 1, borderColor: c.red200 }}
-            onPress={handleSignOut}
-          >
-            <LogOut size={16} color={c.red600} />
-            <Text style={{ color: c.red600, fontWeight: '700', fontSize: fontSize.label }}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+          onPress={handleSignOut}
+          style={{
+            backgroundColor: c.white,
+            borderRadius: 18,
+            paddingVertical: space[14],
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: space[8],
+            borderWidth: 1,
+            borderColor: c.red200,
+          }}
+        >
+          <LogOut size={16} color={c.red600} />
+          <Text style={{ color: c.red600, fontWeight: '800', fontSize: fontSize.label }}>Sign Out</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <QuickPicks

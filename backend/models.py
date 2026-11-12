@@ -50,6 +50,11 @@ class User(Base):
         nullable=True,
         comment="Rescue unit a driver account is assigned to; null for portal accounts",
     )
+    mobile_number = Column(
+        String(20),
+        nullable=True,
+        comment="Call-back number dispatch uses while this account has an active SOS",
+    )
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -247,6 +252,16 @@ class SOSRequest(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     note = Column(Text, nullable=True, comment="Optional text note")
+    reporter_phone = Column(
+        String(20),
+        nullable=True,
+        comment="Reporter's mobile number as it was when the SOS was raised",
+    )
+    plate_number = Column(
+        String(16),
+        nullable=True,
+        comment="Plate of the vehicle the reporter named, for on-scene identification",
+    )
     vehicle_id = Column(
         Integer,
         ForeignKey("vehicles.vehicle_id"),

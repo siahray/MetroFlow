@@ -16,6 +16,7 @@ import {
   updateUser,
 } from "@/lib/users";
 import { useToast } from "./toast-provider";
+import { ConfirmDialog } from "./confirm-dialog";
 import { ErrorNotice } from "./error-notice";
 import { Skeleton } from "./skeleton";
 
@@ -35,6 +36,8 @@ export function UsersManagement() {
     vehicle_id: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [removing, setRemoving] = useState<{ id: number; name: string } | null>(null);
+  const [removingBusy, setRemovingBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -89,14 +92,18 @@ export function UsersManagement() {
     }
   };
 
-  const handleDelete = async (userId: number, name: string) => {
-    if (!confirm(`Are you sure you want to delete user "${name}"?`)) return;
+  const handleDelete = async () => {
+    if (!removing || removingBusy) return;
+    setRemovingBusy(true);
     try {
-      await deleteUser(userId);
+      await deleteUser(removing.id);
       show("User deleted successfully");
+      setRemoving(null);
       loadUsers();
     } catch (cause) {
       show(cause instanceof ApiError ? cause.message : "Failed to delete user");
+    } finally {
+      setRemovingBusy(false);
     }
   };
 
@@ -251,7 +258,7 @@ export function UsersManagement() {
                         <Edit className="h-3 w-3 text-slate-600" />
                       </button>
                       <button
-                        onClick={() => handleDelete(user.user_id, user.name)}
+                        onClick={() => setRemoving({ id: user.user_id, name: user.name })}
                         className="rounded border border-rose-200 bg-white px-2 py-1 hover:bg-rose-50"
                         title="Delete user"
                       >
@@ -504,6 +511,19 @@ export function UsersManagement() {
           </div>
         </div>
       )}
+
+      {removing ? (
+        <ConfirmDialog
+          title={`Delete user "${removing.name}"?`}
+          confirmLabel="Delete user"
+          busy={removingBusy}
+          onConfirm={() => void handleDelete()}
+          onClose={() => setRemoving(null)}
+        >
+          Their sign-in is revoked immediately and the removal is recorded in the audit log. This
+          cannot be undone.
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

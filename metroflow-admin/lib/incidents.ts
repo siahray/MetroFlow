@@ -54,6 +54,10 @@ export type Incident = {
   longitude?: number | null;
   /** Only a depth the reporter actually gave; never a guessed default. */
   waterDepthCm?: number | null;
+  /** SOS only: the account's call-back number, full here and masked in the queue. */
+  reporterPhone?: string | null;
+  /** SOS only: plate the reporter's active garage vehicle carried. */
+  plateNumber?: string | null;
   nearestUnit?: {
     callSign: string;
     type: string;
@@ -127,6 +131,13 @@ export function primarySource(flags: {
   if (flags.escalated) return "escalated";
   if (flags.sensorMismatch) return "sensor";
   return flags.hasPhoto ? "photo" : "other";
+}
+
+/** Tag tint shared by the queue row and the incident detail header. */
+export function incidentTagClass(tag: string): string {
+  if (/impassable|escalated/i.test(tag)) return "border-amber-200 bg-amber-50 text-amber-700";
+  if (/rising|water/i.test(tag)) return "border-sky-200 bg-sky-50 text-sky-700";
+  return "border-slate-200 bg-white text-slate-600";
 }
 
 /** FSD-FR-026: filters are independent flags, so counts can overlap. */

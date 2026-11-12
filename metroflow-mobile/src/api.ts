@@ -91,6 +91,8 @@ export type AuthUser = {
   role: string;
   /** The rescue unit this driver reports as; null for guests and office roles. */
   vehicle_id: number | null;
+  /** Call-back number dispatch uses while this driver has an active SOS. */
+  mobile_number: string | null;
 };
 
 export type SOSRequest = {
@@ -98,6 +100,9 @@ export type SOSRequest = {
   latitude: number;
   longitude: number;
   note: string | null;
+  /** The account's number at the moment the SOS was raised, for the dispatcher. */
+  reporter_phone: string | null;
+  plate_number: string | null;
   vehicle_id: number | null;
   status: string;
   created_at: string | null;
@@ -123,6 +128,14 @@ export function updateMyName(name: string): Promise<AuthUser> {
   return request<AuthUser>("/api/v1/auth/me", {
     method: "PATCH",
     body: JSON.stringify({ name }),
+  });
+}
+
+/** Set or clear the call-back number dispatch gets on an active SOS. */
+export function updateMyMobile(mobileNumber: string | null): Promise<AuthUser> {
+  return request<AuthUser>("/api/v1/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ mobile_number: mobileNumber }),
   });
 }
 
@@ -152,6 +165,7 @@ export function createSOS(data: {
   latitude: number;
   longitude: number;
   note?: string;
+  plate_number?: string;
 }): Promise<SOSRequest> {
   return request<SOSRequest>("/api/v1/sos", {
     method: "POST",

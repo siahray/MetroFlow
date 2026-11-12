@@ -207,6 +207,12 @@ class SOSCreate(BaseModel):
     latitude: float
     longitude: float
     note: str | None = None
+    plate_number: str | None = None
+
+    @field_validator("plate_number")
+    @classmethod
+    def _plate(cls, value: str | None) -> str | None:
+        return _normalise_plate(value)
 
 
 class SOSResponse(BaseModel):
@@ -214,6 +220,8 @@ class SOSResponse(BaseModel):
     latitude: float
     longitude: float
     note: str | None = None
+    reporter_phone: str | None = None
+    plate_number: str | None = None
     vehicle_id: int | None = None
     status: str
     created_at: datetime | None = None
@@ -300,6 +308,33 @@ class TelemetryPing(BaseModel):
 # What a unit can be doing. DISPATCHED is set by the dispatch flow; an administrator may also
 # mark a unit AVAILABLE, ON_SCENE or OUT_OF_SERVICE.
 VEHICLE_STATUSES = ("AVAILABLE", "DISPATCHED", "ON_SCENE", "OUT_OF_SERVICE")
+
+
+def _normalise_mobile(value: str | None) -> str | None:
+    """One stored shape for a phone number: an optional leading +, then digits."""
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    digits = "".join(ch for ch in cleaned if ch.isdigit())
+    if not 7 <= len(digits) <= 15:
+        raise ValueError("mobile_number must contain 7 to 15 digits")
+    return f"+{digits}" if cleaned.startswith("+") else digits
+
+
+def _normalise_plate(value: str | None) -> str | None:
+    """Uppercase and collapse whitespace; a blank plate means "not given"."""
+    if value is None:
+        return None
+    cleaned = " ".join(value.split()).upper()
+    if not cleaned:
+        return None
+    if len(cleaned) > 16:
+        raise ValueError("plate_number must be 16 characters or fewer")
+    if not all(ch.isalnum() or ch in " -" for ch in cleaned):
+        raise ValueError("plate_number may only contain letters, digits, spaces and dashes")
+    return cleaned
 
 
 def _normalise_vehicle_status(value: str | None) -> str | None:
@@ -434,6 +469,7 @@ class UserResponse(BaseModel):
     email: str
     role: str
     vehicle_id: int | None = None
+    mobile_number: str | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -455,9 +491,17 @@ class UserCreateRequest(BaseModel):
 
 
 class SelfUpdateRequest(BaseModel):
-    """A signed-in user editing their own name (portal and driver profile)."""
+    """A signed-in user editing their own profile (portal and driver profile)."""
 
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str | None = Field(None, min_length=1, max_length=100)
+    mobile_number: str | None = Field(
+        None, description="Call-back number dispatch uses on an active SOS; null clears it"
+    )
+
+    @field_validator("mobile_number")
+    @classmethod
+    def _mobile(cls, value: str | None) -> str | None:
+        return _normalise_mobile(value)
 
 
 class UserUpdateRequest(BaseModel):

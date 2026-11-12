@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { ageLabel, type FieldReport } from "@/lib/reports";
+import { ConfirmDialog } from "./confirm-dialog";
 
 export type ReportFilter = "all" | "PHOTO" | "CALL" | "SENSOR";
 
@@ -62,6 +63,7 @@ export function ReportQueue({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
 
   function toggleChecked(id: string) {
     setChecked((prev) => {
@@ -77,6 +79,7 @@ export function ReportQueue({
     setChecked(new Set());
     setRejecting(false);
     setRejectReason("");
+    setConfirmingApprove(false);
   }
 
   function confirmApprove() {
@@ -148,7 +151,7 @@ export function ReportQueue({
               <button
                 type="button"
                 disabled={checked.size === 0 || busy}
-                onClick={confirmApprove}
+                onClick={() => setConfirmingApprove(true)}
                 className="rounded-lg bg-emerald-600 px-2.5 py-1 font-bold text-white disabled:opacity-40"
               >
                 Approve selected
@@ -313,6 +316,20 @@ export function ReportQueue({
           );
         })}
       </div>
+
+      {confirmingApprove ? (
+        <ConfirmDialog
+          title={`Approve ${checked.size} report${checked.size === 1 ? "" : "s"}?`}
+          confirmLabel={`Approve ${checked.size} report${checked.size === 1 ? "" : "s"}`}
+          tone="primary"
+          busy={busy}
+          onConfirm={confirmApprove}
+          onClose={() => setConfirmingApprove(false)}
+        >
+          Approving creates and publishes a hazard at each report&apos;s location, immediately
+          visible to driver routing. This cannot be undone from the queue.
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

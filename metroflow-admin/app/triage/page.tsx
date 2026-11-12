@@ -286,7 +286,6 @@ export default function TriagePage() {
     {
       label: "Dispatched SOS",
       value: String(assignedCount),
-      detail: assignedCount === 1 ? "1 unit responding" : `${assignedCount} units responding`,
       trend: { text: "Active", className: "text-emerald-700" },
       icon: CircleCheck,
       iconClassName: "border-emerald-100 bg-emerald-50 text-emerald-600",
@@ -294,7 +293,6 @@ export default function TriagePage() {
     {
       label: "Fleet Readiness",
       value: `${availableVehiclesCount}/${totalVehiclesCount}`,
-      detail: `${availableVehiclesCount} units ready for callout`,
       trend: { text: "Standby", className: "text-sky-700" },
       icon: Truck,
       iconClassName: "border-sky-100 bg-sky-50 text-sky-600",
@@ -302,7 +300,6 @@ export default function TriagePage() {
     {
       label: "Active Hazards",
       value: String(activeHazardsCount),
-      detail: "Monitored flood closures",
       trend: { text: "Live", className: "text-indigo-600" },
       icon: Shield,
       iconClassName: "border-indigo-100 bg-indigo-50 text-indigo-600",
@@ -311,59 +308,56 @@ export default function TriagePage() {
 
   return (
     <AppShell activeItem="triage" title="Incident Triage & Verification">
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      {/* One compact strip: the numbers a dispatcher scans, plus the call-in
+          action in the same band instead of a separate row. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600">
+            <Siren className="h-4 w-4" />
+          </span>
           <div>
-            <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+            <p className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
               Pending Triage
             </p>
-            <div className="mt-1 flex items-baseline gap-2">
+            <p className="flex items-baseline gap-1.5">
               <span className="text-kpi text-slate-900">{pendingCount}</span>
-            </div>
-            <p className="mt-1 text-[11px] text-slate-500">Awaiting dispatch review</p>
-          </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600">
-            <Siren className="h-5 w-5" />
+              <span className="text-[11px] text-slate-500">awaiting review</span>
+            </p>
           </div>
         </div>
+
+        <span className="hidden h-9 w-px bg-slate-200 sm:block" aria-hidden="true" />
 
         {kpiCards.map((card) => {
           const Icon = card.icon;
 
           return (
-            <div
-              key={card.label}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-            >
+            <div key={card.label} className="flex items-center gap-2.5">
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border ${card.iconClassName}`}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
               <div>
-                <p className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                <p className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">
                   {card.label}
                 </p>
-                <div className="mt-1 flex items-baseline gap-2">
+                <p className="flex items-baseline gap-1.5">
                   <span className="text-kpi text-slate-900">{card.value}</span>
                   {card.trend ? (
-                    <span
-                      className={`flex items-center text-xs font-medium ${card.trend.className}`}
-                    >
+                    <span className={`text-[11px] font-medium ${card.trend.className}`}>
                       {card.trend.text}
                     </span>
                   ) : null}
-                </div>
-                <p className="mt-1 text-[11px] text-slate-500">{card.detail}</p>
-              </div>
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-lg border ${card.iconClassName}`}
-              >
-                <Icon className="h-5 w-5" />
+                </p>
               </div>
             </div>
           );
         })}
-      </div>
 
-      {/* FSD-FR-087: a distress call that arrives by telephone is logged here. */}
-      <div className="flex justify-end">
+        <span className="flex-1" />
+
+        {/* FSD-FR-087: a distress call that arrives by telephone is logged here. */}
         <button
           type="button"
           onClick={() => setLogOpen(true)}
