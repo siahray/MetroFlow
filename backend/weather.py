@@ -120,3 +120,20 @@ def cached_rain_forecast() -> list[tuple[datetime, float]] | None:
     if _forecast_cache is None or now - _forecast_cache[0] >= _FORECAST_CACHE_TTL:
         _forecast_cache = (now, fetch_rain_forecast())
     return _forecast_cache[1]
+
+
+# Separate from the rain-gate ingest cadence above (`due_for_refresh`, which
+# also writes a sensor reading): this is a read-only "what is it doing right
+# now" value for a human-facing panel (the admin simulation toggle below), so
+# it gets its own short cache instead of sharing that ingest's 10-minute gate.
+_RAIN_RATE_CACHE_TTL = timedelta(minutes=2)
+_rain_rate_cache: tuple[datetime, tuple[float, datetime] | None] | None = None
+
+
+def cached_rain_rate() -> tuple[float, datetime] | None:
+    """``fetch_rain_rate``, reused for ``_RAIN_RATE_CACHE_TTL`` before refetching."""
+    global _rain_rate_cache
+    now = datetime.now(UTC)
+    if _rain_rate_cache is None or now - _rain_rate_cache[0] >= _RAIN_RATE_CACHE_TTL:
+        _rain_rate_cache = (now, fetch_rain_rate())
+    return _rain_rate_cache[1]

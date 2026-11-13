@@ -196,6 +196,15 @@ class RouteResponse(BaseModel):
             "route is the plain fastest path; FLOOD_SAFE when water is avoided."
         ),
     )
+    source: Literal["ENGINE", "MAPBOX"] = Field(
+        default="ENGINE",
+        description=(
+            "ENGINE: the in-house TD-A* search (always used for FLOOD_SAFE, and "
+            "the FASTEST fallback). MAPBOX: the Mapbox Directions API, used only "
+            "for a FASTEST request when nothing in the graph is flooded -- it has "
+            "no segment-level flood data, so `segments` and `hazards` are empty."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -444,7 +453,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
-    role: str | None = "EMERGENCY_DRIVER"
+    role: str | None = "PUBLIC_DRIVER"
     verification_code: str | None = None
 
 
@@ -482,11 +491,11 @@ class UserCreateRequest(BaseModel):
     email: str = Field(..., description="Email address (unique)")
     password: str = Field(..., min_length=8, description="Password (min 8 characters)")
     role: str = Field(
-        default="LGU_DISPATCHER",
-        description="Role: SUPER_ADMIN, LGU_DISPATCHER, or EMERGENCY_DRIVER",
+        default="ADMIN",
+        description="Role: SUPER_ADMIN, ADMIN, RESPONDER, or PUBLIC_DRIVER",
     )
     vehicle_id: int | None = Field(
-        None, description="Rescue unit this driver account reports as (EMERGENCY_DRIVER)"
+        None, description="Rescue unit this driver account reports as (RESPONDER)"
     )
 
 
@@ -511,10 +520,10 @@ class UserUpdateRequest(BaseModel):
     email: str | None = None
     role: str | None = Field(
         None,
-        description="Role: SUPER_ADMIN, LGU_DISPATCHER, or EMERGENCY_DRIVER",
+        description="Role: SUPER_ADMIN, ADMIN, RESPONDER, or PUBLIC_DRIVER",
     )
     vehicle_id: int | None = Field(
-        None, description="Rescue unit this driver account reports as (EMERGENCY_DRIVER)"
+        None, description="Rescue unit this driver account reports as (RESPONDER)"
     )
     # Password update is a separate operation for security
 
@@ -571,6 +580,21 @@ class ForecastResponse(BaseModel):
     generated_at: datetime
     rain: RainForecast | None = None
     river: RiverForecast | None = None
+
+
+class LiveRainfallResponse(BaseModel):
+    """Current Open-Meteo rain rate for the admin simulation panel's live-weather toggle.
+
+    A display/input value only -- it never writes to the sensor or advisory
+    tables itself (that is the separate rain-gate ingest in CR-004).
+    """
+
+    available: bool = Field(description="False when the live feed could not be reached")
+    rainfall_mm_hr: float = Field(description="0 when unavailable; never used as a routing input")
+    as_of: datetime | None = Field(
+        default=None, description="When Open-Meteo recorded this reading"
+    )
+    source: str = "Open-Meteo"
 
 
 class SensorReadingRequest(BaseModel):

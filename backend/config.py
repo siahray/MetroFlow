@@ -106,6 +106,19 @@ class Settings(BaseSettings):
     # corridor's 50 km/h limit, and the TSD lists the value as configurable.
     warning_radius_m: int = 200
 
+    # --- Dry-state routing provider --------------------------------------------
+    # Used only when routing_mode() has already decided every edge in the graph
+    # is clear (no water, advisory or closure anywhere): a real road network and
+    # live traffic serve a plain fastest path better than our own graph, which
+    # was built to carry flood state, not drive quality. FLOOD_SAFE never uses
+    # this -- only the in-house TD-A* engine knows about water depth and
+    # vehicle clearance. A missing token or a failed call falls back to that
+    # same in-house engine, so Mapbox being unset or down never breaks routing.
+    mapbox_access_token: str | None = Field(
+        default=None, validation_alias="METROFLOW_MAPBOX_ACCESS_TOKEN"
+    )
+    mapbox_directions_enabled: bool = True
+
     # --- Vehicle telemetry (FSD-FR-072) ---------------------------------------
     # Minimum interval in seconds between telemetry updates for a vehicle.
     # Batches arriving faster than this are rejected with 429 (VAL-020, TTC-022).

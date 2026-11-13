@@ -125,18 +125,18 @@ def test_hazard_stream_is_open_to_any_authenticated_user():
     assert not any(guard in calls for guard in PORTAL_GUARDS)
 
 
-@pytest.mark.parametrize("role", ["LGU_DISPATCHER", "SUPER_ADMIN"])
+@pytest.mark.parametrize("role", ["ADMIN", "SUPER_ADMIN"])
 def test_require_roles_admits_the_listed_roles(role: str):
-    dependency = require_roles("LGU_DISPATCHER", "SUPER_ADMIN")
+    dependency = require_roles("ADMIN", "SUPER_ADMIN")
     user = SimpleNamespace(role=role)
 
     assert dependency(current_user=user) is user
 
 
 def test_require_roles_rejects_every_other_role():
-    dependency = require_roles("LGU_DISPATCHER", "SUPER_ADMIN")
+    dependency = require_roles("ADMIN", "SUPER_ADMIN")
 
     with pytest.raises(HTTPException) as excinfo:
-        dependency(current_user=SimpleNamespace(role="EMERGENCY_DRIVER"))
+        dependency(current_user=SimpleNamespace(role="PUBLIC_DRIVER"))
 
     assert excinfo.value.status_code == 403

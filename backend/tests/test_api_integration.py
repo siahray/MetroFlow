@@ -23,6 +23,7 @@ import pytest
 from evidence import build_jpeg
 from fastapi.testclient import TestClient
 
+import mapbox_directions
 import river_discharge
 import weather
 from config import settings
@@ -1096,6 +1097,155 @@ def test_a_verified_hazard_closes_its_edge_and_shows_on_the_route(client, create
     assert reported["warning_radius_m"] == settings.warning_radius_m
 
 
+def test_avoid_edges_excludes_them_or_reports_no_alternative(client, created_records):
+    baseline = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert baseline.status_code == 200, baseline.text
+    used_edges = [segment["edge_id"] for segment in baseline.json()["segments"]]
+    assert used_edges, "baseline route should traverse at least one edge"
+
+    alternative = client.get(
+        "/api/v1/routing/navigate",
+        params={
+            "start_node": 1,
+            "target_node": 4,
+            "clearance_cm": 60,
+            "avoid_edges": used_edges,
+        },
+    )
+    if alternative.status_code == 200:
+        alt_edges = [segment["edge_id"] for segment in alternative.json()["segments"]]
+        assert not set(alt_edges) & set(used_edges), (
+            "an alternative route must not reuse an edge it was asked to avoid"
+        )
+    else:
+        assert alternative.status_code == 404, alternative.text
+
+
+def _fake_mapbox_route(distance_m=1000.0, duration_s=90.0):
+    return mapbox_directions.MapboxRoute(
+        geometry={"type": "LineString", "coordinates": [[121.0567, 14.5537], [121.058, 14.555]]},
+        distance_m=distance_m,
+        duration_s=duration_s,
+        steps=[
+            mapbox_directions.MapboxStep(
+                manoeuvre="DEPART", road_name="Test Rd", distance_m=distance_m, text="Head north"
+            ),
+            mapbox_directions.MapboxStep(
+                manoeuvre="ARRIVE",
+                road_name=None,
+                distance_m=0.0,
+                text="Arrive at your destination",
+            ),
+        ],
+    )
+
+
+def test_dry_route_uses_mapbox_when_configured(client, monkeypatch):
+    monkeypatch.setattr(settings, "mapbox_access_token", "test-token")
+    monkeypatch.setattr(settings, "mapbox_directions_enabled", True)
+    monkeypatch.setattr(
+        mapbox_directions, "fetch_driving_route", lambda *a, **k: _fake_mapbox_route()
+    )
+
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "MAPBOX"
+    assert body["routing_mode"] == "FASTEST"
+    assert body["segments"] == []
+    assert body["hazards"] == []
+    assert body["instructions"][0]["manoeuvre"] == "DEPART"
+
+
+def test_mapbox_failure_falls_back_to_the_in_house_engine(client, monkeypatch):
+    monkeypatch.setattr(settings, "mapbox_access_token", "test-token")
+    monkeypatch.setattr(settings, "mapbox_directions_enabled", True)
+    monkeypatch.setattr(mapbox_directions, "fetch_driving_route", lambda *a, **k: None)
+
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "ENGINE"
+    assert body["segments"] != []
+
+
+def test_mapbox_is_never_used_without_a_token(client, monkeypatch):
+    monkeypatch.setattr(settings, "mapbox_access_token", None)
+    monkeypatch.setattr(
+        mapbox_directions,
+        "fetch_driving_route",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("Mapbox must not be called")),
+    )
+
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["source"] == "ENGINE"
+
+
+def test_mapbox_is_skipped_for_an_explicit_unsafe_or_alternative_request(client, monkeypatch):
+    """ignore_hazards and avoid_edges both mean "use our own graph on purpose"."""
+    monkeypatch.setattr(settings, "mapbox_access_token", "test-token")
+    monkeypatch.setattr(settings, "mapbox_directions_enabled", True)
+    monkeypatch.setattr(
+        mapbox_directions,
+        "fetch_driving_route",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("Mapbox must not be called")),
+    )
+
+    ignore_hazards_response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60, "ignore_hazards": True},
+    )
+    assert ignore_hazards_response.status_code == 200, ignore_hazards_response.text
+    assert ignore_hazards_response.json()["source"] == "ENGINE"
+
+    avoid_edges_response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60, "avoid_edges": [1]},
+    )
+    assert avoid_edges_response.status_code == 200, avoid_edges_response.text
+    assert avoid_edges_response.json()["source"] == "ENGINE"
+
+
+def test_mapbox_is_never_used_for_flood_safe_routing(client, created_records, monkeypatch):
+    """Only our own engine knows about water depth and clearance (FLOOD_SAFE)."""
+    monkeypatch.setattr(settings, "mapbox_access_token", "test-token")
+    monkeypatch.setattr(settings, "mapbox_directions_enabled", True)
+    monkeypatch.setattr(
+        mapbox_directions,
+        "fetch_driving_route",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("Mapbox must not be called")),
+    )
+
+    report = submit_report(
+        client, created_records, depth="KNEE", latitude=14.5537, longitude=121.0567
+    )
+    approved = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
+    assert approved.status_code == 200, approved.text
+    created_records[1].append(approved.json()["hazard_id"])
+
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={"start_node": 1, "target_node": 4, "clearance_cm": 60},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "ENGINE"
+    assert body["routing_mode"] == "FLOOD_SAFE"
+
+
 def test_caution_hazard_stays_drivable_but_is_reported(client, created_records):
     report = submit_report(
         client, created_records, depth="ANKLE", latitude=14.5537, longitude=121.0567
@@ -1124,7 +1274,7 @@ def test_caution_hazard_stays_drivable_but_is_reported(client, created_records):
 
 
 def _make_driver_headers(client) -> tuple[dict, str]:
-    """Register a fresh EMERGENCY_DRIVER account and return its auth headers + email."""
+    """Register a fresh PUBLIC_DRIVER account and return its auth headers + email."""
     from uuid import uuid4
 
     email = f"telemetry-driver-{uuid4()}@example.test"
@@ -1320,7 +1470,7 @@ def test_get_sos_request_by_id(client):
 
 
 def _make_linked_driver(client, vehicle_id: int) -> tuple[dict, str, int]:
-    """Create an EMERGENCY_DRIVER bound to `vehicle_id`; return headers, email and id."""
+    """Create a RESPONDER bound to `vehicle_id`; return headers, email and id."""
     from uuid import uuid4
 
     email = f"mission-driver-{uuid4()}@example.test"
@@ -1330,7 +1480,7 @@ def _make_linked_driver(client, vehicle_id: int) -> tuple[dict, str, int]:
             "name": "Mission Driver",
             "email": email,
             "password": "mission-pass-123",
-            "role": "EMERGENCY_DRIVER",
+            "role": "RESPONDER",
             "vehicle_id": vehicle_id,
         },
     )
@@ -1669,12 +1819,12 @@ def test_user_management_crud(client):
             "name": "Test Dispatcher",
             "email": "test.dispatcher@example.com",
             "password": "SecurePass123",
-            "role": "LGU_DISPATCHER",
+            "role": "ADMIN",
         },
     )
     assert create_resp.status_code == 201
     user_id = create_resp.json()["user_id"]
-    assert create_resp.json()["role"] == "LGU_DISPATCHER"
+    assert create_resp.json()["role"] == "ADMIN"
 
     # Verify user appears in list
     users_after = client.get("/api/v1/users")
@@ -1704,7 +1854,7 @@ def test_user_management_crud(client):
             "name": "Another User",
             "email": "test.dispatcher@example.com",
             "password": "AnotherPass123",
-            "role": "LGU_DISPATCHER",
+            "role": "ADMIN",
         },
     )
     assert duplicate.status_code == 409
@@ -1747,7 +1897,7 @@ def test_user_management_last_admin_protection(client):
     """
     users = client.get("/api/v1/users")
     assert users.status_code == 200
-    admins = [u for u in users.json() if u["role"] in ("SUPER_ADMIN", "LGU_DISPATCHER")]
+    admins = [u for u in users.json() if u["role"] in ("SUPER_ADMIN", "ADMIN")]
 
     if len(admins) == 1:
         admin_id = admins[0]["user_id"]
@@ -2221,6 +2371,57 @@ def test_forecast_is_display_only_and_never_touches_flood_state(client, monkeypa
     assert all(e["source"] != "forecast" for e in quiet_state["edges"])
 
 
+def test_live_rainfall_reports_the_current_reading_for_the_admin_toggle(client, monkeypatch):
+    """The admin simulation panel's live-weather toggle reads this, never flood-state."""
+    monkeypatch.setattr(weather, "_rain_rate_cache", None)
+    reading_at = datetime.now(UTC).replace(microsecond=0)
+    monkeypatch.setattr(weather, "fetch_rain_rate", lambda: (12.5, reading_at))
+
+    response = client.get("/api/v1/weather/live-rainfall")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["available"] is True
+    assert body["rainfall_mm_hr"] == 12.5
+    assert body["source"] == "Open-Meteo"
+
+
+def test_live_rainfall_reports_unavailable_on_a_feed_failure(client, monkeypatch):
+    monkeypatch.setattr(weather, "_rain_rate_cache", None)
+    monkeypatch.setattr(weather, "fetch_rain_rate", lambda: None)
+
+    response = client.get("/api/v1/weather/live-rainfall")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["available"] is False
+    assert body["rainfall_mm_hr"] == 0.0
+    assert body["as_of"] is None
+
+
+def test_live_rainfall_requires_admin(client, monkeypatch):
+    from uuid import uuid4
+
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    monkeypatch.setattr(weather, "_rain_rate_cache", None)
+    monkeypatch.setattr(weather, "fetch_rain_rate", lambda: (3.0, datetime.now(UTC)))
+
+    email = f"live-rainfall-driver-{uuid4()}@example.test"
+    registered = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Driver", "email": email, "password": "driver-pass-123"},
+    )
+    assert registered.status_code == 201, registered.text
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "driver-pass-123"})
+    assert login.status_code == 200, login.text
+
+    with TestClient(app) as driver_client:
+        driver_client.headers["Authorization"] = f"Bearer {login.json()['access_token']}"
+        response = driver_client.get("/api/v1/weather/live-rainfall")
+    assert response.status_code == 403, response.text
+
+
 def test_flood_state_requires_a_session(client):
     from fastapi.testclient import TestClient
 
@@ -2346,7 +2547,7 @@ def test_a_dispatcher_can_see_the_fleet_but_not_change_it(client):
             "name": "Fleet Test Dispatcher",
             "email": "fleet.dispatcher@example.com",
             "password": "SecurePass123",
-            "role": "LGU_DISPATCHER",
+            "role": "ADMIN",
         },
     )
     assert created.status_code == 201, created.text

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, defer
 import audit
 import events
 import flood_state
+import mapbox_directions
 import models
 import network_seed
 import reports
@@ -33,6 +34,7 @@ from hydrology import calculate_scs_cn_runoff, compute_node_water_depth
 from rate_limit import prune as prune_rate_limits
 from rate_limit import rate_limit
 from routing import (
+    FASTEST,
     FLOOD_SAFE,
     build_instructions,
     classify_passability,
@@ -58,6 +60,7 @@ from schemas import (
     HazardResponse,
     HazardUpdate,
     IncidentLogItem,
+    LiveRainfallResponse,
     LoginRequest,
     NearestSensorReading,
     NetworkStateResponse,
@@ -110,9 +113,13 @@ from schemas import (
 
 
 # Portal roles and field roles are separate: a driver account is authenticated
-# but never privileged, so the two sets are kept explicit.
-ADMIN_ROLES = {"LGU_DISPATCHER", "SUPER_ADMIN"}
-DRIVER_ROLES = {"EMERGENCY_DRIVER"}
+# but never privileged, so the two sets are kept explicit. RESPONDER (an
+# official rescue/field account, typically linked to a vehicle) and
+# PUBLIC_DRIVER (a self-registered member of the public) are both driver
+# roles with identical API privileges today -- the distinction is who
+# provisioned the account, not what it can do.
+ADMIN_ROLES = {"ADMIN", "SUPER_ADMIN"}
+DRIVER_ROLES = {"RESPONDER", "PUBLIC_DRIVER"}
 ALLOWED_ROLES = ADMIN_ROLES | DRIVER_ROLES
 
 # Route-level enforcement (TSD LIM-022). Every /api/v1 route requires a token
@@ -285,15 +292,23 @@ def _load_graph(db: Session):
     return nodes, edges, states
 
 
-def _load_edge_geometry(db: Session) -> dict[int, Any]:
-    """Fetch every edge geometry as parsed GeoJSON, keyed by edge_id."""
-    rows = db.query(
-        models.RoadEdge.edge_id,
-        func.ST_AsGeoJSON(models.RoadEdge.geom),
-    ).all()
+def _load_edge_geometry(db: Session, edge_ids: set[int] | None = None) -> dict[int, Any]:
+    """Fetch edge geometry as parsed GeoJSON, keyed by edge_id.
 
+    ``edge_ids`` narrows the query to just those edges -- a route only needs
+    the handful it actually traverses, not the whole network's geometry (at
+    the real OSM scale that was ~7,600 rows fetched to use a few dozen of
+    them, a measured contributor to the NFR-002 regression, docs/TSD.md
+    LIM-028). Omit it for a caller that genuinely wants every edge, such as
+    the full network-state map.
+    """
+    query = db.query(models.RoadEdge.edge_id, func.ST_AsGeoJSON(models.RoadEdge.geom))
+    if edge_ids is not None:
+        if not edge_ids:
+            return {}
+        query = query.filter(models.RoadEdge.edge_id.in_(edge_ids))
     geometry: dict[int, Any] = {}
-    for edge_id, raw in rows:
+    for edge_id, raw in query.all():
         if raw:
             geometry[edge_id] = json.loads(raw)
     return geometry
@@ -521,8 +536,18 @@ def get_network_state(
       PASSABLE    -> green
       LIGHT_FLOOD -> yellow
       SUBMERGED   -> red (impassable for this clearance)
+
+    Returns a ``Response`` built from Pydantic's own ``model_dump_json``
+    instead of the plain model FastAPI would otherwise re-validate and
+    serialize through ``jsonable_encoder`` -- at the real OSM network's
+    scale (~7,600 edges, ~6,200 nodes) that generic path measured ~20x
+    slower than Pydantic's own serializer for this exact payload and was
+    the single largest contributor to the NFR-001 regression (docs/TSD.md
+    LIM-028), well ahead of the database round trips. ``response_model``
+    stays declared so the OpenAPI schema is unaffected.
     """
-    return _build_network_state(db, clearance_cm)
+    payload = _build_network_state(db, clearance_cm)
+    return Response(content=payload.model_dump_json(), media_type="application/json")
 
 
 @app.post(
@@ -685,6 +710,60 @@ def _routing_graph(
     return graph_nodes, graph_edges, pair_index
 
 
+def _route_from_mapbox(
+    nodes: dict[int, models.RoadNode],
+    start_node: int,
+    target_node: int,
+    clearance_cm: float,
+    access_token: str,
+) -> RouteResponse | None:
+    """Build a RouteResponse from the Mapbox Directions API, or None to fall
+    back to the in-house engine (see the call site in get_optimal_route).
+
+    There is no edge-level flood data behind a provider route, so `segments`
+    and `hazards` are deliberately empty -- the caller already only reaches
+    here when nothing in our own graph is flooded, so that is not a gap.
+    """
+    origin = nodes[start_node]
+    destination = nodes[target_node]
+    provider_route = mapbox_directions.fetch_driving_route(
+        origin.latitude, origin.longitude, destination.latitude, destination.longitude, access_token
+    )
+    if provider_route is None:
+        return None
+
+    instructions = [
+        RouteInstruction(
+            manoeuvre=step.manoeuvre,
+            road_name=step.road_name,
+            distance_m=round(step.distance_m, 2),
+            # Node ids are meaningless for a provider-sourced step; every
+            # instruction carries the route's own endpoints as a harmless
+            # placeholder (nothing reads these when `segments` is empty).
+            start_node_id=start_node,
+            end_node_id=target_node,
+            text=step.text,
+        )
+        for step in provider_route.steps
+    ]
+
+    return RouteResponse(
+        start_node=start_node,
+        target_node=target_node,
+        destination_name=destination.name,
+        vehicle_clearance_cm=clearance_cm,
+        optimal_path_nodes=[start_node, target_node],
+        geometry=provider_route.geometry,
+        segments=[],
+        instructions=instructions,
+        hazards=[],
+        total_distance_m=round(provider_route.distance_m, 2),
+        estimated_travel_time_minutes=provider_route.duration_s / 60,
+        routing_mode=FASTEST,
+        source="MAPBOX",
+    )
+
+
 @app.get("/api/v1/routing/navigate", response_model=RouteResponse)
 def get_optimal_route(
     start_node: Annotated[int, Query(description="Origin node id")],
@@ -711,6 +790,15 @@ def get_optimal_route(
             ),
         ),
     ] = None,
+    avoid_edges: Annotated[
+        list[int],
+        Query(
+            description=(
+                "Edge ids to exclude from the search, for requesting an "
+                "alternative to a previously returned route."
+            ),
+        ),
+    ] = [],  # noqa: B006 - FastAPI Query, not a mutated Python default
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -721,7 +809,8 @@ def get_optimal_route(
 
     Active hazards whose obstruction level blocks the vehicle are excluded
     from the graph unless ``ignore_hazards`` is set (TSD §2.6). Returns 404
-    when no route is passable for the given clearance.
+    when no route is passable for the given clearance, including when
+    ``avoid_edges`` rules out the only remaining safe path.
     """
     nodes, edges, states = _load_graph(db)
     _require_node(nodes, start_node, "start_node")
@@ -731,7 +820,7 @@ def get_optimal_route(
     # A published closure is a flood even when the caller asks to route through
     # it: the unsafe alternative still avoids water everywhere else.
     closures = [h for h in hazards if hazard_blocks(h.obstruction_level)]
-    blocked_edges: set[int] = set()
+    blocked_edges: set[int] = set(avoid_edges)
     if not ignore_hazards:
         for hazard in closures:
             blocked_edges |= hazard_edges.get(hazard.hazard_id, set())
@@ -746,6 +835,26 @@ def get_optimal_route(
     # back to the water-aware cost. See routing.routing_mode. A client that
     # shows the map in normal (traffic-only) mode asks for FASTEST explicitly.
     mode = requested_mode or routing_mode(graph_edges, road_closure=bool(closures))
+
+    # Dry-state handoff to a real road network and live traffic (see
+    # mapbox_directions.py). Only for the plain FASTEST case, and only when
+    # the caller hasn't asked for something our own engine has to answer:
+    # ignore_hazards and avoid_edges are both explicitly "route on our graph,
+    # on purpose". A missing token, a disabled flag, or a failed call all
+    # fall through to the in-house search below unchanged.
+    if (
+        mode == FASTEST
+        and not ignore_hazards
+        and not avoid_edges
+        and start_node != target_node
+        and settings.mapbox_directions_enabled
+        and settings.mapbox_access_token
+    ):
+        provider_response = _route_from_mapbox(
+            nodes, start_node, target_node, clearance_cm, settings.mapbox_access_token
+        )
+        if provider_response is not None:
+            return provider_response
 
     path, travel_time_s = td_a_star_search(
         graph_nodes,
@@ -762,7 +871,12 @@ def get_optimal_route(
             detail="No safe route available under current flood conditions.",
         )
 
-    geometry_map = _load_edge_geometry(db)
+    path_edge_ids = {
+        edge.edge_id
+        for edge in (pair_index.get(hop) for hop in zip(path, path[1:], strict=False))
+        if edge is not None
+    }
+    geometry_map = _load_edge_geometry(db, path_edge_ids)
 
     coordinates: list[list[float]] = []
     segments: list[RouteSegment] = []
@@ -991,11 +1105,12 @@ def verify(request: VerifyRequest):
 )
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
-    Create a driver account.
+    Create a public driver account.
 
-    The portal's dispatcher accounts are provisioned by the LGU, so this endpoint
-    deliberately refuses to mint an administrative role. Drivers and commuters
-    self-register and get the same non-privileged role.
+    The portal's admin/dispatcher accounts and field responder accounts are
+    both provisioned by the LGU (an admin, via the Users screen), so this
+    endpoint deliberately refuses to mint either -- self-registration only
+    ever produces a PUBLIC_DRIVER account.
     """
     import models
 
@@ -1008,13 +1123,13 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if len(request.password) < 8:
         raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
 
-    role = (request.role or "EMERGENCY_DRIVER").strip().upper()
+    role = (request.role or "PUBLIC_DRIVER").strip().upper()
     if role in {"DRIVER", "COMMUTER"}:
-        role = "EMERGENCY_DRIVER"
-    if role in ADMIN_ROLES:
+        role = "PUBLIC_DRIVER"
+    if role in ADMIN_ROLES or role == "RESPONDER":
         raise HTTPException(
             status_code=403,
-            detail="Dispatcher accounts are provisioned by the LGU, not self-registered",
+            detail="Admin and responder accounts are provisioned by the LGU, not self-registered",
         )
     if role not in ALLOWED_ROLES:
         raise HTTPException(status_code=422, detail="Unknown role")
@@ -3158,6 +3273,22 @@ def get_forecast(_user: models.User = Depends(require_user)):
         )
 
     return ForecastResponse(generated_at=now, rain=rain, river=river)
+
+
+@app.get("/api/v1/weather/live-rainfall", response_model=LiveRainfallResponse)
+def get_live_rainfall(_user: models.User = Depends(require_admin)):
+    """
+    Current Open-Meteo rain rate, for the admin Live Network Model panel's
+    "use live weather" toggle -- a demo/presentation input, not a routing
+    source: the dispatcher still clicks Apply, same as a manually typed
+    value. Cached for two minutes (``weather.cached_rain_rate``), separate
+    from the rain-gate ingest cadence in ``/flood-state``.
+    """
+    result = weather.cached_rain_rate()
+    if result is None:
+        return LiveRainfallResponse(available=False, rainfall_mm_hr=0.0)
+    value, as_of = result
+    return LiveRainfallResponse(available=True, rainfall_mm_hr=value, as_of=as_of)
 
 
 @app.get("/api/v1/sensors", response_model=list[SensorResponse])

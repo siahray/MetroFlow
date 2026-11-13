@@ -41,9 +41,7 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(
-        String(20), default="LGU_DISPATCHER"
-    )  # SUPER_ADMIN, LGU_DISPATCHER, EMERGENCY_DRIVER
+    role = Column(String(20), default="ADMIN")  # SUPER_ADMIN, ADMIN, RESPONDER, PUBLIC_DRIVER
     vehicle_id = Column(
         Integer,
         ForeignKey("vehicles.vehicle_id"),
