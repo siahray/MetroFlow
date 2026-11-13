@@ -41,7 +41,7 @@ export function LoginScreen({
       const data = (await res.json()) as { access_token?: string; user?: SessionUser };
       setIsSubmitting(false);
       const user: SessionUser = data.user ?? (data as SessionUser);
-      if (user.role !== "LGU_DISPATCHER" && user.role !== "SUPER_ADMIN") {
+      if (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN") {
         setError("Only authorized admin accounts can access this system");
         return;
       }

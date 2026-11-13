@@ -32,7 +32,7 @@ export function UsersManagement() {
     name: "",
     email: "",
     password: "",
-    role: "LGU_DISPATCHER",
+    role: "ADMIN",
     vehicle_id: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +59,7 @@ export function UsersManagement() {
       await createUser(formData);
       show("User created successfully");
       setIsCreateModalOpen(false);
-      setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER", vehicle_id: null });
+      setFormData({ name: "", email: "", password: "", role: "ADMIN", vehicle_id: null });
       loadUsers();
     } catch (cause) {
       show(cause instanceof ApiError ? cause.message : "Failed to create user");
@@ -83,7 +83,7 @@ export function UsersManagement() {
       show("User updated successfully");
       setIsEditModalOpen(false);
       setEditingUser(null);
-      setFormData({ name: "", email: "", password: "", role: "LGU_DISPATCHER", vehicle_id: null });
+      setFormData({ name: "", email: "", password: "", role: "ADMIN", vehicle_id: null });
       loadUsers();
     } catch (cause) {
       show(cause instanceof ApiError ? cause.message : "Failed to update user");
@@ -233,9 +233,11 @@ export function UsersManagement() {
                         "inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold",
                         user.role === "SUPER_ADMIN"
                           ? "bg-purple-100 text-purple-800"
-                          : user.role === "LGU_DISPATCHER"
+                          : user.role === "ADMIN"
                             ? "bg-sky-100 text-sky-800"
-                            : "bg-emerald-100 text-emerald-800",
+                            : user.role === "RESPONDER"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-emerald-100 text-emerald-800",
                       )}
                     >
                       <Shield className="h-3 w-3" />
@@ -346,9 +348,10 @@ export function UsersManagement() {
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
                 >
-                  <option value="LGU_DISPATCHER">LGU Dispatcher</option>
                   <option value="SUPER_ADMIN">Super Admin</option>
-                  <option value="EMERGENCY_DRIVER">Emergency Driver</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="RESPONDER">Responder</option>
+                  <option value="PUBLIC_DRIVER">Public Driver</option>
                 </select>
               </div>
               <div>
@@ -457,9 +460,10 @@ export function UsersManagement() {
                   }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
                 >
-                  <option value="LGU_DISPATCHER">LGU Dispatcher</option>
                   <option value="SUPER_ADMIN">Super Admin</option>
-                  <option value="EMERGENCY_DRIVER">Emergency Driver</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="RESPONDER">Responder</option>
+                  <option value="PUBLIC_DRIVER">Public Driver</option>
                 </select>
               </div>
               <div>

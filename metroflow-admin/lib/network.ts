@@ -206,6 +206,19 @@ export async function runRainfallSimulation(
   );
 }
 
+/** Current Open-Meteo rain rate for the Live Network Model's "use live weather" toggle. */
+export type LiveRainfall = {
+  available: boolean;
+  rainfall_mm_hr: number;
+  as_of: string | null;
+  source: string;
+};
+
+/** Admin-only, like the simulation it feeds; never writes anything itself. */
+export async function fetchLiveRainfall(): Promise<LiveRainfall> {
+  return fetchJSON<LiveRainfall>("/api/v1/weather/live-rainfall");
+}
+
 /** Ask the Time-Dependent A* search for a route under the same clearance. */
 export async function fetchRoute(
   startNode: number,

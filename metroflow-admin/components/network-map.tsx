@@ -5,6 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {
   CloudRain,
   Gauge,
+  Radio,
   Route as RouteIcon,
   ShieldAlert,
   SlidersHorizontal,
@@ -26,6 +27,7 @@ import type { SOSRequest, Vehicle } from "@/lib/dispatch";
 import { subscribeToHazards, subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 import type { HazardZone } from "@/lib/hazards";
 import {
+  fetchLiveRainfall,
   fetchNetworkState,
   fetchRoute,
   formatDepthCm,
@@ -35,6 +37,7 @@ import {
   STATUS_LABELS,
   summariseNetwork,
   type EdgeProperties,
+  type LiveRainfall,
   type NetworkState,
   type NetworkSummary,
   type RouteResult,
@@ -308,6 +311,13 @@ export function NetworkMap({
   const [busy, setBusy] = useState<"simulation" | "route" | null>(null);
   const [clearanceCm, setClearanceCm] = useState(30);
   const [rainfallMmHr, setRainfallMmHr] = useState(0);
+  // Live-weather toggle for the simulation panel (demo/presentation input,
+  // same Apply step as a manually typed value -- it never bypasses the
+  // admin clicking Apply, it just supplies the number).
+  const [liveWeather, setLiveWeather] = useState(false);
+  const [liveRainfall, setLiveRainfall] = useState<LiveRainfall | null>(null);
+  const [liveRainfallError, setLiveRainfallError] = useState<string | null>(null);
+  const lastAutoAppliedMmHr = useRef<number | null>(null);
   const [startNodeId, setStartNodeId] = useState<number | null>(null);
   const [targetNodeId, setTargetNodeId] = useState<number | null>(null);
   const [hazards, setHazards] = useState<HazardZone[]>([]);
@@ -332,6 +342,33 @@ export function NetworkMap({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [simulationOpen]);
+
+  // Live-weather toggle: poll the current Open-Meteo rain rate only while the
+  // panel is open and the toggle is on -- a presentation aid, not a
+  // background job. The API caches this for 2 minutes on its side, so a
+  // short client poll just picks up that cache rather than hammering it.
+  useEffect(() => {
+    if (!simulationOpen || !liveWeather) return;
+    let cancelled = false;
+    const poll = () => {
+      fetchLiveRainfall()
+        .then((reading) => {
+          if (!cancelled) {
+            setLiveRainfall(reading);
+            setLiveRainfallError(null);
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) setLiveRainfallError(errorMessage(err));
+        });
+    };
+    poll();
+    const timer = setInterval(poll, 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [simulationOpen, liveWeather]);
 
   // --- Map lifecycle -------------------------------------------------------
   // MapLibre touches `window`, so it is imported inside the effect and the
@@ -502,10 +539,17 @@ export function NetworkMap({
           id: "network-nodes",
           type: "circle",
           source: "network-nodes",
+          // Hidden below city-block zoom: at the real OSM network's scale
+          // (~8,950 nodes) every junction dot rendering at a city-wide view
+          // was its own source of clutter, on top of the edge-painting fix
+          // above. Node labels already gated at the same zoom (minzoom 13);
+          // the dots themselves now wait one step earlier so they're visible
+          // just before their labels are.
+          minzoom: 12,
           paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2, 15, 4],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 1.5, 16, 3.5],
             "circle-color": MAP_COLORS.paper,
-            "circle-stroke-width": 1.5,
+            "circle-stroke-width": 1.2,
             "circle-stroke-color": MAP_COLORS.ink,
           },
         });
@@ -721,7 +765,16 @@ export function NetworkMap({
     const nodeSource = map.getSource("network-nodes") as GeoJSONSource | undefined;
     if (!edgeSource || !nodeSource) return;
 
-    edgeSource.setData(network.edges);
+    // Only a flagged edge is drawn: at the real OSM network's scale
+    // (~10,876 edges) painting every passable road green turned the whole
+    // map into a solid green mass even with nothing flooded. A clear road is
+    // left to the plain basemap, same fix already applied to the driver
+    // app's map (`RouteMap.tsx`) -- flood status is what must stand out, not
+    // the absence of it.
+    edgeSource.setData({
+      ...network.edges,
+      features: network.edges.features.filter((edge) => edge.properties.status !== "PASSABLE"),
+    });
     nodeSource.setData(network.nodes);
 
     // Frame the graph once. Later refetches must not yank the camera away from
@@ -975,25 +1028,42 @@ export function NetworkMap({
     setRoute(null);
   }, []);
 
+  // The value Apply actually uses: the live Open-Meteo reading when the
+  // toggle is on and a reading is available, otherwise the manual slider --
+  // never a silent mix of both.
+  const effectiveRainfallMmHr =
+    liveWeather && liveRainfall?.available ? liveRainfall.rainfall_mm_hr : rainfallMmHr;
+
   const handleSimulation = useCallback(async () => {
     if (busy) return;
     setBusy("simulation");
     setError(null);
     try {
-      const result = await runRainfallSimulation(rainfallMmHr, clearanceCm);
+      const result = await runRainfallSimulation(effectiveRainfallMmHr, clearanceCm);
       setNetwork(result);
       setRoute(null);
       onAction(
-        rainfallMmHr === 0
+        effectiveRainfallMmHr === 0
           ? "Rainfall reset: simulated flood depths cleared."
-          : `Simulated ${rainfallMmHr} mm/hr: ${result.affected_edges} edges recomputed, ${result.runoff_mm} mm runoff.`,
+          : `Simulated ${effectiveRainfallMmHr} mm/hr${liveWeather ? " (live weather)" : ""}: ${result.affected_edges} edges recomputed, ${result.runoff_mm} mm runoff.`,
       );
     } catch (err: unknown) {
       setError(errorMessage(err));
     } finally {
       setBusy(null);
     }
-  }, [busy, clearanceCm, onAction, rainfallMmHr]);
+  }, [busy, clearanceCm, onAction, effectiveRainfallMmHr, liveWeather]);
+
+  // Live weather drives the model on its own once the toggle is on: a fresh
+  // reading that actually changed is applied without waiting for another
+  // click on Apply, so the map updates itself while presenting. Re-applying
+  // the same unchanged value every poll would just be wasted work.
+  useEffect(() => {
+    if (!liveWeather || !liveRainfall?.available || busy) return;
+    if (lastAutoAppliedMmHr.current === liveRainfall.rainfall_mm_hr) return;
+    lastAutoAppliedMmHr.current = liveRainfall.rainfall_mm_hr;
+    void handleSimulation();
+  }, [liveWeather, liveRainfall, busy, handleSimulation]);
 
   const handleRoute = useCallback(async () => {
     if (busy || effectiveStart === null || effectiveTarget === null) return;
@@ -1172,43 +1242,88 @@ export function NetworkMap({
               />
             </label>
 
-            <label className="block space-y-1.5">
-              <span className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
                 <span className="flex items-center gap-1.5">
                   <CloudRain className="h-3.5 w-3.5 text-sky-400" />
                   Rainfall intensity
                 </span>
-                <span className="font-mono text-sky-300">{rainfallMmHr} mm/hr</span>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={150}
-                step={10}
-                value={rainfallMmHr}
-                onChange={(event) => setRainfallMmHr(Number(event.target.value))}
-                aria-label="Rainfall intensity in millimetres per hour"
-                className="w-full accent-sky-500"
-              />
-            </label>
+                <label className="flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                  <Radio
+                    className={cn("h-3 w-3", liveWeather ? "text-emerald-400" : "text-slate-500")}
+                  />
+                  Live weather
+                  <input
+                    type="checkbox"
+                    checked={liveWeather}
+                    onChange={(event) => {
+                      const next = event.target.checked;
+                      setLiveWeather(next);
+                      if (!next) lastAutoAppliedMmHr.current = null;
+                    }}
+                    aria-label="Drive rainfall from live weather instead of manual input"
+                    className="accent-emerald-500"
+                  />
+                </label>
+              </div>
+
+              {liveWeather ? (
+                <div className="rounded-lg border border-slate-800 bg-brand-primary px-2.5 py-2 text-[11px]">
+                  {liveRainfall?.available ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300">
+                        {liveRainfall.source} · as of{" "}
+                        {liveRainfall.as_of
+                          ? new Date(liveRainfall.as_of).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "—"}
+                      </span>
+                      <span className="font-mono text-emerald-400">
+                        {liveRainfall.rainfall_mm_hr} mm/hr
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">
+                      {liveRainfallError ?? "Fetching the live reading…"}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <input
+                  type="range"
+                  min={0}
+                  max={150}
+                  step={10}
+                  value={rainfallMmHr}
+                  onChange={(event) => setRainfallMmHr(Number(event.target.value))}
+                  aria-label="Rainfall intensity in millimetres per hour"
+                  className="w-full accent-sky-500"
+                />
+              )}
+              {!liveWeather ? (
+                <span className="font-mono text-[10px] text-sky-300">{rainfallMmHr} mm/hr</span>
+              ) : null}
+            </div>
 
             <button
               type="button"
               onClick={handleSimulation}
-              disabled={busy !== null}
+              disabled={busy !== null || (liveWeather && !liveRainfall?.available)}
               className={cn(
                 "flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
                 busy === "simulation"
                   ? "cursor-wait bg-slate-700 text-slate-300"
-                  : "bg-sky-600 text-white hover:bg-sky-500",
+                  : "bg-sky-600 text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40",
               )}
             >
               <Waves className="h-3.5 w-3.5" />
               {busy === "simulation"
                 ? "Running hydrology…"
-                : rainfallMmHr === 0
+                : effectiveRainfallMmHr === 0
                   ? "Reset flood state"
-                  : `Apply ${rainfallMmHr} mm/hr`}
+                  : `Apply ${effectiveRainfallMmHr} mm/hr`}
             </button>
 
             <div className="flex flex-wrap gap-2 border-t border-slate-800 pt-3">

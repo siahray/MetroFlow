@@ -14,7 +14,7 @@ export const adminUser = {
   user_id: 1,
   name: "Test Dispatcher",
   email: "dispatcher@metroflow.test",
-  role: "LGU_DISPATCHER",
+  role: "ADMIN",
 };
 
 export const sosRow = {

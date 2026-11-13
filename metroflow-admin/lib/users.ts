@@ -4,7 +4,7 @@ export type User = {
   user_id: number;
   name: string;
   email: string;
-  role: "SUPER_ADMIN" | "LGU_DISPATCHER" | "EMERGENCY_DRIVER";
+  role: "SUPER_ADMIN" | "ADMIN" | "RESPONDER" | "PUBLIC_DRIVER";
   /** The rescue unit a driver account reports as; null for portal accounts. */
   vehicle_id: number | null;
   created_at: string | null;
@@ -14,14 +14,14 @@ export type UserCreate = {
   name: string;
   email: string;
   password: string;
-  role: "SUPER_ADMIN" | "LGU_DISPATCHER" | "EMERGENCY_DRIVER";
+  role: "SUPER_ADMIN" | "ADMIN" | "RESPONDER" | "PUBLIC_DRIVER";
   vehicle_id?: number | null;
 };
 
 export type UserUpdate = {
   name?: string;
   email?: string;
-  role?: "SUPER_ADMIN" | "LGU_DISPATCHER" | "EMERGENCY_DRIVER";
+  role?: "SUPER_ADMIN" | "ADMIN" | "RESPONDER" | "PUBLIC_DRIVER";
   vehicle_id?: number | null;
 };
 
