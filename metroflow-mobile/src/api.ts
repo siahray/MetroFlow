@@ -363,6 +363,13 @@ export type RoutePlan = {
    * fastest path, like any map app); FLOOD_SAFE when water is avoided.
    */
   routing_mode: "FASTEST" | "FLOOD_SAFE";
+  /**
+   * ENGINE: the in-house TD-A* search (always for FLOOD_SAFE). MAPBOX: the
+   * Mapbox Directions API, used only for a dry FASTEST route -- it carries
+   * no edge-level flood data, so `segments` and `hazards` are always empty
+   * and an "alternative route" request against it is meaningless.
+   */
+  source: "ENGINE" | "MAPBOX";
 };
 
 export function getNetworkState(clearanceCm: number): Promise<NetworkState> {
@@ -378,6 +385,8 @@ export function getRoute(params: {
   ignore_hazards?: boolean;
   /** Force a personality; omitted means the network decides. */
   routing_mode?: "FASTEST" | "FLOOD_SAFE";
+  /** Edge ids to exclude, for requesting an alternative to a previous route. */
+  avoid_edges?: number[];
 }): Promise<RoutePlan> {
   const query = new URLSearchParams({
     start_node: String(params.start_node),
@@ -386,6 +395,7 @@ export function getRoute(params: {
   });
   if (params.ignore_hazards) query.set("ignore_hazards", "true");
   if (params.routing_mode) query.set("routing_mode", params.routing_mode);
+  for (const edgeId of params.avoid_edges ?? []) query.append("avoid_edges", String(edgeId));
   return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`);
 }
 

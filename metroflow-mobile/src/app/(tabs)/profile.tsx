@@ -30,6 +30,7 @@ import {
   Clock,
   Waves,
   Phone,
+  Volume2,
   X,
 } from 'lucide-react-native';
 import { ApiError, updateMyName, updateMyMobile } from '../../api';
@@ -231,7 +232,7 @@ export default function ProfileScreen() {
   }
 
   const displayName = user?.name || 'Public Driver';
-  const roleLabel = (user?.role && user.role !== 'EMERGENCY_DRIVER' ? user.role : 'Driver').replace(/_/g, ' ');
+  const roleLabel = (user?.role && user.role !== 'PUBLIC_DRIVER' ? user.role : 'Driver').replace(/_/g, ' ');
 
   const stats: { label: string; value: string; icon: IconComponent }[] = [
     { label: 'Clearance', value: `${vehicle?.clearanceCm ?? 28} cm`, icon: Gauge },
@@ -516,6 +517,19 @@ export default function ProfileScreen() {
                 value={prefs.hazardAlerts}
                 onValueChange={(v) => void handlePrefChange('hazardAlerts', v)}
                 accessibilityLabel="Hazard proximity alerts"
+              />
+            }
+          />
+          <Row
+            c={c}
+            icon={Volume2}
+            title="Voice Guidance"
+            subtitle="Speak turn-by-turn directions and alerts aloud"
+            right={
+              <Switch
+                value={prefs.voiceGuidance}
+                onValueChange={(v) => void handlePrefChange('voiceGuidance', v)}
+                accessibilityLabel="Voice guidance"
               />
             }
           />

@@ -16,30 +16,39 @@ import {
 } from "react-native";
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import * as Location from "expo-location";
+import * as Speech from "expo-speech";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Building2,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Clock,
   Compass,
   CornerUpLeft,
   CornerUpRight,
   Droplet,
+  Dumbbell,
   Flag,
   Sun,
   Gauge,
+  HeartPulse,
+  Home,
   Layers,
   LocateFixed,
   MapPin,
   Moon,
   Navigation,
+  Navigation2,
   RefreshCw,
   RotateCcw,
   Search,
+  ShoppingBag,
+  Shuffle,
   ShieldAlert,
   Waves,
   Wifi,
@@ -69,11 +78,14 @@ import { planRouteOffline } from "../navigation/offline-route";
 import { loadCache, saveCache, useOnline } from "../offline";
 import { loadMyVehicle } from "../myVehicle";
 import { usePrefs } from "../prefs";
+import { listQuickPicks, type QuickPick, type QuickPickIcon } from "../quickPicks";
+import { addRecentDestination, listRecentDestinations, type RecentDestination } from "../recentDestinations";
 import {
   distanceToPolygonMeters,
   formatDistance,
   formatDuration,
   instructionIndexForProgress,
+  navZoomFor,
   nearestNode,
   polygonRing,
   progressAlongRoute,
@@ -135,6 +147,13 @@ function formatEta(remainingMinutes: number): string {
 }
 
 function samePath(a: RoutePlan, b: RoutePlan) {
+  // A Mapbox-sourced route's `optimal_path_nodes` is always just the two
+  // endpoints (there is no node path to report), so two different live-traffic
+  // results would otherwise always compare equal; distance is the signal
+  // that actually moved.
+  if (a.source === "MAPBOX" || b.source === "MAPBOX") {
+    return a.source === b.source && Math.round(a.total_distance_m) === Math.round(b.total_distance_m);
+  }
   return a.optimal_path_nodes.join(",") === b.optimal_path_nodes.join(",");
 }
 
@@ -160,6 +179,16 @@ const MAP_VIEW_LABEL: Record<MapViewMode, string> = {
   both: "Flood + traffic",
 };
 
+/** Same icon set as the Quick Picks editor (components/QuickPicks.tsx). */
+const QUICK_PICK_ICON: Record<QuickPickIcon, typeof Home> = {
+  home: Home,
+  work: Building2,
+  gym: Dumbbell,
+  mall: ShoppingBag,
+  hospital: HeartPulse,
+  other: Building2,
+};
+
 export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const router = useRouter();
   const { user } = useAuth();
@@ -176,6 +205,17 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   useFocusEffect(
     useCallback(() => {
       void loadMyVehicle().then((v) => setClearanceCm(v.clearanceCm));
+    }, []),
+  );
+  // Search shortcuts shown before the driver types anything (Google-Maps-style
+  // Home/Work chips and a short "Recent" list) — reload on each visit too, so
+  // a Quick Pick added in Profile shows up without restarting the app.
+  const [quickPicks, setQuickPicks] = useState<QuickPick[]>([]);
+  const [recentDestinations, setRecentDestinations] = useState<RecentDestination[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      void listQuickPicks().then(setQuickPicks);
+      void listRecentDestinations().then(setRecentDestinations);
     }, []),
   );
   // Telemetry display (P3-4): the driver's own read of what is being sent.
@@ -205,6 +245,14 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const [refusal, setRefusal] = useState(false);
   const [unsafeRoute, setUnsafeRoute] = useState(false);
   const [arrived, setArrived] = useState(false);
+  // Preview vs. active navigation (Google-Maps-style): a fresh plan is shown
+  // as a route overview with a "Start Navigation" button first. Voice
+  // guidance, the close-up driving camera and telemetry all wait for this.
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  useEffect(() => {
+    startedRef.current = started;
+  }, [started]);
   // Bottom-sheet presentation (Google-Maps-style): collapsed shows only the turn
   // card and a slim route summary; expanded reveals the full route detail.
   const [expanded, setExpanded] = useState(false);
@@ -260,7 +308,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // The API call fails outright with no connection; a real routing refusal
   // (404) must still surface as "no safe route" rather than retry locally.
   const requestRoute = useCallback(
-    (params: { start_node: number; target_node: number; clearance_cm: number; ignore_hazards?: boolean }) =>
+    (params: {
+      start_node: number;
+      target_node: number;
+      clearance_cm: number;
+      ignore_hazards?: boolean;
+      avoid_edges?: number[];
+    }) =>
       getRoute({ ...params, routing_mode: routingModeRef.current }).catch((cause: unknown) => {
         if (cause instanceof ApiError) throw cause;
         const net = networkRef.current;
@@ -309,12 +363,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setLocationPermissionDenied(false);
         setLocationError(null);
 
+        // Tighter updates while actively navigating (Google-Maps-style
+        // smooth tracking); the wider interval is kinder to the battery
+        // while just browsing the map or previewing a route.
         subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 3000,
-            distanceInterval: 10,
-          },
+          started
+            ? { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 5 }
+            : { accuracy: Location.Accuracy.High, timeInterval: 3000, distanceInterval: 10 },
           (update) => {
             if (cancelled) return;
             setPosition({
@@ -326,11 +381,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             setHeadingDeg(update.coords.heading ?? null);
 
             // --- Telemetry sender (FSD-FR-072) --------------------------------
-            // Fire-and-forget: only while actively navigating as a linked unit.
+            // Fire-and-forget: only while actively navigating (Start tapped)
+            // as a linked unit, not during the route preview.
             if (
               prefsRef.current.telemetry &&
               telemetryVehicleId !== null &&
-              routeRef.current !== null
+              routeRef.current !== null &&
+              startedRef.current
             ) {
               const nowMs = Date.now();
               if (nowMs - lastTelemetrySentMs.current >= 5000) {
@@ -363,7 +420,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       cancelled = true;
       subscription?.remove();
     };
-  }, [user, telemetryVehicleId, locationAttempt]);
+  }, [user, telemetryVehicleId, locationAttempt, started]);
 
   // --- Road network --------------------------------------------------------
   useEffect(() => {
@@ -486,8 +543,20 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setArrived(false);
         arrivedRef.current = false;
         setBanner(null);
+        // A fresh plan is always a preview first (FSD-FR-056-style overview,
+        // Google-Maps-style "Start" before turn-by-turn), never the followed,
+        // spoken active-navigation state -- that only begins once the driver
+        // taps Start below.
+        setStarted(false);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setExpanded(true);
+        const destination = toLatLng(target.geometry.coordinates);
+        void addRecentDestination({
+          nodeId: target.properties.node_id,
+          name: target.properties.name ?? "Destination",
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+        }).then(() => listRecentDestinations().then(setRecentDestinations));
       } catch (cause) {
         if (cause instanceof ApiError && cause.status === 404) {
           setRoute(null);
@@ -622,6 +691,58 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     }
   }, [requestRoute]);
 
+  // --- Alternative route (FSD-FR-062): a different road, not just a refresh
+  const [findingAlternative, setFindingAlternative] = useState(false);
+  const findAlternativeRoute = useCallback(async () => {
+    const current = routeRef.current;
+    if (!current) return;
+    if (!online) {
+      setBanner({
+        title: "No connection",
+        body: "An alternative route needs a connection; try again once you're back online.",
+        tone: "warning",
+      });
+      return;
+    }
+    const here = positionRef.current;
+    const nodes = networkRef.current?.nodes.features ?? [];
+    const origin = here ? nearestNode(nodes, here) : null;
+    const avoidEdges = current.segments.map((segment) => segment.edge_id);
+
+    setFindingAlternative(true);
+    try {
+      const next = await requestRoute({
+        start_node: origin?.properties.node_id ?? current.start_node,
+        target_node: current.target_node,
+        clearance_cm: current.vehicle_clearance_cm,
+        ignore_hazards: unsafeRef.current,
+        avoid_edges: avoidEdges,
+      });
+      void saveCache("route", next);
+      setRoute(next);
+      setRefusal(false);
+      setArrived(false);
+      arrivedRef.current = false;
+      setBanner({
+        title: "Alternative route",
+        body: "Showing a different road to your destination.",
+        tone: "success",
+      });
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) {
+        setBanner({
+          title: "No alternative",
+          body: "No other route avoids this road under current conditions.",
+          tone: "warning",
+        });
+      } else {
+        setError(cause instanceof Error ? cause.message : "Could not find an alternative route.");
+      }
+    } finally {
+      setFindingAlternative(false);
+    }
+  }, [requestRoute, online]);
+
   // --- Proximity alerts (FSD-FR-063, FSD-FR-064) ---------------------------
   useEffect(() => {
     if (!position || !prefs.hazardAlerts) return;
@@ -677,6 +798,34 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     }
   }, [route, progress, selected]);
 
+  // --- Voice guidance (Google-Maps-style spoken turn-by-turn) --------------
+  // -1 means "nothing spoken for this route yet"; reset whenever a genuinely
+  // new plan replaces the old one (a fresh search or a reroute) so its first
+  // instruction is announced again.
+  const spokenStepRef = useRef(-1);
+  useEffect(() => {
+    spokenStepRef.current = -1;
+  }, [route]);
+
+  useEffect(() => {
+    if (!prefs.voiceGuidance || !route || !started) return;
+    const text = route.instructions[currentStep]?.text;
+    if (!text || spokenStepRef.current === currentStep) return;
+    spokenStepRef.current = currentStep;
+    Speech.speak(text, { language: "en-US", pitch: 1.0, rate: 1.0 });
+  }, [prefs.voiceGuidance, route, started, currentStep]);
+
+  // Alerts speak once per banner, alongside the visual card -- hazards,
+  // reroutes and "no safe route" all read out the same way a driver would
+  // expect from a turn-by-turn app. Only once navigation has actually
+  // started; the route-preview phase stays silent.
+  useEffect(() => {
+    if (!prefs.voiceGuidance || !banner || !started) return;
+    Speech.speak(`${banner.title}. ${banner.body}`, { language: "en-US" });
+  }, [prefs.voiceGuidance, banner, started]);
+
+  useEffect(() => () => void Speech.stop(), []);
+
   const matches = useMemo(() => {
     const needle = destinationQuery.trim().toLowerCase();
     if (!needle || !network || route) return [];
@@ -730,6 +879,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     route && progress
       ? remainingOnStep(route.instructions, currentStep, progress.progressM)
       : null;
+  // Google-Maps-style driving camera: tighter near a turn or at low speed,
+  // wider at highway speed.
+  const navZoom = navZoomFor(speedKmh, stepRemaining, instruction?.manoeuvre ?? null);
 
   const mapHazards = hazards.length > 0 ? hazards : (route?.hazards ?? []);
   // Memoized so a GPS tick does not hand the Marker a new coordinate object.
@@ -743,13 +895,29 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     [selected, route],
   );
 
+  /** A Quick Pick or Recent destination resolves against the live network so
+   * it plans through the same `selected` -> `planRoute` path as any other
+   * search result, rather than a parallel route to the same place. */
+  function selectStoredDestination(nodeId: number, name: string) {
+    const node = network?.nodes.features.find((row) => row.properties.node_id === nodeId);
+    if (!node) {
+      setError(`${name} is no longer on the road network.`);
+      return;
+    }
+    setSelected(node);
+    setDestinationQuery(node.properties.name ?? name);
+    setError(null);
+  }
+
   function resetRoute() {
+    void Speech.stop();
     setRoute(null);
     setSelected(null);
     setDestinationQuery("");
     setRefusal(false);
     setUnsafeRoute(false);
     setArrived(false);
+    setStarted(false);
     setBanner(null);
     setError(null);
     setExpanded(true);
@@ -799,6 +967,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   const safetyMarginCm = currentSegment ? clearanceCm - currentSegment.water_depth_cm : null;
   const congestion = currentEdgeMeta ? congestionFromSpeeds(currentEdgeMeta.avg_speed_kmh, currentEdgeMeta.max_speed_kmh) : null;
+  // A small margin over the posted limit avoids flagging ordinary GPS jitter.
+  const speeding =
+    currentEdgeMeta !== null && speedKmh !== null && speedKmh > currentEdgeMeta.max_speed_kmh + 5;
 
   const primaryHazard: RouteHazard | null =
     route?.hazards.find((h) => h.blocking) ?? route?.hazards[0] ?? null;
@@ -853,7 +1024,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         <RouteMap
           ref={mapRef}
           route={route}
+          active={started}
           position={position}
+          heading={headingDeg}
+          navZoom={navZoom}
           destination={destinationCoordinate}
           destinationName={selected?.properties.name ?? route?.destination_name ?? null}
           hazards={mapHazards}
@@ -864,7 +1038,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         {/* Floating chrome, Google-Maps style: the search box before a route, the
             next manoeuvre during one. Everything else lives in the bottom sheet. */}
         <View style={styles.topStack} pointerEvents="box-none">
-          {route ? (
+          {route && started ? (
             instruction ? (
               <View style={styles.instructionCard}>
                 <View style={styles.instructionIcon}>
@@ -886,15 +1060,29 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     {streamError ? " • live alerts offline" : ""}
                   </Text>
                 </View>
+                {currentEdgeMeta ? (
+                  <View
+                    style={[
+                      styles.speedLimitSign,
+                      speeding ? { borderColor: c.red600 } : null,
+                    ]}
+                  >
+                    <Text style={[styles.speedLimitValue, speeding ? { color: c.red600 } : null]}>
+                      {Math.round(currentEdgeMeta.max_speed_kmh)}
+                    </Text>
+                  </View>
+                ) : null}
                 {speedKmh !== null ? (
                   <View style={styles.speedBadge}>
-                    <Text style={styles.speedBadgeValue}>{Math.round(speedKmh)}</Text>
+                    <Text style={[styles.speedBadgeValue, speeding ? { color: c.red400 } : null]}>
+                      {Math.round(speedKmh)}
+                    </Text>
                     <Text style={styles.speedBadgeUnit}>km/h</Text>
                   </View>
                 ) : null}
               </View>
             ) : null
-          ) : (
+          ) : !route ? (
             <View style={styles.searchRow}>
               <BackButton />
               <View style={styles.searchBox}>
@@ -926,10 +1114,69 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 ) : null}
               </View>
             </View>
-          )}
+          ) : null}
 
-          {!route && (destinationQuery || planning || error || refusal) ? (
+          {route && !started ? (
+            <View style={styles.previewPill}>
+              <Navigation2 size={14} color={c.blue600} />
+              <Text style={styles.previewPillText}>Route preview — tap Start to begin</Text>
+            </View>
+          ) : null}
+
+          {!route &&
+          (destinationQuery ||
+            planning ||
+            error ||
+            refusal ||
+            quickPicks.length > 0 ||
+            recentDestinations.length > 0) ? (
             <View style={styles.searchPanel}>
+              {!destinationQuery && !planning && (quickPicks.length > 0 || recentDestinations.length > 0) ? (
+                <View style={{ gap: space[10] }}>
+                  {quickPicks.length > 0 ? (
+                    <View style={styles.quickPickRow}>
+                      {quickPicks.map((pick) => {
+                        const Icon = QUICK_PICK_ICON[pick.icon];
+                        return (
+                          <TouchableOpacity
+                            key={pick.id}
+                            style={styles.quickPickChip}
+                            onPress={() => selectStoredDestination(pick.nodeId, pick.name)}
+                          >
+                            <View style={styles.quickPickIcon}>
+                              <Icon size={16} color={c.blue600} />
+                            </View>
+                            <Text style={styles.quickPickLabel} numberOfLines={1}>
+                              {pick.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  {recentDestinations.length > 0 ? (
+                    <View>
+                      <Text style={styles.sectionLabel}>Recent</Text>
+                      {recentDestinations.map((recent) => (
+                        <TouchableOpacity
+                          key={`recent-${recent.nodeId}`}
+                          style={styles.resultRow}
+                          onPress={() => selectStoredDestination(recent.nodeId, recent.name)}
+                        >
+                          <View style={styles.resultIcon}>
+                            <Clock size={14} color={c.slate500} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.resultName}>{recent.name}</Text>
+                            <Text style={styles.resultMeta}>Recent destination</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               {planning ? (
                 <View style={styles.planningRow}>
                   <ActivityIndicator color={c.blue600} />
@@ -1056,27 +1303,35 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         </View>
 
         {/* One control stack, bottom-right, like Google Maps. Pinch zooms. */}
+        {/* Google Maps keeps live navigation nearly chrome-free: during active
+            turn-by-turn, only the flood/normal map toggle stays (compact,
+            icon-only -- unlike Maps, that layer is safety-critical for this
+            app, not cosmetic) and the map's own Recenter chip covers
+            re-centring. Planning tools (theme, refresh, alternatives, manual
+            locate) are for before Start. */}
         <View style={styles.vControls}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
-            onPress={toggleTheme}
-            style={styles.controlButton}
-          >
-            {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
-          </TouchableOpacity>
+          {!started ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={mode === "storm" ? "Switch to day theme" : "Switch to night/storm theme"}
+              onPress={toggleTheme}
+              style={styles.controlButton}
+            >
+              {mode === "storm" ? <Sun size={18} color={c.slate800} /> : <Moon size={18} color={c.slate800} />}
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={`Map view: ${MAP_VIEW_LABEL[mapView]}. Tap to change.`}
             onPress={() =>
               setMapView((current) => MAP_VIEW_CYCLE[(MAP_VIEW_CYCLE.indexOf(current) + 1) % MAP_VIEW_CYCLE.length])
             }
-            style={styles.viewButton}
+            style={started ? styles.controlButton : styles.viewButton}
           >
             <Layers size={16} color={c.slate800} />
-            <Text style={styles.viewButtonText}>{MAP_VIEW_LABEL[mapView]}</Text>
+            {started ? null : <Text style={styles.viewButtonText}>{MAP_VIEW_LABEL[mapView]}</Text>}
           </TouchableOpacity>
-          {route ? (
+          {route && !started ? (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Refresh route and alternatives"
@@ -1091,14 +1346,31 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               )}
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Centre on my location"
-            onPress={() => mapRef.current?.recenter()}
-            style={styles.controlButton}
-          >
-            <LocateFixed size={18} color={c.slate800} />
-          </TouchableOpacity>
+          {route && !unsafeRoute && !started && route.source !== "MAPBOX" ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Show a different route to the same destination"
+              onPress={() => void findAlternativeRoute()}
+              disabled={findingAlternative}
+              style={styles.controlButton}
+            >
+              {findingAlternative ? (
+                <ActivityIndicator size="small" color={c.blue600} />
+              ) : (
+                <Shuffle size={17} color={c.blue600} />
+              )}
+            </TouchableOpacity>
+          ) : null}
+          {!started ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Centre on my location"
+              onPress={() => mapRef.current?.recenter()}
+              style={styles.controlButton}
+            >
+              <LocateFixed size={18} color={c.slate800} />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {!position && !locationError ? (
@@ -1178,7 +1450,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               <View style={styles.safeChip}>
                 <CheckCircle2 size={12} color={c.green700} />
                 <Text style={styles.safeChipText}>
-                  {route.routing_mode === "FASTEST" ? "Fastest route" : "Flood-safe route"}
+                  {route.routing_mode !== "FASTEST"
+                    ? "Flood-safe route"
+                    : route.source === "MAPBOX"
+                      ? "Fastest route · live traffic"
+                      : "Fastest route"}
                 </Text>
               </View>
             )}
@@ -1313,23 +1589,36 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               <Search size={15} color={c.slate800} />
               <Text style={styles.secondaryButtonText}>New Destination</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.endButton}
-              onPress={() => {
-                void confirm({
-                  title: "End navigation?",
-                  message: "The route and turn-by-turn instructions are cleared.",
-                  confirmLabel: "End Route",
-                  destructive: true,
-                }).then((confirmed) => {
-                  if (!confirmed) return;
-                  resetRoute();
-                  router.back();
-                });
-              }}
-            >
-              <Text style={styles.endButtonText}>End</Text>
-            </TouchableOpacity>
+            {started ? (
+              <TouchableOpacity
+                style={styles.endButton}
+                onPress={() => {
+                  void confirm({
+                    title: "End navigation?",
+                    message: "The route and turn-by-turn instructions are cleared.",
+                    confirmLabel: "End Route",
+                    destructive: true,
+                  }).then((confirmed) => {
+                    if (!confirmed) return;
+                    resetRoute();
+                    router.back();
+                  });
+                }}
+              >
+                <Text style={styles.endButtonText}>End</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={() => {
+                  setStarted(true);
+                  setSheetExpanded(false);
+                }}
+              >
+                <Navigation2 size={15} color={c.white} />
+                <Text style={styles.startButtonText}>Start</Text>
+              </TouchableOpacity>
+            )}
           </View>
           </ScrollView>
         </View>
@@ -1445,6 +1734,32 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   },
   speedBadgeValue: { fontSize: fontSize.subtitle, fontWeight: "800", color: c.onInk },
   speedBadgeUnit: { fontSize: fontSize.nano, color: c.inkMuted },
+  // A real speed-limit sign: white disc, red ring, bold black number.
+  speedLimitSign: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: c.white,
+    borderWidth: 3,
+    borderColor: c.slate900,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  speedLimitValue: { fontSize: fontSize.caption, fontWeight: "800", color: c.slate900 },
+  previewPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[6],
+    alignSelf: "flex-start",
+    backgroundColor: c.blue50,
+    borderWidth: 1,
+    borderColor: c.blue100,
+    borderRadius: 999,
+    paddingHorizontal: space[12],
+    paddingVertical: space[6],
+    ...shadow,
+  },
+  previewPillText: { fontSize: fontSize.caption, fontWeight: "700", color: c.blue700 },
   telemetryStrip: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1599,6 +1914,17 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     justifyContent: "center",
   },
   endButtonText: { fontSize: fontSize.body, fontWeight: "800", color: c.onInk },
+  startButton: {
+    flex: 1.2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space[6],
+    paddingVertical: space[12],
+    borderRadius: 12,
+    backgroundColor: c.blue600,
+  },
+  startButtonText: { fontSize: fontSize.body, fontWeight: "800", color: c.white },
   searchPanel: {
     backgroundColor: c.white,
     borderRadius: 14,
@@ -1663,6 +1989,25 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   resultName: { fontSize: fontSize.body, fontWeight: "700", color: c.slate800 },
   resultMeta: { fontSize: fontSize.micro, color: c.slate400, marginTop: space[1] },
   emptyText: { fontSize: fontSize.caption, color: c.slate500 },
+  quickPickRow: { flexDirection: "row", gap: space[8] },
+  quickPickChip: { alignItems: "center", gap: space[4], width: 64 },
+  quickPickIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: c.blue50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickPickLabel: { fontSize: fontSize.micro, fontWeight: "600", color: c.slate700, textAlign: "center" },
+  sectionLabel: {
+    fontSize: fontSize.nano,
+    fontWeight: "800",
+    color: c.slate400,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginBottom: space[4],
+  },
   hintText: { fontSize: fontSize.caption, color: c.slate500, lineHeight: 16 },
   signedOutCard: {
     margin: space[20],

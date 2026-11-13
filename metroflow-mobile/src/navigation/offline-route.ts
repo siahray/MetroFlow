@@ -368,5 +368,8 @@ export function planRouteOffline(
     total_distance_m: Math.round(hops.reduce((sum, hop) => sum + hop.distanceM, 0) * 100) / 100,
     estimated_travel_time_minutes: Math.round((seconds / 60) * 100) / 100,
     routing_mode: floodAware ? "FLOOD_SAFE" : "FASTEST",
+    // The offline planner is always this same JS port of the in-house
+    // engine -- there is no Mapbox fallback without a network connection.
+    source: "ENGINE",
   };
 }

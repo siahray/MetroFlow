@@ -165,3 +165,39 @@ export function formatDuration(minutes: number): string {
   if (minutes < 1) return "< 1 min";
   return `${Math.round(minutes)} min`;
 }
+
+export type NavCamera = {
+  /** Google Maps (Android) camera distance: higher is more zoomed in. */
+  zoom: number;
+  /** Apple Maps (iOS) camera distance in metres: lower is more zoomed in --
+   * the opposite direction from `zoom`. react-native-maps' Camera type
+   * takes one field per provider (`zoom` for Google, `altitude` for Apple);
+   * passing only `zoom` leaves iOS's Apple Maps camera distance undefined,
+   * which is why an iOS build was seen zooming the *opposite* way intended. */
+  altitude: number;
+};
+
+/**
+ * Google-Maps-style driving-camera distance: tighter at low speed or a close
+ * turn (so the manoeuvre is clearly visible), wider at highway speed (so
+ * there is more road ahead on screen). The upcoming-turn override always
+ * wins over speed, since "about to turn" matters more than "going fast".
+ */
+export function navZoomFor(
+  speedKmh: number | null,
+  stepRemainingM: number | null,
+  manoeuvre: string | null,
+): NavCamera {
+  const approachingTurn =
+    manoeuvre !== null &&
+    !["STRAIGHT", "DEPART", "ARRIVE"].includes(manoeuvre) &&
+    stepRemainingM !== null &&
+    stepRemainingM <= 120;
+  if (approachingTurn) return { zoom: 18.3, altitude: 200 };
+
+  if (speedKmh === null) return { zoom: 17.5, altitude: 400 };
+  if (speedKmh <= 15) return { zoom: 18.0, altitude: 250 };
+  if (speedKmh <= 40) return { zoom: 17.5, altitude: 400 };
+  if (speedKmh <= 70) return { zoom: 16.5, altitude: 800 };
+  return { zoom: 15.5, altitude: 1600 };
+}

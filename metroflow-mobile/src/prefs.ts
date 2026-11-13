@@ -13,9 +13,16 @@ export type DriverPrefs = {
   telemetry: boolean;
   /** Follow the clock between light and storm themes (NFR-023); off = manual. */
   autoTheme: boolean;
+  /** Speak each turn-by-turn instruction and alert aloud while navigating. */
+  voiceGuidance: boolean;
 };
 
-const DEFAULTS: DriverPrefs = { hazardAlerts: true, telemetry: true, autoTheme: true };
+const DEFAULTS: DriverPrefs = {
+  hazardAlerts: true,
+  telemetry: true,
+  autoTheme: true,
+  voiceGuidance: true,
+};
 const STORAGE_KEY = "metroflow_driver_prefs";
 
 let cached: DriverPrefs | null = null;
