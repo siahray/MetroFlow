@@ -42,8 +42,8 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 ### Accounts
 - **Bootstrap dispatcher:** `dispatcher@metroflow.local`, role `SUPER_ADMIN`
 - **Provisioning:** created once at startup from `METROFLOW_ADMIN_EMAIL` / `METROFLOW_ADMIN_PASSWORD` when the `users` table is empty
-- **Driver accounts:** created by `POST /api/v1/auth/register`, always `EMERGENCY_DRIVER`
-- **Escalation:** registration refuses `LGU_DISPATCHER` and `SUPER_ADMIN` with `403`
+- **Driver accounts:** created by `POST /api/v1/auth/register`, always `PUBLIC_DRIVER`
+- **Escalation:** registration refuses `ADMIN` and `SUPER_ADMIN` with `403`
 - **Rotated:** the hosted dispatcher password was changed from the demo default before the API became reachable; the value lives in `backend/.env` on the operator's machine
 
 ### Hosting
@@ -61,7 +61,7 @@ paid Vercel plan, LIM-025). The hosted API still connects with the project's
 ### Authentication
 - **JWT tokens** issued by the API (`PyJWT`, HS256) and returned by `/api/v1/auth/login`
 - **Passwords** bcrypt-hashed on the `users` row
-- **Login** accepts `LGU_DISPATCHER`, `SUPER_ADMIN` and `EMERGENCY_DRIVER`
+- **Login** accepts `ADMIN`, `SUPER_ADMIN`, `RESPONDER` and `PUBLIC_DRIVER`
 - **Registration** creates driver accounts only
 - **`GET /api/v1/auth/me`** returns the caller from the token
 - **Route enforcement** — every route except the four auth entry points requires a bearer token (`401`); routes that change shared state or read incident data require a portal role (`403` for drivers)

@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.2
+Version 1.3
 
 ## Document Information
 
@@ -13,7 +13,7 @@ Version 1.2
 | Project Sponsor | «Project Sponsor»                               |
 | Business Owner  | «Client Representative» — LGU Operations (CDMO) |
 | Project Manager | «Project Team Lead»                             |
-| Budget          | PHP [TBC]                                       |
+| Budget          | PHP634,710 proposed (standardized with `BUSINESS_CASE.md` §7 and `PROJECT_CHARTER.md` §B: CAPEX PHP588,500 + Year-1 OPEX PHP46,210; see the Cost Management table below) |
 | Go-Live         | [TBC]                                           |
 
 ## Revision History
@@ -22,8 +22,12 @@ Version 1.2
 | ------- | ----------- | --------------------------- | ------------------------------------------------- | -------- |
 | 0.1     | 21 Oct 2026 | «Project Team Lead»         | Initial Draft                                     | Draft    |
 | 1.0     | 21 Oct 2026 | «QA and Documentation Lead» | Review release                                    | Review   |
-| 1.1     | 21 Oct 2026 | «Project Team Lead»         | CR-001: driver app, realtime, fleet, sensors      | Proposed |
+| 1.1     | 21 Oct 2026 | «Project Team Lead»         | Driver app, realtime, fleet, sensors added to scope | Proposed |
 | 1.2     | 22 Oct 2026 | «Project Team Lead»         | Provider keys, Supabase Auth, Mapbox, template UI | Proposed |
+| 1.3     | 13 Nov 2026 | «Project Team Lead»         | Offline map regions and satellite observations recorded as final-product scope (not implemented); live flood-state sources partially implemented; EV/HOV/toll "Smart Routing" declined; Mapbox dry-state routing implemented, within the existing scope boundary | Proposed |
+| 1.4     | 13 Nov 2026 | «Project Team Lead»         | Project Schedule table corrected against `git log` (a hand-entered date predating the repository fixed, with a visible Correction note) and completed with live-flood-state/Mapbox-routing/network-rescope rows; "Final documentation and defence" end date filled with a planning projection (4 Dec 2026, from the 18 Aug 2026 start) rather than left open | Proposed |
+| 1.5     | 13 Nov 2026 | «Project Team Lead»         | Cost Management table's contingency convention standardized to match `BUSINESS_CASE.md`/`PROJECT_CHARTER.md` (10% of CAPEX only, not every line combined); Total corrected from PHP639,331 to PHP634,710 per the Project Lead's decision to standardize on one convention | Proposed |
+| 2.0     | 13 Nov 2026 | «Project Team Lead»         | Consolidated baseline: folded every prior scope addition into the plan as original scope; retired the standalone change-request records | Proposed |
 
 ## Approval Sign-Off
 
@@ -63,7 +67,7 @@ incrementally inside a fixed academic term, with a working demonstration at each
 milestone rather than a single delivery at the end.
 
 Current position: the baseline API, schema and portal are built and tested, and so is
-the CR-001 increment — authentication, report intake and moderation, live map, hazard
+the driver-app increment — authentication, report intake and moderation, live map, hazard
 publishing and drawing, fleet dispatch, sensors, exports, offline operation and the
 driver app are implemented and hosted. Every unconfirmed date or amount is marked
 `[TBC]`; remaining work is test depth and operations (`BACKLOG.md`).
@@ -143,24 +147,48 @@ in Appendix B.
 
 ## Project Schedule
 
-| Phase                                  | Start           | End             | Status      |
-| -------------------------------------- | --------------- | --------------- | ----------- |
-| Requirements                           | Week 1 · [TBC]  | Week 2 · [TBC]  | Completed   |
-| Design                                 | Week 3 · [TBC]  | Week 5 · [TBC]  | Completed   |
-| Development — API                      | Week 6 · [TBC]  | Week 9 · [TBC]  | Completed   |
-| Development — Portal                   | Week 10 · [TBC] | Week 12 · [TBC] | Completed   |
-| Hardening and SIT                      | Week 13 · [TBC] | Week 14 · [TBC] | Completed   |
-| Documentation                          | Week 15 · [TBC] | Week 16 · [TBC] | In Progress |
-| Demonstration                          | Week 16 · [TBC] | Week 16 · [TBC] | Planned     |
-| CR-001 requirements and design         | Week 17 · [TBC] | Week 17 · [TBC] | In Progress |
-| Development — realtime, reports, fleet | Week 18 · [TBC] | Week 19 · [TBC] | Planned     |
-| Development — LGU map and moderation   | Week 19 · [TBC] | Week 20 · [TBC] | Planned     |
-| Development — driver app and sensors   | Week 20 · [TBC] | Week 21 · [TBC] | Planned     |
-| CR-001 hardening and SIT               | Week 21 · [TBC] | Week 22 · [TBC] | Planned     |
-| Final documentation and defence        | Week 22 · [TBC] | Week 22 · [TBC] | Planned     |
+| Phase                                  | Start            | End              | Status      |
+| -------------------------------------- | ---------------- | ---------------- | ----------- |
+| Requirements                           | August 18, 2026   | August 20, 2026   | Completed   |
+| Design                                 | August 21, 2026   | August 26, 2026   | Completed   |
+| Development — API                      | August 27, 2026   | October 1, 2026   | Completed   |
+| Development — Portal                   | October 2, 2026   | October 22, 2026  | Completed   |
+| Hardening and SIT                      | October 23, 2026  | October 25, 2026  | Completed   |
+| Documentation                          | October 26, 2026  | October 27, 2026  | Completed   |
+| Demonstration                          | October 28, 2026  | October 28, 2026  | Completed   |
+| Driver-app requirements and design     | October 21, 2026  | October 22, 2026  | Completed   |
+| Development — realtime, reports, fleet | October 23, 2026  | November 4, 2026  | Completed   |
+| Development — LGU map and moderation   | October 28, 2026  | November 4, 2026  | Completed   |
+| Development — driver app and sensors   | October 24, 2026  | November 3, 2026  | Completed   |
+| Driver-app hardening and SIT           | November 4, 2026  | November 7, 2026  | Completed   |
+| Live flood-state integration           | November 3, 2026  | November 11, 2026 | Completed   |
+| Mapbox routing and driver nav polish   | November 11, 2026 | November 13, 2026 | Completed |
+| Quezon City network re-scope           | November 13, 2026 | November 13, 2026 | Completed   |
+| Final documentation and defence        | November 8, 2026  | December 4, 2026 (projected) | In Progress |
 
-Weeks 1–16 are the baseline; CR-001 adds weeks 17–22 `[TBC]`. The increment does
-not reopen a completed baseline milestone.
+Dates above are as recorded in the git history (`git log`), not estimates,
+with one exception: "Final documentation and defence" ends on a
+**projected** 4 December 2026 (18 Aug 2026 start plus ≈15.5 weeks — three
+weeks past the 13 Nov 2026 engineering cut-off, for final documentation and
+rehearsal). The engineering work for every requirement in the current scope
+is complete (`FSD.md` §Implementation Status), but the actual defence date
+is an institutional/panel decision this document cannot set on its own —
+this row is this document's own planning estimate, not a confirmed date,
+and the Project Lead or adviser may move it. Offline map regions and
+satellite observations are final-product extensions that leave the pilot's
+scope and schedule unchanged, so neither gets its own development row above;
+EV/HOV/toll "Smart Routing" was declined for the pilot and was never
+developed.
+
+**Correction:** an earlier export of this table had "Driver-app requirements
+and design" dated October 1, 2026, which predates the repository's first
+commit (21 Oct 2026). Corrected to 21–22 October 2026 to match the git
+history; flag to the Project Lead if October 1 referred to an earlier,
+undocumented scoping conversation worth recording separately.
+
+The baseline runs Requirements through Demonstration above; the driver-app
+work is the increment that follows. The increment does not reopen a
+completed baseline milestone.
 
 Milestones:
 
@@ -203,18 +231,30 @@ may hold more than one role; every role must have a named person before M2.
 
 | Category                                    | Amount (PHP) |
 | ------------------------------------------- | ------------ |
-| Baseline development effort (in-kind)       | [TBC]        |
-| CR-001 native app and realtime increment (in-kind) | [TBC]        |
-| Hosted database                             | [TBC]        |
-| Application hosting                         | [TBC]        |
-| EAS build, app distribution and developer accounts | [TBC]        |
-| Evidence storage                            | [TBC]        |
-| Map, weather and data services              | [TBC]        |
-| Domain and TLS                              | [TBC]        |
-| Test devices and data                       | [TBC]        |
-| Training and handover                       | [TBC]        |
-| Contingency (10%)                           | [TBC]        |
-| **Total**                                   | **[TBC]**    |
+| Baseline development effort (in-kind)       | PHP360,000   |
+| Native app and realtime increment (in-kind) | PHP160,000   |
+| Hosted database                             | PHP18,450    |
+| Application hosting                         | PHP14,760    |
+| EAS build, app distribution and developer accounts | PHP0 (free tier at pilot cadence; public store fees not budgeted, CA-006) |
+| Evidence storage                            | PHP0 (included in the hosted-database line — stored in the report row, not a separate service) |
+| Map, weather and data services              | PHP0 (Mapbox free tier at pilot volume; OpenWeather/OpenTopography/Copernicus free or offline) |
+| Domain and TLS                              | PHP3,000     |
+| Test devices and data                       | PHP15,000    |
+| Training and handover                       | PHP10,000    |
+| Contingency (10% of CAPEX lines only: 360,000+160,000+15,000=535,000) | PHP53,500 |
+| **Total**                                   | **PHP634,710** |
+
+Illustrative projection (not a quotation or a funding request, `CA-001`):
+priced against each vendor's current rate card for the OPEX lines and a
+market junior-developer rate for in-kind student effort; see
+`BUSINESS_CASE.md` §7 for the full cost model and sources. The budget
+convention is standardized at PHP634,710 across every project document
+(this PMP, `BUSINESS_CASE.md` §7, `PROJECT_CHARTER.md` §B): CAPEX
+(PHP535,000 + 10% contingency = PHP588,500) plus Year-1 OPEX (PHP46,210,
+no contingency applied). An earlier revision of this table applied 10%
+contingency to every line combined (PHP58,121, giving PHP639,331); that
+convention is superseded by this one, per the Project Lead's 13 Nov 2026
+decision to standardize on the Business Case's figure.
 
 Rules:
 
@@ -226,13 +266,13 @@ Rules:
 
 | ID    | Type       | Description                                                       | Owner            | Impact | Status        |
 | ----- | ---------- | ----------------------------------------------------------------- | ---------------- | ------ | ------------- |
-| R-001 | Risk       | Scope creep beyond the approved CR-001 boundary                   | PM               | High   | Open          |
+| R-001 | Risk       | Scope creep beyond the approved pilot boundary                    | PM               | High   | Open          |
 | R-002 | Risk       | Hydrological model judged unrealistic                             | Backend Lead     | High   | Open          |
 | R-003 | Risk       | Loss of a team member                                             | PM               | Medium | Open          |
 | R-004 | Risk       | Hosted database never configured                                  | Backend Lead     | Medium | Open          |
 | R-005 | Risk       | Security findings surface late                                    | QA               | Medium | Open          |
 | R-006 | Risk       | Institutional format differs from the document set                | PM               | Low    | Open          |
-| R-007 | Risk       | Authentication slips past the CR-001 release gate                 | PM               | High   | Open          |
+| R-007 | Risk       | Authentication slips past the driver-app release gate             | PM               | High   | Open          |
 | R-008 | Risk       | No baseline data from the client                                  | Business Analyst | Medium | Open          |
 | R-009 | Risk       | Pilot corridor changes late                                       | Business Analyst | Medium | Open          |
 | R-010 | Risk       | Hosted costs exceed the free tier                                 | Backend Lead     | Low    | Open          |
@@ -257,11 +297,11 @@ Rules:
 | A-009 | Assumption | Sensor data may be simulated but is labelled                      | Backend Lead     | Medium | Open          |
 | A-010 | Assumption | Mapbox tiles are available on the pilot tier; OSM is the fallback | Frontend Lead    | Low    | Open          |
 | A-011 | Assumption | Client supplies the HTML/CSS template derived from Figma          | Business Analyst | Medium | Open          |
-| I-001 | Issue      | No authentication on the baseline API or portal                   | PM               | High   | Open (CR-001) |
-| I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Open (CR-001) |
+| I-001 | Issue      | No authentication on the baseline API or portal                   | PM               | High   | Open          |
+| I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Open          |
 | I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround    |
 | I-004 | Issue      | CCTV is out of scope and gauges may be simulated                  | Business Analyst | Low    | Accepted      |
-| I-005 | Issue      | CR-001 increment is planned, not implemented                      | PM               | High   | Closed 8 Nov 2026 — endpoints and offline operation are implemented and hosted |
+| I-005 | Issue      | Driver-app increment is planned, not implemented                  | PM               | High   | Closed 8 Nov 2026 — endpoints and offline operation are implemented and hosted |
 | D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open          |
 | D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open          |
 | D-003 | Dependency | Client confirms the pilot corridor                                | Business Analyst | High   | Open          |
@@ -373,7 +413,7 @@ product. Risks scoring 6 or above are reviewed weekly.
 
 | ID    | Risk                           | P   | I   | Score | Response                                                         | Trigger                             |
 | ----- | ------------------------------ | --- | --- | ----- | ---------------------------------------------------------------- | ----------------------------------- |
-| R-001 | Scope creep beyond CR-001      | 3   | 3   | 9     | Hold the CR-001 boundary; every addition needs a CR              | New feature requested mid-iteration |
+| R-001 | Scope creep beyond the pilot boundary | 3   | 3   | 9     | Hold the approved boundary; every addition needs a change request | New feature requested mid-iteration |
 | R-002 | Model judged unrealistic       | 3   | 3   | 9     | Declare calibration; validate against documented events          | Adviser or client challenges output |
 | R-003 | Loss of a team member          | 2   | 3   | 6     | Pair on critical paths; record decisions                         | Missed stand-ups for a week         |
 | R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible         | Secret absent at M5                 |
@@ -446,7 +486,7 @@ Confidence in next:   <high/medium/low + reason>
 | ADR-001 | Alembic owns the schema                | [TBC] | «Project Team Lead» | TSD §6                        |
 | ADR-002 | Supabase as hosted Postgres            | [TBC] | «Project Team Lead» | TSD §6                        |
 | ADR-007 | RLS deny-by-default                    | [TBC] | «Backend Lead»      | TSD §6                        |
-| ADR-011 | Portal ships with mock data            | [TBC] | «Project Team Lead» | TSD §6 (superseded by CR-001) |
+| ADR-011 | Portal ships with mock data            | [TBC] | «Project Team Lead» | TSD §6 (superseded by the persisted report API) |
 | ADR-014 | Driver client is a native Expo app     | [TBC] | «Project Team Lead» | TSD §6                        |
 | ADR-015 | SSE over Redis pub/sub                 | [TBC] | «Backend Lead»      | TSD §6                        |
 | ADR-016 | Supabase Auth + app RBAC               | [TBC] | «Backend Lead»      | TSD §6 (superseded by ADR-021) |
@@ -465,7 +505,7 @@ Confidence in next:   <high/medium/low + reason>
 - [x] Token enforcement on every privileged route; role violations return 403 and change nothing.
 - [ ] Offline E2E and hazard publish latency tests pass.
 - [ ] Simulated sensors labelled in the product; no CCTV claim.
-- [ ] Document set approved, including CR-001.
+- [ ] Document set approved.
 - [ ] Repository access granted per institutional rule.
 - [ ] Handover session delivered to «Client Representative».
 - [ ] Known limitations communicated in writing (TSD §7).

@@ -7,13 +7,13 @@
 | Project        | MetroFlow                                                             |
 | Document       | Approval Register                                                     |
 | Version        | 1.0                                                                   |
-| Status         | For Review — CR-001, CR-002 and CR-003 approved 27 October 2026; CR-004 approved by the Project Lead 3 November 2026        |
+| Status         | For Review — scope baseline (including driver app, live hazards, fleet dispatch, sensors and live flood-state sources) approved; A-01 to A-09 remain For Review |
 | Date           | 23 October 2026                                                       |
 | Context        | Academic capstone project — not an official LGU project               |
 | Cost boundary  | No project fee; free tiers, open data and institutional resources only |
 | Formal approver | «Project Adviser» and the academic panel                             |
 
-This register lists every document, change request and gate that needs approval
+This register lists every document and gate that needs approval
 before the prototype can move into implementation or be presented as an accepted
 academic deliverable.
 
@@ -57,11 +57,7 @@ cannot close until its dependencies are approved.
 | A-07 | [API Reference](api.md) | 1.4 | Implemented API contracts and error model | «Project Adviser» / panel; technical review by «Project Team Lead» | Draft | Yes |
 | A-08 | [Admin UI Design Baseline](design/ADMIN_UI_BASELINE.md) | 0.4 | Admin design gate, components, states and traceability | «Project Adviser» / panel | For Review | Yes |
 | A-09 | [Driver App Design Baseline](design/DRIVER_APP_BASELINE.md) | 0.7 | Driver design gate, screens, states and traceability | «Project Adviser» / panel | For Review | Yes |
-| A-10 | [CR-001](CR-001.md) | 1.0 | Native Expo driver app, live hazards, fleet dispatch and sensors | «Project Adviser» / panel | Approved 27 Oct 2026 | No |
-| A-11 | [CR-002](CR-002.md) | 1.0 | Final-product Offline Areas; pilot scope unchanged | «Project Adviser» / panel | Approved 27 Oct 2026 | No — final-product scope only |
-| A-12 | [CR-003](CR-003.md) | 1.0 | Sentinel-1 advisory flood observations; pilot scope unchanged | «Project Adviser» / panel | Approved 27 Oct 2026 | No — final-product scope only |
-| A-15 | [CR-004](CR-004.md) | 1.0 | Live flood state from PAGASA river telemetry and satellite; Project NOAH as the advisory fallback | Project Lead (adviser and panel acknowledgement not recorded) | Approved 3 Nov 2026 by the Project Lead | No — final-product scope only |
-| A-13 | Implementation start gate | — | A-01 to A-12 and A-15 approved or formally deferred; open decisions closed | «Project Adviser» / panel | Partly cleared — A-10 to A-12 and A-15 approved; A-01 to A-09 still For Review | Yes |
+| A-13 | Implementation start gate | — | A-01 to A-09 approved or formally deferred; open decisions closed | «Project Adviser» / panel | Partly cleared — A-01 to A-09 still For Review | Yes |
 | A-14 | Data and privacy approach | — | Synthetic/public data, no real personal data, no live CCTV | «Project Adviser» / panel | For Review | Yes before any real data |
 | A-16 | Demo and acceptance review | — | Working demonstration, test evidence and known limitations | «Project Adviser» / panel | Not started | Yes for final acceptance |
 | A-17 | Final document set and defense | — | All documents accepted and limitations disclosed | «Project Adviser» / panel | Not started | Yes for final acceptance |
@@ -77,25 +73,20 @@ they are resolved or explicitly deferred in writing.
 | -------- | ------- | ----- | ------ |
 | `OD-D01` to `OD-D22` | Driver and admin design decisions recorded in the two design baselines | Scenario reviewer / Design / Engineering | Open; several may be deferred |
 | `OD-D07` | Native distribution, EAS, bundle identifiers and store accounts | Engineering | Open |
-| `OD-D23` | Offline provider, licence, package contents, storage limits and stale-data policy | Scenario reviewer / Engineering | CR-002 approved; design decisions still open |
-| `OD-D24` | Sentinel-1 access route, credential type, processing, confidence, latency and offline retention | Scenario reviewer / Engineering | CR-003 approved; design decisions still open |
-| `OD-D25` | PAGASA river telemetry access route, station list for the pilot corridor, thresholds, freshness window and licence | Project Lead / Engineering | CR-004 approved; access route open |
-| `OD-D26` | Open data sources for CR-004: Open-Meteo (fair use, attribution) and NASA GPM IMERG (Earthdata token) terms, resolution, and the pilot river points | Project Lead / Engineering | CR-004 rev 1.1 approved; terms to confirm |
+| `OD-D23` | Offline provider, licence, package contents, storage limits and stale-data policy | Scenario reviewer / Engineering | Open — final-product scope, not pursued for the pilot |
+| `OD-D24` | Sentinel-1 access route, credential type, processing, confidence, latency and offline retention | Scenario reviewer / Engineering | Open — final-product scope, not pursued for the pilot |
+| `OD-D25` | PAGASA river telemetry access route, station list for the pilot corridor, thresholds, freshness window and licence | Project Lead / Engineering | Open — access route not yet secured |
+| `OD-D26` | Open data sources: Open-Meteo (fair use, attribution) and NASA GPM IMERG (Earthdata token) terms, resolution, and the pilot river points | Project Lead / Engineering | Approved by the Project Lead 3 Nov 2026; terms to confirm |
 
 ### 2.2 Decision record
 
 | Date       | Item | Decision | Note |
 | ---------- | ---- | -------- | ---- |
-| 27 Oct 2026 | A-10 (CR-001) | Approved | Scope accepted; implementation continues, with route-level token enforcement tracked as TSD LIM-022 |
-| 27 Oct 2026 | A-11 (CR-002) | Approved | Final-product Offline Areas accepted; the pilot keeps its on-device report queue and cache, while basemap tile download stays out of scope (TSD LIM-017) |
-| 27 Oct 2026 | A-12 (CR-003) | Approved | Sentinel-1 selected as the final-product satellite source; no feed exists yet |
-| 3 Nov 2026 | A-15 (CR-004) | Approved by the Project Lead | PAGASA telemetry and satellite are the live sources; NOAH is a rain-gated advisory fallback. The Project Lead approves change requests under standing authority; adviser and panel acknowledgement is not recorded. `OD-D25` (PAGASA access route) is open |
-| 3 Nov 2026 | A-15 (CR-004 rev 1.1) | Approved by the Project Lead | Open data sources (Open-Meteo, NASA GPM IMERG) added as the working live sources while PAGASA access is open; values are labelled observed, modelled or estimated. Adviser and panel acknowledgement not recorded |
+| 3 Nov 2026 | Live flood-state sources | Approved by the Project Lead | PAGASA telemetry and satellite are the live sources; NOAH is a rain-gated advisory fallback. The Project Lead approves scope decisions under standing authority; adviser and panel acknowledgement is not recorded. `OD-D25` (PAGASA access route) is open |
 
-Approving the three change requests settles scope. It does not move A-01 to A-09,
-which remain For Review, and it does not close the open design decisions in
-§2.1. A-13 therefore stays open on those items rather than on the change
-requests.
+This decision does not move A-01 to A-09, which remain For Review, and it does
+not close the open design decisions in §2.1. A-13 therefore stays open on
+those items.
 
 ## 3. Approval Sequence
 
@@ -106,11 +97,9 @@ requests.
 3. **Technical baseline.** Approve the TSD and API reference.
 4. **Delivery controls.** Approve the Business Case and PMP.
 5. **Design gate.** Approve the admin and driver baselines.
-6. **Change requests.** Decide CR-001, CR-002 and CR-003 individually. Deferring
-   a change is allowed, but the affected feature cannot then enter implementation.
-7. **Implementation gate.** Close A-13 after the required approvals and open
+6. **Implementation gate.** Close A-13 after the required approvals and open
    decisions.
-8. **Acceptance.** Demonstrate, review and approve the final document set.
+7. **Acceptance.** Demonstrate, review and approve the final document set.
 
 ## 4. What Approval Does Not Authorise
 

@@ -1,6 +1,6 @@
 # MetroFlow — What's Left to Implement
 
-**As of:** 10 November 2026 · **Source:** cross-checked against `BACKLOG.md`,
+**As of:** 13 November 2026 · **Source:** cross-checked against `BACKLOG.md`,
 `docs/BRD.md`, `docs/TSD.md`, `docs/design/*_BASELINE.md`, and the actual code
 (`backend/main.py`, `models.py`, test suites) — not just what the docs claim.
 
@@ -11,13 +11,14 @@ over the items in that section. Blocked items count against the bar — they
 genuinely aren't done — but no amount of engineering time fixes them, so don't
 read a low bar there as "needs more coding." Out-of-scope features (Evacuation
 Centers, Comms Streams, Crew Profiles, Broadcasts, Air-Asset Escalation,
-CR-002/003 future proposals) and business paperwork (budgets, approvals,
+offline map regions and satellite observations as final-product proposals)
+and business paperwork (budgets, approvals,
 charter dates) are excluded entirely — they were never engineering work.
 
 ## Overall
 
 ```
-█████████████████░░░ 85%  (42.5 / 50 weighted items)
+████████████████░░░░ 83%  (41.5 / 50 weighted items)
 ```
 
 ---
@@ -30,7 +31,9 @@ links to its full writeup via the ID.
 
 ### Ready to implement (no external dependency)
 
-Nothing left here — the only item that fit this bucket (§7's doc sweep) is done.
+| ID | What's left | Where |
+|----|-------------|-------|
+| NFR-001/002/019 | Re-measured 13 Nov 2026 against the real Quezon City network over the hosted deployment: all three budgets missed by 11–14.7×. Profiled and fixed two real causes same day (NFR-001/002 only — see §1); still not met, remaining work is a clean re-measurement without a concurrent SSE client and a decision on the hosted-database round trip itself (NFR-019 untouched, unaffected by either fix) | §1, `TSD.md` LIM-028 |
 
 ### Written but needs a production go-ahead (lead dev sign-off, not coding)
 
@@ -54,16 +57,16 @@ Nothing left here — the only item that fit this bucket (§7's doc sweep) is do
 ## 1. Non-Functional Requirements — `docs/BRD.md`
 
 ```
-███████████████░░░░░ 78%  (19.5 / 25)
+██████████████░░░░░░ 74%  (18.5 / 25)
 ```
 
-- [x] NFR-001, 002 — network state / routing latency within budget (measured, `bench_latency.py`)
+- [ ] 🔶 NFR-001, 002 — network state / routing latency within budget. Was Done against the 34-node synthetic lattice over a local database; re-measured 13 Nov 2026 against the real Quezon City network over the hosted deployment and found not met (p95 ≈5,585 ms / ≈2,934 ms vs. 500 ms / 200 ms budgets). Two real code-level causes found and fixed same day (routing's unscoped geometry fetch; network-state's slow generic JSON serializer) — re-measured median improved for both, but network-state's p95 got worse due to a concurrent SSE client holding a DB connection during the benchmark, and the underlying hosted-DB round trip is untouched by either fix. **Still not met**; a clean re-measurement and the round-trip latency itself are still open (`bench_latency.py`, `BRD.md`, `TSD.md` LIM-028)
 - [x] NFR-004 — ZAP scan, 0 High/Medium (false-positive root-caused and fixed; awaiting a live CI run to confirm)
 - [x] NFR-005, 006, 007 — secrets, RLS, PII protection
 - [x] NFR-008, 010, 011 — triage interaction count, browser support, accessibility (axe-core in CI)
 - [x] NFR-012, 013, 014, 015 — migrations-only schema, external config, audit attribution, horizontal scaling
 - [x] NFR-017 — units and timezone
-- [x] NFR-019 — SSE publish latency ≤100ms p95 (was failing, fixed by lowering the poll interval)
+- [ ] 🔶 NFR-019 — SSE publish latency ≤100ms p95. Was Done locally (poll interval fix); re-measured 13 Nov 2026 against the hosted deployment and **not currently met** (p95 ≈1,374 ms — same cause as NFR-001/002, `TSD.md` LIM-028)
 - [x] NFR-020, 021, 022 — role checks, location privacy, telemetry throttle
 - [ ] 🔶 NFR-016 — RPO/RTO defined; `scripts/backup-db.sh` now runs nightly via a launchd job (03:00, 14-dump retention) and the drill on the hosted cluster matched prod row counts exactly; a restore *over* prod stays a go-ahead-gated runbook step — the free tier has no managed backups to restore from
 - [x] NFR-023 — storm/night theme now covers the driver app's navigation screen plus Home, SOS, Report and Report History (10 Nov 2026); the admin portal stays single-theme by standing scope decision, not a gap
@@ -161,11 +164,11 @@ list) — that table is stale, see §6.
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
   Civic Broadcasts, Air-Asset Escalation, functional offline tile caching,
   real CCTV — all in `AGENTS.md`'s scope constraints.
-- **Unapproved future proposals:** CR-002 (offline region packages), CR-003
-  (Sentinel-1 satellite ingestion) — change requests, not committed scope.
+- **Unapproved future-product proposals:** offline region packages, Sentinel-1
+  satellite ingestion — recorded as final-product scope, not committed for the pilot.
 - **Business/academic paperwork:** budgets, approvals, charter dates, ROI
   figures in `PROJECT_CHARTER.md`, `BUSINESS_CASE.md`, `PROJ_MANAGEMENT_PLAN.md`,
-  `APPROVALS.md`, `CR-001..004.md` — explicitly `[TBC]` placeholders for the
+  `APPROVALS.md` — explicitly `[TBC]` placeholders for the
   client/sponsor/adviser to fill in, per `docs/README.md`'s own convention.
 
 ## Suggested next step

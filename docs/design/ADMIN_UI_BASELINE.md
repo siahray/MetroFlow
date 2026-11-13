@@ -13,12 +13,11 @@
 | Source         | Client-supplied HTML/CSS, 4 of 4 UIs received        |
 | Behaviour ref  | [FSD](../FSD.md)                                     |
 | Architecture   | [TSD](../TSD.md)                                     |
-| Change record  | [CR-001](../CR-001.md)                               |
-| Implementation | Implemented through CR-001; see the 8 November 2026 status note below |
+| Implementation | Implemented; see the 8 November 2026 status note below |
 
 This baseline turns the supplied HTML/CSS into a design specification for the
 modelled LGU admin site. It does not approve implementation, cost, schedule or
-the outstanding CR-001 scope. This is an academic capstone project, not an
+the outstanding scope. This is an academic capstone project, not an
 official LGU deployment; the LGU is a scenario user context and no endorsement,
 funding or data-sharing agreement is implied. The native Expo driver app is
 covered separately in [DRIVER_APP_BASELINE.md](DRIVER_APP_BASELINE.md).
@@ -990,40 +989,45 @@ hard-coded.
 
 Roles follow `TSD` §Database Design — users.
 
-| Capability                           | SUPER_ADMIN | LGU_COMMANDER | LGU_DISPATCHER | EMERGENCY_DRIVER |
-| ------------------------------------ | :---------: | :-----------: | :------------: | :--------------: |
-| Sign in to the admin portal          |     Yes     |      Yes      |      Yes       |        No        |
-| View dashboard and queue             |     Yes     |      Yes      |      Yes       |        No        |
-| View masked reporter identity        |     Yes     |      Yes      |      Yes       |        No        |
-| Reveal reporter contact (audited)    |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Triage: reject, hold, escalate       |     Yes     |      Yes      |      Yes       |        No        |
-| Approve and dispatch                 |     Yes     |      Yes      |      Yes       |        No        |
-| Create hazard draft                  |     Yes     |      Yes      |      Yes       |        No        |
-| Publish or withdraw hazard           |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| View civic broadcasts                |     Yes     |      Yes      |      Yes       |        No        |
-| Publish or withdraw bulletin         |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Share or send bulletin               |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Approve public imagery               |   `[TBD]`   |    `[TBD]`    |       No       |        No        |
-| View evacuation capacity             |     Yes     |      Yes      |      Yes       |        No        |
-| Manage evacuation centers            |     Yes     |    `[TBD]`    |       No       |        No        |
-| View fleet                           |     Yes     |      Yes      |      Yes       |        No        |
-| View unit telemetry and task         |     Yes     |      Yes      |      Yes       |        No        |
-| View crew identity and certification |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| View comms stream                    |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Send comms or broadcast ping         |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Reroute an active unit               |     Yes     |      Yes      |      Yes       |        No        |
-| Complete or cancel a mission         |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Request support or air escalation    |     Yes     |      Yes      |    `[TBD]`     |        No        |
-| Assign or reassign a unit            |     Yes     |      Yes      |      Yes       |        No        |
-| View sensors and advisories          |     Yes     |      Yes      |      Yes       |        No        |
-| Configure sensor thresholds          |     Yes     |      Yes      |       No       |        No        |
-| Manage users and roles               |     Yes     |      No       |       No       |        No        |
-| Export incident and audit records    |     Yes     |      Yes      |    `[TBD]`     |        No        |
+| Capability                           | SUPER_ADMIN (Head) | ADMIN (Dispatcher) | RESPONDER / PUBLIC_DRIVER |
+| ------------------------------------ | :-----------------: | :----------------: | :------------------------: |
+| Sign in to the admin portal          |         Yes          |         Yes         |             No              |
+| View dashboard and queue             |         Yes          |         Yes         |             No              |
+| View masked reporter identity        |         Yes          |         Yes         |             No              |
+| Reveal reporter contact (audited)    |         Yes          |       `[TBD]`       |             No              |
+| Triage: reject, hold, escalate       |         Yes          |         Yes         |             No              |
+| Approve and dispatch                 |         Yes          |         Yes         |             No              |
+| Create hazard draft                  |         Yes          |         Yes         |             No              |
+| Publish or withdraw hazard           |         Yes          |       `[TBD]`       |             No              |
+| View civic broadcasts                |         Yes          |         Yes         |             No              |
+| Publish or withdraw bulletin         |         Yes          |       `[TBD]`       |             No              |
+| Share or send bulletin               |         Yes          |       `[TBD]`       |             No              |
+| Approve public imagery               |       `[TBD]`        |         No          |             No              |
+| View evacuation capacity             |         Yes          |         Yes         |             No              |
+| Manage evacuation centers            |         Yes          |         No          |             No              |
+| View fleet                           |         Yes          |         Yes         |             No              |
+| View unit telemetry and task         |         Yes          |         Yes         |             No              |
+| View crew identity and certification |         Yes          |       `[TBD]`       |             No              |
+| View comms stream                    |         Yes          |       `[TBD]`       |             No              |
+| Send comms or broadcast ping         |         Yes          |       `[TBD]`       |             No              |
+| Reroute an active unit               |         Yes          |         Yes         |             No              |
+| Complete or cancel a mission         |         Yes          |       `[TBD]`       |             No              |
+| Request support or air escalation    |         Yes          |       `[TBD]`       |             No              |
+| Assign or reassign a unit            |         Yes          |         Yes         |             No              |
+| View sensors and advisories          |         Yes          |         Yes         |             No              |
+| Configure sensor thresholds          |         Yes          |         No          |             No              |
+| Manage users and roles               |         Yes          |         No          |             No              |
+| Export incident and audit records    |         Yes          |       `[TBD]`       |             No              |
 
-The `EMERGENCY_DRIVER` role uses the separate native driver app and has no admin
-access. The matrix is a proposal until the client confirms who may publish
-hazards and public bulletins. `FSD-FR-092` requires the decision to be explicit
-and enforced by the API, not only by hiding buttons.
+`RESPONDER` (a field responder, typically linked to a rescue unit) and
+`PUBLIC_DRIVER` (the general public) are both driver-app roles with
+identical, non-privileged API access and no admin portal access. An earlier
+revision of this matrix carried a speculative `LGU_COMMANDER` role, column
+removed -- `FSD.md` ACT-002 already notes a commander "is not distinguished
+from dispatcher," so it was never a role distinct from `ADMIN`. The matrix
+is a proposal until the client confirms who may publish hazards and public
+bulletins. `FSD-FR-092` requires the decision to be explicit and enforced by
+the API, not only by hiding buttons.
 
 ## 11. Accessibility and Usability
 
@@ -1133,7 +1137,7 @@ UI 4 adds these issues:
 
 ## 13. Implementation Slices
 
-No slice starts until this baseline is accepted and CR-001 is approved.
+No slice starts until this baseline is accepted.
 
 | Slice | Output                                                        | FSD reference           | Verification                          |
 | ----- | ------------------------------------------------------------- | ----------------------- | ------------------------------------- |
@@ -1250,7 +1254,6 @@ Charter is completed.
 ## 16. What This Document Does Not Approve
 
 - It does not approve implementation or a sprint.
-- It does not approve CR-001.
 - It does not close the Requirements phase.
 - It does not confirm budget, dates or staffing.
 - It does not add Evacuation Centers, Civic Broadcasts, resident estimates or

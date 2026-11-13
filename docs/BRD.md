@@ -7,8 +7,12 @@
 | Version | Date        | Author         | Description                                                        |
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
 | 1.0     | 21 Oct 2026 | «Project Team» | Initial Version                                                    |
-| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch, sensor ingestion |
+| 1.1     | 21 Oct 2026 | «Project Team» | Driver app, live hazards, fleet dispatch, sensor ingestion added to scope |
 | 1.4     | 9 Nov 2026  | «Project Team» | Current-state column in Appendix A synced with the delivered pilot   |
+| 1.5     | 13 Nov 2026 | «Project Team» | Appendix A gains BR-019 (offline map areas, final-product, not implemented), BR-020 (satellite observation, not implemented), BR-021 (live flood-state sources, partly met), BR-022 (EV/HOV/toll "Smart Routing", declined) |
+| 1.6     | 13 Nov 2026 | «Project Team» | BR-003's current state updated for the Mapbox dry-state ("FASTEST") routing handoff; FLOOD_SAFE unaffected |
+| 1.7     | 13 Nov 2026 | «Project Team» | Success Metrics table's "Hazard publish to SSE event" row corrected from a stale "Met (9 Nov 2026)" to "Not currently met," matching NFR-019 above it |
+| 2.0     | 13 Nov 2026 | «Project Team» | Consolidated baseline: folded every prior scope addition into the document as original scope; retired the standalone change-request records |
 
 ## Approvals
 
@@ -124,8 +128,8 @@ Appendix A.
 
 | Req ID  | Description                                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------------------------------ |
-| NFR-001 | Network state responds within 500 ms at p95 for the pilot graph. Met: measured p95 ~163 ms (34-node pilot graph, `backend/benchmarks/bench_latency.py`, 9 Nov 2026). |
-| NFR-002 | Route requests respond within 200 ms at p95. Met: measured p95 ~115 ms (same benchmark).                           |
+| NFR-001 | Network state responds within 500 ms at p95 for the pilot graph. **Not currently met.** The 9 Nov 2026 "Met" figure (p95 ~163 ms) was measured locally against the 34-node synthetic lattice, not the real network or the hosted deployment. Re-measured 13 Nov 2026 (`backend/benchmarks/bench_latency.py`) against the real Quezon City network (6,177 nodes, 7,618 edges) through the actual hosted API/database path: **p95 ≈5,585 ms, 11× over budget.** Profiled the same day and found two distinct, fixable causes, not the database round trip alone: (1) `/network/state` was returning its ~5.3 MB GeoJSON payload through FastAPI's generic `jsonable_encoder`, measured at ~3.2 s for this payload against ~0.16 s for Pydantic's own serializer — now fixed, the endpoint returns a pre-serialized `Response` instead (`backend/main.py::get_network_state`); (2) the hosted database round trip itself (Vercel function to the Supabase pooler in `ap-northeast-2`) still costs roughly 1-1.5 s per request end to end, unchanged by this fix. Re-measured after the fix: median ≈4,705 ms, but **p95 ≈52,872 ms** — the fix measurably helped the typical case but the tail got worse, which traces to a live SSE client (a connected driver/portal session) holding a pooled database connection open throughout the run, the same pool-contention pattern already recorded in `BACKLOG.md`'s simulation-endpoint entries. **Still not met**, and the fix is only partially verified: a clean re-measurement with no concurrent SSE clients is needed before this NFR can be re-scored |
+| NFR-002 | Route requests respond within 200 ms at p95. **Not currently met.** Same original re-measurement as NFR-001: **p95 ≈2,934 ms, 14.7× over budget**, against the earlier "Met" figure of ~115 ms on the 34-node lattice over a local connection. Profiling traced a distinct, fixable cause: the endpoint was fetching every edge's geometry (~7,618 rows) to render a route that only ever uses a few dozen of them; `_load_edge_geometry` now takes an `edge_ids` filter and the routing endpoint passes only the path's own edges (`backend/main.py`). Re-measured after the fix: median ≈2,509 ms, p95 ≈4,341 ms — a modest, not yet conclusive improvement, muddied by the same concurrent-SSE-client contention noted under NFR-001. **Still not met** |
 | NFR-003 | API availability of 99% during a declared event `[TBC]`.                                                           |
 | NFR-004 | No High or Medium findings from the OWASP ZAP API scan. Fixed 9 Nov 2026, awaiting a green CI run: the last two scheduled runs showed a High SQLi alert on `/auth/login`, `/auth/send-verification` and `/auth/verify`, which was a false positive from the scan's own request volume tripping the login/register rate limiter mid-scan (401→429 read as a boolean differential); `security-zap.yml` now raises those limits for its own ephemeral run only, and a local run of the same scan reports 0 High/Medium/Low. |
 | NFR-005 | No secrets in the repository; runtime configuration supplied by environment variables.                             |
@@ -142,13 +146,18 @@ Appendix A.
 | NFR-016 | Recovery point and recovery time objectives are defined and tested. RPO ≤24h (age of newest `scripts/backup-db.sh` dump), RTO ≤1h (`docs/TSD.md` §5.2); dump/restore drilled on the hosted cluster 10 Nov 2026 — scratch DB restored with every table's row count matching prod exactly. A restore *over* prod stays a go-ahead-gated runbook step; the free tier exposes no managed backups, so `pg_dump` is the only mechanism. |
 | NFR-017 | Times shown in PHT, distances in metres/kilometres, depths in centimetres.                                         |
 | NFR-018 | The driver app navigates and accepts reports from the cached corridor when offline `[TBC]`.                        |
-| NFR-019 | A published hazard reaches every connected SSE client in 100 ms at p95, server-side. Was failing at the 100 ms poll default (measured ~110 ms median, ~220-330 ms p95 -- a 100 ms poll alone cannot bound p95 to 100 ms once any processing time is added). Fixed: `event_stream_poll_ms` lowered to 40 (`backend/config.py`); re-measured p95 ~50 ms. |
+| NFR-019 | A published hazard reaches every connected SSE client in 100 ms at p95, server-side. Was failing at the 100 ms poll default (measured ~110 ms median, ~220-330 ms p95 -- a 100 ms poll alone cannot bound p95 to 100 ms once any processing time is added). Fixed: `event_stream_poll_ms` lowered to 40 (`backend/config.py`); re-measured p95 ~50 ms at the time, locally. **Not currently met**: re-measured 13 Nov 2026 against the hosted deployment, same benchmark run as NFR-001/002: **p95 ≈1,374 ms, 13.7× over budget** -- the `event_stream_poll_ms` fix itself is unchanged in code; this regression is the hosted database's real round-trip latency on every poll, not a regression in the poll-interval fix |
 | NFR-020 | Every privileged LGU action is role-checked; unauthorised calls return 403 and change nothing.                     |
 | NFR-021 | Driver positions are rounded to 50 m, device ids salted-hashed, and retained at most 24 hours.                     |
 | NFR-022 | Telemetry is throttled to at most one batch per five seconds per device.                                           |
 | NFR-023 | Storm and night themes keep AA text contrast and pair colour with a text or shape cue. Built in the driver app (9 Nov 2026): a persisted toggle (Profile, and a quick-access icon on the navigation screen) switches between day and a low-glare storm palette (`metroflow-mobile/src/theme.tsx`), mapped per contrast role rather than inverted wholesale. Extended 10 Nov 2026 to Home, SOS, Report and Report History, so every screen a driver uses while the toggle is on now follows it, not just route/navigation and map chrome. The admin portal stays single-theme — out of scope by standing decision (`BACKLOG.md`), not a gap. |
 | NFR-024 | The driver app becomes interactive within 5 s on a mid-range phone over 4G `[TBC]`.                                |
 | NFR-025 | The LGU map renders the pilot network and active hazards at a usable frame rate while panning and zooming `[TBC]`. |
+| NFR-026 | A region package must be resumable and must not exceed the approved storage cap `[TBC]` MB (final-product Offline Areas, not implemented for the pilot). |
+| NFR-027 | An observation must show acquisition-to-availability latency, confidence and expiry; the approved service-level target is `[TBC]` (satellite flood observations, not implemented for the pilot). |
+| NFR-028 | Ingestion must tolerate source outages without failing requests, and report a source as stale within one freshness window (live flood-state sources, implemented). |
+| NFR-029 | Every non-flood routing preference (toll, HOV, EV, schedule) must degrade gracefully to the plain flood-safe route when its backing data source is unavailable (Smart Routing extras, declined for the pilot). |
+| NFR-030 | A missing token, a disabled flag, or a failed Mapbox call must never fail a route request; the in-house engine is always the fallback (dry-state routing, implemented). |
 
 ## Risks
 
@@ -164,7 +173,7 @@ Business-level risks. The full register, scoring and responses are in
 | Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require a change request                                    |
 | Personal data incident during testing             | Legal and ethical exposure                 | Synthetic data only; row-level security verified; no personal data in logs                     |
 | Hosted database secret never supplied             | Hosted deployment not demonstrated         | Resolved — the hosted deployment is live (`docs/TSD.md` §5.2/5.3): Supabase Postgres at head, API on Vercel, portal on Vercel, migrations applied by CI             |
-| CR-001 scope exceeds the remaining term           | Schedule overrun; nothing accepted on time | Phase gates; `Must` requirements first; every further addition requires a change request       |
+| Driver-app scope exceeds the remaining term       | Schedule overrun; nothing accepted on time | Phase gates; `Must` requirements first; every further addition requires a change request       |
 | Drivers do not adopt the app                      | Field evidence stays thin                  | Usability tests from M7; QR onboarding; synthetic reports remain a fallback                    |
 | Background location limits on iOS                 | Telemetry gaps during navigation           | Foreground-only telemetry; limitation recorded                                                  |
 | Driver location privacy incident                  | Legal and ethical exposure                 | Rounding, hashing, 24-hour retention, role-only access, synthetic test data                    |
@@ -182,7 +191,7 @@ Business-level risks. The full register, scoring and responses are in
 | High/Medium security findings               | 0                                              | Met (9 Nov 2026) — see NFR-004 above                                          |
 | `Must` requirements accepted                | 100% by M9                                     | Tracked in the FSD, not this document                                        |
 | System Usability Scale                      | ≥ 75 `[TBC]`                                   | Blocked — needs real UAT sessions                                            |
-| Hazard publish to SSE event                 | ≤ 100 ms at p95, server-side                   | Met (9 Nov 2026) — see NFR-019 above                                         |
+| Hazard publish to SSE event                 | ≤ 100 ms at p95, server-side                   | **Not currently met** — re-measured 13 Nov 2026 against the real Quezon City network over the hosted deployment, p95 ≈1,374 ms; see NFR-019 above |
 | Offline route completion in cached corridor | 100% of scripted runs                          | Met — `offline-route.test.ts` (clearance vs depth, hazard detour, `ignore_hazards`, no safe route), 15/15 passing |
 | Privileged actions blocked without a role   | 100%                                           | Met — role-dependency checks return 403 on every privileged route; test-covered |
 | Driver reports reaching a triage decision   | 100% of queued reports have a recorded outcome | Structurally guaranteed (no silent delete, `BRULE-005`); not yet measured over a real event |
@@ -198,7 +207,7 @@ does, so this document is also an honest statement of scope.
 | ------ | ---------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
 | BR-001 | Provide a single, current view of road passability across the pilot corridor | Must     | Met — network state endpoint returns every edge with depth and status                 |
 | BR-002 | Allow the operations unit to ask "what happens if it rains this hard?"       | Must     | Met — rainfall simulation endpoint                                                    |
-| BR-003 | Recommend a route that a vehicle of known clearance can actually drive       | Must     | Met — routing endpoint                                                                |
+| BR-003 | Recommend a route that a vehicle of known clearance can actually drive       | Must     | Met — routing endpoint; a dry (FASTEST) request now hands off to the Mapbox Directions API for a real road network and live traffic, reporting the source used; FLOOD_SAFE routing is unaffected |
 | BR-004 | Present incoming reports as a prioritised queue                              | Must     | Met — queue ordered by urgency score                                                  |
 | BR-005 | Allow narrowing the queue by source and by free-text search                  | Should   | Met — source filters and search                                                       |
 | BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                     |
@@ -212,12 +221,17 @@ does, so this document is also an honest statement of scope.
 | BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue and a moderation desk            |
 | BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; native telephony is out of scope |
 | BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — gauge ingestion and advisory road flagging are implemented; external PAGASA and satellite feeds (CR-004) are not connected |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — gauge ingestion and advisory road flagging are implemented; external PAGASA and satellite feeds are not connected |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
+| BR-019 | A driver must be able to use a usable map, road graph and safety snapshot when connectivity is unavailable (final-product Offline Areas) | Could | Not implemented for the pilot — design placeholder only (`/offline` simulates download states); final-product scope, pilot delivery unaffected |
+| BR-020 | Give dispatchers a wide-area, all-weather flood observation source that complements reports and gauges | Should | Not implemented — Sentinel-1 satellite ingestion proposed, pilot scope unchanged |
+| BR-021 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Partly met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled; PAGASA telemetry and the Sentinel-1 observation remain blocked on `OD-D25` |
+| BR-022 | A driver on the final-product release may route to include EV charging, avoid HOV lanes or tolls, or plan a multimodal trip, without weakening flood-safety routing | Could | Declined for the pilot and for any near-term release — no real road-attribute or charger data exists to build it on; recorded as a final-product research item only |
 
 `Must` requirements define the acceptance boundary. All of them are met in the pilot
-except the external-feed half of BR-017, which is `Should`; CR-004 is the vehicle that
-closes it. Deprioritised or out-of-pilot scope is marked above rather than assumed.
+except the external-feed half of BR-017, which is `Should`; live flood-state source
+integration is the vehicle that closes it. Deprioritised or out-of-pilot scope is
+marked above rather than assumed.
 
 ### A.2 In scope
 

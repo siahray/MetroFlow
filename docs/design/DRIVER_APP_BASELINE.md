@@ -13,12 +13,11 @@
 | Source         | Client-supplied HTML/CSS, 8 driver screens received in 4 source files |
 | Behaviour ref  | [FSD](../FSD.md)                                                      |
 | Architecture   | [TSD](../TSD.md) — ADR-014, ADR-021 and proposed ADR-022              |
-| Change record  | [CR-001](../CR-001.md); CR-002 and CR-003 proposed                    |
-| Implementation | Implemented through CR-001; see the 8 November 2026 status note below |
+| Implementation | Implemented; see the 8 November 2026 status note below               |
 
 This baseline turns the supplied driver HTML/CSS into a design specification for
 the native Expo driver app. It does not approve implementation, cost, schedule or
-the outstanding CR-001 scope. This is an academic capstone project, not an
+the outstanding scope. This is an academic capstone project, not an
 official LGU deployment; the LGU and responder context is a scenario, and no
 endorsement, funding or data-sharing agreement is implied. The admin portal is
 covered separately in [ADMIN_UI_BASELINE.md](ADMIN_UI_BASELINE.md).
@@ -31,7 +30,7 @@ gap is recorded below.
 > Stack change: the driver client moved from a Vite PWA to Expo SDK 58 / React
 > Native / Expo Router on 22 October 2026. The Vite prototype remains in git
 > history at `1633c75`; the supplied HTML/CSS remains archived under
-> `source/driver/`. This change is covered by CR-001 and ADR-014 and is pending
+> `source/driver/`. This change is covered by ADR-014 and is pending
 > academic approval.
 
 > **Implementation status (27 October 2026).** This baseline is a design
@@ -71,11 +70,11 @@ share a third source file. The profile screen has a fourth source file. All four
 files are preserved for provenance and are not production code.
 
 The Offline Maps screen is not in the four supplied source files. It is a
-final-product design extension added under proposed [CR-002](../CR-002.md). It
+final-product design extension, not pursued for the pilot. It
 uses the established driver tokens and a local simulated state; it is not a
-production download implementation. Proposed [CR-003](../CR-003.md) selects
-Sentinel-1 as the final-product satellite source for advisory flood extent; the
-prototype uses no satellite data, credential or derived layer.
+production download implementation. Sentinel-1 is selected as the final-product
+satellite source for advisory flood extent; the prototype uses no satellite
+data, credential or derived layer.
 
 ### Common implementation
 
@@ -144,7 +143,7 @@ Production adaptation:
 - Functional telemetry, live sensor-feed connection and offline-map downloads;
   the Offline Maps screen is a design placeholder only.
 - Sentinel-1 ingest, flood-extent processing, observation review and the
-  satellite-derived hazard layer; proposed in CR-003 and not present in the
+  satellite-derived hazard layer; a final-product proposal, not present in the
   prototype.
 - Hazard detail, full drainage map and notification screens.
 - Profile editing, verified-ID handling, settings persistence and logout behaviour.
@@ -158,7 +157,7 @@ Production adaptation:
 ### Out-of-scope elements removed
 
 The following supplied affordances were removed from the prototype because they
-promise features excluded by CR-001 §3.2 or have no FSD or API requirement. The
+promise features out of pilot scope or have no FSD or API requirement. The
 source HTML remains archived for provenance; do not reintroduce these controls
 without a scope change and design-gate approval.
 
@@ -171,7 +170,7 @@ without a scope change and design-gate approval.
 The earlier combined `Offline Maps & Telemetry` settings row was removed in v0.5
 because it implied a downloaded raster tile cache. In v0.6 it is replaced by a
 standalone `Offline Maps` final-product design placeholder. Functional offline
-tile downloads remain outside the pilot scope and require CR-002 approval.
+tile downloads remain outside the pilot scope, recorded as a final-product item.
 
 ### Current prototype boundary
 
@@ -293,7 +292,7 @@ without a brand decision. See `OD-D05` and `OD-D10`.
 | Report Hazard    | `/(tabs)/report`  | 6         | FSD-FR-065 to 067 as visual affordances                               | Partial — shell only, no upload |
 | SOS Rescue Dispatch | `/(tabs)/sos`  | 7         | FSD-FR-073, 074 as visual affordances                                 | Partial — posts to `/api/v1/sos`; no native telephony |
 | Citizen Profile  | `/(tabs)/profile` | 8         | No dedicated FSD requirement; clearance and session fields overlap FSD-FR-002 and FSD-FR-022 | Implemented — clearance in cm, sign-out |
-| Offline Maps     | `/offline`        | none      | Final-product extension under CR-002                                   | Placeholder — simulated download |
+| Offline Maps     | `/offline`        | none      | Final-product extension, not pursued for the pilot                     | Placeholder — simulated download |
 | SOS confirmation | overlay           | 2 partial | FSD-FR-073, FSD-FR-074                                                | Entry only                     |
 
 ## 5. Screen Details
@@ -595,8 +594,8 @@ Traceability and gaps:
   Those screens and states are not supplied.
 - The priority-line, geo-lock, accuracy, sensor, 24/7 monitoring and "Critical"
   labels have no confirmed data source. See `OD-D20`.
-- Production telephony and emergency-service hand-off are out of scope under
-  CR-001 §3.2. The `Call 911 Directly` action was removed; the disclaimer keeps a
+- Production telephony and emergency-service hand-off are out of pilot scope.
+  The `Call 911 Directly` action was removed; the disclaimer keeps a
   static instruction to call 911 from the user's phone. See `OD-D19`.
 - The supplied pedestrian icon is `figure-stand`, which the source script
   replaces with `user`; the prototype uses Lucide `User`.
@@ -655,10 +654,9 @@ Traceability and gaps:
 ### 5.9 Offline Maps
 
 This screen is a final-product extension, not part of the four supplied source
-files. It is recorded under approved [CR-002](../CR-002.md), with the
-final-product satellite flood snapshot approved under
-[CR-003](../CR-003.md). It is a design placeholder for review and does not
-change the pilot scope.
+files, with the final-product satellite flood snapshot recorded as a related
+proposal. It is a design placeholder for review and does not change the pilot
+scope.
 
 Elements:
 
@@ -695,16 +693,15 @@ Interactions:
 
 Traceability and gaps:
 
-- The FSD has no offline-map requirement. CR-002 proposes `FSD-FR-094` to
-  `FSD-FR-100`; those identifiers are not effective until the change is
-  approved.
+- `FSD-FR-094` to `FSD-FR-100` are recorded in the FSD but not implemented
+  for the pilot.
 - `Metro Manila Grid` is demo copy. Region boundaries, map provider, tile licence,
   package size, storage limit, update cadence, auto-update consent and stale-data
   policy remain unresolved. See `OD-D23`.
 - In the production target, the hazard snapshot carries verified hazards plus
   the latest verified Sentinel-1 flood extent, with acquisition time, confidence,
   source and expiry. Raw scenes and the Sentinel credential are never packaged.
-  CR-003 is approved; none of this is implemented.
+  None of this is implemented for the pilot.
 - The hazard snapshot is deliberately a point-in-time copy. Using it must never
   present the route as live-safe; the warning is part of the design contract.
   Sentinel-1 extent is not depth and does not establish road passability.
@@ -723,7 +720,7 @@ Before production integration:
 
 | Area                | Delta                                                                                              | Status |
 | ------------------- | -------------------------------------------------------------------------------------------------- | ------ |
-| Identity            | Supabase Auth session, identifier policy and role checks per FSD-FR-021 to 023 and CR-001           | Open   |
+| Identity            | Supabase Auth session, identifier policy and role checks per FSD-FR-021 to 023                      | Open   |
 | Guest access        | Session or anonymous-device policy, limits, home identity and sign-out behaviour                    | Open   |
 | Report submission   | Depth/passability/notes payload, validation, idempotency and confirmation screen                     | Open   |
 | Report evidence     | Native camera/file picker, MIME and size limits, multipart upload and storage                        | Open   |
@@ -737,7 +734,7 @@ Before production integration:
 | Hazard stream       | Verified hazard subscription, route intersection, reroute and alert-detail contract                 | Open   |
 | Drainage telemetry  | Pump capacity, blocked segments, tide level, estuary surge and update timestamps                    | Open   |
 | Weather             | Temperature and condition source                                                                | Open   |
-| Map                 | MapLibre React Native, tile source, satellite style and offline cached graph; offline region packages proposed under CR-002 | Later  |
+| Map                 | MapLibre React Native, tile source, satellite style and offline cached graph; offline region packages a final-product proposal | Later  |
 | Map overlays        | Hazard polygons, route polyline, water-level tags and map labels                                    | Later  |
 | Quick picks         | Work, Home, gym and mall destinations, custom pins and persistence                                  | Open   |
 | Recent searches     | Safe-search history, reuse, clear-history behaviour and privacy                                     | Open   |
@@ -747,8 +744,8 @@ Before production integration:
 | App version         | Source of displayed version and build metadata                                                     | Open   |
 | Bottom navigation   | Report, Rescue and Profile routes implemented; notification and full-drainage-map destinations remain pending | Partial |
 | Offline             | SQLite cache, queue and sync per FSD-FR-068 to 071                                                  | Later  |
-| Offline map package | Region manifest, package size, version, checksum, tile/graph/hazard snapshot, expiry and download URL | Open — CR-002 |
-| Offline map storage | File layout, size cap, eviction, integrity check, resume and update policy                          | Open — CR-002 |
+| Offline map package | Region manifest, package size, version, checksum, tile/graph/hazard snapshot, expiry and download URL | Open |
+| Offline map storage | File layout, size cap, eviction, integrity check, resume and update policy                          | Open |
 | Native distribution | EAS project, bundle identifiers, signing, TestFlight/internal testing and store accounts             | Open   |
 | Background location | `expo-location` + `expo-task-manager`, permission copy and store justification                        | Open   |
 | Push                | `expo-notifications`, device registration and permission flow                                      | Later  |
@@ -768,7 +765,7 @@ destinations; authentication and the route picker sit outside it.
 | `src/app/(tabs)/sos.tsx`    | SOS Rescue Dispatch — posts to `/api/v1/sos`                    |
 | `src/app/(tabs)/profile.tsx`| Citizen Profile, clearance in cm, sign-out                      |
 | `src/app/route.tsx`         | Destination entry and the flood-safe / direct route comparison  |
-| `src/app/offline.tsx`       | Offline Maps — labelled final-product placeholder (CR-002)      |
+| `src/app/offline.tsx`       | Offline Maps — labelled final-product placeholder      |
 | `src/api.ts`                | API client: login, register, verification, SOS                  |
 | `src/auth.tsx`              | Auth context shared by the tabs                                 |
 | `app.json`                  | Expo configuration, icons and the router root                   |
@@ -806,7 +803,7 @@ avatar is local initials rather than a remote image.
 | OD-D08 | What data drives the status labels?                                                             | Client       | Open               |
 | OD-D09 | Which native capabilities are pilot must-haves: background location, push, offline SQLite or cached road graph? | Client / Engineering | Open |
 | OD-D10 | Use Inter or Plus Jakarta Sans across the driver app, and how should the two palettes be reconciled? | Client / Design | Open     |
-| OD-D11 | Which map provider and tile style are required, and is the satellite aesthetic mandatory? Offline tile packs are proposed under CR-002. | Client / Engineering | Open |
+| OD-D11 | Which map provider and tile style are required, and is the satellite aesthetic mandatory? Offline tile packs remain a final-product proposal. | Client / Engineering | Open |
 | OD-D12 | Which drainage, pump, tide, weather and estuary values are demo copy, and which contracts feed them? | Client / FSD | Open     |
 | OD-D13 | Is the five-item bottom navigation in scope for the pilot, and what do Report, Rescue and Profile open? | Client / Design | Routes answered; pilot scope open |
 | OD-D14 | Should guest sessions show the supplied "Carlos Reyes" identity or an anonymous state?            | Client / Design | Open           |
@@ -814,12 +811,12 @@ avatar is local initials rather than a remote image.
 | OD-D16 | Should turn-by-turn, active navigation, hazard detail and full drainage map be supplied next?     | Client       | Open               |
 | OD-D17 | Confirm the report depth vocabulary, required-field validation and whether local depth/passability/notes state persists or submits. | Client / FSD | Open |
 | OD-D18 | What confirmation, offline queue, acknowledgement, assignment and resolution states follow report submission and SOS dispatch? | Client / Design | Open |
-| OD-D19 | Native telephone hand-off for SOS | Client / Engineering | Answered — out of scope under CR-001 §3.2; action removed, static 911 instruction retained |
+| OD-D19 | Native telephone hand-off for SOS | Client / Engineering | Answered — out of pilot scope; action removed, static 911 instruction retained |
 | OD-D20 | Which "Live Dispatch Sync", "Active Geo-Lock", sensor telemetry, dispatch count and monitoring claims are real? | Client / FSD | Open |
 | OD-D21 | Which profile fields are authoritative and verified, how is `280 mm` clearance converted, and what does Log Out do? | Client / FSD | Open |
 | OD-D22 | Is the notification switch a real push-permission control, and what do Help & Support actions do? | Client / Engineering | Open |
-| OD-D23 | For final-product offline maps: which region boundaries and provider licence apply, and what are the package contents, size cap, storage limit, auto-update consent, signed manifest and stale-data policy? | Client / Engineering | Open — CR-002 |
-| OD-D24 | For final-product Sentinel-1 observations: which Copernicus access route and credential type, product level, processing service/algorithm, validation method, confidence and publish threshold, revisit/latency target, licence/attribution and offline retention apply? | Client / Engineering | Open — CR-003 |
+| OD-D23 | For final-product offline maps: which region boundaries and provider licence apply, and what are the package contents, size cap, storage limit, auto-update consent, signed manifest and stale-data policy? | Client / Engineering | Open |
+| OD-D24 | For final-product Sentinel-1 observations: which Copernicus access route and credential type, product level, processing service/algorithm, validation method, confidence and publish threshold, revisit/latency target, licence/attribution and offline retention apply? | Client / Engineering | Open |
 
 ## 9. Design Gate Checklist
 
@@ -840,9 +837,6 @@ avatar is local initials rather than a remote image.
 - [ ] Accessibility review completed
 - [ ] `375 × 812` visual review signed off
 - [ ] Design gate approved
-- [ ] CR-001 approved
-- [ ] CR-002 approved
-- [ ] CR-003 approved
 
 Production work remains blocked until the unchecked items are closed.
 
@@ -878,6 +872,6 @@ Production work remains blocked until the unchecked items are closed.
 | FSD-FR-073 | One-tap SOS with location                       | Prototype — SOS screen and static location; no request |
 | FSD-FR-074 | SOS acknowledgement, assignment and resolution  | Not supplied                          |
 | No dedicated FSD requirement | Citizen Profile and settings     | Prototype — demo data; local settings only |
-| CR-002 (FSD-FR-094 to 100 proposed) | Offline Maps download, readiness, storage and stale-data states | Design placeholder — simulated; no storage or network |
-| CR-003 (FSD-FR-101 to 107 proposed) | Sentinel-1 observation review, verified satellite hazard, freshness and offline snapshot | Not implemented — advisory satellite source proposed |
-| CR-001 §3.2; no FSD requirement | Native telephony and Civic Karma | Removed from prototype |
+| FSD-FR-094 to 100 (proposed) | Offline Maps download, readiness, storage and stale-data states | Design placeholder — simulated; no storage or network |
+| FSD-FR-101 to 107 (proposed) | Sentinel-1 observation review, verified satellite hazard, freshness and offline snapshot | Not implemented — advisory satellite source proposed |
+| Out of pilot scope; no FSD requirement | Native telephony and Civic Karma | Removed from prototype |

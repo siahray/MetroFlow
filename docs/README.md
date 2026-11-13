@@ -4,14 +4,22 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v1.2 (CR-001, approved 27 October 2026) · **Code baseline:** `main`, 9 November 2026
+**Document baseline:** v2.0 (consolidated, 13 November 2026) · **Code baseline:** `main`, 13 November 2026
 
-CR-001 extends the scope to the Expo driver app, live hazard publication, fleet
-dispatch and sensor ingestion. The change request is **approved and implemented**:
-authentication, SOS, hazards, fleet, dispatch, field reports and moderation, sensors,
-event streams, offline operation, exports and user management all exist in the API and
-the clients. Each document labels its own status honestly rather than assuming the
-target state; `FSD.md` §Implementation Status is the per-requirement record.
+The pilot scope covers an Expo driver app, live hazard publication, fleet
+dispatch, sensor ingestion, authentication, SOS, field reports and moderation,
+event streams, offline operation, exports and user management — all implemented
+in the API and the clients. A dry-state ("FASTEST") routing request hands off
+to the Mapbox Directions API; `FLOOD_SAFE` routing is unaffected (BRULE-017).
+The pilot's road network is scoped to Quezon City for presentation legibility,
+which surfaced that NFR-001/002/019 are **not currently met** at this real-OSM
+scale (LIM-028). A downloadable-offline-areas capability, satellite flood
+observations and "Smart Routing" extras (EV/HOV/toll/multimodal) remain
+out of scope for the pilot — the first two as proposed final-product work, the
+third declined for lack of real road-attribute data (see BRD Appendix A,
+BR-019 to BR-022). Each document labels its own status honestly rather than
+assuming the target state; `FSD.md` §Implementation Status is the
+per-requirement record.
 
 ## Documents
 
@@ -23,11 +31,7 @@ target state; `FSD.md` §Implementation Status is the per-requirement record.
 | Functional Specification       | [FSD.md](FSD.md)                                   | MF-FSD-001 | Defines actors, functional requirements, screens and tests           | Developers, QA, panel   |
 | Technical Specification        | [TSD.md](TSD.md)                                   | MF-TSD-001 | Defines architecture, algorithms, data design, security and CI/CD    | Developers, panel       |
 | Project Management Plan        | [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) | MF-PMP-001 | Defines schedule, quality, risk, communications and change control   | Team, adviser           |
-| Approval Register              | [APPROVALS.md](APPROVALS.md)                       | MF-APR-001 | Lists every document, change request and gate that needs approval    | Adviser, panel, team    |
-| Change Request CR-001          | [CR-001.md](CR-001.md)                             | MF-CR-001  | Records the scope change for the Expo driver app, hazards, fleet, sensors | Sponsor, team, panel  |
-| Change Request CR-002          | [CR-002.md](CR-002.md)                             | MF-CR-002  | Final-product Offline Areas; pilot scope unchanged                   | Adviser, team, panel    |
-| Change Request CR-003          | [CR-003.md](CR-003.md)                             | MF-CR-003  | Sentinel-1 advisory flood observations; pilot scope unchanged        | Adviser, team, panel    |
-| Change Request CR-004          | [CR-004.md](CR-004.md)                             | MF-CR-004  | Live flood-state sources and the source-priority rule; NOAH fallback | Adviser, team, panel    |
+| Approval Register              | [APPROVALS.md](APPROVALS.md)                       | MF-APR-001 | Lists every document and gate that needs approval                    | Adviser, panel, team    |
 | Progress Report                | [../PROGRESS_REPORT.md](../PROGRESS_REPORT.md)      | —          | Records what is implemented on the current branch                    | Team, panel             |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
 
@@ -111,7 +115,6 @@ Requirement identifiers are stable across every document.
 | `R-001`, `A-001`, `I-001`, `D-001` | RAID entry                        | PMP                              |
 | `ADR-001`                          | Architecture decision             | TSD                              |
 | `LIM-001`, `SEC-001`               | Known limitation, security risk   | TSD                              |
-| `CR-001`                           | Change request                    | CR-001, PMP change control       |
 
 ## Placeholder conventions
 
@@ -133,13 +136,16 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | ------- | ----------- | -------------- | ----------------------------------------------------------------------- |
 | 0.1     | 21 Oct 2026 | «Project Team» | Initial draft of the six project documents and the API reference        |
 | 1.0     | 21 Oct 2026 | «Project Team» | Restructured to the supplied Word templates; template identifier scheme |
-| 1.1     | 21 Oct 2026 | «Project Team» | CR-001: driver app, live hazards, fleet dispatch and sensors            |
+| 1.1     | 21 Oct 2026 | «Project Team» | Driver app, live hazards, fleet dispatch and sensors added to scope      |
 | 1.2     | 22 Oct 2026 | «Project Team» | Provider keys, Supabase Auth, Mapbox tiles and template-sourced UI      |
-| 1.3     | 27 Oct 2026 | «Project Team» | CR-001 approved; ADR-021 tokens; implementation status aligned with the code |
+| 1.3     | 27 Oct 2026 | «Project Team» | Driver-app scope approved; ADR-021 tokens; implementation status aligned with the code |
 | 1.4     | 27 Oct 2026 | «Project Team» | Route-level token enforcement and role checks; LIM-001 and LIM-022 closed |
 | 1.5     | 27 Oct 2026 | «Project Team» | API hosted as a Vercel Python function; portal pointed at it; LIM-023 and LIM-024 recorded |
 | 1.6     | 28 Oct 2026 | «Project Team» | Application rate limits on login, registration, SOS and simulation (LIM-006 closed for limits; LIM-025 records the plan's missing WAF); FSD status and actors aligned |
 | 1.7     | 28 Oct 2026 | «Project Team» | API connected to the repository (root `backend/`, production `main`); LIM-024 closed |
+| 1.8     | 13 Nov 2026 | «Project Team» | EV/HOV/toll "Smart Routing" recorded as declined (no real road-attribute data); dry-state routing hands off to Mapbox Directions (FSD-FR-131, BRULE-017); driver navigation polish (FSD-FR-124 to 129: voice guidance, route preview/Start, speed-aware camera, heading marker, Quick Picks/recent search, alternative routes); live-weather simulation toggle (FSD-FR-130) |
+| 1.9     | 13 Nov 2026 | «Project Team» | Pilot road network scoped to Quezon City (LIM-014 superseded again); NFR-001/002/019 re-measured against the live hosted network and recorded as **not currently met** (LIM-028); project schedule dates corrected against git history across Charter/PMP/Business Case |
+| 2.0     | 13 Nov 2026 | «Project Team» | Consolidated baseline: folded every prior scope addition into the documents as original scope; retired the standalone change-request records |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
@@ -150,7 +156,7 @@ change, per the configuration management rules in the PMP.
 | Material                     | Location                                       |
 | ---------------------------- | ---------------------------------------------- |
 | Runnable system              | `backend/`, `metroflow-admin/`, `docker-compose.yml`   |
-| Driver app (Expo, CR-001)    | `metroflow-mobile/`                               |
+| Driver app (Expo)            | `metroflow-mobile/`                               |
 | UI template (client-supplied) | `docs/design/`                                  |
 | Environment templates        | `backend/.env.example`, `metroflow-admin/.env.example`, `metroflow-mobile/.env.example` |
 | OpenAPI document (generated) | `/openapi.json` on the API host, e.g. `https://metroflow-api-siahrays-projects.vercel.app/openapi.json` |

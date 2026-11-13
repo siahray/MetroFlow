@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.2
+Version 1.3
 
 ## Document Control
 
@@ -10,15 +10,15 @@ Version 1.2
 | ----------- | ---------------------------------------------------------------- |
 | Project     | MetroFlow                                                        |
 | Document    | Technical Specification Document                                 |
-| Version     | 1.2                                                              |
+| Version     | 2.0                                                              |
 | Prepared By | «Project Team»                                                   |
-| Baseline    | `main` @ `9605e38` (last code commit)                            |
-| Change      | CR-001 adds the driver app, event stream, fleet, SOS and sensors |
+| Baseline    | `main`, 13 November 2026                                         |
+| Change      | Consolidated baseline: Mapbox Directions dry-state routing handoff (ADR-025) and every other prior scope addition folded in as original scope; TTC-025 to 031 and the External data services / Application Components tables fully synced |
 
-Version 1.2 describes the **target architecture** for CR-001, including the
-approved provider keys and API-issued session tokens. Sections marked `Planned` are not
-implemented in the baseline. See [CR-001.md](CR-001.md) for the change record and
-FSD §Implementation Status for the current position.
+This document describes the architecture for the approved provider keys,
+API-issued session tokens, and the Mapbox dry-state routing design (ADR-025,
+BRULE-017). Sections marked `Planned` are not implemented in the baseline.
+See FSD §Implementation Status for the current position.
 
 ## Requirements Traceability
 
@@ -32,7 +32,7 @@ FSD §Implementation Status for the current position.
 | BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                                 |
 | BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log                   |
 | BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration                        |
-| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — API-issued JWT with role checks (CR-001) |
+| BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — API-issued JWT with role checks  |
 | BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI             |
 | BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy                |
 | BR-012 | FSD-FR-049                           | Reporting and export (CSV export for audit logs and incidents)          |
@@ -96,7 +96,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | --------------------- | ------------------------------------ | -------------------------------------------------------------------------- |
 | Network State Service | BR-001 / FSD-FR-001 to 005           | Load graph, classify passability, emit GeoJSON nodes and edges             |
 | Hydrology Engine      | BR-002 / FSD-FR-006 to 010           | SCS-CN runoff, elevation-weighted ponding, speed degradation, state commit |
-| Routing Engine        | BR-003 / FSD-FR-011 to 017           | TD-A\* search, clearance blocking, route geometry assembly, travel time    |
+| Routing Engine        | BR-003 / FSD-FR-011 to 017, 127, 131 | TD-A\* search, clearance blocking, route geometry assembly, travel time, alternative-route request (`avoid_edges`), dry-state Mapbox Directions handoff  |
 | Geometry Service      | BR-001 / FSD-FR-004, FSD-FR-053      | Idempotent PostGIS backfill with advisory lock                             |
 | Data Layer            | BR-001 / FSD-FR-001                  | SQLAlchemy models, connection lifecycle, migrations                        |
 | Audit Store           | BR-008 / FSD-FR-047                  | Actor, action, JSON payload, integrity hash (schema only)                  |
@@ -113,7 +113,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | User Service          | BR-009 / FSD-FR-048                 | User CRUD with audit trail, role validation, self-protection, last admin protection |
 | Export Service        | BR-012 / FSD-FR-049                 | CSV export for audit logs and incidents with filtering                     |
 | Evidence Store        | BR-014 / FSD-FR-066, 067             | Local volume for the pilot; MIME check, re-encode, EXIF strip              |
-| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074 | Navigation, alerts, reports, offline cache and SOS                         |
+| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074, 124 to 129 | Navigation, alerts, reports, offline cache and SOS; voice guidance, route preview/Start flow, speed/turn-aware driving camera, heading marker, Quick Picks/recent destinations in search |
 | LGU Map UI            | BR-016 / FSD-FR-075, 076, 082–089    | MapLibre layers, draw tools, fleet and dispatch panels                     |
 
 ### Technology stack
@@ -145,8 +145,8 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Service        | Mode              | Used for                        | Failure behaviour                                        |
 | -------------- | ----------------- | ------------------------------- | -------------------------------------------------------- |
 | Supabase (Postgres) | Runtime      | Hosted database                 | API unavailable; no fallback                             |
-| Mapbox         | Planned (CR-001)  | Raster basemap                  | OpenStreetMap raster fallback; no client requests tiles today |
-| OpenWeather    | Planned (CR-001)  | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
+| Mapbox         | Planned ; Directions implemented | Raster basemap (planned); dry-state ("FASTEST") routing via the Directions API, `backend/mapbox_directions.py` | Basemap: OpenStreetMap raster fallback; no client requests tiles today. Directions: missing token, disabled flag, or a failed call falls back to the in-house TD-A* engine (`source: "ENGINE"` instead of `"MAPBOX"` in the routing response) |
+| OpenWeather    | Planned   | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
 | OpenTopography | Offline           | Digital elevation model         | Cached derived terrain; no runtime impact                |
 | Copernicus     | Offline           | Sentinel imagery and land cover | Cached derived layers; no runtime impact                 |
 
@@ -201,7 +201,7 @@ Index: primary key plus GiST on `geom`.
 | `name`          | varchar(100) | Display name                                                         |
 | `email`         | varchar(100) | Unique; login identifier                                             |
 | `password_hash` | varchar(255) | Hash, never plaintext                                                |
-| `role`          | varchar(20)  | `SUPER_ADMIN`, `LGU_COMMANDER`, `LGU_DISPATCHER`, `EMERGENCY_DRIVER` |
+| `role`          | varchar(20)  | `SUPER_ADMIN` (Head, Admin Portal), `ADMIN` (Dispatcher, Admin Portal), `RESPONDER` (Driver App, linked to a rescue unit), `PUBLIC_DRIVER` (Driver App, the general public) |
 | `created_at`    | timestamp    | Creation time                                                        |
 
 ## Database Design - audit_logs
@@ -418,7 +418,7 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/incidents/export`        | GET    | BR-012 / FSD-FR-049        |
 
 The sensor registry, user management, exports, moderation actions, offline queue
-and on-device cache are implemented. What remains from CR-001 is real hardware
+and on-device cache are implemented. What remains is real hardware
 ingestion behind the existing endpoints, and basemap tiles (LIM-017). The
 routing endpoint is also extended with coordinate inputs, hazard exclusion and
 turn instructions.
@@ -468,7 +468,7 @@ Full request and response contracts, examples and error bodies are in
 | Automated dependency updates (Dependabot)                                              | BR-008 / FSD-FR-047          |
 | Static analysis (CodeQL) with capability preflight                                     | BR-008 / FSD-FR-047          |
 | Dynamic API scan (OWASP ZAP), fail-closed                                              | BR-008 / FSD-FR-047          |
-| Authentication and role enforcement (Supabase session verification, role guards)       | BR-009 / FSD-FR-092 — CR-001 |
+| Authentication and role enforcement (Supabase session verification, role guards)       | BR-009 / FSD-FR-092 |
 | Key exposure rules: public keys scoped by origin, secrets server-only, rotation        | BR-011 / FSD-FR-051          |
 | Service-role key confined to the backend; never shipped to a client                    | BR-011 / FSD-FR-051          |
 | Evidence upload validation: MIME sniff, size cap, re-encode and EXIF strip             | BR-014 / FSD-FR-066, 067     |
@@ -484,7 +484,7 @@ Full request and response contracts, examples and error bodies are in
 | ID      | Risk                                              | Severity | Disposition                                                                 |
 | ------- | ------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
 | SEC-001 | Most endpoints did not check the session token    | High     | Resolved 27 Oct 2026: every route except the auth entry points requires a token, and writes require a portal role |
-| SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist in CR-001; the app uses bearer tokens        |
+| SEC-002 | Baseline CORS allows every origin                 | Medium   | Replace with a portal allowlist; the app uses bearer tokens                 |
 | SEC-003 | Baseline has no rate limiting                     | Medium   | Closed 28 Oct 2026 for the routes that exist: login, registration, SOS and simulation are limited per address in Postgres. Report and telemetry limits land with those routes |
 | SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Resolved 10 Nov 2026: repository is public, which is free for CodeQL. Scan runs on push/PR/weekly; first run reported 0 alerts |
 | SEC-005 | Audit hash column has no write path               | Low      | Implement with FSD-FR-093                                                   |
@@ -551,6 +551,13 @@ reconnect. Migrations run one transaction per revision.
 | TTC-022 | BR-013  | FSD-FR-072 | Two telemetry batches inside five seconds produce one accepted write                                          |
 | TTC-023 | BR-017  | FSD-FR-091 | A breach marks only in-radius edges advisory until confirmed                                                  |
 | TTC-024 | BR-018  | FSD-FR-068 | A queued report syncs once, survives a retry, and cached routes render offline                                |
+| TTC-025 | BR-020  | FSD-FR-101 | Sentinel-1 credential failure, quota exhaustion and malformed ingest payloads fail closed without publishing hazards (not implemented) |
+| TTC-026 | BR-021  | FSD-FR-108, FSD-FR-111 | Source outage, credential failure and malformed payloads fail safe: no hazard is published or cleared (implemented) |
+| TTC-027 | BR-003  | FSD-FR-127 | `avoid_edges` excludes them from the search, or the endpoint returns 404 when no alternative survives         |
+| TTC-028 | BR-003  | FSD-FR-131 | A dry FASTEST request with a configured token returns `source: "MAPBOX"` with empty `segments`/`hazards`      |
+| TTC-029 | BR-003  | FSD-FR-131 | A Mapbox failure, missing token, or disabled flag falls back to `source: "ENGINE"` without failing the request |
+| TTC-030 | BR-003  | FSD-FR-131 | `ignore_hazards`, `avoid_edges`, or a FLOOD_SAFE network never invoke the Mapbox adapter (BRULE-017)           |
+| TTC-031 | BR-002  | FSD-FR-130 | `/weather/live-rainfall` reports the cached Open-Meteo reading and requires an admin session                  |
 
 ## Technical Acceptance Criteria
 
@@ -689,7 +696,7 @@ recency    = exp(−age_minutes / 30)
 urgency    = severity × source × corrobor × recency
 ```
 
-Weights are configuration, validated with dispatchers at M7 `[TBC]`. A report
+Weights are configuration, validated with dispatchers at M7 (4 November 2026, per `PROJECT_CHARTER.md`'s milestone table). A report
 inside 150 m and 15 minutes of an existing pending report is flagged as a
 possible duplicate, not discarded.
 
@@ -751,7 +758,7 @@ erDiagram
 | --------------------------- | -------------------------------------------------------------------- |
 | `fd26e0cb82cc`              | Initial schema: five application tables plus spatial columns         |
 | `a1b2c3d4e5f6`              | Enable RLS on application tables and revoke `anon` / `authenticated` |
-| Generated on implementation | CR-001: nine tables, indexes, RLS policies and seed accounts         |
+| Generated on implementation | Nine tables, indexes, RLS policies and seed accounts                 |
 
 Rules:
 
@@ -807,8 +814,8 @@ bootstrap dispatcher values, the five `METROFLOW_*` calibration/threshold values
 `METROFLOW_CORS_ORIGINS` and `RUN_MIGRATIONS` (container entrypoint). The
 remaining rows — `REDIS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENWEATHER_API_KEY`,
 `METROFLOW_SENSOR_TOKEN`, the upload, retention, telemetry, warning-radius and
-sensor-debounce settings — are reserved for the CR-001 work packages that are
-still planned (see CR-001 §8).
+sensor-debounce settings — are reserved for work packages that are
+still planned (see `FSD.md` §Implementation Status).
 
 `METROFLOW_REDIS_URL` is accepted as a deprecated alias of `REDIS_URL` so an
 existing deployment does not break; new configuration uses `REDIS_URL`.
@@ -890,8 +897,8 @@ secrets with no documented rotation path. Both are read once at process start
 | `backend`  | built from `backend/Dockerfile`            | 8000 | `curl /openapi.json` |
 | `mobile`   | `metroflow-mobile/` Expo Metro dev server | 8081 | `bun run start`      |
 
-Redis carries the hazard, fleet and SOS event channels. It is no longer a
-provisioned-but-unused container once CR-001 lands. Rate limits do not use it:
+Redis carries the hazard, fleet and SOS event channels; it is no longer a
+provisioned-but-unused container. Rate limits do not use it:
 their counter is in Postgres, because the hosted API has no Redis and a
 serverless instance cannot hold one in memory (§5.3). The telemetry throttle is
 a setting, not a counter. The backend container runs as uid 10001, mounts the
@@ -1065,20 +1072,21 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-008 | ZAP is a gate, not a report                              | `continue-on-error`                  | A report nobody reads does not prevent regressions                                                                            | Accepted                        |
 | ADR-009 | CodeQL preflight skip                                    | Delete or let it fail                | Keeps the workflow ready to activate without edits                                                                            | Accepted                        |
 | ADR-010 | Bun ecosystem in Dependabot                              | npm ecosystem                        | Dependabot cannot parse `bun.lock` under npm                                                                                  | Accepted                        |
-| ADR-011 | Portal ships with mock incident data                     | Block the UI until intake exists     | Demonstrates the workflow and fixes the visual contract early                                                                 | Superseded by CR-001            |
+| ADR-011 | Portal ships with mock incident data                     | Block the UI until intake exists     | Demonstrates the workflow and fixes the visual contract early                                                                 | Superseded by the persisted report API |
 | ADR-012 | Security headers in middleware                           | Reverse proxy only                   | Headers exist even without a proxy, which is how ZAP sees the app                                                             | Accepted                        |
-| ADR-013 | Redis provisioned but unused                             | Remove it                            | Keeps parity with the intended production topology                                                                            | Accepted; activates with CR-001 |
-| ADR-014 | Driver client is a native Expo app                       | Progressive web app, bare React Native | Native background location, push notifications, SQLite/SecureStore and app distribution; Expo Router keeps one TypeScript codebase | Accepted (CR-001, 27 Oct 2026); direction selected 22 Oct 2026 |
-| ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-013 | Redis provisioned but unused                             | Remove it                            | Keeps parity with the intended production topology                                                                            | Accepted; now active            |
+| ADR-014 | Driver client is a native Expo app                       | Progressive web app, bare React Native | Native background location, push notifications, SQLite/SecureStore and app distribution; Expo Router keeps one TypeScript codebase | Accepted (27 Oct 2026); direction selected 22 Oct 2026 |
+| ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Accepted (27 Oct 2026)               |
 | ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Superseded by ADR-021                        |
-| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (CR-001, 27 Oct 2026)               |
-| ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Accepted (CR-001, 27 Oct 2026)               |
-| ADR-019 | MapLibre GL JS is the portal map renderer                | Mapbox GL JS, OSM raster only        | MapLibre is integrated over a style URL, so a Mapbox or OSM raster style is a one-line swap and no renderer code changes | Accepted (CR-001, 27 Oct 2026); basemap refined by ADR-022 |
-| ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (CR-001, 27 Oct 2026)               |
+| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (27 Oct 2026)               |
+| ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Accepted (27 Oct 2026)               |
+| ADR-019 | MapLibre GL JS is the portal map renderer                | Mapbox GL JS, OSM raster only        | MapLibre is integrated over a style URL, so a Mapbox or OSM raster style is a one-line swap and no renderer code changes | Accepted (27 Oct 2026); basemap refined by ADR-022 |
+| ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (27 Oct 2026)               |
 | ADR-021 | Session tokens are issued by the API (PyJWT + bcrypt)     | Supabase Auth (ADR-016), shared passcode | No Supabase Auth project is provisioned, both clients already call `/auth/login`, and bcrypt keeps dispatcher and driver accounts in the one table the API authorises against. Revisit when managed identity exists | Accepted 27 Oct 2026; supersedes ADR-016 |
 | ADR-022 | Portal basemap is the keyless Carto Positron style        | Mapbox raster (ADR-019), OSM raster  | One public style URL needs no token, so a clone runs the map without onboarding an account; the desaturated basemap keeps the network status colours the only saturated layer, and the style URL stays a constant if a licensed provider is adopted later | Accepted 29 Oct 2026; refines ADR-019 |
 | ADR-023 | Report evidence lives in the report row                   | Local evidence volume behind a storage interface (ADR-017), Supabase Storage | The hosted API runs on Vercel, where the filesystem is ephemeral and no object store is provisioned, so an object key would point at nothing after a cold start. Bytes are capped at 4 MB, type-sniffed, hashed in the row and served only through an authenticated endpoint; moving to ADR-017's volume means changing one intake branch and one read endpoint | Accepted 30 Oct 2026; diverges from ADR-017 for the hosted pilot |
 | ADR-024 | Offline state is on-device SQLite, replays keyed by `client_id` | In-memory queue, raster tile cache | The queue, road graph, hazards and last route must survive an app restart, and `expo-sqlite` is already the app's storage; a device-generated `client_id` makes a report replay after a lost response return the original row instead of a duplicate. Tile storage and licensing stay out of scope (ADR-018, LIM-017) | Accepted 8 Nov 2026 |
+| ADR-025 | A FASTEST-mode route is answered by the Mapbox Directions API, not the in-house engine | Keep the in-house engine for every mode; a second in-house "fastest, flood-blind" search | Only the in-house engine knows about water depth and clearance, so it keeps FLOOD_SAFE exclusively; `routing_mode() == FASTEST` already means every edge in the graph is confirmed clear (BRULE-017), so delegating that one case to a real road network and live traffic improves drive quality with no safety trade-off. A second in-house "flood-blind fastest" mode (the status quo before this ADR) would have kept routing bounded to the imported OSM extent for no safety benefit over the provider | Accepted (13 Nov 2026) |
 
 ## 7. Known Limitations
 
@@ -1086,9 +1094,9 @@ available for an out-of-band release, but the normal release path is the merge.
 | ------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | LIM-001 | Baseline had no route-level authorisation         | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-002 | Baseline incident data is mocked                   | Closed 30 Oct 2026                               | See the note below the table                                                                                 |
-| LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | CR-001 adds optional OpenWeather and labelled simulated gauges; real gauge feeds need agreements             |
-| LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | CR-001 uses it for events and throttling                                                                     |
-| LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | CR-001 allowlist                                                                                             |
+| LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | Optional OpenWeather and labelled simulated gauges added; real gauge feeds need agreements                   |
+| LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | Now used for events and throttling                                                                           |
+| LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | Portal allowlist added                                                                                       |
 | LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
 | LIM-007 | No map in the baseline portal                      | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-008 | Baseline audit log is schema-only                  | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
@@ -1105,17 +1113,20 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-019 | Authentication requires API and database reachability | An offline app cannot sign in                | Sign in when online; the token lasts 24 hours; no privileged offline action                                  |
 | LIM-020 | Map and rainfall depend on third-party quotas      | Tiles or live rainfall can degrade               | Keyless Carto style swapped by URL (ADR-022), manual rainfall override, cached derived data and labelled degradation |
 | LIM-021 | The mobile package has no `package-lock.json`      | An npm-based install is not reproducible         | Bun is the package manager for the app (`bun.lock`); Mobile CI installs with Bun                           |
-| LIM-022 | CR-001 endpoints did not enforce the session token | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
+| LIM-022 | Driver-app endpoints did not enforce the session token | Closed 27 Oct 2026                           | See the note below the table                                                                                 |
 | LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Closed 10 Nov 2026: `metroflow_app` owns every app table/sequence and `DATABASE_URL` (local + Vercel) points at it |
 | LIM-024 | API deployments are manual, not git-connected      | Closed 28 Oct 2026                               | The project now builds from `siahray/MetroFlow` with root directory `backend` and production branch `main`     |
 | LIM-025 | Vercel WAF rate-limit rules need a paid plan       | No edge-level limit or edge bot rule             | Application limits (LIM-006) cover the abuse surface; upgrade the team before public exposure                 |
+| LIM-026 | NOAH maps are modelled scenarios, not observations; PAGASA coverage is limited to telemetered stations; satellite passes are hours to days apart | Live flood state can be stale or absent for a segment with no nearby source | Advisory only, labelled with source/kind/freshness; PAGASA access and Sentinel-1 ingestion remain not implemented |
+| LIM-027 | GloFAS discharge is a coarse daily model, not a gauge, and may miss small urban rivers; GPM rainfall is a 0.1° estimate with about 4 hours latency | Advisory signal can be coarse relative to street-level flooding | Labelled `MODELLED`; PAGASA gauges take priority when available |
+| LIM-028 | `NFR-001`/`NFR-002`/`NFR-019` latency budgets are not met at the real Quezon City network scale over the hosted deployment (13 Nov 2026 re-measurement, p95 11–14.7× over budget) | Network state, routing and SSE delivery are all substantially slower than specified in production-like conditions | **Partially addressed, not closed.** Profiling on 13 Nov 2026 found two distinct, fixable code-level causes beyond the raw database round trip: (1) `/network/state` serialized its ~5.3 MB payload through FastAPI's generic `jsonable_encoder` (~3.2 s for this payload vs. ~0.16 s for Pydantic's own serializer) — fixed by returning a pre-serialized `Response` (`backend/main.py::get_network_state`); (2) `/routing/navigate` fetched every edge's geometry (~7,618 rows) to render a route using a few dozen of them — fixed by scoping `_load_edge_geometry` to the path's own edges. Re-measured after both fixes: routing's median improved (≈2,509 ms vs. ≈2,934 ms p95 before) but network-state's p95 got worse (≈52,872 ms), traced to a live SSE client holding a pooled database connection open for the whole benchmark run — the same pool-contention pattern `BACKLOG.md`'s simulation-endpoint entries already document, not a flaw in either fix. The underlying hosted-database round trip (Vercel function to the Supabase pooler in `ap-northeast-2`, roughly 1-1.5 s per request end to end) is still unaddressed and is the floor neither fix touches. A clean re-measurement with no concurrent SSE clients, and a decision on the round-trip latency itself (e.g. a database region closer to the deployment, or caching the static graph in process), are both still open. See `BRD.md` NFR-001/002/019 |
 
 LIM-001 and LIM-022 are closed. Every route except the four auth entry points
 (`login`, `register`, `send-verification`, `verify`) requires a bearer token:
 `401` without one. Authorisation is enforced per route through
 `auth_utils.require_roles`, so publishing hazards, changing the fleet, running a
 simulation, reading the incident queue and confirming dispatch require
-`LGU_DISPATCHER` or `SUPER_ADMIN`; a driver account gets `403`. Both clients now
+`ADMIN` or `SUPER_ADMIN`; a driver account (`RESPONDER` or `PUBLIC_DRIVER`) gets `403`. Both clients now
 store and send the token, which is why these are no longer open limitations.
 
 LIM-006 is closed for the abuse surface that matters on a single pilot host.
@@ -1153,6 +1164,14 @@ additive and idempotent — it upserts the documented columns, never deletes a r
 and never resets `live_edge_states` — which is what made it safe to run against
 the hosted database while hazards and dispatch records already referenced the
 graph. `tests/test_network_seed.py` covers those properties.
+
+**Superseded twice since.** `backend/osm_network.py` (TSD §4.1) replaced this
+synthetic lattice outright with a real OpenStreetMap import, first spanning a
+wide Metro Manila extent (≈8,950 nodes, ≈10,876 edges), then — for
+presentation legibility — re-scoped to Quezon City alone
+(6,177 nodes, 7,618 edges). `network_seed.py` itself is unchanged on disk and
+still used as the local dev fallback seed; the hosted production database now
+runs on the real OSM import, not this file's output.
 
 LIM-002 is closed: `POST /api/v1/reports` persists a field report with its
 evidence, `GET /api/v1/reports` returns the moderation queue ordered by live
@@ -1200,7 +1219,7 @@ MetroFlow/
 │   ├── Dockerfile
 │   └── entrypoint.sh
 ├── metroflow-admin/                 Next.js LGU portal (template-derived UI, map, queue, dispatch)
-├── metroflow-mobile/        Expo React Native app (CR-001)
+├── metroflow-mobile/        Expo React Native app 
 │   ├── src/app/             Expo Router routes and screens
 │   ├── src/components/      template-derived UI and screens
 │   ├── src/constants/       driver design tokens and copy

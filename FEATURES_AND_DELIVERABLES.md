@@ -27,7 +27,7 @@
 - **Role-based access control** - Restrict screens and actions by role
 - **JWT tokens** - API-issued HS256 session tokens
 - **Password hashing** - bcrypt-hashed on users table
-- **Registration** - Create driver accounts only (not LGU_DISPATCHER or SUPER_ADMIN)
+- **Registration** - Create driver accounts only (not ADMIN or SUPER_ADMIN)
 - **User profile** - GET /api/v1/auth/me returns caller from token
 - **Route enforcement** - Bearer token required on all routes except auth endpoints
 - **Role permissions** - Enforce on verification, publishing, dispatch, configuration

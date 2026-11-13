@@ -3,8 +3,8 @@
 | Field                     | Value                                                                    |
 | ------------------------- | ------------------------------------------------------------------------ |
 | Document ID               | MF-API-001                                                               |
-| Version                   | 1.4                                                                      |
-| Status                    | Matches `main` after route enforcement; §9 is the approved CR-001 contract |
+| Version                   | 2.0                                                                      |
+| Status                    | Matches `main` after route enforcement; §9 is the approved extended contract |
 | Date                      | 8 November 2026                                                          |
 | Base URL (local)          | `http://localhost:8000`                                                  |
 | Base URL (hosted)         | `https://metroflow-api-siahrays-projects.vercel.app`                     |
@@ -16,10 +16,10 @@
 The API computes flood depth over a road graph and returns clearance-aware
 routes. Responses are JSON; geometry is GeoJSON.
 
-Sections 2–8 document the core API. Section 9 documents the endpoints added by
-[CR-001](CR-001.md), which is approved and implemented for auth, SOS and
-dispatch, reports and moderation, hazards, fleet, sensors, users, exports and
-streams; §9.7a lists the one route still absent. The generated
+Sections 2–8 document the core API. Section 9 documents the extended set of
+endpoints — auth, SOS and dispatch, reports and moderation, hazards, fleet,
+sensors, users, exports and streams — all implemented; §9.7a lists the one
+route still absent. The generated
 `/openapi.json` is always authoritative for what is running.
 
 | Method | Path                       | Purpose                                                  |
@@ -48,19 +48,23 @@ The API issues its own session tokens. Clients post credentials to
 `users` row and returns a signed HS256 JWT. `GET /api/v1/auth/me` requires that
 token and returns the caller's identity and role.
 
-Two role families exist. `LGU_DISPATCHER` and `SUPER_ADMIN` are portal roles and
-are provisioned by the operator, never self-registered. `EMERGENCY_DRIVER` is
-the field role and is created by `POST /api/v1/auth/register`; the endpoint
-refuses to mint an administrative role.
+Two role families exist. `ADMIN` (Dispatcher) and `SUPER_ADMIN` (Head) are
+portal roles and are provisioned by the operator, never self-registered.
+`RESPONDER` and `PUBLIC_DRIVER` are the two driver-app roles, identical in
+API privileges; only `PUBLIC_DRIVER` can be created by
+`POST /api/v1/auth/register` (the driver app is built for the general
+public) — a `RESPONDER` account, like a portal account, is provisioned by an
+operator, typically paired with a `vehicle_id` assignment. The endpoint
+refuses to mint an administrative or responder role.
 
 Every route requires that token except the four auth entry points — `login`,
 `register`, `send-verification` and `verify` — and the health check at `/`. A
 missing, malformed or expired token returns `401`.
 
-Authorisation is separate from authentication. Portal roles (`LGU_DISPATCHER`,
-`SUPER_ADMIN`) may change shared state and read incident data; a driver account
-(`EMERGENCY_DRIVER`) may read the network, hazards, routes and fleet, and create
-SOS requests. A denied action returns `403`.
+Authorisation is separate from authentication. Portal roles (`ADMIN`,
+`SUPER_ADMIN`) may change shared state and read incident data; a driver
+account (`RESPONDER` or `PUBLIC_DRIVER`) may read the network, hazards,
+routes and fleet, and create SOS requests. A denied action returns `403`.
 
 | Route                                                                      | Driver | Portal |
 | -------------------------------------------------------------------------- | ------ | ------ |
@@ -164,7 +168,7 @@ account, so a shared office NAT shares one quota.
 | -------------- | -------------- | -------------------------------------------- |
 | Carto          | Portal (basemap) | Keyless Positron vector style fetched by URL; no token, no runtime key |
 | Mapbox         | Optional swap     | A licensed raster style can replace the Carto style URL     |
-| OpenWeather    | Backend (planned, CR-001) | Optional rainfall; manual entry fallback     |
+| OpenWeather    | Backend (optional)  | Optional rainfall; manual entry fallback     |
 | OpenTopography | Preprocessing  | Terrain model; cached, not called at runtime |
 | Copernicus     | Preprocessing  | Imagery and land cover; cached               |
 
@@ -440,11 +444,16 @@ requested clearance.
 | `target_node`  | query | integer | **yes**  | —       | Must exist      |
 | `clearance_cm` | query | number  | no       | `30`    | `> 0`, `<= 200` |
 | `routing_mode` | query | string  | no       | auto    | `FASTEST` or `FLOOD_SAFE` |
+| `ignore_hazards` | query | boolean | no | `false` | Plan through verified hazards anyway (the explicit unsafe alternative) |
+| `avoid_edges`  | query | integer[] | no    | `[]`    | Edge ids to exclude, for requesting an alternative to a previously returned route |
 
 `routing_mode` forces a personality from §4.3 instead of letting the network
 decide — the driver app sends `FASTEST` while its map is in normal
 (traffic-only) view, so the plan is the fastest path a general-purpose map app
-would give. The clearance gate still applies in both modes.
+would give. The clearance gate still applies in both modes. `ignore_hazards`
+and `avoid_edges` both also mean "route on our own graph on purpose" and skip
+the Mapbox handoff in §4.3 even when the network would otherwise choose
+`FASTEST`.
 
 ### 4.2 Response `200`
 
@@ -458,6 +467,12 @@ would give. The clearance gate still applies in both modes.
 | `segments`                      | object[]  | One entry per traversed edge                                |
 | `estimated_travel_time_minutes` | number    | Travel time under current depth penalties, 2 decimal places |
 | `routing_mode`                  | string    | `FASTEST` or `FLOOD_SAFE`; see §4.3                         |
+| `source`                        | string    | `ENGINE` (in-house TD-A*) or `MAPBOX` (dry-state handoff); see §4.3 |
+
+A `MAPBOX`-sourced response has empty `segments` and `hazards`: there is no
+edge-level flood data behind a provider route. The caller only ever reaches
+this case when the in-house engine has already confirmed nothing in the graph
+is flooded, so that is not a safety gap.
 
 **Segment**
 
@@ -494,6 +509,16 @@ The router runs in one of two modes, reported as `routing_mode`:
   sensor advisory, or a published blocking hazard. The full cost above applies.
 
 The clearance gate holds in both modes: a road under water is never traversable.
+
+When the network resolves to `FASTEST` (and the caller passed neither
+`ignore_hazards` nor `avoid_edges`), the request is handed off to the Mapbox
+Directions API instead of the in-house search, reported as `source: "MAPBOX"`
+— a real road network and live traffic serve a plain fastest path better than
+our own graph, which exists to carry flood state, not drive quality. A
+missing `METROFLOW_MAPBOX_ACCESS_TOKEN`, the feature disabled, or a failed
+Mapbox call all fall back to the in-house engine (`source: "ENGINE"`)
+transparently. `FLOOD_SAFE` never uses Mapbox: only the in-house engine knows
+about water depth and vehicle clearance.
 
 ### 4.4 Example — dry network
 
@@ -541,9 +566,14 @@ curl -s -H "Authorization: Bearer $TOKEN" \
     }
   ],
   "estimated_travel_time_minutes": 3.32,
-  "routing_mode": "FASTEST"
+  "routing_mode": "FASTEST",
+  "source": "ENGINE"
 }
 ```
+
+(This example predates the Mapbox handoff above and still used the in-house
+engine for `FASTEST`; a dry request today most often returns `source:
+"MAPBOX"` instead, with empty `segments`.)
 
 The three-hop corridor (1100 m at 60 km/h, 1000 m at 50, 850 m at 50) takes
 199.2 s, faster than the direct 2800 m edge at 40 km/h (252 s).
@@ -569,7 +599,8 @@ The direct edge 1 → 4 survives at `18.67 cm`, so the response becomes:
     }
   ],
   "estimated_travel_time_minutes": 17.12,
-  "routing_mode": "FLOOD_SAFE"
+  "routing_mode": "FLOOD_SAFE",
+  "source": "ENGINE"
 }
 ```
 
@@ -668,7 +699,7 @@ document has a defect.
 
 ---
 
-## 9. CR-001 endpoints
+## 9. Extended endpoints
 
 These routes exist and are called by the portal and the driver app. Request and
 response models live in `backend/schemas.py`. All of them, and the rest of the
@@ -684,8 +715,8 @@ API, require a bearer token except the four auth entry points in §9.1.
 | `POST` | `/api/v1/auth/send-verification` | `email`                             | `message`, dev-only `code`  | BR-009 / FSD-FR-022     |
 | `POST` | `/api/v1/auth/verify`          | `email`, `code`                       | `verified`                  | BR-009 / FSD-FR-022     |
 
-Registration accepts `DRIVER`, `COMMUTER` or `EMERGENCY_DRIVER` and stores
-`EMERGENCY_DRIVER`. It returns `403` for `LGU_DISPATCHER` and `SUPER_ADMIN`,
+Registration accepts `DRIVER`, `COMMUTER` or `PUBLIC_DRIVER` and stores
+`PUBLIC_DRIVER`. It returns `403` for `ADMIN`, `SUPER_ADMIN` and `RESPONDER`,
 `409` for a duplicate email, and `422` for a missing name, malformed email or a
 password shorter than eight characters. `GET /api/v1/auth/me` returns the
 caller's identity from the token and `401` without a valid `Authorization`
@@ -941,8 +972,8 @@ share the 200-row ceiling of the JSON list routes.
 | `PATCH`  | `/api/v1/users/{user_id}` | any of `name`, `email`, `role`, `vehicle_id`              | `user`         | BR-009 / FSD-FR-048     |
 | `DELETE` | `/api/v1/users/{user_id}` | —                                                         | `204`          | BR-009 / FSD-FR-048     |
 
-Admin only (`SUPER_ADMIN` or `LGU_DISPATCHER`). `role` is `SUPER_ADMIN`,
-`LGU_DISPATCHER` or `EMERGENCY_DRIVER`; `vehicle_id` must reference an existing
+Admin only (`SUPER_ADMIN` or `ADMIN`). `role` is `SUPER_ADMIN`, `ADMIN`,
+`RESPONDER` or `PUBLIC_DRIVER`; `vehicle_id` must reference an existing
 unit and can be cleared with an explicit `null` on `PATCH`. Emails are unique
 ignoring case (`409`). You cannot modify or delete your own account through
 these routes (`403`), and the last administrator cannot be deleted (`409`).
@@ -973,7 +1004,7 @@ with `GET /api/v1/flood-state` (§9.7b). Deleting a sensor deletes its advisorie
 Other sensor changes are audited too. Rescue
 route preview is `GET /api/v1/dispatch/{sos_id}/preview` (§9.2).
 
-### 9.7b `GET /api/v1/flood-state` (CR-004)
+### 9.7b `GET /api/v1/flood-state`
 
 Resolved flood state per road segment, with the source and the time it applies to. Any
 signed-in account may read it. Query: `only_flagged` (default `false`) leaves out segments

@@ -3,7 +3,7 @@
 ## Project Setup
 
 ### Environment Configuration
-- **Backend:** `backend/.env` - `DATABASE_URL` (Supabase Postgres), `JWT_SECRET`, optional `METROFLOW_ADMIN_EMAIL` / `METROFLOW_ADMIN_PASSWORD`
+- **Backend:** `backend/.env` - `DATABASE_URL` (Supabase Postgres), `JWT_SECRET`, optional `METROFLOW_ADMIN_EMAIL` / `METROFLOW_ADMIN_PASSWORD`, optional `METROFLOW_MAPBOX_ACCESS_TOKEN` (dry-state/"FASTEST" routing only; unset falls back to the in-house engine, see `backend/mapbox_directions.py`)
 - **Admin UI:** `metroflow-admin/.env.local` - `NEXT_PUBLIC_API_BASE_URL` only; no Supabase key
 - **Driver App:** `metroflow-mobile/.env` - `EXPO_PUBLIC_API_BASE_URL` only; no Supabase key
 
@@ -83,7 +83,7 @@ Location: `supabase-migrations/`
    - **Dispatch Action Log Persistence (FSD-FR-039 to 046):**
      - Per-incident log endpoints (`GET /api/v1/sos/{sos_id}/log`, `GET /api/v1/reports/{report_id}/log`)
      - Removed in-memory log state from radar, triage, and dashboard
-   - **Moderation and dispatch actions (CR-001):**
+   - **Moderation and dispatch actions:**
      - Report/SOS `hold`, `reject`, `escalate`, `notes`, `dismiss`, `restore`; SOS `resolve`; dispatch `undo`
      - `GET /api/v1/reports/mine` (driver history) and `GET /api/v1/vehicles/{id}/mission` (unit poll)
      - `GET /api/v1/{hazards,vehicles,sos}/stream` SSE feeds
@@ -141,7 +141,7 @@ Location: `supabase-migrations/`
 - Native telephony/SMS in SOS
 - Functional SQLite tile caching for offline maps
 - Real CCTV integration
-- Real rain-gauge integration beyond the CR-004 sources (PAGASA river telemetry and satellite are the live sources; Project NOAH is the advisory fallback: see `docs/CR-004.md`)
+- Real rain-gauge integration beyond the live sources (PAGASA river telemetry and satellite are the live sources; Project NOAH is the advisory fallback: see `docs/BRD.md` BR-021/BR-017 and `docs/TSD.md` LIM-026/027)
 
 ### Units
 - All depths: centimeters (cm)
