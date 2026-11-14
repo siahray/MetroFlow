@@ -131,7 +131,7 @@ describe('editing', () => {
     await fireEvent.changeText(await screen.findByLabelText('Quick Pick name'), 'Work HQ 2');
     await fireEvent.press(screen.getByLabelText('Save Changes'));
 
-    expect(await screen.findByText('Save Changes?')).toBeTruthy();
+    expect(await screen.findByText('Save changes?')).toBeTruthy();
     expect(mockedSave).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByLabelText('Cancel'));
