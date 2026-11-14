@@ -40,9 +40,9 @@ production single sign-on and a public information portal.
 | ------------------------ | ----------------------------------------------------------- |
 | Start Date               | August 18, 2026 (Requirements start)                       |
 | Cutover Date             | [TBC] — a real institutional/LGU go-live decision, not an engineering date; this pilot ends at panel defence (below), not at LGU deployment |
-| Period (Weeks)           | ≈14 weeks total (18 Aug – 25 Nov 2026) through the panel defence — a planning projection, pending the panel's own scheduling confirmation |
+| Period (Weeks)           | ≈14.5 weeks total (18 Aug – 27 Nov 2026) through deployment and panel defence — a planning projection, pending the panel's own scheduling confirmation |
 | Assigned Project Manager | «Project Team Lead»                                         |
-| Duration Estimate        | ≈14 weeks total, pending the panel's own scheduling confirmation of the 25 Nov 2026 defence date below |
+| Duration Estimate        | ≈14.5 weeks total, pending the panel's own scheduling confirmation of the 27 Nov 2026 defence date below |
 
 ### OPEX
 
@@ -144,12 +144,12 @@ Project-Management-Plan.docx.
 | M1  | Charter and requirements approved   | Charter and BRD signed off                                      | August 20, 2026 — Completed  |
 | M2  | Architecture and data design frozen | TSD accepted; schema drafted                                    | August 26, 2026 — Completed  |
 | M3  | API engine operational              | Simulate, network state and route endpoints pass contract tests | October 1, 2026 — Completed |
-| M4  | Dispatch portal operational         | Triage flow demonstrated with queue, detail and actions         | October 22, 2026 — Completed |
+| M4  | Dispatch portal operational         | Triage flow demonstrated with queue, detail and actions         | November 5, 2026 — Completed |
 | M5  | Hardening complete                  | ZAP clean at High/Medium; no open critical defects              | October 25, 2026 — Completed |
 | M6  | Baseline documentation accepted     | Baseline document set accepted                                  | October 27, 2026 — Completed |
 | M7  | Realtime, reports and fleet API     | Auth, reports, hazards, SSE and fleet pass contract tests       | November 4, 2026 — Completed |
 | M8  | LGU map, moderation and dispatch    | Map, evidence desk, draw/publish and dispatch demonstrated      | November 4, 2026 — Completed |
-| M9  | Driver app, sensors and defence     | Offline E2E, sensor impact and panel demonstration complete     | Panel defence **projected November 25, 2026** (18 Aug start + ≈14 weeks) — a planning projection, pending the panel's own scheduling confirmation, not an engineering date |
+| M9  | Driver app, sensors and defence     | Offline E2E, sensor impact and panel demonstration complete     | Panel defence **projected November 27, 2026** (18 Aug start + ≈14.5 weeks) — a planning projection, pending the panel's own scheduling confirmation, not an engineering date |
 
 ## F. SUCCESS CRITERIA
 

@@ -78,13 +78,13 @@ driver app are implemented and hosted. Every unconfirmed date or amount is marke
 
 The project follows a sequential Waterfall methodology with the following phases:
 
-| Phase                    | Description                                      |
-| ----------------------- | ------------------------------------------------ |
-| Requirements            | Gather and document all business and technical requirements |
-| System Design           | Create architecture, data model, and technical specifications |
-| Implementation          | Build backend API, database schema, admin portal, and driver app |
-| Verification/Testing    | Execute unit tests, integration tests, security scans, and user acceptance testing |
-| Deployment/Maintenance   | Deploy to production, hand over to operations, and provide maintenance support |
+| Phase                    | Description                                                                                                                                           | Schedule                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Requirements             | Gather and document all business and technical requirements.                                                                                          | August 18, 2026 – August 20, 2026  |
+| System Design            | Create architecture, data model, and technical specifications.                                                                                        | August 21, 2026 – August 26, 2026  |
+| Implementation           | Build the backend API, database schema, admin portal, and driver app (API Implementation: Aug 27 – Oct 1, 2026; Portal Implementation: Oct 2 – Nov 5, 2026). | August 27, 2026 – November 5, 2026 |
+| Verification / Testing   | Execute unit tests, integration tests, security scans, and user acceptance testing (UAT).                                                             | November 6, 2026 – November 23, 2026 |
+| Deployment / Maintenance | Deploy to production, hand over to operations, and provide maintenance support.                                                                       | November 24, 2026 – November 27, 2026 |
 
 **Definition of done:** merged to `main`; tests pass for the affected area; lint
 and build pass when the web app is touched; the FSD status reflects reality; no
@@ -134,16 +134,16 @@ broken `main` may proceed, with the request raised the same day.
 
 | Phase                    | Start            | End              | Status      |
 | ------------------------ | ---------------- | ---------------- | ----------- |
-| Requirements            | August 18, 2026   | August 20, 2026   | Completed   |
-| System Design           | August 21, 2026   | August 26, 2026   | Completed   |
-| Implementation — API    | August 27, 2026   | October 1, 2026   | Completed   |
-| Implementation — Portal | October 2, 2026   | October 22, 2026  | Completed   |
-| Verification/Testing    | October 23, 2026  | November 7, 2026  | Completed   |
-| Deployment/Maintenance   | November 8, 2026   | November 25, 2026 (projected) | In Progress |
+| Requirements             | August 18, 2026  | August 20, 2026  | Completed   |
+| System Design            | August 21, 2026  | August 26, 2026  | Completed   |
+| Implementation — API     | August 27, 2026  | October 1, 2026  | Completed   |
+| Implementation — Portal  | October 2, 2026  | November 5, 2026 | Completed   |
+| Verification / Testing   | November 6, 2026 | November 23, 2026| In Progress |
+| Deployment / Maintenance | November 24, 2026| November 27, 2026| Planned     |
 
 Dates above are as recorded in the git history and work logs. The
 projected end date is a planning estimate based on the 18 Aug 2026 start date
-plus ≈14 weeks for the panel defence. The actual defence date is an
+plus ≈14.5 weeks for the deployment and panel defence on November 27, 2026. The actual defence date is an
 institutional/panel decision this document cannot set on its own — this row is
 this document's own planning estimate, not a confirmed date, and the Project
 Lead or adviser may move it.

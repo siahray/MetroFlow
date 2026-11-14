@@ -361,21 +361,21 @@ client's own data, and these effects recompute the same way.
 | M1  | Charter and requirements approved   | August 20, 2026 — Completed  |
 | M2  | Architecture and data design frozen | August 26, 2026 — Completed  |
 | M3  | API engine operational              | October 1, 2026 — Completed  |
-| M4  | Dispatch portal operational         | October 22, 2026 — Completed |
+| M4  | Dispatch portal operational         | November 5, 2026 — Completed |
 | M5  | Hardening complete                  | October 25, 2026 — Completed |
 | M6  | Baseline documentation accepted     | October 27, 2026 — Completed |
 | M7  | Realtime, reports and fleet API     | November 4, 2026 — Completed |
 | M8  | LGU map, moderation and dispatch    | November 4, 2026 — Completed |
-| M9  | Driver app, sensors and defence     | Panel defence **projected November 25, 2026** (planning projection, pending the panel's own scheduling) |
+| M9  | Driver app, sensors and defence     | Panel defence **projected November 27, 2026** (planning projection, pending the panel's own scheduling) |
 
 Approval is requested at M1. The baseline demonstration fell on 28 October 2026,
 between M6 and the start of the driver-app work — it has no separate M-number
 of its own in this list. The final demonstration/defence is part of M9. The
-baseline ran about 10 weeks (18 Aug – 27 Oct 2026); the driver-app work and the
-live flood-state/Mapbox/network-rescope work ran about 3.5 weeks of engineering
-(21 Oct – 13 Nov 2026); the projected defence date above adds a further ≈2
-weeks for final documentation and rehearsal, for a projected ≈14-week total
-engagement (18 Aug – 25 Nov 2026). This is this document's own planning estimate,
+baseline ran about 10 weeks (18 Aug – 27 Oct 2026); the driver-app work, live
+flood-state integration, and portal implementation ran through November 5, 2026;
+verification and testing runs November 6 – November 23, 2026; deployment and
+maintenance runs November 24 – November 27, 2026, for a projected ≈14.5-week total
+engagement (18 Aug – 27 Nov 2026). This is this document's own planning estimate,
 not a confirmed institutional or panel date.
 
 ## 13. Governance, Assumptions and Dependencies
