@@ -15,8 +15,13 @@ database, never part of startup::
 OSM node ids overflow the 32-bit road_nodes.node_id column, so nodes are
 renumbered from 1 in OSM id order and edges follow; every dependent row (live
 states, advisories, closure hazards) is reset by the same import, so the shift
-is safe. Elevations are flat 10 m: the lattice's calibrated flood-prone belt
-was demo scaffolding, and real depth now comes from sensors and reports.
+is safe. Elevations are a deterministic placeholder (`_synthetic_elevation_m`,
+a smooth function of each node's own coordinates, not a flat value) pending a
+real OpenTopography DEM (TSD "External data services", ADR-020): the rainfall
+simulation's SCS-CN ponding amplification needs *some* elevation spread to
+produce anything other than one uniform depth across the whole network, and a
+flat value made every edge identical, which defeated the point of testing
+flood-aware routing against it.
 
 Usage policy: Overpass is a shared free service. One run is one request; do
 not loop this script.
@@ -85,6 +90,23 @@ def _haversine_m(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> floa
     d_lambda = math.radians(b_lon - a_lon)
     h = math.sin(d_phi / 2) ** 2 + math.cos(phi_a) * math.cos(phi_b) * math.sin(d_lambda / 2) ** 2
     return 2 * radius * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _synthetic_elevation_m(latitude: float, longitude: float) -> float:
+    """Deterministic placeholder elevation (metres), a smooth function of a
+    node's own coordinates -- pending a real OpenTopography DEM (TSD
+    "External data services", ADR-020). A closed-form blend of two sine
+    waves at different spatial frequencies gives a natural-looking terrain
+    of gentle "low" and "high" zones (same node, same coordinates, always
+    gets the same value, so re-running this import is stable) instead of
+    one flat number that gave `hydrology.compute_node_water_depth` nothing
+    to vary the SCS-CN ponding amplification by.
+    """
+    base = 10.0
+    wave = 6.0 * math.sin(latitude * 140.0) * math.cos(longitude * 95.0) + 3.0 * math.sin(
+        latitude * 380.0 + longitude * 210.0
+    )
+    return round(max(1.0, base + wave), 2)
 
 
 def parse_maxspeed(tags: dict) -> float | None:
@@ -170,7 +192,7 @@ def build_graph(elements: list[dict]) -> tuple[list[ImportNode], list[ImportEdge
             name=junction_name(osm_id),
             latitude=coords[1],
             longitude=coords[0],
-            elevation_m=10.0,
+            elevation_m=_synthetic_elevation_m(coords[1], coords[0]),
         )
         for osm_id, coords in sorted(_junction_coordinates(ways).items())
         if osm_id in assign

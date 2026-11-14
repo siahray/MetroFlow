@@ -56,7 +56,14 @@ def compute_node_water_depth(
     amp = settings.ponding_amplification if amplification is None else amplification
 
     # Deeper ponding at lower elevations (clamped to a 10 m reference datum).
-    depression_factor = 1.0 + (10.0 - min(elevation_m, 10.0)) * 0.15
+    # 0.3 (was 0.15, calibrated against the old 34-node demo lattice's ~5.5 m
+    # elevation spread) -- the real OSM network's elevation spread is ~18 m
+    # (CR-007, docs/TSD.md LIM-028), and 0.15 made the ratio between the
+    # lowest and highest point's depth too narrow to ever cross from Light
+    # flood into Passable or Submerged: every edge landed in the same colour
+    # band regardless of rainfall. See tests/test_hydrology.py for the
+    # calibration this and PONDING_AMPLIFICATION (now 2.4, was 3.5) satisfy.
+    depression_factor = 1.0 + (10.0 - min(elevation_m, 10.0)) * 0.3
     base_depth_cm = (runoff_mm / 10.0) * depression_factor * amp
 
     return round(float(max(0.0, base_depth_cm)), 2)
