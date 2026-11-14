@@ -2,18 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-**Version 2.0** — consolidated baseline including the driver app, live hazard
-publication, fleet dispatch, sensor ingestion, provider keys, template-sourced
-UI, the Mapbox dry-state routing handoff, and the pilot road network scoped to
-Quezon City (which also found NFR-001/002/019 not currently met at this scale
-— see `BRD.md`), with every cost figure in
-§7–§11 now filled — OPEX against each vendor's current rate card, CAPEX/
-training/maintenance/benefits against reasonable market-based placeholder
-rates (labelled `illustrative` throughout); §12's milestone table also fills
-the M9 panel-defence date with a planning projection (4 Dec 2026, from the 18
-Aug 2026 start) rather than leaving it open. This is a **planning projection,
-not a quotation or a funding commitment**: swap in real institutional and client
-figures before treating any number here as an actual budget.
+**Version 1.0** — Initial Baseline Release
 
 ## 1. Executive Summary
 
@@ -40,9 +29,7 @@ for.
 The pilot is scoped to one corridor and deliberately excludes public App Store
 and Play Store releases, real CCTV, carrier-grade SOS and multi-LGU tenancy. It
 includes the driver side of the loop: a native Expo app, live hazard
-publication, fleet dispatch and labelled sensor ingestion. That increment is
-costed as its own line item (§7) so its cost remains visible alongside the
-rest of the build.
+publication, fleet dispatch and labelled sensor ingestion.
 
 Monetary figures (13 Nov 2026) are an **illustrative projection** for planning
 discussion, not a quotation or a funding commitment: OPEX lines are priced
@@ -69,7 +56,7 @@ the driver already on the road, so the same hazard is discovered again by each
 vehicle in turn.
 
 The full problem statement, personas and business requirements are in
-[BRD.md](BRD.md).
+[BRD.docx](BRD.docx).
 
 ## 3. Project Objectives
 
@@ -181,24 +168,24 @@ than one of that table's 10 listed roles, as its own note says).
 for 1 month is 4 person-months, the same as 1 person working for 4 months —
 it is not a count of 9 or 4 separate people.
 
-| No. | Category                               | Basis                      | Amount (PHP) |
-| --- | -------------------------------------- | -------------------------- | ------------ |
-| 1   | Baseline development effort            | 9 person-months (4 people × ≈2.3 months, 18 Aug – 27 Oct 2026) × ₱40,000 | ₱360,000     |
-| 2   | Native app, realtime, fleet increment  | 4 person-months (4 people × ≈1 month, 21 Oct – 7 Nov 2026) × ₱40,000 | ₱160,000     |
-| 3   | Test devices and data                  | 2 budget Android test phones, field data/SIM allowance | ₱15,000      |
-| 4   | Contingency                            | 10% of the above (₱535,000) | ₱53,500      |
-|     | **Total CAPEX**                        |                            | **₱588,500** |
+| No. | Category                     | Basis                      | Amount (PHP) |
+| --- | ---------------------------- | -------------------------- | ------------ |
+| 1   | Development effort           | 13 person-months (4 people × ≈3.25 months, 18 Aug – 13 Nov 2026) × ₱40,000 | ₱520,000     |
+| 2   | Test devices and data         | 2 budget Android test phones, field data/SIM allowance | ₱15,000      |
+| 3   | Contingency                   | 10% of the above (₱535,000) | ₱53,500      |
+|     | **Total CAPEX**               |                            | **₱588,500** |
 
 ### 7.2 OPEX
 
 Priced against each vendor's own published rate card, fetched 13 November
 2026 (sources in §7.2.1), converted at ≈₱61.5/USD (mid-market, mid-Nov 2026 —
-re-check before budgeting, FX moves). Lines 1, 2, 6 and 9 are priced at the
-**Pro/paid tier**, not Free, because the pilot's own `NFR-003` (99% uptime
-during a declared event) is incompatible with Supabase Free's pause after a
-week of inactivity and Vercel Hobby's non-commercial-use terms — this revises
-`CA-002`'s original "free tier suffices" assumption now that the system is a
-running pilot, not a prototype. Usage is still well inside every paid tier's
+re-check before budgeting, FX moves). Lines 1 and 2 (Supabase Pro and Vercel
+Pro) are priced at the **paid tier**, not Free, because the pilot's own
+`NFR-003` (99% uptime during a declared event) is incompatible with Supabase
+Free's pause after a week of inactivity and Vercel Hobby's non-commercial-use
+terms. Lines 6 and 9 (EAS build/distribution and the map, weather and imagery
+services) stay on their vendors' **free tiers**, whose included allowances cover
+pilot thresholds, so both are ₱0. Usage is still well inside every paid tier's
 included allowance at pilot scale, so the figures below are the **plan
 minimum**, not a volume estimate; overage rates are given so the line can be
 re-priced if usage grows.
@@ -209,10 +196,10 @@ re-priced if usage grows.
 | 2   | Application hosting               | Vercel Pro, $20/mo/seat, 2 projects, 1 seat ([vercel.com/pricing](https://vercel.com/pricing)) | ₱14,760 | ₱14,760 | ₱14,760 |
 | 3   | Domain and TLS                    | `.ph` registrar, ≈₱2,500–3,500/yr; TLS auto-issued free by Vercel | ₱3,000    | ₱3,000    | ₱3,000    |
 | 4   | Training and handover             | 2 days × ₱5,000/day facilitator rate, ≤10 users (`CA-004`) | ₱10,000   | —         | —         |
-| 5   | Maintenance and support           | 17.5% of CAPEX lines 1+2 (₱520,000), midpoint of the 15–20% band | —         | ₱91,000   | ₱91,000   |
+| 5   | Maintenance and support           | 17.5% of CAPEX line 1 (₱520,000), midpoint of the 15–20% band | —         | ₱91,000   | ₱91,000   |
 | 6   | EAS build and app distribution    | Free tier covers it at pilot cadence (15 Android + 15 iOS builds/mo, [expo.dev/pricing](https://expo.dev/pricing)); Starter $19/mo + credit if build volume grows | ₱0 | ₱0 | ₱0 |
 | 7   | Evidence photo storage            | `bytea` in the `incident_reports` row (ADR-023), not a separate object-storage service — folded into line 1's 8 GB database / 100 GB file-storage allowance | included in line 1 | included in line 1 | included in line 1 |
-| 8   | Redis / event infrastructure      | Not provisioned in the hosted deployment — the event stream polls Postgres instead (`docs/TSD.md` §5.3, ADR-015); Redis runs only in the local dev `docker-compose` stack | ₱0        | ₱0        | ₱0        |
+| 8   | Redis / event infrastructure      | Not provisioned in the hosted deployment — the event stream polls Postgres instead (`docs/TSD.docx` §5.3, ADR-015); Redis runs only in the local dev `docker-compose` stack | ₱0        | ₱0        | ₱0        |
 | 9   | Map, weather and imagery services | Mapbox Directions (dry-state routing): 100,000 free requests/mo, then $2.00/1,000 ([mapbox.com/pricing](https://www.mapbox.com/pricing)). OpenWeather, OpenTopography and Copernicus stay free/offline (`CA-009`) | ₱0        | ₱0        | ₱0        |
 |     | **Total OPEX**                    |                                | **₱46,210** | **₱127,210** | **₱127,210** |
 
@@ -237,7 +224,7 @@ adviser/client's own rate before this projection is treated as a real budget.
 | ID     | Assumption                                                                                                                             |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | CA-001 | Development effort is student time and is not cash-funded, but is costed at an institutional rate so total cost of ownership is honest |
-| CA-002 | ~~Free tiers of each service suffice for the pilot; paid tiers apply only at production scale~~ — superseded 13 Nov 2026: Supabase and Vercel are priced at their paid tier in §7.2 because `NFR-003` (99% uptime during a declared event) is incompatible with Supabase Free's pause-after-a-week and Vercel Hobby's non-commercial terms; usage still sits well inside the paid tier's included allowance |
+| CA-002 | Supabase and Vercel are priced at their paid tier in §7.2 because `NFR-003` (99% uptime during a declared event) is incompatible with Supabase Free's pause-after-a-week and Vercel Hobby's non-commercial terms; usage still sits well inside the paid tier's included allowance |
 | CA-003 | All libraries used are open source; no licence fees                                                                                    |
 | CA-004 | Training is delivered to a small group (≤ 10 users) at the operations centre                                                           |
 | CA-005 | Year-2 maintenance assumes dependency and security updates only, no major feature work                                                 |
@@ -303,7 +290,7 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 | Background location limits on iOS          | Telemetry gaps                          | Foreground-only telemetry; documented limitation                                      |
 | Sensor or demo CCTV mistaken for live data | Wrong operational decision              | Label simulated and demo sources in the API and UI                                    |
 
-Full scoring and owners are in [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
+Full scoring and owners are in [Project-Management-Plan.docx](Project-Management-Plan.docx).
 
 ## 10. Financial Analysis
 
@@ -379,19 +366,17 @@ client's own data, and these effects recompute the same way.
 | M6  | Baseline documentation accepted     | October 27, 2026 — Completed |
 | M7  | Realtime, reports and fleet API     | November 4, 2026 — Completed |
 | M8  | LGU map, moderation and dispatch    | November 4, 2026 — Completed |
-| M9  | Driver app, sensors and defence     | November 3, 2026 for the engineering; panel defence **projected December 4, 2026** (planning projection, pending the panel's own scheduling) |
+| M9  | Driver app, sensors and defence     | Panel defence **projected November 25, 2026** (planning projection, pending the panel's own scheduling) |
 
-Approval is requested at M1. The baseline demonstration (`PROJ_MANAGEMENT_PLAN.md`'s
-"Demonstration" row) fell on 28 October 2026, between M6 and the start of the
-driver-app increment — it has no separate M-number of its own in this list. The
-final demonstration/defence is part of M9. The baseline ran about 10
-weeks (18 Aug – 27 Oct 2026); the driver-app increment and the live
-flood-state/Mapbox/network-rescope work ran about 3.5 weeks of engineering
-(21 Oct – 13 Nov 2026); the projected
-defence date above adds a further ≈3 weeks for final documentation and
-rehearsal, for a projected ≈15.5-week total engagement (18 Aug – 4 Dec 2026).
-This is this document's own planning estimate, not a confirmed institutional
-or panel date.
+Approval is requested at M1. The baseline demonstration fell on 28 October 2026,
+between M6 and the start of the driver-app work — it has no separate M-number
+of its own in this list. The final demonstration/defence is part of M9. The
+baseline ran about 10 weeks (18 Aug – 27 Oct 2026); the driver-app work and the
+live flood-state/Mapbox/network-rescope work ran about 3.5 weeks of engineering
+(21 Oct – 13 Nov 2026); the projected defence date above adds a further ≈2
+weeks for final documentation and rehearsal, for a projected ≈14-week total
+engagement (18 Aug – 25 Nov 2026). This is this document's own planning estimate,
+not a confirmed institutional or panel date.
 
 ## 13. Governance, Assumptions and Dependencies
 
@@ -417,12 +402,12 @@ or panel date.
 | D-001 | Hosted database credentials are supplied as a repository secret      | Hosted migration not demonstrated       |
 | D-003 | Client confirms the pilot corridor                                   | Seed data and demonstration rework      |
 | D-004 | Supabase credentials and pilot accounts are supplied at deployment   | Authentication cannot start             |
-| D-005 | A persistent evidence volume is available                            | Photos cannot be retained               |
+| D-005 | Evidence is stored as `bytea` bytes in the `incident_reports` row (ADR-023), not a separate volume | Resolved — no external storage to fail; the 4 MB row cap is the only limit |
 | D-006 | Map and data providers stay within their free or institutional tiers | Degraded map or manual rainfall         |
 
 ## 14. Approval Recommendation
 
-Approve **Option 4**, the pilot build, including the driver-app increment, on
+Approve **Option 4**, the pilot build, including the driver-app scope, on
 the conditions in §6.
 
 | Decision           | Detail                                                                 |

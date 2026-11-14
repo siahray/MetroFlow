@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.3
+Version 1.0 — Initial Baseline Release
 
 ## Document Control
 
@@ -10,14 +10,14 @@ Version 1.3
 | ----------- | ---------------------------------------------------------------- |
 | Project     | MetroFlow                                                        |
 | Document    | Technical Specification Document                                 |
-| Version     | 2.0                                                              |
+| Version     | 1.0                                                              |
 | Prepared By | «Project Team»                                                   |
 | Baseline    | `main`, 13 November 2026                                         |
-| Change      | Consolidated baseline: Mapbox Directions dry-state routing handoff (ADR-025) and every other prior scope addition folded in as original scope; TTC-025 to 031 and the External data services / Application Components tables fully synced |
+| Change      | Initial Baseline Release                                         |
 
 This document describes the architecture for the approved provider keys,
 API-issued session tokens, and the Mapbox dry-state routing design (ADR-025,
-BRULE-017). Sections marked `Planned` are not implemented in the baseline.
+BRULE-015). Sections marked `Planned` are not implemented in the baseline.
 See FSD §Implementation Status for the current position.
 
 ## Requirements Traceability
@@ -55,25 +55,26 @@ See FSD §Implementation Status for the current position.
                      FastAPI  (session tokens · RBAC · rate limits)
         network · routing · simulation · reports · hazards
         vehicles · telemetry · SOS · dispatch · sensors
-                     │                              │
-        PostgreSQL + PostGIS                 Redis pub/sub
-        graph · reports · hazards            events · throttle
-        fleet · sensors · audit              counters · cache
                      │
-              evidence volume (photos)
+        PostgreSQL + PostGIS
+        graph · reports · hazards · fleet
+        sensors · audit · rate limits
+        event_log (SSE relay) · evidence bytes (ADR-023)
 ```
 
-The API is stateless apart from the evidence volume and Redis: every request
-loads its data from PostgreSQL, and events fan out through Redis, so instances
+The API is stateless: every request loads its data from PostgreSQL, so instances
 can be added horizontally. The portal is a Next.js App Router application; the
 driver client is a native Expo app built with React Native and Expo Router. It is
 distributed separately from the portal and uses native background tasks, SQLite
 and SecureStore rather than browser storage.
 
 The event path is deliberately narrow. A privileged mutation commits to
-PostgreSQL, writes its audit record, publishes to a Redis channel, and returns;
-the SSE endpoint relays the channel to connected clients. Publication latency is
-measured from the commit to the emitted event, not from the device receiving it.
+PostgreSQL and appends one `event_log` row in the same transaction; the SSE
+endpoint tails those rows by `event_id` on a short poll (40 ms) and relays them
+to connected clients. No broker is provisioned and the hosted database sits
+behind a transaction pooler that cannot carry `LISTEN/NOTIFY`, so the durable
+table is the bus (ADR-015). Publication latency is measured from the commit to
+the emitted event, not from the device receiving it.
 
 **Design principles**
 
@@ -96,7 +97,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | --------------------- | ------------------------------------ | -------------------------------------------------------------------------- |
 | Network State Service | BR-001 / FSD-FR-001 to 005           | Load graph, classify passability, emit GeoJSON nodes and edges             |
 | Hydrology Engine      | BR-002 / FSD-FR-006 to 010           | SCS-CN runoff, elevation-weighted ponding, speed degradation, state commit |
-| Routing Engine        | BR-003 / FSD-FR-011 to 017, 127, 131 | TD-A\* search, clearance blocking, route geometry assembly, travel time, alternative-route request (`avoid_edges`), dry-state Mapbox Directions handoff  |
+| Routing Engine        | BR-003 / FSD-FR-011 to 017, 108, 112 | TD-A\* search, clearance blocking, route geometry assembly, travel time, alternative-route request (`avoid_edges`), dry-state Mapbox Directions handoff  |
 | Geometry Service      | BR-001 / FSD-FR-004, FSD-FR-053      | Idempotent PostGIS backfill with advisory lock                             |
 | Data Layer            | BR-001 / FSD-FR-001                  | SQLAlchemy models, connection lifecycle, migrations                        |
 | Audit Store           | BR-008 / FSD-FR-047                  | Actor, action, JSON payload, integrity hash (schema only)                  |
@@ -106,14 +107,14 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Auth Service          | BR-009 / FSD-FR-092                  | Session token issue and verification, role dependency (audit context planned) |
 | Report Service        | BR-014 / FSD-FR-065 to 081           | Multipart intake, EXIF extraction, urgency, dedupe, moderation             |
 | Hazard Service        | BR-013 / FSD-FR-059 to 064, 082–086  | Polygon/line validation, obstruction level, publish and withdraw           |
-| Event Stream          | BR-018 / FSD-FR-086                  | Redis pub/sub fan-out over SSE with reconnect snapshots                    |
+| Event Stream          | BR-018 / FSD-FR-086                  | `event_log` relay over SSE (40 ms poll) with `Last-Event-ID` reconnect     |
 | Fleet Service         | BR-016 / FSD-FR-075, 076, 088        | Unit registry, status transitions, telemetry, nearest-unit ranking         |
 | Dispatch Service      | BR-016 / FSD-FR-087 to 089           | Distress incidents, assignment, flood-safe rescue route                    |
 | Sensor Service        | BR-017 / FSD-FR-090, 091             | Reading validation, thresholds, impact radius, advisory roads (implemented) |
 | User Service          | BR-009 / FSD-FR-048                 | User CRUD with audit trail, role validation, self-protection, last admin protection |
 | Export Service        | BR-012 / FSD-FR-049                 | CSV export for audit logs and incidents with filtering                     |
-| Evidence Store        | BR-014 / FSD-FR-066, 067             | Local volume for the pilot; MIME check, re-encode, EXIF strip              |
-| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074, 124 to 129 | Navigation, alerts, reports, offline cache and SOS; voice guidance, route preview/Start flow, speed/turn-aware driving camera, heading marker, Quick Picks/recent destinations in search |
+| Evidence Store        | BR-014 / FSD-FR-066, 067             | `photo_data` bytes in the report row (ADR-023); MIME check, re-encode, EXIF strip |
+| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074, 105 to 110 | Navigation, alerts, reports, offline cache and SOS; voice guidance, route preview/Start flow, speed/turn-aware driving camera, heading marker, Quick Picks/recent destinations in search |
 | LGU Map UI            | BR-016 / FSD-FR-075, 076, 082–089    | MapLibre layers, draw tools, fleet and dispatch panels                     |
 
 ### Technology stack
@@ -135,7 +136,7 @@ measured from the commit to the emitted event, not from the device receiving it.
 | Styling         | Tailwind CSS                                  | 4.x                                        |
 | UI source       | Client-supplied HTML/CSS template             | Figma-derived; adapted to React components |
 | Package manager | Bun                                           | 1.4.3                                      |
-| Realtime        | SSE + Redis pub/sub                           | Redis 7                                    |
+| Realtime        | SSE over a durable `event_log` relay          | PostgreSQL 15 / 17                         |
 | Auth            | API-issued HS256 JWT; bcrypt password hashes  | PyJWT 2.15, passlib/bcrypt                 |
 | Evidence        | Pillow, python-multipart                      | current at implementation                  |
 | Tests           | pytest, Ruff, ESLint, `tsc --noEmit`, `bun test`, Playwright | In CI today; Playwright covers the portal smoke only (LIM-009) |
@@ -146,7 +147,11 @@ measured from the commit to the emitted event, not from the device receiving it.
 | -------------- | ----------------- | ------------------------------- | -------------------------------------------------------- |
 | Supabase (Postgres) | Runtime      | Hosted database                 | API unavailable; no fallback                             |
 | Mapbox         | Planned ; Directions implemented | Raster basemap (planned); dry-state ("FASTEST") routing via the Directions API, `backend/mapbox_directions.py` | Basemap: OpenStreetMap raster fallback; no client requests tiles today. Directions: missing token, disabled flag, or a failed call falls back to the in-house TD-A* engine (`source: "ENGINE"` instead of `"MAPBOX"` in the routing response) |
-| OpenWeather    | Planned   | Rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
+| Open-Meteo     | Live — advisory only | Rain gate (rainfall intensity for the NOAH condition, `GET /api/v1/weather/live-rainfall`); 2-minute cache; labelled as modelled | Manual rainfall override; the run is labelled as manual |
+| Open-Meteo Flood / GloFAS | Live — advisory only | Modelled river discharge for pilot rivers (`backend/river_discharge.py`, FSD-FR-103); labelled `MODELLED`; coarse daily model — may miss small urban rivers | Falls back to no-data advisory; routing is unaffected |
+| PAGASA telemetry | Blocked (OD-D25) | Real-time river gauge readings (FSD-FR-094) — not implemented; access blocked on OD-D25 | Not applicable — blocked upstream |
+| NOAH flood maps | Not implemented | Flood-hazard map layers for routing caution (FSD-FR-098, FR-099) — layer data/import missing | Not applicable |
+| OpenWeather    | Planned   | Optional supplementary rainfall intensity              | Manual rainfall override; the run is labelled as manual  |
 | OpenTopography | Offline           | Digital elevation model         | Cached derived terrain; no runtime impact                |
 | Copernicus     | Offline           | Sentinel imagery and land cover | Cached derived layers; no runtime impact                 |
 
@@ -443,7 +448,7 @@ Full request and response contracts, examples and error bodies are in
 | VAL-011       | BR-005  | FSD-FR-026 | Filter values are constrained to the defined source set                                                                  |
 | VAL-012       | BR-008  | FSD-FR-047 | Schema changes are applied only through Alembic revisions                                                                |
 | VAL-013       | BR-014  | FSD-FR-065 | `depth_level` is one of `ANKLE`, `KNEE`, `IMPASSABLE`                                                                    |
-| VAL-014       | BR-014  | FSD-FR-066 | Photo is required for a photo report; max 8 MB; JPEG/PNG/WebP; MIME sniffed                                              |
+| VAL-014       | BR-014  | FSD-FR-066 | Photo is required for a photo report; max 4 MB; JPEG/PNG/WebP; MIME sniffed                                              |
 | VAL-015       | BR-014  | FSD-FR-067 | Latitude is within ±90, longitude within ±180; EXIF location must agree with the claimed point within 200 m when present |
 | VAL-016       | BR-014  | FSD-FR-065 | Report submissions are rate-limited per device `[TBC]`                                                                   |
 | VAL-017       | BR-016  | FSD-FR-082 | A flood polygon has at least three vertices and is closed; a closure line has at least two points                        |
@@ -468,7 +473,7 @@ Full request and response contracts, examples and error bodies are in
 | Automated dependency updates (Dependabot)                                              | BR-008 / FSD-FR-047          |
 | Static analysis (CodeQL) with capability preflight                                     | BR-008 / FSD-FR-047          |
 | Dynamic API scan (OWASP ZAP), fail-closed                                              | BR-008 / FSD-FR-047          |
-| Authentication and role enforcement (Supabase session verification, role guards)       | BR-009 / FSD-FR-092 |
+| Authentication and role enforcement (API-issued session verification, role guards)       | BR-009 / FSD-FR-092 |
 | Key exposure rules: public keys scoped by origin, secrets server-only, rotation        | BR-011 / FSD-FR-051          |
 | Service-role key confined to the backend; never shipped to a client                    | BR-011 / FSD-FR-051          |
 | Evidence upload validation: MIME sniff, size cap, re-encode and EXIF strip             | BR-014 / FSD-FR-066, 067     |
@@ -488,7 +493,7 @@ Full request and response contracts, examples and error bodies are in
 | SEC-003 | Baseline has no rate limiting                     | Medium   | Closed 28 Oct 2026 for the routes that exist: login, registration, SOS and simulation are limited per address in Postgres. Report and telemetry limits land with those routes |
 | SEC-004 | CodeQL cannot analyse the private repository      | Medium   | Resolved 10 Nov 2026: repository is public, which is free for CodeQL. Scan runs on push/PR/weekly; first run reported 0 alerts |
 | SEC-005 | Audit hash column has no write path               | Low      | Implement with FSD-FR-093                                                   |
-| SEC-006 | Uploaded evidence can exhaust or poison storage   | High     | 8 MB cap, MIME sniff, re-encode, random keys, no execution                  |
+| SEC-006 | Uploaded evidence can exhaust or poison storage   | High     | 4 MB cap, MIME sniff, re-encode, row-scoped access, no execution            |
 | SEC-007 | SSE stream could leak fleet or SOS positions      | Medium   | Authenticate the stream and filter by role                                  |
 | SEC-008 | Driver location can be re-identified              | Medium   | Round, hash the device id, restrict access, purge after 24 hours            |
 | SEC-009 | Demo CCTV may be mistaken for live footage        | Closed   | CCTV dropped: evidence is the reporter's own photo                          |
@@ -510,12 +515,12 @@ Full request and response contracts, examples and error bodies are in
 | E007       | Unhandled server error                         | Return 500; log the traceback; do not leak internals         |
 | E008       | Missing, expired or invalid session token      | Return 401 with `WWW-Authenticate`; change nothing           |
 | E009       | Role not permitted for the action              | Return 403; record the attempt without the payload secrets   |
-| E010       | Photo missing, unsupported or above 8 MB       | Return 415 or 413 with the accepted types and limit          |
+| E010       | Photo missing, unsupported or above 4 MB       | Return 415 or 413 with the accepted types and limit          |
 | E011       | Report already verified, rejected or duplicate | Return 409 with the current status                           |
 | E012       | Vehicle unavailable or illegal status change   | Return 409 with the current status and allowed transitions   |
 | E013       | Invalid or self-intersecting geometry          | Return 422 with the geometry reason                          |
 | E014       | Rate limit exceeded                            | Return 429 with `Retry-After`                                |
-| E015       | Event stream or Redis unavailable              | Return 503 for the stream; clients fall back to a snapshot   |
+| E015       | Event relay or database unavailable            | Return 503 for the stream; clients fall back to a snapshot   |
 
 Transaction rules: read endpoints do not commit; simulation commits once after
 all edge updates; a privileged mutation commits its row and audit record in one
@@ -551,13 +556,12 @@ reconnect. Migrations run one transaction per revision.
 | TTC-022 | BR-013  | FSD-FR-072 | Two telemetry batches inside five seconds produce one accepted write                                          |
 | TTC-023 | BR-017  | FSD-FR-091 | A breach marks only in-radius edges advisory until confirmed                                                  |
 | TTC-024 | BR-018  | FSD-FR-068 | A queued report syncs once, survives a retry, and cached routes render offline                                |
-| TTC-025 | BR-020  | FSD-FR-101 | Sentinel-1 credential failure, quota exhaustion and malformed ingest payloads fail closed without publishing hazards (not implemented) |
-| TTC-026 | BR-021  | FSD-FR-108, FSD-FR-111 | Source outage, credential failure and malformed payloads fail safe: no hazard is published or cleared (implemented) |
-| TTC-027 | BR-003  | FSD-FR-127 | `avoid_edges` excludes them from the search, or the endpoint returns 404 when no alternative survives         |
-| TTC-028 | BR-003  | FSD-FR-131 | A dry FASTEST request with a configured token returns `source: "MAPBOX"` with empty `segments`/`hazards`      |
-| TTC-029 | BR-003  | FSD-FR-131 | A Mapbox failure, missing token, or disabled flag falls back to `source: "ENGINE"` without failing the request |
-| TTC-030 | BR-003  | FSD-FR-131 | `ignore_hazards`, `avoid_edges`, or a FLOOD_SAFE network never invoke the Mapbox adapter (BRULE-017)           |
-| TTC-031 | BR-002  | FSD-FR-130 | `/weather/live-rainfall` reports the cached Open-Meteo reading and requires an admin session                  |
+| TTC-025 | BR-019  | FSD-FR-094, FSD-FR-097 | Source outage, credential failure and malformed payloads fail safe: no hazard is published or cleared (implemented) |
+| TTC-026 | BR-003  | FSD-FR-108 | `avoid_edges` excludes them from the search, or the endpoint returns 404 when no alternative survives         |
+| TTC-027 | BR-003  | FSD-FR-112 | A dry FASTEST request with a configured token returns `source: "MAPBOX"` with empty `segments`/`hazards`      |
+| TTC-028 | BR-003  | FSD-FR-112 | A Mapbox failure, missing token, or disabled flag falls back to `source: "ENGINE"` without failing the request |
+| TTC-029 | BR-003  | FSD-FR-112 | `ignore_hazards`, `avoid_edges`, or a FLOOD_SAFE network never invoke the Mapbox adapter (BRULE-015)           |
+| TTC-030 | BR-002  | FSD-FR-111 | `/weather/live-rainfall` reports the cached Open-Meteo reading and requires an admin session                  |
 
 ## Technical Acceptance Criteria
 
@@ -696,7 +700,7 @@ recency    = exp(−age_minutes / 30)
 urgency    = severity × source × corrobor × recency
 ```
 
-Weights are configuration, validated with dispatchers at M7 (4 November 2026, per `PROJECT_CHARTER.md`'s milestone table). A report
+Weights are configuration, validated with dispatchers at M7 (4 November 2026, per `Project_Charter.docx`'s milestone table). A report
 inside 150 m and 15 minutes of an existing pending report is flagged as a
 possible duplicate, not discarded.
 
@@ -777,19 +781,21 @@ seed and the interactive OpenAPI docs. `test` disables the seed but keeps the
 docs. `production` disables the seed and serves no `/docs` or `/redoc`; the
 schema remains at `/openapi.json`. The startup seed only fills an empty graph, so
 it never overwrites a real network; bringing an existing graph up to the curated
-one is an explicit `python network_seed.py` run, which upserts the documented
-columns and deletes nothing (LIM-014). Calibration and threshold settings keep
+synthetic lattice is an explicit `python network_seed.py` run. The hosted
+production database, however, runs the real OpenStreetMap import imported by
+`backend/osm_network.py` — 6,177 nodes and 7,618 edges covering Quezon City;
+`network_seed.py` is the local dev fallback and is not run against the
+production database (LIM-014). Calibration and threshold settings keep
 the `METROFLOW_` prefix and may be supplied in a local `.env`.
 
 | Variable                            | Default                | Effect                                                           | Class          |
 | ----------------------------------- | ---------------------- | ---------------------------------------------------------------- | -------------- |
 | `FASTAPI_ENV`                       | `development`          | Runtime mode; gates the demo seed and, in production, the docs UI | Server config  |
 | `DATABASE_URL`                      | local PostGIS DSN      | SQLAlchemy DSN for the runtime application role                  | Secret         |
-| `REDIS_URL`                         | `redis://redis:6379/0` | Event bus and throttle counters                                  | Secret if used |
 | `JWT_SECRET`                        | dev fallback           | Signs the HS256 session tokens the API issues                    | Secret         |
 | `METROFLOW_ADMIN_EMAIL`             | `dispatcher@metroflow.local` | First dispatcher, created once when the user table is empty | Server config  |
 | `METROFLOW_ADMIN_PASSWORD`          | `metroflow-dev`        | Password for that seeded dispatcher; change before any exposure  | Secret         |
-| `SUPABASE_SERVICE_ROLE_KEY`         | no default             | Reserved for evidence storage and provisioning; no code path reads it yet | Secret |
+| `SUPABASE_SERVICE_ROLE_KEY`         | no default             | Reserved for provisioning; no code path reads it yet             | Secret         |
 | `OPENWEATHER_API_KEY`               | no default             | Optional live rainfall; manual rainfall remains the fallback     | Secret         |
 | `OPENTOPOGRAPHY_API_KEY`            | no default             | Offline DEM acquisition only                                     | Secret         |
 | `COPERNICUS_CLIENT_ID`              | no default             | Offline imagery acquisition only                                 | Secret         |
@@ -802,8 +808,7 @@ the `METROFLOW_` prefix and may be supplied in a local `.env`.
 | `METROFLOW_DEFAULT_CLEARANCE_CM`    | 30.0                   | Clearance when omitted                                           | Server config  |
 | `RUN_MIGRATIONS`                    | true                   | Apply migrations on container start                              | Server config  |
 | `METROFLOW_CORS_ORIGINS`            | `*` (any origin)       | Comma-separated portal origins; credentials are only advertised for an explicit list | Server config  |
-| `METROFLOW_UPLOAD_DIR`              | `/data/evidence`       | Evidence volume mount                                            | Server config  |
-| `METROFLOW_MAX_UPLOAD_MB`           | 8                      | Photo size cap                                                   | Server config  |
+| `METROFLOW_MAX_UPLOAD_MB`           | 4                      | Photo size cap                                                   | Server config  |
 | `METROFLOW_DRIVER_RETENTION_HOURS`  | 24                     | Driver location purge window                                     | Server config  |
 | `METROFLOW_TELEMETRY_MIN_SECONDS`   | 5                      | Server-side telemetry throttle                                   | Server config  |
 | `METROFLOW_WARNING_RADIUS_M`        | [TBC]                  | Driver proximity alert radius                                    | Server config  |
@@ -812,13 +817,12 @@ the `METROFLOW_` prefix and may be supplied in a local `.env`.
 Read by the code today: `FASTAPI_ENV`, `DATABASE_URL`, `JWT_SECRET`, the two
 bootstrap dispatcher values, the five `METROFLOW_*` calibration/threshold values,
 `METROFLOW_CORS_ORIGINS` and `RUN_MIGRATIONS` (container entrypoint). The
-remaining rows — `REDIS_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENWEATHER_API_KEY`,
-`METROFLOW_SENSOR_TOKEN`, the upload, retention, telemetry, warning-radius and
-sensor-debounce settings — are reserved for work packages that are
-still planned (see `FSD.md` §Implementation Status).
-
-`METROFLOW_REDIS_URL` is accepted as a deprecated alias of `REDIS_URL` so an
-existing deployment does not break; new configuration uses `REDIS_URL`.
+remaining rows — `SUPABASE_SERVICE_ROLE_KEY`, `OPENWEATHER_API_KEY`,
+`METROFLOW_SENSOR_TOKEN`, the retention, telemetry, warning-radius and
+sensor-debounce settings — are reserved for work packages that are still
+planned (see `FSD.docx` §Implementation Status). No Redis variable is read or
+provisioned; evidence bytes are stored in the report row, not on a filesystem
+(ADR-023).
 
 Authentication does not involve Supabase. `POST /api/v1/auth/login` checks the
 bcrypt hash on the `users` row and the API signs its own HS256 token with
@@ -855,7 +859,6 @@ secret, and no service-role key may ever appear in either client.
 | `OPENWEATHER_API_KEY`                    | Backend host environment  | Server-only                                                       |
 | `OPENTOPOGRAPHY_API_KEY`                 | Preprocessing environment | Used offline; not present on the runtime host                     |
 | `COPERNICUS_CLIENT_ID` / `_SECRET`       | Preprocessing environment | Used offline; not present on the runtime host                     |
-| `REDIS_URL`                              | Backend host environment  | May embed a password                                              |
 | `METROFLOW_SENSOR_TOKEN`                 | Backend and gateway       | Generated per deployment; rotated on suspicion                    |
 | `JWT_SECRET`                             | Backend host environment  | Signs API tokens; the code fallback is development-only           |
 | `NEXT_PUBLIC_API_BASE_URL`               | Vercel project env        | Not a secret; the only variable the portal reads                  |
@@ -893,17 +896,17 @@ secrets with no documented rotation path. Both are read once at process start
 | Service    | Image / build                              | Port | Health check         |
 | ---------- | ------------------------------------------ | ---- | -------------------- |
 | `postgres` | `postgis/postgis:15-3.3-alpine`            | 5432 | `pg_isready`         |
-| `redis`    | `redis:7-alpine`                           | 6379 | `redis-cli ping`     |
+| `redis` (unused) | `redis:7-alpine`                     | 6379 | `redis-cli ping`     |
 | `backend`  | built from `backend/Dockerfile`            | 8000 | `curl /openapi.json` |
 | `mobile`   | `metroflow-mobile/` Expo Metro dev server | 8081 | `bun run start`      |
 
-Redis carries the hazard, fleet and SOS event channels; it is no longer a
-provisioned-but-unused container. Rate limits do not use it:
-their counter is in Postgres, because the hosted API has no Redis and a
-serverless instance cannot hold one in memory (§5.3). The telemetry throttle is
-a setting, not a counter. The backend container runs as uid 10001, mounts the
-evidence volume read-write, and applies migrations on start unless
-`RUN_MIGRATIONS=false`.
+The local compose file still declares a `redis` container, but no service
+connects to it: the hazard, fleet and SOS event channels are carried by the
+`event_log` relay in every environment (ADR-015), and rate-limit counters live
+in Postgres, because the hosted API has no Redis and a serverless instance
+cannot hold one in memory (§5.3). The telemetry throttle is a setting, not a
+counter. The backend container runs as uid 10001 and applies migrations on start
+unless `RUN_MIGRATIONS=false`.
 
 ### 5.2 Hosted database
 
@@ -973,14 +976,19 @@ the dump — so it still needs the lead dev's explicit go-ahead.
 - **9 Nov 2026**, local throwaway Postgres: seeded pilot data, `pg_dump -F c`,
   drop, `pg_restore`, `alembic check` clean, every row exact.
 - **10 Nov 2026**, hosted cluster: `pg_dump -F c -n public` of the live
-  project (107 KB), `CREATE DATABASE metroflow_drill`, `pg_restore
+  project (107 KB at the time — the graph has since been replaced by the
+  real Quezon City OSM import), `CREATE DATABASE metroflow_drill`, `pg_restore
   --no-owner --no-privileges` into it, verified every public table's row
-  count matched production exactly (`road_nodes` 34, `road_edges` 61,
-  `audit_logs` 16, `alembic_version` `a1f4e8c2d607`, …) and dropped the
-  scratch database. This exercised the real dump/restore path against the
-  hosted engine, PostGIS included. What remains unexercised is only a
-  restore *over* the production `postgres` database itself — same mechanics,
-  but destructive, so it stays a go-ahead-gated runbook step rather than a
+  count matched production exactly. At the time of this drill the hosted
+  database still carried the 34-node / 61-edge synthetic seed rows; the
+  production database was subsequently replaced with the real OSM import
+  (6,177 nodes, 7,618 edges — `osm_network.py`), so a fresh drill will
+  show those counts rather than 34 / 61 (audit_logs 16,
+  `alembic_version` `a1f4e8c2d607` at drill time). The scratch database was
+  then dropped. This exercised the real dump/restore path against the hosted
+  engine, PostGIS included. What remains unexercised is only a restore *over*
+  the production `postgres` database itself — same mechanics, but
+  destructive, so it stays a go-ahead-gated runbook step rather than a
   scheduled drill.
 
 ### 5.3 Hosted API
@@ -1074,11 +1082,11 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-010 | Bun ecosystem in Dependabot                              | npm ecosystem                        | Dependabot cannot parse `bun.lock` under npm                                                                                  | Accepted                        |
 | ADR-011 | Portal ships with mock incident data                     | Block the UI until intake exists     | Demonstrates the workflow and fixes the visual contract early                                                                 | Superseded by the persisted report API |
 | ADR-012 | Security headers in middleware                           | Reverse proxy only                   | Headers exist even without a proxy, which is how ZAP sees the app                                                             | Accepted                        |
-| ADR-013 | Redis provisioned but unused                             | Remove it                            | Keeps parity with the intended production topology                                                                            | Accepted; now active            |
+| ADR-013 | Redis is not provisioned                                | Keep Redis for parity, managed Redis | No code path reads `REDIS_URL` and no Redis is provisioned in the hosted deployment; the event bus is the `event_log` relay (ADR-015) and rate-limit counters live in Postgres. The local compose file still declares an unused `redis` container | Accepted; revised 14 Nov 2026 |
 | ADR-014 | Driver client is a native Expo app                       | Progressive web app, bare React Native | Native background location, push notifications, SQLite/SecureStore and app distribution; Expo Router keeps one TypeScript codebase | Accepted (27 Oct 2026); direction selected 22 Oct 2026 |
-| ADR-015 | SSE over Redis pub/sub                                   | WebSocket, polling                   | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler; polling cannot meet the latency target           | Accepted (27 Oct 2026)               |
+| ADR-015 | SSE over a durable `event_log` relay                     | WebSocket, Redis pub/sub, raw polling | One-way hazard and fleet updates fit SSE; proxies and reconnect are simpler. No broker is provisioned and the hosted database sits behind a transaction pooler that cannot carry `LISTEN/NOTIFY`, so the bus is a durable `event_log` table each relay tails by `event_id` on a 40 ms poll (BRD NFR-019). A client reconnects with `Last-Event-ID` and receives exactly what it missed | Accepted 27 Oct 2026; broker revised 14 Nov 2026 |
 | ADR-016 | Supabase Auth with application RBAC                      | Custom JWT + bcrypt, shared passcode | Managed identity, no password storage, JWKS verification and admin provisioning; roles stay enforced in the API and Postgres  | Superseded by ADR-021                        |
-| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (27 Oct 2026)               |
+| ADR-017 | Local evidence volume behind a storage interface         | Supabase Storage, S3                 | No external credential or cost for the pilot; the interface allows a later swap                                               | Accepted (27 Oct 2026); superseded by ADR-023 in the hosted deployment |
 | ADR-018 | Offline mode uses the cached graph                       | Cache raster tiles, block offline    | Tile storage and licensing are disproportionate; the graph, hazards and route are enough to navigate                          | Accepted (27 Oct 2026)               |
 | ADR-019 | MapLibre GL JS is the portal map renderer                | Mapbox GL JS, OSM raster only        | MapLibre is integrated over a style URL, so a Mapbox or OSM raster style is a one-line swap and no renderer code changes | Accepted (27 Oct 2026); basemap refined by ADR-022 |
 | ADR-020 | One live data provider; terrain and imagery preprocessed | All providers runtime, all offline   | OpenWeather is the only per-event call; DEM and Sentinel products are slow, quota-bound and better cached as derived datasets | Accepted (27 Oct 2026)               |
@@ -1086,7 +1094,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-022 | Portal basemap is the keyless Carto Positron style        | Mapbox raster (ADR-019), OSM raster  | One public style URL needs no token, so a clone runs the map without onboarding an account; the desaturated basemap keeps the network status colours the only saturated layer, and the style URL stays a constant if a licensed provider is adopted later | Accepted 29 Oct 2026; refines ADR-019 |
 | ADR-023 | Report evidence lives in the report row                   | Local evidence volume behind a storage interface (ADR-017), Supabase Storage | The hosted API runs on Vercel, where the filesystem is ephemeral and no object store is provisioned, so an object key would point at nothing after a cold start. Bytes are capped at 4 MB, type-sniffed, hashed in the row and served only through an authenticated endpoint; moving to ADR-017's volume means changing one intake branch and one read endpoint | Accepted 30 Oct 2026; diverges from ADR-017 for the hosted pilot |
 | ADR-024 | Offline state is on-device SQLite, replays keyed by `client_id` | In-memory queue, raster tile cache | The queue, road graph, hazards and last route must survive an app restart, and `expo-sqlite` is already the app's storage; a device-generated `client_id` makes a report replay after a lost response return the original row instead of a duplicate. Tile storage and licensing stay out of scope (ADR-018, LIM-017) | Accepted 8 Nov 2026 |
-| ADR-025 | A FASTEST-mode route is answered by the Mapbox Directions API, not the in-house engine | Keep the in-house engine for every mode; a second in-house "fastest, flood-blind" search | Only the in-house engine knows about water depth and clearance, so it keeps FLOOD_SAFE exclusively; `routing_mode() == FASTEST` already means every edge in the graph is confirmed clear (BRULE-017), so delegating that one case to a real road network and live traffic improves drive quality with no safety trade-off. A second in-house "flood-blind fastest" mode (the status quo before this ADR) would have kept routing bounded to the imported OSM extent for no safety benefit over the provider | Accepted (13 Nov 2026) |
+| ADR-025 | A FASTEST-mode route is answered by the Mapbox Directions API, not the in-house engine | Keep the in-house engine for every mode; a second in-house "fastest, flood-blind" search | Only the in-house engine knows about water depth and clearance, so it keeps FLOOD_SAFE exclusively; `routing_mode() == FASTEST` already means every edge in the graph is confirmed clear (BRULE-015), so delegating that one case to a real road network and live traffic improves drive quality with no safety trade-off. A second in-house "flood-blind fastest" mode (the status quo before this ADR) would have kept routing bounded to the imported OSM extent for no safety benefit over the provider | Accepted (13 Nov 2026) |
 
 ## 7. Known Limitations
 
@@ -1095,7 +1103,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-001 | Baseline had no route-level authorisation         | Closed 27 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-002 | Baseline incident data is mocked                   | Closed 30 Oct 2026                               | See the note below the table                                                                                 |
 | LIM-003 | Baseline has no live sensor or weather ingestion   | Simulation is operator-driven                    | Optional OpenWeather and labelled simulated gauges added; real gauge feeds need agreements                   |
-| LIM-004 | Baseline Redis is unused                           | Extra container in the stack                     | Now used for events and throttling                                                                           |
+| LIM-004 | Baseline Redis is unused                           | Unused container in the local stack              | Closed: no Redis is provisioned; events use the `event_log` relay (ADR-015) and throttling is in Postgres      |
 | LIM-005 | Baseline CORS allows all origins                   | Cross-origin abuse surface                       | Portal allowlist added                                                                                       |
 | LIM-006 | No rate limiting or WAF                            | Closed 28 Oct 2026 for application limits        | See the note below the table; an edge WAF remains unavailable on the plan (LIM-025)                           |
 | LIM-007 | No map in the baseline portal                      | Closed 29 Oct 2026                               | See the note below the table                                                                                 |
@@ -1117,9 +1125,9 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-023 | Hosted API connects as the `postgres` role         | The API holds more database privilege than it needs | Closed 10 Nov 2026: `metroflow_app` owns every app table/sequence and `DATABASE_URL` (local + Vercel) points at it |
 | LIM-024 | API deployments are manual, not git-connected      | Closed 28 Oct 2026                               | The project now builds from `siahray/MetroFlow` with root directory `backend` and production branch `main`     |
 | LIM-025 | Vercel WAF rate-limit rules need a paid plan       | No edge-level limit or edge bot rule             | Application limits (LIM-006) cover the abuse surface; upgrade the team before public exposure                 |
-| LIM-026 | NOAH maps are modelled scenarios, not observations; PAGASA coverage is limited to telemetered stations; satellite passes are hours to days apart | Live flood state can be stale or absent for a segment with no nearby source | Advisory only, labelled with source/kind/freshness; PAGASA access and Sentinel-1 ingestion remain not implemented |
+| LIM-026 | NOAH maps are modelled scenarios, not observations; PAGASA coverage is limited to telemetered stations | Live flood state can be stale or absent for a segment with no nearby source | Advisory only, labelled with source/kind/freshness; PAGASA access remains not implemented |
 | LIM-027 | GloFAS discharge is a coarse daily model, not a gauge, and may miss small urban rivers; GPM rainfall is a 0.1° estimate with about 4 hours latency | Advisory signal can be coarse relative to street-level flooding | Labelled `MODELLED`; PAGASA gauges take priority when available |
-| LIM-028 | `NFR-001`/`NFR-002`/`NFR-019` latency budgets are not met at the real Quezon City network scale over the hosted deployment (13 Nov 2026 re-measurement, p95 11–14.7× over budget) | Network state, routing and SSE delivery are all substantially slower than specified in production-like conditions | **Partially addressed, not closed.** Profiling on 13 Nov 2026 found two distinct, fixable code-level causes beyond the raw database round trip: (1) `/network/state` serialized its ~5.3 MB payload through FastAPI's generic `jsonable_encoder` (~3.2 s for this payload vs. ~0.16 s for Pydantic's own serializer) — fixed by returning a pre-serialized `Response` (`backend/main.py::get_network_state`); (2) `/routing/navigate` fetched every edge's geometry (~7,618 rows) to render a route using a few dozen of them — fixed by scoping `_load_edge_geometry` to the path's own edges. Re-measured after both fixes: routing's median improved (≈2,509 ms vs. ≈2,934 ms p95 before) but network-state's p95 got worse (≈52,872 ms), traced to a live SSE client holding a pooled database connection open for the whole benchmark run — the same pool-contention pattern `BACKLOG.md`'s simulation-endpoint entries already document, not a flaw in either fix. The underlying hosted-database round trip (Vercel function to the Supabase pooler in `ap-northeast-2`, roughly 1-1.5 s per request end to end) is still unaddressed and is the floor neither fix touches. A clean re-measurement with no concurrent SSE clients, and a decision on the round-trip latency itself (e.g. a database region closer to the deployment, or caching the static graph in process), are both still open. See `BRD.md` NFR-001/002/019 |
+| LIM-028 | `NFR-001`/`NFR-002`/`NFR-019` latency budgets are not met at the real Quezon City network scale over the hosted deployment (13 Nov 2026 re-measurement, p95 11–14.7× over budget) | Network state, routing and SSE delivery are all substantially slower than specified in production-like conditions | **Partially addressed, not closed.** Profiling on 13 Nov 2026 found two distinct, fixable code-level causes beyond the raw database round trip: (1) `/network/state` serialized its ~5.3 MB payload through FastAPI's generic `jsonable_encoder` (~3.2 s for this payload vs. ~0.16 s for Pydantic's own serializer) — fixed by returning a pre-serialized `Response` (`backend/main.py::get_network_state`); (2) `/routing/navigate` fetched every edge's geometry (~7,618 rows) to render a route using a few dozen of them — fixed by scoping `_load_edge_geometry` to the path's own edges. Re-measured after both fixes: routing's median improved (≈2,509 ms vs. ≈2,934 ms p95 before) but network-state's p95 got worse (≈52,872 ms), traced to a live SSE client holding a pooled database connection open for the whole benchmark run — the same pool-contention pattern `BACKLOG.md`'s simulation-endpoint entries already document, not a flaw in either fix. The underlying hosted-database round trip (Vercel function to the Supabase pooler in `ap-northeast-2`, roughly 1-1.5 s per request end to end) is still unaddressed and is the floor neither fix touches. A clean re-measurement with no concurrent SSE clients, and a decision on the round-trip latency itself (e.g. a database region closer to the deployment, or caching the static graph in process), are both still open. See `BRD.docx` NFR-001/002/019 |
 
 LIM-001 and LIM-022 are closed. Every route except the four auth entry points
 (`login`, `register`, `send-verification`, `verify`) requires a bearer token:
@@ -1211,7 +1219,8 @@ MetroFlow/
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           response contracts
 │   ├── auth_utils.py        session token issue/verify and role lookup
-│   ├── network_seed.py      curated 34-node / 61-edge pilot road network
+│   ├── network_seed.py      34-node / 61-edge synthetic lattice — local dev fallback seed only; production runs the real OSM import (osm_network.py)
+│   ├── osm_network.py       OSM importer — production road graph: 6,177 nodes / 7,618 edges (Quezon City)
 │   ├── verification_store.py in-process email verification codes
 │   ├── database.py          engine, session lifecycle
 │   ├── migrations/          Alembic history

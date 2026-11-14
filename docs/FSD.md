@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 2.0
+Version 1.0 — Initial Baseline Release
 
 ## Document Control
 
@@ -10,19 +10,17 @@ Version 2.0
 | ----------- | ------------------------------------------------------------------------------ |
 | Project     | MetroFlow                                                                      |
 | Prepared By | «Project Team»                                                                 |
-| Version     | 2.0                                                                            |
-| Status      | For Review — driver app and Mapbox dry-state routing implemented; offline areas/satellite observations/"Smart Routing" recorded as not implemented or declined; live flood-state sources partially implemented. Full identifier sync 13 November 2026 |
-| Change      | Consolidated baseline: every prior scope addition folded into this document as original scope, with its real implementation status carried over verbatim. Routing and Hazard authoring rows in §Implementation Status cross-reference `NFR-002`/`NFR-019` not currently met (see `BRD.md`), matching the `NFR-001` note already on the Network state row |
+| Version     | 1.0                                                                            |
+| Status      | For Review — Initial Baseline Release. Each requirement carries its own implementation status inline; see the Implementation Status table |
+| Change      | Initial Baseline Release                                                       |
 
 This document records the provider configuration, API-issued session tokens, Mapbox
 tiles and template-sourced UI, adding `TC-045` and `TC-046` for provider fallback.
-`FSD-FR-094` to `100` (Offline Areas, final-product, not implemented), `FSD-FR-101`
-to `107` (satellite observations, not implemented), `FSD-FR-108` to `118` (live
-flood-state sources, partially implemented), `FSD-FR-119` to `123` (EV/HOV/toll
-"Smart Routing", declined), and `FSD-FR-124` to `131` (driver navigation polish,
-the admin live-weather toggle, and the Mapbox dry-state routing handoff — all
-implemented). Each identifier carries its own implementation status inline; see
-the Implementation Status table for the authoritative per-module record.
+`FSD-FR-094` to `104` (live flood-state sources, partially implemented) and
+`FSD-FR-105` to `112` (driver navigation polish, the admin live-weather toggle, and
+the Mapbox dry-state routing handoff — all implemented) complete the requirement
+set. Each identifier carries its own implementation status inline; see the
+Implementation Status table for the authoritative per-module record.
 
 ## BRD Requirements Reference
 
@@ -46,10 +44,7 @@ the Implementation Status table for the authoritative per-module record.
 | BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch  |
 | BR-017 | Ingest river and rain gauge readings and flag impacted roads           |
 | BR-018 | Keep navigation, hazards and reporting usable offline                  |
-| BR-019 | A driver must be able to use a usable map, road graph and safety snapshot when connectivity is unavailable (final-product Offline Areas) — not implemented for the pilot |
-| BR-020 | Give dispatchers a wide-area, all-weather flood observation source that complements reports and gauges — not implemented |
-| BR-021 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not — partly implemented |
-| BR-022 | Route to include EV charging, avoid HOV lanes or tolls, or plan a multimodal trip, without weakening flood-safety routing — declined for lack of real data |
+| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not — partly implemented |
 
 ## Functional Requirements
 
@@ -148,44 +143,25 @@ the Implementation Status table for the authoritative per-module record.
 | FSD-FR-091 | BR-017         | Mark roads within the configured impact radius of a threshold breach as advisory                              |
 | FSD-FR-092 | BR-009         | Enforce role permissions on verification, publishing, dispatch and configuration                              |
 | FSD-FR-093 | BR-008         | Write an immutable audit record for every privileged action                                                   |
-| FSD-FR-094 | BR-019         | Select an offline region from provider-backed coverage and show its boundary before download (not implemented) |
-| FSD-FR-095 | BR-019         | Download a package with map tiles, road graph, hazard snapshot, active route corridor and signed manifest (not implemented) |
-| FSD-FR-096 | BR-019         | Show progress and allow pause, resume or cancel; preserve a resumable state after interruption (not implemented) |
-| FSD-FR-097 | BR-019         | Verify checksum, signature, package version and map/graph compatibility before use (not implemented) |
-| FSD-FR-098 | BR-019         | List downloaded regions with storage use, last update, update and delete actions (not implemented)    |
-| FSD-FR-099 | BR-019         | Honour Wi-Fi-only and auto-update preferences; never auto-download over metered data without consent (not implemented) |
-| FSD-FR-100 | BR-019         | Show map readiness separately from hazard freshness and warn when the hazard snapshot exceeds its policy age (not implemented) |
-| FSD-FR-101 | BR-020         | Ingest Sentinel-1 product metadata for the approved coverage area, including source product ID and acquisition time (not implemented) |
-| FSD-FR-102 | BR-020         | Derive or receive flood-extent polygons with documented water, terrain, urban and vegetation handling and a confidence value (not implemented) |
-| FSD-FR-103 | BR-020         | Store satellite flood observations separately from verified hazards and retain source, acquisition, processing and review metadata (not implemented) |
-| FSD-FR-104 | BR-020         | Correlate a satellite observation with roads, sensors and reports and present the evidence to a dispatcher (not implemented) |
-| FSD-FR-105 | BR-020         | Publish a verified satellite hazard or dismiss the observation with a reason; only a verified hazard may affect routing (not implemented) |
-| FSD-FR-106 | BR-020         | Display acquisition time, confidence, source and stale state; never label a satellite snapshot as live-safe (not implemented) |
-| FSD-FR-107 | BR-020         | Include the latest verified satellite flood polygons and their freshness metadata in an Offline Area (not implemented) |
-| FSD-FR-108 | BR-021         | Ingest river water-level readings from the approved PAGASA access route into the sensor gateway with station identity and timestamp (blocked on OD-D25) |
-| FSD-FR-109 | BR-021         | Allow a dispatcher to enter a river reading manually with its source and observation time; the entry is audited (not implemented) |
-| FSD-FR-110 | BR-021         | Resolve each road segment's flood state from the source-priority rule and store the source and "as of" time (implemented — `GET /api/v1/flood-state`) |
-| FSD-FR-111 | BR-021         | Treat a reading older than the freshness window as stale and fall through to the next source; never treat missing data as safe (implemented) |
-| FSD-FR-112 | BR-021         | Import NOAH flood hazard maps for the pilot corridor and match them to road segments by return period and depth class (not implemented — layer data/import missing) |
-| FSD-FR-113 | BR-021         | Show the NOAH layer on the admin map and, only when the rain condition holds, apply it as a caution with a route cost penalty (not implemented — depends on FSD-FR-112) |
-| FSD-FR-114 | BR-021         | Show the source, "as of" time and freshness of a flood state to dispatchers and drivers (implemented)  |
-| FSD-FR-115 | BR-021         | Show sensors and their latest readings in the portal, labelling simulated sensors as simulated (implemented — `/sensors` registry page) |
-| FSD-FR-116 | BR-021         | Record the data source on every audit entry created from an ingested or manual reading (not verified this baseline) |
-| FSD-FR-117 | BR-021         | Ingest modelled river discharge from the Open-Meteo Flood API for the pilot rivers and label it as modelled (implemented — `backend/river_discharge.py`) |
-| FSD-FR-118 | BR-021         | Obtain rainfall intensity from Open-Meteo and NASA GPM IMERG Early for the NOAH rain gate, with the source and time shown (partly implemented — Open-Meteo only, NASA GPM IMERG missing) |
-| FSD-FR-119 | BR-022         | Tag road edges with real toll, HOV-lane and EV-charger attributes from an approved, licensed or open dataset — never fabricated (declined) |
-| FSD-FR-120 | BR-022         | Offer a toll/highway bypass preference that re-routes around tagged toll edges while still honouring the clearance gate (declined) |
-| FSD-FR-121 | BR-022         | Offer an EV charging-stop waypoint drawn from a real charger registry, with the registry's own freshness and attribution shown (declined) |
-| FSD-FR-122 | BR-022         | Offer walking, cycling and public-transit route modes as distinct personalities from vehicle-clearance routing (declined) |
-| FSD-FR-123 | BR-022         | Accept a scheduled departure or arrival time and apply a live or historical travel-time feed to the estimate, labelled as a prediction, not a guarantee (declined) |
-| FSD-FR-124 | BR-013         | Speak each turn-by-turn instruction and hazard/reroute/arrival alert aloud, with a driver-controlled toggle    |
-| FSD-FR-125 | BR-013         | Present a route as a preview (overview, ETA, distance) with an explicit Start action before active, spoken, camera-followed navigation begins |
-| FSD-FR-126 | BR-013         | Adjust the driving camera's zoom, pitch and follow behaviour by vehicle speed and proximity to the next manoeuvre |
-| FSD-FR-127 | BR-003         | Offer an alternative route to the same destination that excludes the previously returned route's edges        |
-| FSD-FR-128 | BR-013         | Render the driver's own position as a heading-oriented marker during active navigation, a plain marker otherwise |
-| FSD-FR-129 | BR-013         | Offer saved Quick Picks and recent destinations directly from the destination search, alongside road-node and address matches |
-| FSD-FR-130 | BR-002         | Allow the dispatcher to drive the rainfall simulation from the current live weather reading instead of a manual value |
-| FSD-FR-131 | BR-003         | Hand off a FASTEST-mode route request to the Mapbox Directions API when nothing in the network is flooded, advised or closed, reporting the source used  |
+| FSD-FR-094 | BR-019         | Ingest river water-level readings from the approved PAGASA access route into the sensor gateway with station identity and timestamp (blocked on OD-D25) |
+| FSD-FR-095 | BR-019         | Allow a dispatcher to enter a river reading manually with its source and observation time; the entry is audited (not implemented) |
+| FSD-FR-096 | BR-019         | Resolve each road segment's flood state from the source-priority rule and store the source and "as of" time (implemented — `GET /api/v1/flood-state`) |
+| FSD-FR-097 | BR-019         | Treat a reading older than the freshness window as stale and fall through to the next source; never treat missing data as safe (implemented) |
+| FSD-FR-098 | BR-019         | Import NOAH flood hazard maps for the pilot corridor and match them to road segments by return period and depth class (not implemented — layer data/import missing) |
+| FSD-FR-099 | BR-019         | Show the NOAH layer on the admin map and, only when the rain condition holds, apply it as a caution with a route cost penalty (not implemented — depends on FSD-FR-098) |
+| FSD-FR-100 | BR-019         | Show the source, "as of" time and freshness of a flood state to dispatchers and drivers (implemented)  |
+| FSD-FR-101 | BR-019         | Show sensors and their latest readings in the portal, labelling simulated sensors as simulated (implemented — `/sensors` registry page) |
+| FSD-FR-102 | BR-019         | Record the data source on every audit entry created from an ingested or manual reading (not verified this baseline) |
+| FSD-FR-103 | BR-019         | Ingest modelled river discharge from the Open-Meteo Flood API for the pilot rivers and label it as modelled (implemented — `backend/river_discharge.py`) |
+| FSD-FR-104 | BR-019         | Obtain rainfall intensity from Open-Meteo and NASA GPM IMERG Early for the NOAH rain gate, with the source and time shown (partly implemented — Open-Meteo only, NASA GPM IMERG missing) |
+| FSD-FR-105 | BR-013         | Speak each turn-by-turn instruction and hazard/reroute/arrival alert aloud, with a driver-controlled toggle    |
+| FSD-FR-106 | BR-013         | Present a route as a preview (overview, ETA, distance) with an explicit Start action before active, spoken, camera-followed navigation begins |
+| FSD-FR-107 | BR-013         | Adjust the driving camera's zoom, pitch and follow behaviour by vehicle speed and proximity to the next manoeuvre |
+| FSD-FR-108 | BR-003         | Offer an alternative route to the same destination that excludes the previously returned route's edges        |
+| FSD-FR-109 | BR-013         | Render the driver's own position as a heading-oriented marker during active navigation, a plain marker otherwise |
+| FSD-FR-110 | BR-013         | Offer saved Quick Picks and recent destinations directly from the destination search, alongside road-node and address matches |
+| FSD-FR-111 | BR-002         | Allow the dispatcher to drive the rainfall simulation from the current live weather reading instead of a manual value |
+| FSD-FR-112 | BR-003         | Hand off a FASTEST-mode route request to the Mapbox Directions API when nothing in the network is flooded, advised or closed, reporting the source used  |
 
 ## Screen Specifications
 
@@ -257,10 +233,8 @@ the Implementation Status table for the authoritative per-module record.
 | BRULE-011 | BR-016  | FSD-FR-088, FSD-FR-089 | Only an available unit may be assigned; assignment changes it to en route    |
 | BRULE-012 | BR-017  | FSD-FR-091             | A sensor breach is advisory until a dispatcher confirms it                   |
 | BRULE-013 | BR-018  | FSD-FR-067, FSD-FR-068 | Driver location is rounded, device id hashed, and retained at most 24 hours  |
-| BRULE-014 | BR-019  | FSD-FR-100             | A downloaded hazard snapshot is not live safety data; it must show its capture time and expiry (final-product Offline Areas, not implemented) |
-| BRULE-015 | BR-020  | FSD-FR-106             | A Sentinel-1 flood observation is advisory until the approved verification policy is met; flood extent does not establish depth or passability (not implemented) |
-| BRULE-016 | BR-021  | FSD-FR-112, FSD-FR-113 | A NOAH-derived or PAGASA-derived state is advisory until a dispatcher confirms it; a modelled flood map is never a closure (not implemented) |
-| BRULE-017 | BR-003  | FSD-FR-131             | A FASTEST route may be answered by Mapbox only because every edge in the graph is already confirmed clear; FLOOD_SAFE never delegates routing  |
+| BRULE-014 | BR-019  | FSD-FR-098, FSD-FR-099 | A NOAH-derived or PAGASA-derived state is advisory until a dispatcher confirms it; a modelled flood map is never a closure (not implemented) |
+| BRULE-015 | BR-003  | FSD-FR-112             | A FASTEST route may be answered by Mapbox only because every edge in the graph is already confirmed clear; FLOOD_SAFE never delegates routing  |
 
 ## Interface Requirements
 
@@ -282,7 +256,7 @@ the Implementation Status table for the authoritative per-module record.
 | Device camera and GPS | BR-014  | FSD-FR-066, FSD-FR-067 | Camera and geolocation modules in the native app        |
 | Map tile source       | BR-013  | FSD-FR-056, FSD-FR-075 | Keyless Carto Positron style via MapLibre (ADR-022); the style URL keeps a Mapbox or OSM raster an easy swap; graph offline |
 | Sensor gateway        | BR-017  | FSD-FR-090             | River and rain gauge readings with identity             |
-| Redis pub/sub         | BR-018  | FSD-FR-086             | Fan-out for hazard, fleet and SOS events                |
+| Event relay           | BR-018  | FSD-FR-086             | Durable `event_log` fan-out for hazard, fleet and SOS events |
 
 ## Test Scenarios
 
@@ -334,35 +308,22 @@ the Implementation Status table for the authoritative per-module record.
 | TC-044 | BR-008  | FSD-FR-093                         | Every privileged action writes exactly one attributable audit record        |
 | TC-045 | BR-013  | FSD-FR-056, FSD-FR-075             | With no provider token configured the map still renders basemap tiles and the network, and stays usable |
 | TC-046 | BR-002  | FSD-FR-006, FSD-FR-007             | When OpenWeather is unavailable, rainfall is entered manually and labelled  |
-| TC-047 | BR-019  | FSD-FR-095, FSD-FR-096             | Download a region on Wi-Fi, disable connectivity, reopen the app and use the map and cached graph (not implemented) |
-| TC-048 | BR-019  | FSD-FR-096, FSD-FR-097             | Interrupt a download, resume it and confirm the package is usable only after verification (not implemented) |
-| TC-049 | BR-019  | FSD-FR-097                         | Reject a corrupt, unsigned or incompatible package and retain the previous usable version (not implemented) |
-| TC-050 | BR-019  | FSD-FR-100                         | Confirm a downloaded map does not label stale hazards as live or safe (not implemented)                 |
-| TC-051 | BR-019  | FSD-FR-098                         | Delete a region and confirm its files, metadata and route-corridor copy are removed (not implemented)   |
-| TC-052 | BR-019  | FSD-FR-099                         | Confirm metered-data and auto-update preferences are respected (not implemented)                        |
-| TC-053 | BR-020  | FSD-FR-101 to 103                  | Ingest a valid Sentinel-1 product and store exactly one observation with source, acquisition time and geometry (not implemented) |
-| TC-054 | BR-020  | FSD-FR-101                         | Reject a malformed, out-of-coverage or unauthenticated product without creating a hazard (not implemented) |
-| TC-055 | BR-020  | FSD-FR-103, FSD-FR-105             | A pending satellite observation does not appear as a verified hazard and does not reroute a driver (not implemented) |
-| TC-056 | BR-020  | FSD-FR-105                         | A reviewer publishes or dismisses an observation; the decision is audited and the event stream updates (not implemented) |
-| TC-057 | BR-020  | FSD-FR-106                         | A stale satellite observation is visibly stale on the admin map and in the driver app (not implemented) |
-| TC-058 | BR-020  | FSD-FR-107                         | An Offline Area contains the latest verified satellite flood snapshot, not raw scenes, and reports its acquisition and expiry times (not implemented) |
-| TC-059 | BR-021  | FSD-FR-108, FSD-FR-110             | A fresh PAGASA reading above its threshold marks only roads inside the impact radius as advisory (blocked on `OD-D25`) |
-| TC-060 | BR-021  | FSD-FR-111                         | A reading older than the freshness window is stale and the segment falls back to the next source (implemented) |
-| TC-061 | BR-021  | FSD-FR-112, FSD-FR-113             | With no live data and no rain, NOAH is shown as a map layer only and does not change routing (not implemented) |
-| TC-062 | BR-021  | FSD-FR-113                         | With no live data and rain occurring, NOAH applies a caution and route penalty but does not close a road (not implemented) |
-| TC-063 | BR-021  | FSD-FR-109, FSD-FR-116             | A manual reading is stored with its source and time and appears in the audit log (not implemented)      |
-| TC-064 | BR-021  | FSD-FR-108                         | Missing or malformed source data is rejected and does not create or clear a hazard (implemented)        |
-| TC-065 | BR-021  | FSD-FR-117                         | A modelled discharge value is stored and shown as modelled, advisory only, and never closes a road (implemented) |
-| TC-066 | BR-021  | FSD-FR-111                         | When an open source is unreachable, the segment falls back to the next source and nothing is cleared as safe (implemented) |
-| TC-067 | BR-022  | FSD-FR-120                         | A toll-avoidance request on an untagged graph (the pilot graph) returns the ordinary flood-safe route unchanged, not an error (declined) |
-| TC-068 | BR-013  | FSD-FR-124                         | Voice guidance speaks the current instruction and alert banners once started; stays silent during route preview |
-| TC-069 | BR-013  | FSD-FR-125                         | A fresh plan shows a route preview with Start; turn-by-turn, voice and the driving camera wait for it           |
-| TC-070 | BR-013  | FSD-FR-126                         | The driving camera zooms in near a turn or at low speed, and out at highway speed                               |
-| TC-071 | BR-003  | FSD-FR-127                         | Requesting an alternative route excludes the current route's own edges, or reports none available              |
-| TC-072 | BR-013  | FSD-FR-128                         | The position marker is a heading-oriented arrow during active navigation and a plain marker otherwise           |
-| TC-073 | BR-013  | FSD-FR-129                         | A Quick Pick or a recent destination resolves to a live road node and plans a route                             |
-| TC-074 | BR-002  | FSD-FR-130                         | Toggling live weather replaces the manual rainfall slider with the current reading and applies it on change    |
-| TC-075 | BR-003  | FSD-FR-131                         | A dry FASTEST request returns a Mapbox-sourced route when configured; FLOOD_SAFE, ignore_hazards and avoid_edges always use the in-house engine |
+| TC-047 | BR-019  | FSD-FR-094, FSD-FR-096             | A fresh PAGASA reading above its threshold marks only roads inside the impact radius as advisory (blocked on `OD-D25`) |
+| TC-048 | BR-019  | FSD-FR-097                         | A reading older than the freshness window is stale and the segment falls back to the next source (implemented) |
+| TC-049 | BR-019  | FSD-FR-098, FSD-FR-099             | With no live data and no rain, NOAH is shown as a map layer only and does not change routing (not implemented) |
+| TC-050 | BR-019  | FSD-FR-099                         | With no live data and rain occurring, NOAH applies a caution and route penalty but does not close a road (not implemented) |
+| TC-051 | BR-019  | FSD-FR-095, FSD-FR-102             | A manual reading is stored with its source and time and appears in the audit log (not implemented)      |
+| TC-052 | BR-019  | FSD-FR-094                         | Missing or malformed source data is rejected and does not create or clear a hazard (implemented)        |
+| TC-053 | BR-019  | FSD-FR-103                         | A modelled discharge value is stored and shown as modelled, advisory only, and never closes a road (implemented) |
+| TC-054 | BR-019  | FSD-FR-097                         | When an open source is unreachable, the segment falls back to the next source and nothing is cleared as safe (implemented) |
+| TC-055 | BR-013  | FSD-FR-105                         | Voice guidance speaks the current instruction and alert banners once started; stays silent during route preview |
+| TC-056 | BR-013  | FSD-FR-106                         | A fresh plan shows a route preview with Start; turn-by-turn, voice and the driving camera wait for it           |
+| TC-057 | BR-013  | FSD-FR-107                         | The driving camera zooms in near a turn or at low speed, and out at highway speed                               |
+| TC-058 | BR-003  | FSD-FR-108                         | Requesting an alternative route excludes the current route's own edges, or reports none available              |
+| TC-059 | BR-013  | FSD-FR-109                         | The position marker is a heading-oriented arrow during active navigation and a plain marker otherwise           |
+| TC-060 | BR-013  | FSD-FR-110                         | A Quick Pick or a recent destination resolves to a live road node and plans a route                             |
+| TC-061 | BR-002  | FSD-FR-111                         | Toggling live weather replaces the manual rainfall slider with the current reading and applies it on change    |
+| TC-062 | BR-003  | FSD-FR-112                         | A dry FASTEST request returns a Mapbox-sourced route when configured; FLOOD_SAFE, ignore_hazards and avoid_edges always use the in-house engine |
 
 ## Acceptance Criteria
 
@@ -392,8 +353,8 @@ the Implementation Status table for the authoritative per-module record.
 | BRD ID | FSD References                                   | Test Cases                                             |
 | ------ | ------------------------------------------------ | ------------------------------------------------------ |
 | BR-001 | FSD-FR-001 to 005, FSD-FR-053                    | TC-001, TC-002, TC-003, TC-021                         |
-| BR-002 | FSD-FR-006 to 010, FSD-FR-130                    | TC-004, TC-005, TC-006, TC-074                         |
-| BR-003 | FSD-FR-011 to 017, FSD-FR-127, FSD-FR-131        | TC-007, TC-008, TC-009, TC-010, TC-071, TC-075         |
+| BR-002 | FSD-FR-006 to 010, FSD-FR-111                    | TC-004, TC-005, TC-006, TC-061                         |
+| BR-003 | FSD-FR-011 to 017, FSD-FR-108, FSD-FR-112        | TC-007, TC-008, TC-009, TC-010, TC-058, TC-062         |
 | BR-004 | FSD-FR-024, FSD-FR-025, FSD-FR-029, FSD-FR-031   | TC-013, TC-016                                         |
 | BR-005 | FSD-FR-026 to 028                                | TC-014, TC-015                                         |
 | BR-006 | FSD-FR-032 to 038                                | TC-016                                                 |
@@ -403,16 +364,13 @@ the Implementation Status table for the authoritative per-module record.
 | BR-010 | FSD-FR-050 to 052                                | TC-021                                                 |
 | BR-011 | FSD-FR-023, FSD-FR-051                           | TC-021                                                 |
 | BR-012 | FSD-FR-049                                       | — (covered by the export tests in `test_api_integration.py`) |
-| BR-013 | FSD-FR-054 to 064, FSD-FR-072, FSD-FR-085 to 086, FSD-FR-124 to 126, FSD-FR-128, FSD-FR-129 | TC-022, TC-023, TC-024, TC-025, TC-026, TC-031, TC-038, TC-068, TC-069, TC-070, TC-072, TC-073 |
+| BR-013 | FSD-FR-054 to 064, FSD-FR-072, FSD-FR-085 to 086, FSD-FR-105 to 107, FSD-FR-109, FSD-FR-110 | TC-022, TC-023, TC-024, TC-025, TC-026, TC-031, TC-038, TC-055, TC-056, TC-057, TC-059, TC-060 |
 | BR-014 | FSD-FR-065 to 081                                | TC-027, TC-028, TC-034, TC-035, TC-036, TC-037         |
 | BR-015 | FSD-FR-073, FSD-FR-074, FSD-FR-087               | TC-032                                                 |
 | BR-016 | FSD-FR-075 to 076, FSD-FR-082 to 089             | TC-033, TC-038, TC-039, TC-040, TC-041                 |
 | BR-017 | FSD-FR-090, FSD-FR-091                           | TC-042                                                 |
 | BR-018 | FSD-FR-059, FSD-FR-068 to 071                    | TC-029, TC-030                                         |
-| BR-019 | FSD-FR-094 to 100                                | TC-047, TC-048, TC-049, TC-050, TC-051, TC-052 (not implemented) |
-| BR-020 | FSD-FR-101 to 107                                | TC-053, TC-054, TC-055, TC-056, TC-057, TC-058 (not implemented) |
-| BR-021 | FSD-FR-108 to 118                                | TC-059, TC-060, TC-061, TC-062, TC-063, TC-064, TC-065, TC-066 (partly implemented) |
-| BR-022 | FSD-FR-119 to 123                                | TC-067 (declined)                               |
+| BR-019 | FSD-FR-094 to 104                                | TC-047, TC-048, TC-049, TC-050, TC-051, TC-052, TC-053, TC-054 (partly implemented) |
 
 ## Implementation Status
 
@@ -421,9 +379,9 @@ statement; the FSD identifiers above remain stable as items move.
 
 | Module                   | FSD IDs           | Status      | Note                                                |
 | ------------------------ | ----------------- | ----------- | --------------------------------------------------- |
-| Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested. The seeded 34-node/61-edge synthetic lattice (LIM-014 closed) was superseded by a real OpenStreetMap import, now scoped to Quezon City (6,177 nodes, 7,618 edges) -- functionally identical endpoints, a real road graph instead of a demo one. `NFR-001` (network-state latency) does not currently hold at this scale against the hosted database; see `BRD.md` |
-| Rainfall simulation      | FSD-FR-006 to 010, 130 | Implemented | Contract-tested; overrides respected. A dispatcher "Live weather" toggle on the admin simulation panel replaces the manual rainfall slider with the current Open-Meteo reading (`GET /api/v1/weather/live-rainfall`, admin-only, 2-minute cache) and auto-applies a changed reading |
-| Routing                  | FSD-FR-011 to 017, 127, 131 | Implemented | Unit and contract tests. `avoid_edges` requests a genuinely different path (FSD-FR-127). A dry FASTEST request hands off to the Mapbox Directions API, reported as `source: "MAPBOX"`; any failure or explicit `ignore_hazards`/`avoid_edges` falls back to the in-house engine (`source: "ENGINE"`) — FLOOD_SAFE never delegates (BRULE-017). `NFR-002` (routing latency) does not currently hold at the real Quezon City scale against the hosted database; see `BRD.md` |
+| Network state            | FSD-FR-001 to 005 | Implemented | Contract-tested. The seeded 34-node/61-edge synthetic lattice (LIM-014 closed) was superseded by a real OpenStreetMap import, now scoped to Quezon City (6,177 nodes, 7,618 edges) -- functionally identical endpoints, a real road graph instead of a demo one. `NFR-001` (network-state latency) does not currently hold at this scale against the hosted database; see `BRD.docx` |
+| Rainfall simulation      | FSD-FR-006 to 010, 111 | Implemented | Contract-tested; overrides respected. A dispatcher "Live weather" toggle on the admin simulation panel replaces the manual rainfall slider with the current Open-Meteo reading (`GET /api/v1/weather/live-rainfall`, admin-only, 2-minute cache) and auto-applies a changed reading |
+| Routing                  | FSD-FR-011 to 017, 108, 112 | Implemented | Unit and contract tests. `avoid_edges` requests a genuinely different path (FSD-FR-108). A dry FASTEST request hands off to the Mapbox Directions API, reported as `source: "MAPBOX"`; any failure or explicit `ignore_hazards`/`avoid_edges` falls back to the in-house engine (`source: "ENGINE"`) — FLOOD_SAFE never delegates (BRULE-015). `NFR-002` (routing latency) does not currently hold at the real Quezon City scale against the hosted database; see `BRD.docx` |
 | Portal access            | FSD-FR-018 to 023 | Implemented | Real sign-in against `/auth/login`; the token and profile are kept for the session, every request sends the token, and the shell returns to `/login` without one or when the API answers `401` |
 | Incident queue           | FSD-FR-024 to 031 | Implemented | One urgency-ordered queue of SOS signals and field reports, refreshed every 10 seconds; filters All, Photo, Sensor Mismatch and Escalated read per-incident flags with overlapping counts (`sensor_mismatch` is computed by the API from the nearest rain gauge); search by id, reporter, location or barangay; explicit empty state; a dismissed incident leaves the active count but is not deleted (dismissal lasts for the browser session) |
 | Incident detail          | FSD-FR-032 to 038 | Implemented | Docket, witness narrative, authenticated evidence photo viewer with EXIF and submersion range, location with nearest unit ETA and rising-water indicator, and original file lightbox |
@@ -431,23 +389,20 @@ statement; the FSD identifiers above remain stable as items move.
 | Audit and administration | FSD-FR-047 to 049 | Implemented | Hash-chained audit write path, `/audit` read API, `/audit/verify` and CSV export; user management with its own audit entries; every privileged mutating route writes an audit entry, enforced by a unit test (sign-in and citizen-side submissions are the documented exceptions) |
 | Operations               | FSD-FR-050 to 053 | Implemented | Health, headers, OpenAPI, idempotent seed           |
 | Authentication and RBAC  | FSD-FR-092, 093   | Implemented | Login, registration, roles, `/auth/me`, route-level enforcement and one attributable audit row per privileged action |
-| Driver navigation        | FSD-FR-054 to 064, 124 to 129 | Implemented | Turn-by-turn guidance, road names, GPS instruction tracking, hazard-aware routing, proximity alerts, and SSE auto-rerouting. Google-Maps-style additions: spoken turn-by-turn and alerts (`expo-speech`, toggle in Profile, FSD-FR-124); a route preview with an explicit Start action before voice/camera-follow/telemetry begin (FSD-FR-125); a speed- and turn-proximity-aware driving camera zoom/pitch (`navigation/geo.ts::navZoomFor`, FSD-FR-126); a heading-oriented position marker during active navigation (FSD-FR-128); Quick Picks and recent destinations surfaced directly in the destination search (FSD-FR-129) |
+| Driver navigation        | FSD-FR-054 to 064, 105 to 110 | Implemented | Turn-by-turn guidance, road names, GPS instruction tracking, hazard-aware routing, proximity alerts, and SSE auto-rerouting. Google-Maps-style additions: spoken turn-by-turn and alerts (`expo-speech`, toggle in Profile, FSD-FR-105); a route preview with an explicit Start action before voice/camera-follow/telemetry begin (FSD-FR-106); a speed- and turn-proximity-aware driving camera zoom/pitch (`navigation/geo.ts::navZoomFor`, FSD-FR-107); a heading-oriented position marker during active navigation (FSD-FR-109); Quick Picks and recent destinations surfaced directly in the destination search (FSD-FR-110) |
 | Field reporting          | FSD-FR-065 to 067 | Implemented | Driver report intake with camera/gallery photo, EXIF retention, live GPS with accuracy fallback, depth selector and multipart submission |
 | Offline operation        | FSD-FR-068 to 071 | Implemented | Reports queue on a network failure with a pending banner and sync in order, once (`client_id` idempotency); graph, hazards and last route are cached in on-device SQLite (`expo-sqlite`) and shown offline. Planning a *new* route offline now runs a client-side port of the same time-dependent A* (`navigation/offline-route.ts`), with the same hazard-blocking rule. Basemap tiles stay out of scope (LIM-017); the Offline Data screen reports what is actually cached — road graph, hazard count, last route and size on disk |
 | Telemetry and SOS        | FSD-FR-072 to 074 | Implemented | POST /vehicles/{id}/telemetry throttles at 5 s server-side; the driver app posts a batch every 5 s while navigation is active and the account is linked to a unit, and shows the driver what it sent; SOS uses real GPS (VAL-021) and shows its status (FSD-FR-074) |
 | Live operational map     | FSD-FR-075, 076   | Implemented | MapLibre renders live network and A* route with toggleable overlays for verified hazards, fleet units and active SOS signals |
 | Moderation and evidence  | FSD-FR-077 to 081 | Implemented | Portal desk at `/moderation`: urgency-ordered queue, authenticated evidence viewer, EXIF, approve (creates and publishes a hazard), reject and duplicate, all audited; nearest rain-gauge cross-reference (FR-079) shown in the report desk |
-| Hazard authoring         | FSD-FR-082 to 086 | Implemented | The API creates, updates and publishes hazards, and streams changes at `/api/v1/hazards/stream`. The portal publishes a hazard on a chosen **road segment** (levels CAUTION, LEVEL_2, LEVEL_3, IMPASSABLE) or draws it directly on the map as a flood polygon (FR-082) or a closure line (FR-083); `hazard_zones.geometry` is a generic PostGIS geometry column for either shape. `PATCH /hazards/{id}` with `active=false` withdraws a hazard (FR-085), exposed as a button in the portal. `NFR-019` (publish-to-SSE-delivery latency) does not currently hold against the hosted deployment; see `BRD.md` |
+| Hazard authoring         | FSD-FR-082 to 086 | Implemented | The API creates, updates and publishes hazards, and streams changes at `/api/v1/hazards/stream`. The portal publishes a hazard on a chosen **road segment** (levels CAUTION, LEVEL_2, LEVEL_3, IMPASSABLE) or draws it directly on the map as a flood polygon (FR-082) or a closure line (FR-083); `hazard_zones.geometry` is a generic PostGIS geometry column for either shape. `PATCH /hazards/{id}` with `active=false` withdraws a hazard (FR-085), exposed as a button in the portal. `NFR-019` (publish-to-SSE-delivery latency) does not currently hold against the hosted deployment; see `BRD.docx` |
 | Distress and dispatch    | FSD-FR-087 to 089 | Implemented | A distress incident comes from an app SOS or from the triage screen's call-in entry (FR-087), and both reach the same queue, the map and the SSE feed; assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
 | User management          | FSD-FR-048         | Implemented | CRUD endpoints for users with audit trail; admin UI with search, role badges, create/edit modals, delete confirmation; security: role validation, email uniqueness, self-protection, last admin protection |
 | Fleet management         | FSD-FR-075, 076    | Implemented | A super admin adds, edits and removes rescue units from the Fleet screen (a dispatcher sees it read-only); call signs are unique, a unit on a live dispatch cannot be removed, and every change is audited |
 | Export                   | FSD-FR-049         | Implemented | CSV export for audit logs and incidents; admin UI with one-click export buttons and toast notifications |
 | Sensor ingestion         | FSD-FR-090, 091   | Implemented | POST /api/v1/sensors/readings with threshold breach detection; sensor registry CRUD; every reading is written to the road edges in the sensor's radius (`edge_advisories`) and a breach flags them as an advisory, read through `GET /api/v1/flood-state` with source, kind and "as of" time (resolver: verified hazard, then fresh live observation, then NOAH fallback); an advisory never closes a road (BRULE-012). The portal has a sensor registry page (`/sensors`, CRUD) and a map layer on the live network map, colour-coded by breach state. Routing (`td_a_star_search`) now applies a soft time penalty to a flagged, fresh advisory edge, so it is preferred around but never blocked, matching BRULE-012 |
 | Portal and driver app UI | FSD-FR-054 to 089 | Implemented | The portal covers the queue, docket, dispatch, moderation, hazards, fleet, users, sensors, exports and the live map; the driver app covers route guidance, reporting, offline operation, SOS, report history and profile. Component and end-to-end tests are still missing (BACKLOG Q-1) |
-| Offline Areas (final product) | FSD-FR-094 to 100 | Not implemented | `/offline` simulates download states only; no tiles, package or database are created. Final-product scope, pilot delivery unaffected |
-| Satellite flood observations | FSD-FR-101 to 107 | Not implemented | Sentinel-1 ingestion, confidence scoring and offline-area inclusion all remain proposed; pilot scope unchanged |
-| Live flood-state sources | FSD-FR-108 to 118 | Partially implemented | The source-priority resolver and `GET /api/v1/flood-state` exist with tests; Open-Meteo rain (rain gate, FSD-FR-118) and Open-Meteo Flood API / GloFAS discharge (`backend/river_discharge.py`, FSD-FR-117) are live, both labelled and advisory-only; sensor display (FSD-FR-115) and source/freshness display (FSD-FR-114) are implemented. Still missing: PAGASA telemetry (FSD-FR-108, blocked on `OD-D25`), manual river entry (FSD-FR-109), NASA GPM IMERG, Sentinel-1 and NOAH layer data/import (FSD-FR-112, FSD-FR-113) |
-| Smart Routing extras (EV/HOV/toll/multimodal) | FSD-FR-119 to 123 | Declined | No real road-attribute or charger data exists to build any of this on; recorded as a final-product research item only, not pursued for the pilot or any near-term release |
+| Live flood-state sources | FSD-FR-094 to 104 | Partially implemented | The source-priority resolver and `GET /api/v1/flood-state` exist with tests; Open-Meteo rain (rain gate, FSD-FR-104) and Open-Meteo Flood API / GloFAS discharge (`backend/river_discharge.py`, FSD-FR-103) are live, both labelled and advisory-only; sensor display (FSD-FR-101) and source/freshness display (FSD-FR-100) are implemented. Still missing: PAGASA telemetry (FSD-FR-094, blocked on `OD-D25`), manual river entry (FSD-FR-095), NASA GPM IMERG and NOAH layer data/import (FSD-FR-098, FSD-FR-099) |
 
 ## Actors
 

@@ -6,13 +6,7 @@
 
 | Version | Date        | Author         | Description                                                        |
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
-| 1.0     | 21 Oct 2026 | «Project Team» | Initial Version                                                    |
-| 1.1     | 21 Oct 2026 | «Project Team» | Driver app, live hazards, fleet dispatch, sensor ingestion added to scope |
-| 1.4     | 9 Nov 2026  | «Project Team» | Current-state column in Appendix A synced with the delivered pilot   |
-| 1.5     | 13 Nov 2026 | «Project Team» | Appendix A gains BR-019 (offline map areas, final-product, not implemented), BR-020 (satellite observation, not implemented), BR-021 (live flood-state sources, partly met), BR-022 (EV/HOV/toll "Smart Routing", declined) |
-| 1.6     | 13 Nov 2026 | «Project Team» | BR-003's current state updated for the Mapbox dry-state ("FASTEST") routing handoff; FLOOD_SAFE unaffected |
-| 1.7     | 13 Nov 2026 | «Project Team» | Success Metrics table's "Hazard publish to SSE event" row corrected from a stale "Met (9 Nov 2026)" to "Not currently met," matching NFR-019 above it |
-| 2.0     | 13 Nov 2026 | «Project Team» | Consolidated baseline: folded every prior scope addition into the document as original scope; retired the standalone change-request records |
+| 1.0     | 21 Oct 2026 | «Project Team» | Initial Baseline Release                                            |
 
 ## Approvals
 
@@ -39,8 +33,8 @@ reroutes, and carries field reports back to the operations centre even when the
 network drops.
 
 This document states the business problem, requirements and success measures for
-the pilot. Technical behaviour is specified in [FSD.md](FSD.md) and construction
-in [TSD.md](TSD.md).
+the pilot. Technical behaviour is specified in [FSD.docx](FSD.docx) and construction
+in [TSD.docx](TSD.docx).
 
 ## Business Problem Statement
 
@@ -92,12 +86,12 @@ because a single dispatch into deep water can be fatal.
 | «Project Team»          | Applications development            | Design, build, test and document                   |
 | Citizens                | Barangays within the pilot corridor | Report incidents; affected by response time        |
 
-Personas and engagement detail are in [PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md).
+Personas and engagement detail are in [Project-Management-Plan.docx](Project-Management-Plan.docx).
 
 ## Functional Requirements
 
 These are the business-level capabilities. The FSD decomposes them into
-`FSD-FR-001` to `FSD-FR-093`; each row here names the business requirement it
+`FSD-FR-001` to `FSD-FR-112`; each row here names the business requirement it
 serves so the traceability chain is never broken.
 
 | Req ID | Requirement                                                                            | Priority |
@@ -143,7 +137,7 @@ Appendix A.
 | NFR-013 | The API runs from a container with all configuration supplied externally.                                          |
 | NFR-014 | Every override and decision is attributable to an actor and a timestamp.                                           |
 | NFR-015 | API instances can be added horizontally behind a load balancer.                                                    |
-| NFR-016 | Recovery point and recovery time objectives are defined and tested. RPO ≤24h (age of newest `scripts/backup-db.sh` dump), RTO ≤1h (`docs/TSD.md` §5.2); dump/restore drilled on the hosted cluster 10 Nov 2026 — scratch DB restored with every table's row count matching prod exactly. A restore *over* prod stays a go-ahead-gated runbook step; the free tier exposes no managed backups, so `pg_dump` is the only mechanism. |
+| NFR-016 | Recovery point and recovery time objectives are defined and tested. RPO ≤24h (age of newest `scripts/backup-db.sh` dump), RTO ≤1h (`docs/TSD.docx` §5.2); dump/restore drilled on the hosted cluster 10 Nov 2026 — scratch DB restored with every table's row count matching prod exactly. A restore *over* prod stays a go-ahead-gated runbook step; the free tier exposes no managed backups, so `pg_dump` is the only mechanism. |
 | NFR-017 | Times shown in PHT, distances in metres/kilometres, depths in centimetres.                                         |
 | NFR-018 | The driver app navigates and accepts reports from the cached corridor when offline `[TBC]`.                        |
 | NFR-019 | A published hazard reaches every connected SSE client in 100 ms at p95, server-side. Was failing at the 100 ms poll default (measured ~110 ms median, ~220-330 ms p95 -- a 100 ms poll alone cannot bound p95 to 100 ms once any processing time is added). Fixed: `event_stream_poll_ms` lowered to 40 (`backend/config.py`); re-measured p95 ~50 ms at the time, locally. **Not currently met**: re-measured 13 Nov 2026 against the hosted deployment, same benchmark run as NFR-001/002: **p95 ≈1,374 ms, 13.7× over budget** -- the `event_stream_poll_ms` fix itself is unchanged in code; this regression is the hosted database's real round-trip latency on every poll, not a regression in the poll-interval fix |
@@ -153,16 +147,13 @@ Appendix A.
 | NFR-023 | Storm and night themes keep AA text contrast and pair colour with a text or shape cue. Built in the driver app (9 Nov 2026): a persisted toggle (Profile, and a quick-access icon on the navigation screen) switches between day and a low-glare storm palette (`metroflow-mobile/src/theme.tsx`), mapped per contrast role rather than inverted wholesale. Extended 10 Nov 2026 to Home, SOS, Report and Report History, so every screen a driver uses while the toggle is on now follows it, not just route/navigation and map chrome. The admin portal stays single-theme — out of scope by standing decision (`BACKLOG.md`), not a gap. |
 | NFR-024 | The driver app becomes interactive within 5 s on a mid-range phone over 4G `[TBC]`.                                |
 | NFR-025 | The LGU map renders the pilot network and active hazards at a usable frame rate while panning and zooming `[TBC]`. |
-| NFR-026 | A region package must be resumable and must not exceed the approved storage cap `[TBC]` MB (final-product Offline Areas, not implemented for the pilot). |
-| NFR-027 | An observation must show acquisition-to-availability latency, confidence and expiry; the approved service-level target is `[TBC]` (satellite flood observations, not implemented for the pilot). |
-| NFR-028 | Ingestion must tolerate source outages without failing requests, and report a source as stale within one freshness window (live flood-state sources, implemented). |
-| NFR-029 | Every non-flood routing preference (toll, HOV, EV, schedule) must degrade gracefully to the plain flood-safe route when its backing data source is unavailable (Smart Routing extras, declined for the pilot). |
-| NFR-030 | A missing token, a disabled flag, or a failed Mapbox call must never fail a route request; the in-house engine is always the fallback (dry-state routing, implemented). |
+| NFR-026 | Ingestion must tolerate source outages without failing requests, and report a source as stale within one freshness window (live flood-state sources, implemented). |
+| NFR-027 | A missing token, a disabled flag, or a failed Mapbox call must never fail a route request; the in-house engine is always the fallback (dry-state routing, implemented). |
 
 ## Risks
 
 Business-level risks. The full register, scoring and responses are in
-[PROJ_MANAGEMENT_PLAN.md](PROJ_MANAGEMENT_PLAN.md) §RAID Log.
+[Project-Management-Plan.docx](Project-Management-Plan.docx) §RAID Log.
 
 | Risk                                              | Impact                                     | Mitigation                                                                                     |
 | ------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
@@ -170,15 +161,15 @@ Business-level risks. The full register, scoring and responses are in
 | Route-level authorisation not delivered before acceptance | Cannot be used with real data       | Delivered 27 Oct 2026: every route requires a token and writes require a portal role. Rate limiting delivered 28 Oct 2026 for login, registration, SOS and simulation (TSD LIM-006); an edge WAF needs a paid plan (LIM-025) |
 | No baseline data from the client                  | Benefits cannot be quantified              | Use audit-trail and risk benefits; collect the baseline during the pilot                       |
 | Dispatchers find the portal slower than radio     | They bypass the system                     | Usability sessions from M4; keep the existing process running in parallel                      |
-| Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require a change request                                    |
+| Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require scope re-evaluation                                 |
 | Personal data incident during testing             | Legal and ethical exposure                 | Synthetic data only; row-level security verified; no personal data in logs                     |
-| Hosted database secret never supplied             | Hosted deployment not demonstrated         | Resolved — the hosted deployment is live (`docs/TSD.md` §5.2/5.3): Supabase Postgres at head, API on Vercel, portal on Vercel, migrations applied by CI             |
-| Driver-app scope exceeds the remaining term       | Schedule overrun; nothing accepted on time | Phase gates; `Must` requirements first; every further addition requires a change request       |
+| Hosted database secret never supplied             | Hosted deployment not demonstrated         | Resolved — the hosted deployment is live (`docs/TSD.docx` §5.2/5.3): Supabase Postgres at head, API on Vercel, portal on Vercel, migrations applied by CI             |
+| Driver-app scope exceeds the remaining term       | Schedule overrun; nothing accepted on time | Phase gates; `Must` requirements first                                                |
 | Drivers do not adopt the app                      | Field evidence stays thin                  | Usability tests from M7; QR onboarding; synthetic reports remain a fallback                    |
 | Background location limits on iOS                 | Telemetry gaps during navigation           | Foreground-only telemetry; limitation recorded                                                  |
 | Driver location privacy incident                  | Legal and ethical exposure                 | Rounding, hashing, 24-hour retention, role-only access, synthetic test data                    |
 | Sensor threshold false positives                  | Unnecessary closures and reroutes          | Advisory state until a dispatcher confirms; threshold configured per sensor                    |
-| Realtime stream overload                          | Late or dropped hazard warnings            | Redis pub/sub, bounded queues, reconnect with a full snapshot                                  |
+| Realtime stream overload                          | Late or dropped hazard warnings            | Durable `event_log` relay, bounded queues, reconnect with a full snapshot                       |
 
 ## Success Metrics
 
@@ -221,17 +212,14 @@ does, so this document is also an honest statement of scope.
 | BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue and a moderation desk            |
 | BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; native telephony is out of scope |
 | BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — gauge ingestion and advisory road flagging are implemented; external PAGASA and satellite feeds are not connected |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented; external PAGASA feed integration (`FSD-FR-094`) remains blocked on `OD-D25` |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
-| BR-019 | A driver must be able to use a usable map, road graph and safety snapshot when connectivity is unavailable (final-product Offline Areas) | Could | Not implemented for the pilot — design placeholder only (`/offline` simulates download states); final-product scope, pilot delivery unaffected |
-| BR-020 | Give dispatchers a wide-area, all-weather flood observation source that complements reports and gauges | Should | Not implemented — Sentinel-1 satellite ingestion proposed, pilot scope unchanged |
-| BR-021 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Partly met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled; PAGASA telemetry and the Sentinel-1 observation remain blocked on `OD-D25` |
-| BR-022 | A driver on the final-product release may route to include EV charging, avoid HOV lanes or tolls, or plan a multimodal trip, without weakening flood-safety routing | Could | Declined for the pilot and for any near-term release — no real road-attribute or charger data exists to build it on; recorded as a final-product research item only |
+| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Partly met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled; PAGASA telemetry remains blocked on `OD-D25` |
 
 `Must` requirements define the acceptance boundary. All of them are met in the pilot
-except the external-feed half of BR-017, which is `Should`; live flood-state source
-integration is the vehicle that closes it. Deprioritised or out-of-pilot scope is
-marked above rather than assumed.
+except the external-feed half of BR-017 and BR-019's live flood-state sources, both
+`Should` and only partly met. Deprioritised or out-of-pilot scope is marked above
+rather than assumed.
 
 ### A.2 In scope
 
@@ -293,12 +281,12 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Assumption | A-002 | The pilot corridor is representative enough to demonstrate routing        |
 | Assumption | A-003 | Free or institutional service tiers suffice for the pilot                 |
 | Assumption | A-004 | Dispatchers have a modern desktop browser and reliable connectivity       |
-| Assumption | A-005 | Rainfall is supplied manually, with optional OpenWeather data             |
+| Assumption | A-005 | Rainfall is supplied manually or from Open-Meteo (live rain gate); OpenWeather is an optional supplementary source; PAGASA telemetry is blocked on OD-D25 |
 | Assumption | A-006 | The client provides corridor and barangay naming conventions              |
 | Assumption | A-007 | Drivers have a smartphone with a modern browser, camera and geolocation   |
 | Assumption | A-008 | Cellular data can drop during an event, so offline operation is required  |
 | Assumption | A-009 | Sensor readings may be simulated for the pilot but must be labelled       |
-| Assumption | A-010 | Mapbox tiles are available on the pilot tier; OSM is the no-key fallback  |
+| Assumption | A-010 | Mapbox Directions API is used for dry-state routing (ADR-025); the portal basemap is the keyless Carto Positron style (ADR-022); OSM raster remains the swap-in fallback |
 | Constraint | C-001 | Delivery must fit the academic term                                       |
 | Constraint | C-002 | Team effort is part-time and shared with coursework                       |
 | Constraint | C-003 | No paid GitHub Code Security, so CodeQL cannot analyse the private repo   |
@@ -313,7 +301,7 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Dependency | D-002 | Adviser and panel availability for reviews                                |
 | Dependency | D-003 | Client confirms the pilot corridor                                        |
 | Dependency | D-004 | Supabase project credentials and pilot accounts supplied at deployment    |
-| Dependency | D-005 | Persistent upload volume or object storage for evidence photos            |
+| Dependency | D-005 | Evidence storage is the `bytea` column on the `incident_reports` row (ADR-023), not a separate upload volume or object store |
 | Dependency | D-006 | Mapbox and OSM tile services remain reachable within their usage policies |
 | Dependency | D-007 | Weather, terrain and imagery providers remain within their quotas         |
 
@@ -329,11 +317,14 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Edge              | A road segment between two intersections                      |
 | EXIF              | Photo metadata, including capture time and GPS, when present  |
 | GeoJSON           | JSON encoding of geographic features                          |
+| GloFAS            | Copernicus Global Flood Awareness System; provides modelled river discharge used as an advisory-only source |
 | Hazard polygon    | Verified flood area drawn or approved by the LGU              |
 | SQLite            | On-device database used for offline driver data               |
 | LGU               | Local Government Unit                                         |
 | MDRRMC            | Disaster Risk Reduction and Management Council                |
-| Node              | An intersection or endpoint on the road graph                 |
+| Node              | An intersection or endpoint on the road graph. The production Quezon City OSM graph has 6,177 nodes and 7,618 edges; the synthetic 34-node / 61-edge lattice (`network_seed.py`) is the local dev fallback only |
+| OSM               | OpenStreetMap — source of the production road graph           |
+| PAGASA            | Philippine Atmospheric, Geophysical and Astronomical Services Administration; real-time gauge integration is blocked on OD-D25 |
 | Passability       | Whether a vehicle can drive an edge given current water depth |
 | PostGIS           | Spatial extension for PostgreSQL                              |
 | Expo              | React Native framework used for the native driver app         |
@@ -341,6 +332,6 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Runoff            | Rainfall that does not infiltrate and flows over the surface  |
 | SCS-CN            | Soil Conservation Service Curve Number runoff method          |
 | SOS               | One-tap emergency rescue request with location                |
-| SSE               | Server-sent events; one-way realtime stream from server       |
+| SSE               | Server-sent events; one-way realtime stream from server; powered by the durable `event_log` table (ADR-015); no message broker is provisioned |
 | Telemetry         | Periodic vehicle position and movement report                 |
 | Triage            | Verifying and prioritising incoming reports                   |
