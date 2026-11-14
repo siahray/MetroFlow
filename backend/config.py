@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # This is a *calibration* coefficient, not a physical constant: it stands in
     # for the depression-storage / drainage-area ratio of a low-lying road
     # segment. Replace with a DEM + drainage-network model when available.
-    ponding_amplification: float = 3.5
+    ponding_amplification: float = 2.4
 
     # --- Passability thresholds ------------------------------------------------
     # Depth at or above which a road is a "light flood" caution (but passable).

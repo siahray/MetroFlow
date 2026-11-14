@@ -1163,6 +1163,46 @@ def test_dry_route_uses_mapbox_when_configured(client, monkeypatch):
     assert body["instructions"][0]["manoeuvre"] == "DEPART"
 
 
+def test_mapbox_routes_to_the_searched_place_not_the_snapped_node(client, monkeypatch):
+    """dest_lat/dest_lon and the GPS origin reach the provider verbatim, and
+    dest_name labels the response (the driver searched a place, not a node)."""
+    seen: dict[str, float] = {}
+
+    def capture(origin_lat, origin_lon, dest_lat, dest_lon, token):
+        seen.update(
+            origin_lat=origin_lat, origin_lon=origin_lon, dest_lat=dest_lat, dest_lon=dest_lon
+        )
+        return _fake_mapbox_route()
+
+    monkeypatch.setattr(settings, "mapbox_access_token", "test-token")
+    monkeypatch.setattr(settings, "mapbox_directions_enabled", True)
+    monkeypatch.setattr(mapbox_directions, "fetch_driving_route", capture)
+
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={
+            "start_node": 1,
+            "target_node": 4,
+            "clearance_cm": 60,
+            "origin_lat": 14.6001,
+            "origin_lon": 121.0501,
+            "dest_lat": 14.5505,
+            "dest_lon": 121.0565,
+            "dest_name": "Market! Market!",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "MAPBOX"
+    assert body["destination_name"] == "Market! Market!"
+    assert seen == {
+        "origin_lat": 14.6001,
+        "origin_lon": 121.0501,
+        "dest_lat": 14.5505,
+        "dest_lon": 121.0565,
+    }
+
+
 def test_mapbox_failure_falls_back_to_the_in_house_engine(client, monkeypatch):
     monkeypatch.setattr(settings, "mapbox_access_token", "test-token")
     monkeypatch.setattr(settings, "mapbox_directions_enabled", True)
@@ -2284,7 +2324,7 @@ def test_open_meteo_rain_drives_the_rain_gate_and_the_advisory(client, monkeypat
     monkeypatch.setattr(settings, "weather_ingest", True)  # the suite disables it
     monkeypatch.setattr(weather, "_last_fetch", None)
     monkeypatch.setattr(
-        weather, "fetch_rain_rate", lambda: (2.5, datetime.now(UTC).replace(microsecond=0))
+        weather, "fetch_rain_rate", lambda *_: (2.5, datetime.now(UTC).replace(microsecond=0))
     )
     try:
         raining = _flood_state(client)
@@ -2299,7 +2339,7 @@ def test_open_meteo_rain_drives_the_rain_gate_and_the_advisory(client, monkeypat
         # Rain stops: the next ingest writes a quiet reading and the advisory clears.
         monkeypatch.setattr(weather, "_last_fetch", None)
         monkeypatch.setattr(
-            weather, "fetch_rain_rate", lambda: (0.0, datetime.now(UTC).replace(microsecond=0))
+            weather, "fetch_rain_rate", lambda *_: (0.0, datetime.now(UTC).replace(microsecond=0))
         )
         cleared = _by_edge(_flood_state(client))
         assert cleared[hit[0]["edge_id"]]["basis"] == "NONE"
@@ -2375,7 +2415,7 @@ def test_live_rainfall_reports_the_current_reading_for_the_admin_toggle(client, 
     """The admin simulation panel's live-weather toggle reads this, never flood-state."""
     monkeypatch.setattr(weather, "_rain_rate_cache", None)
     reading_at = datetime.now(UTC).replace(microsecond=0)
-    monkeypatch.setattr(weather, "fetch_rain_rate", lambda: (12.5, reading_at))
+    monkeypatch.setattr(weather, "fetch_rain_rate", lambda *_: (12.5, reading_at))
 
     response = client.get("/api/v1/weather/live-rainfall")
     assert response.status_code == 200, response.text
@@ -2387,7 +2427,7 @@ def test_live_rainfall_reports_the_current_reading_for_the_admin_toggle(client, 
 
 def test_live_rainfall_reports_unavailable_on_a_feed_failure(client, monkeypatch):
     monkeypatch.setattr(weather, "_rain_rate_cache", None)
-    monkeypatch.setattr(weather, "fetch_rain_rate", lambda: None)
+    monkeypatch.setattr(weather, "fetch_rain_rate", lambda *_: None)
 
     response = client.get("/api/v1/weather/live-rainfall")
     assert response.status_code == 200, response.text
@@ -2405,7 +2445,7 @@ def test_live_rainfall_requires_admin(client, monkeypatch):
     from main import app
 
     monkeypatch.setattr(weather, "_rain_rate_cache", None)
-    monkeypatch.setattr(weather, "fetch_rain_rate", lambda: (3.0, datetime.now(UTC)))
+    monkeypatch.setattr(weather, "fetch_rain_rate", lambda *_: (3.0, datetime.now(UTC)))
 
     email = f"live-rainfall-driver-{uuid4()}@example.test"
     registered = client.post(
