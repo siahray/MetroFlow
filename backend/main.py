@@ -651,13 +651,24 @@ def trigger_rainfall_simulation(
     network = _build_network_state(
         db, clearance_cm, preloaded=(nodes, edges, states), overrides=overrides
     )
-    return SimulationResponse(
-        **network.model_dump(),
+    # `model_construct` builds the response from `network`'s own already-
+    # validated field objects directly, instead of `**network.model_dump()`
+    # (dict-ifies every one of ~13,000 nested features, then re-validates
+    # them all again building `SimulationResponse`) -- `network`'s fields are
+    # already-validated Pydantic objects, not untrusted input, so skipping
+    # that round trip is safe. Returning a pre-serialized `Response` instead
+    # of the plain model also skips FastAPI's generic `jsonable_encoder` for
+    # this payload, the single largest cost measured for the equivalent
+    # `/network/state` endpoint (see docs/TSD.md LIM-028) -- this endpoint
+    # carries the identical edges/nodes payload on top of the simulation.
+    sim_response = SimulationResponse.model_construct(
+        **network.__dict__,
         rainfall_mm_hr=rainfall_mm_hr,
         runoff_mm=round(runoff_mm, 4),
         affected_edges=affected_edges,
         message=f"Simulated {rainfall_mm_hr} mm/hr rainfall",
     )
+    return Response(content=sim_response.model_dump_json(), media_type="application/json")
 
 
 def _routing_graph(
@@ -716,9 +727,18 @@ def _route_from_mapbox(
     target_node: int,
     clearance_cm: float,
     access_token: str,
+    *,
+    origin_override: tuple[float, float] | None = None,
+    dest_override: tuple[float, float] | None = None,
+    dest_name: str | None = None,
 ) -> RouteResponse | None:
     """Build a RouteResponse from the Mapbox Directions API, or None to fall
     back to the in-house engine (see the call site in get_optimal_route).
+
+    ``origin_override``/``dest_override`` are the caller's true coordinates
+    (the driver's GPS fix and the searched place) -- a provider route is
+    door-to-door, not node-to-node, when they are given. The graph nodes stay
+    the identity the response reports either way.
 
     There is no edge-level flood data behind a provider route, so `segments`
     and `hazards` are deliberately empty -- the caller already only reaches
@@ -726,8 +746,10 @@ def _route_from_mapbox(
     """
     origin = nodes[start_node]
     destination = nodes[target_node]
+    origin_lat, origin_lon = origin_override or (origin.latitude, origin.longitude)
+    dest_lat, dest_lon = dest_override or (destination.latitude, destination.longitude)
     provider_route = mapbox_directions.fetch_driving_route(
-        origin.latitude, origin.longitude, destination.latitude, destination.longitude, access_token
+        origin_lat, origin_lon, dest_lat, dest_lon, access_token
     )
     if provider_route is None:
         return None
@@ -750,7 +772,7 @@ def _route_from_mapbox(
     return RouteResponse(
         start_node=start_node,
         target_node=target_node,
-        destination_name=destination.name,
+        destination_name=dest_name or destination.name,
         vehicle_clearance_cm=clearance_cm,
         optimal_path_nodes=[start_node, target_node],
         geometry=provider_route.geometry,
@@ -799,6 +821,29 @@ def get_optimal_route(
             ),
         ),
     ] = [],  # noqa: B006 - FastAPI Query, not a mutated Python default
+    origin_lat: Annotated[
+        float | None, Query(ge=-90, le=90, description="True GPS origin latitude")
+    ] = None,
+    origin_lon: Annotated[
+        float | None, Query(ge=-180, le=180, description="True GPS origin longitude")
+    ] = None,
+    dest_lat: Annotated[
+        float | None,
+        Query(
+            ge=-90,
+            le=90,
+            description=(
+                "The searched place's real latitude. A dry Mapbox route ends at "
+                "the place itself; the graph planners keep target_node."
+            ),
+        ),
+    ] = None,
+    dest_lon: Annotated[
+        float | None, Query(ge=-180, le=180, description="Real destination longitude")
+    ] = None,
+    dest_name: Annotated[
+        str | None, Query(max_length=200, description="Display name of the searched place")
+    ] = None,
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -851,7 +896,20 @@ def get_optimal_route(
         and settings.mapbox_access_token
     ):
         provider_response = _route_from_mapbox(
-            nodes, start_node, target_node, clearance_cm, settings.mapbox_access_token
+            nodes,
+            start_node,
+            target_node,
+            clearance_cm,
+            settings.mapbox_access_token,
+            origin_override=(
+                (origin_lat, origin_lon)
+                if origin_lat is not None and origin_lon is not None
+                else None
+            ),
+            dest_override=(
+                (dest_lat, dest_lon) if dest_lat is not None and dest_lon is not None else None
+            ),
+            dest_name=dest_name,
         )
         if provider_response is not None:
             return provider_response
@@ -965,7 +1023,9 @@ def get_optimal_route(
     return RouteResponse(
         start_node=start_node,
         target_node=target_node,
-        destination_name=nodes[target_node].name,
+        # The graph planner ends at the snapped node either way; the label
+        # still names the place the driver searched for when one was given.
+        destination_name=dest_name or nodes[target_node].name,
         vehicle_clearance_cm=clearance_cm,
         optimal_path_nodes=path,
         geometry={"type": "LineString", "coordinates": coordinates},
@@ -3052,7 +3112,20 @@ def _ingest_weather(db: Session) -> None:
     audit entry: the reading row and the advisory state it writes are the
     record, and a dispatcher confirming a real flood is still the audited step.
     """
-    result = weather.fetch_rain_rate()
+    # Centre the gauge on whatever network is actually loaded, so a re-import
+    # (the seed lattice in CI, Quezon City in production) stays covered.
+    min_lat, max_lat, min_lon, max_lon = db.query(
+        func.min(models.RoadNode.latitude),
+        func.max(models.RoadNode.latitude),
+        func.min(models.RoadNode.longitude),
+        func.max(models.RoadNode.longitude),
+    ).one()
+    lat, lon, radius_m = (
+        weather.coverage_for_extent(min_lat, min_lon, max_lat, max_lon)
+        if None not in (min_lat, max_lat, min_lon, max_lon)
+        else (weather.CORRIDOR_LAT, weather.CORRIDOR_LON, weather.IMPACT_RADIUS_M)
+    )
+    result = weather.fetch_rain_rate(lat, lon)
     if result is None:
         return
     value, recorded_at = result
@@ -3062,15 +3135,18 @@ def _ingest_weather(db: Session) -> None:
             sensor_id=weather.SENSOR_ID,
             sensor_type="RAIN_GAUGE",
             name="Open-Meteo rain over the pilot corridor",
-            geom=_point(weather.CORRIDOR_LAT, weather.CORRIDOR_LON),
+            geom=_point(lat, lon),
             threshold_value=weather.RAIN_THRESHOLD_MM_HR,
             threshold_unit="mm_hr",
-            impact_radius_m=weather.IMPACT_RADIUS_M,
+            impact_radius_m=radius_m,
             active=True,
             simulated=False,
         )
         db.add(sensor)
         db.flush()
+    else:
+        sensor.geom = _point(lat, lon)
+        sensor.impact_radius_m = radius_m
     _record_sensor_reading(db, sensor, value, "mm_hr", recorded_at)
     db.commit()
 
