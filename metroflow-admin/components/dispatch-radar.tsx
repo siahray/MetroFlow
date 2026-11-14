@@ -16,11 +16,13 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { IncidentLocationMap } from "./incident-location-map";
 import { type Incident } from "@/lib/incidents";
 import { cn } from "@/lib/cn";
 import { addSOSNote, escalateSOS, rejectSOS } from "@/lib/dispatch";
+import { nearbyPlace, type NearbyPlace } from "@/lib/nearby-place";
 import { addReportNote, escalateReport, rejectReport } from "@/lib/reports";
 
 type DispatchRadarProps = {
@@ -46,6 +48,36 @@ export function DispatchRadar({
   const [actionReason, setActionReason] = useState("");
   const [actionAgency, setActionAgency] = useState("BFP");
   const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [nearby, setNearby] = useState<NearbyPlace | null>(null);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+
+  const { latitude, longitude } = incident;
+  const locationKey = latitude != null && longitude != null ? `${latitude},${longitude}` : null;
+  // Clear a stale lookup from the previous incident the moment the location
+  // itself changes, not inside the effect -- React's own "adjust state
+  // during render" pattern, same one already used in the driver app.
+  const [prevLocationKey, setPrevLocationKey] = useState(locationKey);
+  if (locationKey !== prevLocationKey) {
+    setPrevLocationKey(locationKey);
+    setNearby(null);
+    setNearbyLoading(locationKey !== null);
+  }
+
+  useEffect(() => {
+    if (latitude == null || longitude == null) return;
+    const controller = new AbortController();
+    nearbyPlace(latitude, longitude, controller.signal)
+      .then((place) => {
+        if (!controller.signal.aborted) setNearby(place);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setNearby(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setNearbyLoading(false);
+      });
+    return () => controller.abort();
+  }, [latitude, longitude]);
 
   // FSD-FR-043: notes and actions persist through the API; this screen has no
   // log panel of its own, so it does not keep a copy to drift out of date.
@@ -163,13 +195,34 @@ export function DispatchRadar({
             <p className="mt-1 text-xs text-slate-500">
               {incident.barangay} · reported {incident.reportedAt}
             </p>
-            <Link
-              href="/hazards"
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Navigation className="h-3.5 w-3.5" /> Open the live operations map
-            </Link>
+            <div className="mt-3 flex items-center gap-3">
+              <Link
+                href="/hazards"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Navigation className="h-3.5 w-3.5" /> Open the live operations map
+              </Link>
+              {nearby ? (
+                <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                  Near <span className="font-semibold text-slate-700">{nearby.name}</span>
+                  {nearby.address ? `, ${nearby.address}` : ""}
+                </span>
+              ) : nearbyLoading ? (
+                <span className="text-xs text-slate-400">Looking up nearby place…</span>
+              ) : null}
+            </div>
           </div>
+
+          {incident.latitude != null && incident.longitude != null ? (
+            <div className="h-56 overflow-hidden rounded-xl border border-slate-200">
+              <IncidentLocationMap latitude={incident.latitude} longitude={incident.longitude} />
+            </div>
+          ) : (
+            <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-400">
+              No coordinates reported
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
