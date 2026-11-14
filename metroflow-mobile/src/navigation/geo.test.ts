@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { navZoomFor } from "./geo";
+import { navZoomFor, snapToRoute } from "./geo";
 
 test("navZoomFor zooms in at low speed and out at highway speed", () => {
   // zoom rises and altitude falls together -- they must never disagree on
@@ -40,4 +40,30 @@ test("navZoomFor never returns a zoom/altitude pair that disagree on direction",
     expect(tiers[i].zoom).toBeLessThanOrEqual(tiers[i - 1].zoom);
     expect(tiers[i].altitude).toBeGreaterThanOrEqual(tiers[i - 1].altitude);
   }
+});
+
+test("snapToRoute moves a point off the line onto its nearest point on the route", () => {
+  const route = [
+    { latitude: 14.6, longitude: 121.0 },
+    { latitude: 14.6, longitude: 121.01 },
+  ];
+  // East of the midpoint, well off the (flat, east-west) line.
+  const offRoute = { latitude: 14.6005, longitude: 121.005 };
+  const snapped = snapToRoute(route, offRoute);
+  expect(snapped).not.toBeNull();
+  expect(snapped!.latitude).toBeCloseTo(14.6, 3);
+  expect(snapped!.longitude).toBeCloseTo(121.005, 3);
+});
+
+test("snapToRoute clamps to an endpoint when the point is past the end of the route", () => {
+  const route = [
+    { latitude: 14.6, longitude: 121.0 },
+    { latitude: 14.6, longitude: 121.01 },
+  ];
+  const pastTheEnd = { latitude: 14.6, longitude: 121.05 };
+  expect(snapToRoute(route, pastTheEnd)).toEqual(route[1]);
+});
+
+test("snapToRoute returns null for a degenerate (single-point) route", () => {
+  expect(snapToRoute([{ latitude: 14.6, longitude: 121.0 }], { latitude: 14.6, longitude: 121.0 })).toBeNull();
 });

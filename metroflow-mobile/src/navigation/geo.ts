@@ -112,6 +112,34 @@ export function progressAlongRoute(
   return { ...best, totalM: accumulated };
 }
 
+/**
+ * The nearest point on the route line to `point`, for a map-matched position
+ * marker -- the same "always on the road" puck behaviour a turn-by-turn app
+ * gives, instead of the raw GPS fix (which can sit metres off the road, or
+ * inside a park if the graph's nearest junction is a block away). Returns
+ * `null` for a degenerate route (fewer than two points) so the caller falls
+ * back to the raw position rather than guessing.
+ */
+export function snapToRoute(coordinates: LatLng[], point: LatLng): LatLng | null {
+  if (coordinates.length < 2) return null;
+  let best: { distance: number; point: LatLng } | null = null;
+  for (let index = 0; index < coordinates.length - 1; index += 1) {
+    const start = coordinates[index];
+    const end = coordinates[index + 1];
+    const projection = projectOnSegment(point, start, end);
+    if (!best || projection.distance < best.distance) {
+      best = {
+        distance: projection.distance,
+        point: {
+          latitude: start.latitude + projection.t * (end.latitude - start.latitude),
+          longitude: start.longitude + projection.t * (end.longitude - start.longitude),
+        },
+      };
+    }
+  }
+  return best?.point ?? null;
+}
+
 /** Index of the instruction the driver is currently on. */
 export function instructionIndexForProgress(
   instructions: RouteInstruction[],

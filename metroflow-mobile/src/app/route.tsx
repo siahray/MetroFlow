@@ -34,10 +34,12 @@ import {
   Droplet,
   Dumbbell,
   Flag,
+  GraduationCap,
   Sun,
   Gauge,
   HeartPulse,
   Home,
+  Landmark,
   Layers,
   LocateFixed,
   MapPin,
@@ -50,10 +52,13 @@ import {
   ShoppingBag,
   Shuffle,
   ShieldAlert,
+  Train,
   Waves,
   Wifi,
   WifiOff,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react-native";
 
 import {
@@ -71,7 +76,7 @@ import {
 import { useAuth } from "../auth";
 import { BackButton } from "../components/BackButton";
 import { useDialog } from "../components/Dialog";
-import { boundingBoxOf, searchAddress, type GeocodeResult } from "../geocode";
+import { boundingBoxOf, reverseGeocodeName, searchPlaces, type GeocodeResult } from "../geocode";
 import { congestionFromSpeeds, RouteMap, type MapViewMode, type RouteMapHandle } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
@@ -81,6 +86,7 @@ import { usePrefs } from "../prefs";
 import { listQuickPicks, type QuickPick, type QuickPickIcon } from "../quickPicks";
 import { addRecentDestination, listRecentDestinations, type RecentDestination } from "../recentDestinations";
 import {
+  distanceMeters,
   distanceToPolygonMeters,
   formatDistance,
   formatDuration,
@@ -212,6 +218,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // a Quick Pick added in Profile shows up without restarting the app.
   const [quickPicks, setQuickPicks] = useState<QuickPick[]>([]);
   const [recentDestinations, setRecentDestinations] = useState<RecentDestination[]>([]);
+  const [recentCollapsed, setRecentCollapsed] = useState(false);
   useFocusEffect(
     useCallback(() => {
       void listQuickPicks().then(setQuickPicks);
@@ -230,8 +237,15 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Bumped by the Retry action so the one-shot location effect runs again.
   const [locationAttempt, setLocationAttempt] = useState(0);
   const [destinationQuery, setDestinationQuery] = useState("");
-  // Address search (Nominatim), alongside the instant road-node name match
-  // below -- a driver can type either a junction name or a real address.
+  // The place the driver picked from the results ("SM City North EDSA"), kept
+  // so the box and route summary name the establishment rather than the road
+  // node the flood-safe router snaps to.
+  const [placeName, setPlaceName] = useState<string | null>(null);
+  // The picked place's real coordinates. A dry Mapbox route navigates to the
+  // place itself; the snapped node only anchors the graph-based planners.
+  const [placeCoords, setPlaceCoords] = useState<LatLng | null>(null);
+  // Place search (curated establishments + Nominatim), alongside the instant
+  // road-node name match below -- a driver can type either a place or a junction.
   const [addressResults, setAddressResults] = useState<GeocodeResult[]>([]);
   const [geocoding, setGeocoding] = useState(false);
   const [selected, setSelected] = useState<NodeFeature | null>(null);
@@ -272,6 +286,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const unsafeRef = useRef(false);
   const prefsRef = useRef(prefs);
   const plannedFor = useRef<string | null>(null);
+  // Guards a dropped pin's reverse-geocode reply against overwriting a
+  // newer selection (a second pin, or a search result picked meanwhile)
+  // made before the lookup resolves.
+  const longPressGeneration = useRef(0);
   const initialDestinationHandled = useRef(false);
   const hazardsInitialised = useRef(false);
   const arrivedRef = useRef(false);
@@ -314,6 +332,9 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       clearance_cm: number;
       ignore_hazards?: boolean;
       avoid_edges?: number[];
+      origin?: LatLng;
+      destination?: LatLng;
+      destination_name?: string;
     }) =>
       getRoute({ ...params, routing_mode: routingModeRef.current }).catch((cause: unknown) => {
         if (cause instanceof ApiError) throw cause;
@@ -534,11 +555,17 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           target_node: target.properties.node_id,
           clearance_cm: clearanceCm,
           ignore_hazards: unsafe,
+          // Door-to-door when the provider allows it: the true GPS origin and
+          // the searched place's own coordinates. The graph planners ignore
+          // these and keep their snapped nodes.
+          origin: position,
+          destination: placeCoords ?? undefined,
+          destination_name: placeName ?? undefined,
         });
         void saveCache("route", plan);
         setRoute(plan);
         setSelected(target);
-        setDestinationQuery(target.properties.name ?? "");
+        setDestinationQuery(placeName ?? target.properties.name ?? "");
         setUnsafeRoute(unsafe);
         setArrived(false);
         arrivedRef.current = false;
@@ -568,7 +595,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         setPlanning(false);
       }
     },
-    [network, position, requestRoute, clearanceCm, planKey],
+    [network, position, requestRoute, clearanceCm, planKey, placeName, placeCoords],
   );
 
   useEffect(() => {
@@ -767,6 +794,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   }, [position, hazards, prefs.hazardAlerts]);
 
   // --- Instruction and arrival advances (FSD-FR-058) ----------------------
+  // What the driver searched for, in the order a person expects: the place
+  // they picked, then the road node, then the router's own destination name.
+  const destinationLabel =
+    placeName ?? selected?.properties.name ?? route?.destination_name ?? null;
   const progress = useMemo(
     () => (route && position ? progressAlongRoute(routeCoordinates(route), position) : null),
     [route, position],
@@ -792,11 +823,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       setArrived(true);
       setBanner({
         title: "You have arrived",
-        body: route.destination_name ?? selected?.properties.name ?? "Destination reached.",
+        body: destinationLabel ?? "Destination reached.",
         tone: "success",
       });
     }
-  }, [route, progress, selected]);
+  }, [route, progress, selected, destinationLabel]);
 
   // --- Voice guidance (Google-Maps-style spoken turn-by-turn) --------------
   // -1 means "nothing spoken for this route yet"; reset whenever a genuinely
@@ -844,15 +875,20 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // No search applies: render time ignores whatever addressResults/geocoding
   // are still holding from a previous query, rather than resetting them
   // synchronously from the effect body below.
-  const addressSearchActive = destinationQuery.trim().length >= 3 && searchBox !== null && !route;
+  const addressSearchActive = destinationQuery.trim().length >= 3 && !route;
   const visibleAddressResults = addressSearchActive ? addressResults : [];
   useEffect(() => {
-    if (!addressSearchActive || !searchBox) return;
+    if (!addressSearchActive) return;
     const needle = destinationQuery.trim();
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setGeocoding(true);
-      searchAddress(needle, searchBox, controller.signal)
+      // Proximity from the ref, not state: a GPS tick must not re-fire the search.
+      searchPlaces(
+        needle,
+        { box: searchBox, proximity: positionRef.current },
+        controller.signal,
+      )
         .then((results) => {
           if (!controller.signal.aborted) setAddressResults(results);
         })
@@ -887,12 +923,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Memoized so a GPS tick does not hand the Marker a new coordinate object.
   const destinationCoordinate = useMemo(
     () =>
-      selected
+      placeCoords ?? (selected
         ? toLatLng(selected.geometry.coordinates)
         : route
           ? toLatLng(route.geometry.coordinates[route.geometry.coordinates.length - 1])
-          : null,
-    [selected, route],
+          : null),
+    [placeCoords, selected, route],
   );
 
   /** A Quick Pick or Recent destination resolves against the live network so
@@ -905,14 +941,43 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       return;
     }
     setSelected(node);
+    setPlaceName(null);
+    setPlaceCoords(null);
     setDestinationQuery(node.properties.name ?? name);
     setError(null);
+  }
+
+  /** A long-press on the basemap: drop a pin and plan to it immediately,
+   * same as picking any other search result -- `selected`/`planRoute`'s own
+   * effect does the planning. The place name starts generic and upgrades in
+   * place once the reverse lookup resolves, so the route starts right away
+   * rather than waiting on a network call first. */
+  function handleMapLongPress(point: LatLng) {
+    if (started || !network) return;
+    const nearest = nearestNode(network.nodes.features, point);
+    if (!nearest) {
+      setError("That point is outside the mapped road network.");
+      return;
+    }
+    const generation = ++longPressGeneration.current;
+    setSelected(nearest);
+    setPlaceCoords(point);
+    setPlaceName("Dropped pin");
+    setDestinationQuery("Dropped pin");
+    setError(null);
+    void reverseGeocodeName(point.latitude, point.longitude).then((name) => {
+      if (!name || longPressGeneration.current !== generation) return;
+      setPlaceName(name);
+      setDestinationQuery(name);
+    });
   }
 
   function resetRoute() {
     void Speech.stop();
     setRoute(null);
     setSelected(null);
+    setPlaceName(null);
+    setPlaceCoords(null);
     setDestinationQuery("");
     setRefusal(false);
     setUnsafeRoute(false);
@@ -1029,10 +1094,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           heading={headingDeg}
           navZoom={navZoom}
           destination={destinationCoordinate}
-          destinationName={selected?.properties.name ?? route?.destination_name ?? null}
+          destinationName={destinationLabel}
           hazards={mapHazards}
           edges={network?.edges.features}
           viewMode={mapView}
+          onLongPressMap={started ? undefined : handleMapLongPress}
         />
 
         {/* Floating chrome, Google-Maps style: the search box before a route, the
@@ -1092,7 +1158,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   onChangeText={(value) => {
                     setDestinationQuery(value);
                     setSelected(null);
+                    setPlaceName(null);
+                    setPlaceCoords(null);
                     plannedFor.current = null;
+                    // A route-planning failure (e.g. a stale session token)
+                    // must not linger over the next search as if it were a
+                    // search result -- it reads as a Mapbox/key error there.
+                    setError(null);
                   }}
                   placeholder="Where to?"
                   placeholderTextColor={c.slate400}
@@ -1106,6 +1178,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     onPress={() => {
                       setDestinationQuery("");
                       setSelected(null);
+                      setPlaceName(null);
+                      setPlaceCoords(null);
                     }}
                     hitSlop={8}
                   >
@@ -1156,22 +1230,36 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   ) : null}
                   {recentDestinations.length > 0 ? (
                     <View>
-                      <Text style={styles.sectionLabel}>Recent</Text>
-                      {recentDestinations.map((recent) => (
-                        <TouchableOpacity
-                          key={`recent-${recent.nodeId}`}
-                          style={styles.resultRow}
-                          onPress={() => selectStoredDestination(recent.nodeId, recent.name)}
-                        >
-                          <View style={styles.resultIcon}>
-                            <Clock size={14} color={c.slate500} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.resultName}>{recent.name}</Text>
-                            <Text style={styles.resultMeta}>Recent destination</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
+                      <TouchableOpacity
+                        style={styles.sectionHeaderRow}
+                        onPress={() => setRecentCollapsed((collapsed) => !collapsed)}
+                        accessibilityRole="button"
+                        accessibilityLabel={recentCollapsed ? "Show recent destinations" : "Hide recent destinations"}
+                      >
+                        <Text style={styles.sectionLabel}>Recent</Text>
+                        {recentCollapsed ? (
+                          <ChevronDown size={14} color={c.slate400} />
+                        ) : (
+                          <ChevronUp size={14} color={c.slate400} />
+                        )}
+                      </TouchableOpacity>
+                      {recentCollapsed
+                        ? null
+                        : recentDestinations.map((recent) => (
+                            <TouchableOpacity
+                              key={`recent-${recent.nodeId}`}
+                              style={styles.resultRow}
+                              onPress={() => selectStoredDestination(recent.nodeId, recent.name)}
+                            >
+                              <View style={styles.resultIcon}>
+                                <Clock size={14} color={c.slate500} />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.resultName}>{recent.name}</Text>
+                                <Text style={styles.resultMeta}>Recent destination</Text>
+                              </View>
+                            </TouchableOpacity>
+                          ))}
                     </View>
                   ) : null}
                 </View>
@@ -1199,7 +1287,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 <View style={styles.refusalCard}>
                   <Text style={styles.refusalTitle}>No safe route</Text>
                   <Text style={styles.refusalBody}>
-                    Every verified route to {selected.properties.name ?? "this destination"} is blocked
+                    Every verified route to {destinationLabel ?? "this destination"} is blocked
                     for your {clearanceCm} cm clearance.
                   </Text>
                   <View style={styles.panelButtons}>
@@ -1219,30 +1307,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 </View>
               ) : null}
 
-              {matches.length > 0 || visibleAddressResults.length > 0 ? (
+              {visibleAddressResults.length > 0 || matches.length > 0 ? (
                 <ScrollView style={{ maxHeight: 230 }} keyboardShouldPersistTaps="handled">
-                  {matches.map((node) => (
-                    <TouchableOpacity
-                      key={`node-${node.id}`}
-                      style={styles.resultRow}
-                      onPress={() => {
-                        setSelected(node);
-                        setDestinationQuery(node.properties.name ?? "");
-                        setError(null);
-                      }}
-                    >
-                      <View style={styles.resultIcon}>
-                        <MapPin size={14} color={c.blue600} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.resultName}>{node.properties.name}</Text>
-                        <Text style={styles.resultMeta}>Road node {node.properties.node_id}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
                   {visibleAddressResults.map((result, index) => (
                     <TouchableOpacity
-                      key={`address-${index}`}
+                      key={`place-${result.id ?? index}`}
                       style={styles.resultRow}
                       onPress={() => {
                         const nearest = network
@@ -1253,26 +1322,62 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                           : null;
                         if (!nearest) return;
                         setSelected(nearest);
-                        setDestinationQuery(result.label);
+                        setPlaceName(result.name);
+                        setPlaceCoords({ latitude: result.latitude, longitude: result.longitude });
+                        setDestinationQuery(result.name);
                         setError(null);
                       }}
                     >
                       <View style={styles.resultIcon}>
-                        <Search size={14} color={c.blue600} />
+                        <MapPin size={14} color={c.blue600} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.resultName} numberOfLines={1}>
-                          {result.label}
+                          {result.name}
                         </Text>
-                        <Text style={styles.resultMeta}>Address · nearest road</Text>
+                        <Text style={styles.resultMeta} numberOfLines={1}>
+                          {position
+                            ? `${formatDistance(
+                                distanceMeters(position, {
+                                  latitude: result.latitude,
+                                  longitude: result.longitude,
+                                }),
+                              )} · ${result.subtitle}`
+                            : result.subtitle}
+                        </Text>
                       </View>
                     </TouchableOpacity>
                   ))}
+                  {/* Road nodes are a fallback for a junction name or offline
+                      use, not the answer to a place search. */}
+                  {visibleAddressResults.length === 0 && !(addressSearchActive && geocoding)
+                    ? matches.map((node) => (
+                        <TouchableOpacity
+                          key={`node-${node.id}`}
+                          style={styles.resultRow}
+                          onPress={() => {
+                            setSelected(node);
+                            setPlaceName(null);
+                            setPlaceCoords(null);
+                            setDestinationQuery(node.properties.name ?? "");
+                            setError(null);
+                          }}
+                        >
+                          <View style={styles.resultIcon}>
+                            <MapPin size={14} color={c.blue600} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.resultName}>{node.properties.name}</Text>
+                            <Text style={styles.resultMeta}>Road</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))
+                    : null}
                 </ScrollView>
               ) : addressSearchActive && geocoding ? (
                 <Text style={styles.emptyText}>Searching…</Text>
               ) : destinationQuery && !planning && !refusal ? (
-                <Text style={styles.emptyText}>No road node or address matches that search.</Text>
+                <Text style={styles.emptyText}>No location matches that search.</Text>
               ) : null}
             </View>
           ) : null}
@@ -1361,6 +1466,22 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               )}
             </TouchableOpacity>
           ) : null}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Zoom in"
+            onPress={() => mapRef.current?.zoomIn()}
+            style={styles.controlButton}
+          >
+            <ZoomIn size={17} color={c.slate800} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Zoom out"
+            onPress={() => mapRef.current?.zoomOut()}
+            style={styles.controlButton}
+          >
+            <ZoomOut size={17} color={c.slate800} />
+          </TouchableOpacity>
           {!started ? (
             <TouchableOpacity
               accessibilityRole="button"
@@ -1426,7 +1547,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           <View style={styles.routeSummary}>
             <View style={{ flex: 1 }}>
               <Text style={styles.routeDestination} numberOfLines={1}>
-                {route.destination_name ?? selected?.properties.name}
+                {destinationLabel ?? "Destination"}
               </Text>
               <Text style={styles.routeMeta}>
                 {[
@@ -1592,6 +1713,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             {started ? (
               <TouchableOpacity
                 style={styles.endButton}
+                activeOpacity={0.8}
                 onPress={() => {
                   void confirm({
                     title: "End navigation?",
@@ -1909,7 +2031,7 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     paddingHorizontal: space[22],
     paddingVertical: space[12],
     borderRadius: 12,
-    backgroundColor: c.inkBg,
+    backgroundColor: c.red600,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2007,6 +2129,12 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     letterSpacing: 0.4,
     textTransform: "uppercase",
     marginBottom: space[4],
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: space[4],
   },
   hintText: { fontSize: fontSize.caption, color: c.slate500, lineHeight: 16 },
   signedOutCard: {

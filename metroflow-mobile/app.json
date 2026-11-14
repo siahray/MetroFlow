@@ -53,15 +53,13 @@
         }
       ],
       "expo-sqlite",
-      [
-        "react-native-maps",
-        {
-          "androidGoogleMapsApiKey": "not-used-tiles-come-from-mapbox-or-carto"
-        }
-      ],
+      "@rnmapbox/maps",
       [
         "expo-build-properties",
         {
+          "ios": {
+            "buildReactNativeFromSource": true
+          },
           "android": {
             "enableMinifyInReleaseBuilds": false,
             "enableShrinkResourcesInReleaseBuilds": false
