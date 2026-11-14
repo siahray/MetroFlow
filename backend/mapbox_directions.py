@@ -17,6 +17,7 @@ must never fail a route request.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 from urllib.request import Request, urlopen
@@ -28,6 +29,19 @@ _DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox/driving/{coords}"
 # schemas.RouteInstruction.manoeuvre).
 _LEFT_MODIFIERS = {"left", "sharp left"}
 _RIGHT_MODIFIERS = {"right", "sharp right"}
+
+
+def _coordinate(value: float, limit: float) -> str:
+    """One coordinate as a URL-safe decimal, or ``ValueError`` if it is not one.
+
+    These values arrive as request query parameters, so they are untrusted
+    input to a URL: coercion to ``float`` plus fixed-precision formatting means
+    the output can only ever be a sign, digits and a point.
+    """
+    number = float(value)
+    if not math.isfinite(number) or abs(number) > limit:
+        raise ValueError(f"invalid coordinate: {value!r}")
+    return f"{number:.6f}"
 
 
 @dataclass
@@ -75,14 +89,18 @@ def fetch_driving_route(
 
     Returns ``None`` on any failure (network, non-200, malformed payload, or
     no route in the response) so the caller can fall back to the in-house
-    engine without special-casing each failure mode.
+    engine without special-casing each failure mode. A coordinate that is not
+    a real number in range is refused before any request is made.
     """
-    coords = f"{origin_lon},{origin_lat};{dest_lon},{dest_lat}"
-    url = (
-        _DIRECTIONS_URL.format(coords=coords)
-        + f"?geometries=geojson&steps=true&overview=full&access_token={access_token}"
-    )
     try:
+        coords = (
+            f"{_coordinate(origin_lon, 180)},{_coordinate(origin_lat, 90)}"
+            f";{_coordinate(dest_lon, 180)},{_coordinate(dest_lat, 90)}"
+        )
+        url = (
+            _DIRECTIONS_URL.format(coords=coords)
+            + f"?geometries=geojson&steps=true&overview=full&access_token={access_token}"
+        )
         request = Request(url, headers={"User-Agent": "MetroFlow flood advisory pilot"})
         with urlopen(request, timeout=5) as response:
             payload = json.load(response)
