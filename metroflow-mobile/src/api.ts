@@ -387,6 +387,14 @@ export function getRoute(params: {
   routing_mode?: "FASTEST" | "FLOOD_SAFE";
   /** Edge ids to exclude, for requesting an alternative to a previous route. */
   avoid_edges?: number[];
+  /** True GPS origin; a dry Mapbox route starts here instead of the snapped node. */
+  origin?: { latitude: number; longitude: number };
+  /** The searched place's real coordinates; a dry Mapbox route ends at the
+   * place itself (a mall forecourt, an address) instead of the nearest
+   * network node. FLOOD_SAFE stays graph-based and ignores this. */
+  destination?: { latitude: number; longitude: number };
+  /** Display name of the searched place, echoed back as destination_name. */
+  destination_name?: string;
 }): Promise<RoutePlan> {
   const query = new URLSearchParams({
     start_node: String(params.start_node),
@@ -396,6 +404,15 @@ export function getRoute(params: {
   if (params.ignore_hazards) query.set("ignore_hazards", "true");
   if (params.routing_mode) query.set("routing_mode", params.routing_mode);
   for (const edgeId of params.avoid_edges ?? []) query.append("avoid_edges", String(edgeId));
+  if (params.origin) {
+    query.set("origin_lat", String(params.origin.latitude));
+    query.set("origin_lon", String(params.origin.longitude));
+  }
+  if (params.destination) {
+    query.set("dest_lat", String(params.destination.latitude));
+    query.set("dest_lon", String(params.destination.longitude));
+  }
+  if (params.destination_name) query.set("dest_name", params.destination_name);
   return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`);
 }
 
