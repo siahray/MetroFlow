@@ -3,6 +3,8 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 import weather
 
 
@@ -89,3 +91,17 @@ def test_cached_rain_forecast_reuses_the_result_within_the_ttl(monkeypatch):
     )
     weather.cached_rain_forecast()
     assert len(calls) == 2  # stale cache triggers a refetch
+
+
+def test_coverage_for_extent_centres_the_gauge_on_the_loaded_network():
+    # The seed lattice (CI): centre 14.565 / 121.064, farthest corner ~2.9 km,
+    # inside the 5 km floor -- the old fixed gauge already covered it.
+    lat, lon, radius_m = weather.coverage_for_extent(14.545, 121.048, 14.585, 121.080)
+    assert lat == pytest.approx(14.565)
+    assert lon == pytest.approx(121.064)
+    assert radius_m == pytest.approx(weather.IMPACT_RADIUS_M)
+
+    # A re-imported real network is wider than the floor, so the radius has to
+    # grow to keep every corner covered -- the bug this function exists for.
+    _, _, wide_radius_m = weather.coverage_for_extent(14.55, 120.98, 14.80, 121.15)
+    assert wide_radius_m > weather.IMPACT_RADIUS_M

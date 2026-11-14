@@ -7,7 +7,13 @@ rules: junction splitting, node renaming, naming, direction, speed parsing and
 loop handling.
 """
 
-from osm_network import ImportEdge, build_graph, parse_maxspeed, way_direction
+from osm_network import (
+    ImportEdge,
+    _synthetic_elevation_m,
+    build_graph,
+    parse_maxspeed,
+    way_direction,
+)
 
 
 def element(element_type: str, element_id: int, tags: dict, **extra) -> dict:
@@ -162,3 +168,22 @@ def test_import_edge_is_a_frozen_dataclass():
         coordinates=((121.0, 14.6), (121.01, 14.6)),
     )
     assert edge == ImportEdge(1, 1, 2, 100.0, 50.0, 2, "X", "BOTH", ((121.0, 14.6), (121.01, 14.6)))
+
+
+def test_synthetic_elevation_is_deterministic_and_varies_across_the_network():
+    # Same coordinates, always the same elevation (a re-import must be stable).
+    assert _synthetic_elevation_m(14.65, 121.05) == _synthetic_elevation_m(14.65, 121.05)
+    # Two real points across the Quezon City bbox must not collapse to one
+    # flat value -- that was the exact bug: every edge getting the same
+    # ponding depth, with nothing for flood-aware routing to route around.
+    samples = {
+        _synthetic_elevation_m(lat, lon)
+        for lat, lon in [(14.60, 121.00), (14.65, 121.05), (14.70, 121.10), (14.75, 121.02)]
+    }
+    assert len(samples) > 1
+
+
+def test_synthetic_elevation_never_goes_below_the_floor():
+    for lat in (14.0, 14.5, 15.0):
+        for lon in (120.5, 121.0, 121.5):
+            assert _synthetic_elevation_m(lat, lon) >= 1.0
