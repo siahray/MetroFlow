@@ -27,8 +27,10 @@ try:
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Pt, RGBColor
+
+    HAVE_DOCX = True
 except ImportError:  # pragma: no cover - operator guidance
-    sys.exit("python-docx is required: pip install python-docx")
+    HAVE_DOCX = False
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
@@ -58,10 +60,15 @@ MATH_TOKENS = [
     (r"\\min\b", "min"),
     (r"\\max\b", "max"),
     (r"\\log\b", "log"),
+    (r"\\exp\b", "exp"),
+    (r"\\quad\b", " "),
+    (r"\\(?:left|right)\b", ""),
     (r"\\[lr]eft\b", ""),
+    (r"\^\*", "*"),
+    (r"\s*&\s*", " "),
     (r"\\[{}]", ""),
     (r"\\_", "_"),
-    (r"\\[,;: ]", " "),
+    (r"\\[,;: !]", " "),
 ]
 
 
@@ -81,8 +88,19 @@ def latex_to_text(expression: str) -> str:
     return re.sub(r"\s+", " ", text.replace("{", "").replace("}", "")).strip()
 
 
+def _looks_like_math(span: str) -> bool:
+    """Distinguish `$…$` math from US-dollar prices such as `$25/mo … $10/mo`."""
+    if "\\" in span or "^" in span or "{" in span:
+        return True
+    return not re.search(r"[A-Za-z]{2,}", span)
+
+
 def inline_math(text: str) -> str:
-    return re.sub(r"\$([^$\n]+)\$", lambda m: latex_to_text(m.group(1)), text)
+    return re.sub(
+        r"\$([^$\n]+)\$",
+        lambda m: latex_to_text(m.group(1)) if _looks_like_math(m.group(1)) else m.group(0),
+        text,
+    )
 
 INLINE = re.compile(r"(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\([^)]+\))")
 
@@ -300,6 +318,9 @@ def build(markdown_path: Path, template_path: Path, output_path: Path) -> None:
 
 
 def main() -> int:
+    if not HAVE_DOCX:
+        print("python-docx is required: pip install python-docx", file=sys.stderr)
+        return 1
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for markdown_name, template_name in DOCUMENTS:
         markdown_path = SOURCES / markdown_name
