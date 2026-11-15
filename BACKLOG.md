@@ -111,7 +111,7 @@ record of what actually happened, not as live links.
 ## 1. Documentation drift (code is ahead of the docs)
 
 ```
-████████████████████ 100%  (1 / 1)
+████████████████████ 100%  (1 / 1, re-opened and re-closed 15 Nov 2026)
 ```
 
 Done in the 8 November docs sync. `FEATURES_AND_DELIVERABLES.md` counts offline
@@ -121,8 +121,25 @@ Done in the 8 November docs sync. `FEATURES_AND_DELIVERABLES.md` counts offline
 ticks the release checks that are provable; `TSD.md` gains ADR-024 (on-device
 SQLite and `client_id`) and the two report columns it was missing; both design
 baselines carry an 8 November status note with corrected traceability; and
-`AGENTS.md` no longer calls offline a placeholder. No open items remain in this
-section.
+`AGENTS.md` no longer calls offline a placeholder.
+
+**Re-opened 15 Nov 2026:** the Project Lead supplied the regenerated formal
+`docx` set (BRD/Business Case/FSD/Project Charter/PMP/TSD/Test Case Workbook)
+and asked what had changed since. Three feature commits landed after the last
+full doc regeneration (`f8bd103`) with no formal-document update at all — only
+`BACKLOG.md` itself recorded them (the admin incident map and mobile
+Mapbox/search entries just above, and the flood-calibration fix from this same
+session's hydrology work): the admin SOS incident location map, the driver
+app's Mapbox basemap/place-search/drop-a-pin/door-to-door navigation, and the
+flood-simulation recalibration for the real network. Drafted
+`docs/CR-009.md`, `docs/CR-010.md` and `docs/CR-011.md` recording each as
+**Approved by the Project Lead**, added them to `docs/README.md`'s document
+index and revision history (v2.1) and `docs/APPROVALS.md`'s decision record.
+Each CR reserves its own next-free `FSD-FR`/`TC`/`BRULE`/`LIM`/`ADR`
+identifiers but does **not** yet fold them into `BRD.md`/`FSD.md`/`TSD.md`'s
+own tables — that cross-document identifier sync (the same two-step pattern
+CR-007 followed: drafted first, synced in a later pass) is the next open item
+here, re-closed after it happens.
 
 ## 2. Functional gaps
 

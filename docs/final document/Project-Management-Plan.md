@@ -1,0 +1,489 @@
+# PROJECT MANAGEMENT PLAN
+
+## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
+
+Version 1.0
+
+## Document Information
+
+| Item            | Details                                         |
+| --------------- | ----------------------------------------------- |
+| Document Title  | Project Management Plan (PMP)                   |
+| Project Name    | MetroFlow                                       |
+| Project Sponsor | «Project Sponsor»                               |
+| Business Owner  | «Client Representative» — LGU Operations (CDMO) |
+| Project Manager | Khent U. Lapating                             |
+| Budget          | PHP634,710 proposed (standardized with Business_Case.md §7 and Project_Charter.md §B: CAPEX PHP588,500 + Year-1 OPEX PHP46,210; see the Cost Management table below) |
+| Go-Live         | [TBC]                                           |
+
+## Revision History
+
+| Version | Date        | Author            | Description              | Status |
+| ------- | ----------- | ----------------- | ------------------------ | ------ |
+| 1.0     | 21 Oct 2026 | Khent U. Lapating | Initial Baseline Release | Review |
+| 1.1     | 15 Nov 2026 | Khent U. Lapating | CR-001 accepted — production network recalibration, Mapbox driver navigation and admin incident location visualizer | Review |
+
+## Approval Sign-Off
+
+| Approver                | Role             | Signature | Date  |
+| ----------------------- | ---------------- | --------- | ----- |
+| «Project Sponsor»       | Project Sponsor  |           | [TBC] |
+| «Client Representative» | Business Owner   |           | [TBC] |
+| Sigfred Jayme       | Academic Adviser |           | [TBC] |
+| Khent U. Lapating     | Project Manager  |           | [TBC] |
+
+## Table of Contents
+
+1. Executive Summary
+2. Project Overview
+3. Scope Management
+4. Project Schedule
+5. Resource Management
+6. Cost Management
+7. RAID Log
+8. RACI Matrix
+9. Communication Management
+10. Testing Management
+11. Success Metrics
+12. Appendices
+
+## Executive Summary
+
+MetroFlow gives the LGU operations centre a verified picture of road passability
+during flooding, a traceable path from field report to dispatch decision, and a
+way to warn and reroute drivers before they enter the water. The pilot covers one
+corridor, a simulation and routing API, a browser-based dispatch portal and a
+native Expo driver app.
+
+This plan defines how the work is executed and controlled: schedule, resources,
+cost, risk, quality, communication and change. The project is delivered
+through sequential Waterfall phases with documented phase gates.
+
+Current position: the baseline API, schema and portal are built and tested, and so is
+the driver-app — authentication, report intake and moderation, live map, hazard
+publishing and drawing, fleet dispatch, sensors, exports, offline operation and the
+driver app are implemented and hosted. Every unconfirmed date or amount is marked
+`[TBC]`; remaining work is test depth and operations (BACKLOG.md).
+
+## Project Overview
+
+| Item         | Description                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| Purpose      | Replace unverifiable verbal coordination with a shared network picture and a recorded triage decision |
+| Users        | LGU dispatchers, rescue commanders, field responders and drivers/commuters using the app              |
+| Deliverables | API engine, LGU portal, driver app, versioned database, CI/CD pipeline, document set, demonstration   |
+| Out of scope | Native store builds, real CCTV, carrier-grade SOS, offline tiles, multi-LGU tenancy, public portal    |
+| Constraints  | Academic term, part-time effort, no paid Code Security, synthetic data only                           |
+
+### Delivery approach
+
+The project follows a sequential Waterfall methodology with the following phases:
+
+| Phase                    | Description                                                                                                                                           | Schedule                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Requirements             | Gather and document all business and technical requirements.                                                                                          | August 18, 2026 – August 20, 2026  |
+| System Design            | Create architecture, data model, and technical specifications.                                                                                        | August 21, 2026 – August 26, 2026  |
+| Implementation           | Build the backend API, database schema, admin portal, and driver app (API Implementation: Aug 27 – Oct 1, 2026; Portal Implementation: Oct 2 – Nov 5, 2026). | August 27, 2026 – November 5, 2026 |
+| Verification / Testing   | Execute unit tests, integration tests, security scans, and user acceptance testing (UAT).                                                             | November 6, 2026 – November 23, 2026 |
+| Deployment / Maintenance | Deploy to production, hand over to operations, and provide maintenance support.                                                                       | November 24, 2026 – November 27, 2026 |
+
+**Definition of done:** merged to `main`; tests pass for the affected area; lint
+and build pass when the web app is touched; the FSD status reflects reality; no
+new High or Medium ZAP finding.
+
+## Scope Management
+
+### In scope
+
+- Flood simulation across the pilot road graph.
+- Clearance-aware route computation with coordinates, turn instructions and
+  hazard avoidance.
+- LGU portal: authenticated login, live map, queue, evidence desk, drawing
+  tools, fleet, dispatch actions and operations log.
+- Driver app: navigation, rerouting, proximity alerts, reports, offline mode,
+  telemetry and SOS.
+- Hazard verification and live publication over SSE.
+- River and rain gauge ingestion with advisory road impact.
+- API-issued session tokens, route-level RBAC and audit writes.
+- Versioned PostGIS schema with row-level security.
+- Automated build, test, security and migration pipeline for web and mobile.
+
+### Out of scope
+
+- Native iOS or Android store builds.
+- CCTV. Evidence is the photo the reporter submits from their own phone.
+- Production SMS, telephony or carrier integration for SOS.
+- Offline basemap tiles; the cached graph is used offline.
+- Production single sign-on.
+- Multi-LGU tenancy and billing.
+- Public information portal.
+
+### Change control
+
+A change request is required when a request adds or removes a deliverable,
+crosses the scope boundary, changes a `Must` requirement, moves the schedule by
+more than one week, changes the budget, or changes an architecture decision.
+
+```text
+Request → Log → Impact assessment → Decision → Update documents → Implement
+```
+
+No change is implemented before a decision is recorded. Emergency fixes for a
+broken `main` may proceed, with the request raised the same day.
+
+## Project Schedule
+
+| Phase                    | Start            | End              | Status      |
+| ------------------------ | ---------------- | ---------------- | ----------- |
+| Requirements             | August 18, 2026  | August 20, 2026  | Completed   |
+| System Design            | August 21, 2026  | August 26, 2026  | Completed   |
+| Implementation — API     | August 27, 2026  | October 1, 2026  | Completed   |
+| Implementation — Portal  | October 2, 2026  | November 5, 2026 | Completed   |
+| Verification / Testing   | November 6, 2026 | November 23, 2026| In Progress |
+| Deployment / Maintenance | November 24, 2026| November 27, 2026| Planned     |
+
+Dates above are as recorded in the git history and work logs. The
+projected end date is a planning estimate based on the 18 Aug 2026 start date
+plus ≈14.5 weeks for the deployment and panel defence on November 27, 2026. The actual defence date is an
+institutional/panel decision this document cannot set on its own — this row is
+this document's own planning estimate, not a confirmed date, and the Project
+Lead or adviser may move it.
+
+Milestones:
+
+| ID  | Milestone                           | Exit criterion                                        |
+| --- | ----------------------------------- | ----------------------------------------------------- |
+| M1  | Charter and requirements approved   | Charter and BRD signed off                            |
+| M2  | Architecture and data design frozen | TSD accepted; schema drafted                          |
+| M3  | API engine operational              | Network, simulation and routing pass contract tests   |
+| M4  | Dispatch portal operational         | Triage flow demonstrated end-to-end                   |
+| M5  | Hardening complete                  | ZAP clean at High/Medium; no open critical defects    |
+| M6  | Baseline documentation and demo     | Baseline document set accepted; baseline demonstrated |
+| M7  | Realtime, reports and fleet API     | Auth, reports, hazards, SSE and fleet contract tests  |
+| M8  | LGU map, moderation and dispatch    | Map, evidence, draw/publish and dispatch E2E          |
+| M9  | Driver app, sensors and defence     | Offline E2E, sensor impact and panel demonstration    |
+
+**Critical path:** requirements → data model → simulation → routing → auth →
+reports and hazards → SSE → fleet and dispatch → map → driver app → hardening →
+defence. The sensor path runs in parallel but is not done until a threshold
+breach reaches the map as an advisory without publishing a hazard.
+
+## Resource Management
+
+| Role                       | Resource                                              | Allocation |
+| -------------------------- | ----------------------------------------------------- | ---------- |
+| Project Manager            | Khent U. Lapating                                     | 50%        |
+| Business Analyst           | «Client Representative»                               | 20%        |
+| Architect                  | Khent U. Lapating                                     | 30%        |
+| Backend Developers         | Josiah Ray S. De Vera / Khent U. Lapating             | 100%       |
+| Frontend Developers        | Josiah Ray S. De Vera / Marck Aaron V. Felipe         | 100%       |
+| Mobile Developer           | Josiah Ray S. De Vera / John Gabriel D. Vergara       | 100%       |
+| UX Designer                | Marck Aaron V. Felipe                                 | 40%        |
+| QA and Documentation       | John Gabriel D. Vergara                               | 60%        |
+| Adviser                    | Sigfred Jayme                                         | 5%         |
+| Dispatcher representatives | «Lead Dispatcher»                                     | 5%         |
+
+Allocations are part-time estimates against a nominal working week. One person
+may hold more than one role; every role must have a named person before M2.
+
+## Cost Management
+
+| Category                                    | Amount (PHP) |
+| ------------------------------------------- | ------------ |
+| Development effort (in-kind)               | PHP520,000   |
+| Hosted database                             | PHP18,450    |
+| Application hosting                         | PHP14,760    |
+| EAS build, app distribution and developer accounts | PHP0 (free tier at pilot cadence; public store fees not budgeted, CA-006) |
+| Evidence storage                            | PHP0 (included in the hosted-database line — stored in the report row, not a separate service) |
+| Map, weather and data services              | PHP0 (Mapbox free tier at pilot volume; OpenWeather/OpenTopography/Copernicus free or offline) |
+| Domain and TLS                              | PHP3,000     |
+| Test devices and data                       | PHP15,000    |
+| Training and handover                       | PHP10,000    |
+| Contingency (10% of CAPEX lines only: 520,000+15,000=535,000) | PHP53,500 |
+| **Total**                                   | **PHP634,710** |
+
+Illustrative projection (not a quotation or a funding request, CA-001):
+priced against each vendor's current rate card for the OPEX lines and a
+market junior-developer rate for in-kind student effort; see
+Business_Case.md §7 for the full cost model and sources. The budget
+convention is standardized at PHP634,710 across every project document
+(this PMP, Business_Case.md §7, Project_Charter.md §B): CAPEX
+(PHP535,000 + 10% contingency = PHP588,500) plus Year-1 OPEX (PHP46,210,
+no contingency applied).
+
+Rules:
+
+1. No paid service is subscribed without sponsor approval.
+2. Free tiers are the default; exceeding one requires a documented reason.
+3. Effort is tracked weekly so the in-kind cost in the business case is real.
+
+## RAID (Risks, Assumptions, Issues and Dependencies) Log
+
+| ID    | Type       | Description                                                       | Owner            | Impact | Status        |
+| ----- | ---------- | ----------------------------------------------------------------- | ---------------- | ------ | ------------- |
+| R-001 | Risk       | Scope creep beyond the approved pilot boundary                    | PM               | High   | Open          |
+| R-002 | Risk       | Hydrological model judged unrealistic                             | Backend Lead     | High   | Open          |
+| R-003 | Risk       | Loss of a team member                                             | PM               | Medium | Open          |
+| R-004 | Risk       | Hosted database never configured                                  | Backend Lead     | Medium | Open          |
+| R-005 | Risk       | Security findings surface late                                    | QA               | Medium | Open          |
+| R-006 | Risk       | Institutional format differs from the document set                | PM               | Low    | Open          |
+| R-007 | Risk       | Route authorisation not delivered                                | PM               | High   | Closed        |
+| R-008 | Risk       | No baseline data from the client                                  | Business Analyst | Medium | Open          |
+| R-009 | Risk       | Pilot corridor changes late                                       | Business Analyst | Medium | Open          |
+| R-010 | Risk       | Hosted costs exceed the free tier                                 | Backend Lead     | Low    | Open          |
+| R-011 | Risk       | GitHub or Supabase outage during a milestone                      | PM               | Low    | Open          |
+| R-012 | Risk       | Dispatchers reject the tool                                       | Frontend Lead    | Medium | Open          |
+| R-013 | Risk       | A commercial platform is chosen later                             | PM               | Low    | Open          |
+| R-014 | Risk       | Personal data incident during testing                             | QA               | Medium | Open          |
+| R-015 | Risk       | Drivers do not adopt the app                                      | PM               | High   | Open          |
+| R-016 | Risk       | Background-location limits on iOS                                 | Mobile Lead      | Medium | Open          |
+| R-017 | Risk       | Driver location privacy incident                                  | QA               | Medium | Open          |
+| R-018 | Risk       | Sensor false positives trigger unnecessary closures               | Backend Lead     | Medium | Open          |
+| R-019 | Risk       | Event stream overload or dropped updates                          | Backend Lead     | Medium | Open          |
+| R-020 | Risk       | Evidence upload abuse exhausts storage                            | Backend Lead     | Medium | Open          |
+| A-001 | Assumption | PostGIS-capable PostgreSQL is available                           | Backend Lead     | High   | Open          |
+| A-002 | Assumption | Pilot corridor is representative enough to demonstrate routing    | PM               | Medium | Open          |
+| A-003 | Assumption | Free or institutional tiers suffice for the pilot                 | PM               | Medium | Open          |
+| A-004 | Assumption | Dispatchers have a modern browser and connectivity                | Business Analyst | High   | Open          |
+| A-005 | Assumption | Rainfall intensity is supplied manually or from Open-Meteo (live rain gate, implemented); OpenWeather is an optional supplementary source; PAGASA telemetry is blocked on OD-D25 | Backend Lead     | Medium | Open          |
+| A-006 | Assumption | Client provides corridor and barangay naming                      | Business Analyst | Low    | Open          |
+| A-007 | Assumption | Drivers have a smartphone with camera and geolocation             | Business Analyst | High   | Open          |
+| A-008 | Assumption | Connectivity can drop during an event                             | PM               | High   | Open          |
+| A-009 | Assumption | Sensor data may be simulated but is labelled                      | Backend Lead     | Medium | Open          |
+| A-010 | Assumption | Mapbox Directions API used for dry-state routing (ADR-025); portal basemap is keyless Carto Positron (ADR-022); OSM raster remains the swap-in fallback | Frontend Lead    | Low    | Open          |
+| I-001 | Issue      | No authentication on the baseline API or portal                   | PM               | High   | Closed        |
+| I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Closed        |
+| I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround    |
+| I-004 | Issue      | CCTV is out of scope and gauges may be simulated                  | Business Analyst | Low    | Accepted      |
+| I-005 | Issue      | Driver-app scope is planned, not implemented                     | PM               | High   | Closed        |
+| D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open          |
+| D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open          |
+| D-003 | Dependency | Client confirms the pilot corridor                                | Business Analyst | High   | Open          |
+| D-004 | Dependency | Supabase credentials and pilot accounts supplied at deployment    | Backend Lead     | High   | Open          |
+| D-005 | Dependency | Evidence stored as `bytea` in the `incident_reports` row (ADR-023); no separate volume or object store | Backend Lead | Low | Closed |
+| D-006 | Dependency | Mapbox and OSM tiles remain reachable within their usage policies | Frontend Lead    | Low    | Open          |
+| D-007 | Dependency | Weather, terrain and imagery providers remain within quota        | Backend Lead     | Low    | Open          |
+| D-008 | Dependency | Client supplies the HTML/CSS template before UI implementation    | Frontend Lead    | High   | Open          |
+
+Risk scoring and detailed responses are in Appendix A.
+
+## RACI Matrix
+
+R = responsible, A = accountable, C = consulted, I = informed.
+
+| Activity               | Sponsor | PM  | BA  | DEV | QA  |
+| ---------------------- | ------- | --- | --- | --- | --- |
+| Requirements           | A       | C   | R   | I   | I   |
+| Architecture           | I       | A   | C   | R   | C   |
+| Backend development    | I       | A   | I   | R   | C   |
+| Portal development     | I       | A   | C   | R   | C   |
+| Driver app development | I       | A   | C   | R   | C   |
+| Realtime event stream  | I       | A   | I   | R   | C   |
+| Sensor ingestion       | I       | A   | C   | R   | C   |
+| Test strategy          | I       | A   | I   | C   | R   |
+| Security scan          | I       | A   | I   | C   | R   |
+| Hosted migration       | I       | A   | C   | R   | C   |
+| Documentation          | A       | R   | C   | C   | R   |
+| UAT and demonstration  | A       | R   | C   | C   | C   |
+| Change approval        | A       | R   | C   | I   | I   |
+
+## Communication Management
+
+| Audience              | Frequency     | Method                                |
+| --------------------- | ------------- | ------------------------------------- |
+| Project team          | Twice weekly  | Progress meeting                      |
+| Project adviser       | Bi-weekly     | Review meeting                        |
+| Project sponsor       | At milestones | Written status report                 |
+| Dispatcher users      | M4, M5 and M8 | Demo and usability session            |
+| Rescue commanders     | M8            | Dispatch walkthrough                  |
+| Driver pilot group    | M9            | Guided install and offline field test |
+| Steering stakeholders | Monthly       | Progress briefing                     |
+| Panel                 | M9            | Document submission and demonstration |
+
+**Escalation:** blocker at the progress meeting → owner resolves within one day → Project
+Team Lead (Khent U. Lapating) → Sigfred Jayme / «Project Sponsor» for scope. Academic or ethical
+concerns go to the adviser immediately.
+
+### Change log
+
+| CR      | Date        | Scope                                                                 | Status   |
+| ------- | ----------- | --------------------------------------------------------------------- | -------- |
+| CR-001  | 15 Nov 2026 | Production network hydrological recalibration, Mapbox driver navigation and door-to-door routing, admin incident location visualizer. Affects BRD, FSD, TSD, PMP and Project Charter | Approved 15 Nov 2026 |
+
+## Testing Management
+
+| Phase              | Owner        | Exit Criteria                                                       |
+| ------------------ | ------------ | ------------------------------------------------------------------- |
+| Unit tests         | DEV          | All pass; hydrology and routing edge cases covered                  |
+| Contract tests     | QA + DEV     | Every endpoint returns the documented shape and status codes        |
+| Static checks      | QA           | ESLint, TypeScript and production build pass                        |
+| Database migration | DEV          | `alembic upgrade head` on a clean database; `alembic check` clean   |
+| Security scan      | QA           | No High or Medium ZAP findings                                      |
+| System integration | QA           | End-to-end triage flow works against the running stack              |
+| Mobile unit        | Mobile Lead  | Navigation, depth, throttle, cache and queue logic pass             |
+| Offline E2E        | QA           | Cached route renders offline and a queued report syncs exactly once |
+| Realtime           | Backend Lead | Publish event reaches SSE under 100 ms p95 in the test harness      |
+| Upload security    | QA           | Oversize, wrong MIME and EXIF-bearing images handled correctly      |
+| UAT                | Business     | Dispatcher and driver complete the scripted scenarios; sign-off     |
+| Regression         | QA           | No S1 or S2 defects open before demonstration                       |
+
+| Test type              | Tool                                       |
+| ---------------------- | ------------------------------------------ |
+| Unit                   | pytest (`-m "not integration"`)            |
+| Contract / integration | pytest (`-m integration`) against PostGIS  |
+| Web lint and types     | ESLint, `next build`                       |
+| Web unit               | Bun test (`bun test lib`)                  |
+| Driver unit            | Bun test (planned)                         |
+| Browser E2E            | Playwright (online; portal smoke in Web CI) |
+| Security               | OWASP ZAP API scan, CodeQL (when licensed) |
+| Migration              | Alembic                                    |
+| Exploratory            | Scripted browser session                   |
+
+This table is the agreed test strategy. Present in the repository today: pytest
+suites, ESLint and `next build`, `tsc --noEmit` for the driver app, `bun test`
+over `metroflow-admin/lib`, a Playwright smoke over the portal (`metroflow-admin/e2e`,
+API stubbed in the browser), Alembic, the ZAP API scan workflow and CodeQL.
+
+## Success Metrics
+
+| KPI                                           | Target                        |
+| --------------------------------------------- | ----------------------------- |
+| `Must` requirements accepted                  | 100% by M9                    |
+| Report-to-triage time                         | Below the M1 baseline `[TBC]` |
+| Decisions with actor, timestamp and action    | 100%                          |
+| Dispatch attempts aborted for road conditions | 0 per event                   |
+| High/Medium security findings                 | 0                             |
+| CI pass rate                                  | ≥ 95%                         |
+| Requirement coverage                          | 100% of `Must` by M9          |
+| System Usability Scale                        | ≥ 75 `[TBC]`                  |
+| Hazard publish to SSE event                   | ≤ 100 ms at p95, server-side  |
+| Offline route and queued report               | 100% of scripted runs         |
+| Privileged actions blocked without a role     | 100%                          |
+| SOS acknowledged within the pilot target      | `[TBC]`                       |
+| Reports with a recorded moderation outcome    | 100%                          |
+
+**Production caveat:** the latency target above (*Hazard publish to SSE event,
+≤ 100 ms at p95 server-side*) is the architectural target, not a current
+measurement. Re-measured 13 Nov 2026 against the real Quezon City network over
+the hosted deployment, it is **not met** — the hosted database round trip and
+connection-pool contention dominate the path. See `BRD.md` NFR-001, NFR-002 and
+NFR-019, and `TSD.md` LIM-028, for the figures and the remaining work.
+
+## Appendices
+
+### Appendix A — Risk scoring and responses
+
+Probability and impact are scored High (3), Medium (2), Low (1); score is their
+product. Risks scoring 6 or above are reviewed weekly.
+
+| ID    | Risk                           | P   | I   | Score | Response                                                         | Trigger                             |
+| ----- | ------------------------------ | --- | --- | ----- | ---------------------------------------------------------------- | ----------------------------------- |
+| R-001 | Scope creep beyond the pilot boundary | 3   | 3   | 9     | Hold the approved boundary; every addition needs a change request | New feature requested after a phase gate |
+| R-002 | Model judged unrealistic       | 3   | 3   | 9     | Declare calibration; validate against documented events          | Adviser or client challenges output |
+| R-003 | Loss of a team member          | 2   | 3   | 6     | Pair on critical paths; record decisions                         | Missed progress meetings for a week |
+| R-004 | Hosted database not configured | 3   | 2   | 6     | Local stack is the primary demo; CD is gated and visible         | Secret absent at M5                 |
+| R-005 | Late security findings         | 2   | 3   | 6     | Weekly ZAP gate from the first build                             | New Medium finding                  |
+| R-006 | Format mismatch                | 2   | 2   | 4     | Confirm the rubric at M1                                         | Adviser requests restructuring      |
+| R-007 | Route authorisation not delivered | 3 | 3 | 9 | Delivered 27 Oct 2026: tokens plus per-route role dependencies; rate limits added 28 Oct 2026 (LIM-006). Residual risk is the unavailable edge WAF (LIM-025) | Pilot asked to handle real data |
+| R-008 | No baseline data               | 3   | 2   | 6     | Use audit-trail and risk benefits; collect during pilot          | Baseline absent at M1 review        |
+| R-009 | Corridor changes late          | 2   | 3   | 6     | Freeze the corridor at M2                                        | New barangay list arrives           |
+| R-010 | Hosted costs exceed free tier  | 2   | 2   | 4     | Keep hosting provider-agnostic                                   | Usage warning from provider         |
+| R-011 | Provider outage or quota       | 2   | 3   | 6     | OSM fallback, manual rainfall, cached derived data               | Provider status page or quota alert |
+| R-012 | Dispatchers reject the tool    | 2   | 3   | 6     | Usability sessions from M4; keep the radio process running       | Negative feedback in session        |
+| R-013 | Commercial alternative chosen  | 1   | 2   | 2     | Publish the API contract; routing engine outlives the portal     | Procurement announcement            |
+| R-014 | Personal data incident         | 1   | 3   | 3     | Synthetic data only; RLS verified; no personal data in logs      | Any real report used in a demo      |
+| R-015 | Drivers do not adopt the app   | 3   | 3   | 9     | Usability tests; QR onboarding; synthetic reports fallback       | Low install or report count at M9   |
+| R-016 | Background-location limits     | 2   | 2   | 4     | Foreground fallback; permission tests; document the limit        | Telemetry gap on iOS devices        |
+| R-017 | Location privacy incident      | 2   | 3   | 6     | Rounding, hashing, retention, role-only access                   | Unrounded coordinate in a response  |
+| R-018 | Sensor false positive          | 2   | 2   | 4     | Advisory until confirmed; debounce; per-sensor thresholds        | Advisory without a matching flood   |
+| R-019 | Event stream overload          | 2   | 2   | 4     | `event_log` relay; bounded queues; reconnect snapshot            | SSE lag above target                |
+| R-020 | Evidence storage abuse         | 2   | 2   | 4     | Size cap, MIME sniff, rate limit; bytes served only through an authenticated endpoint | Unexpected growth in report photo bytes |
+
+### Appendix B — Change request template
+
+```text
+CR id:             CR-nnn
+Raised by:         <name>              Date: <date>
+Description:       <what is being asked>
+Reason:            <why>
+Impact — scope:    <requirements affected>
+Impact — schedule: <weeks>
+Impact — cost:     <amount or none>
+Impact — risk:     <new or changed risks>
+Decision:          <approved / deferred / rejected>   By: <name>   Date: <date>
+Documents updated: <list>
+```
+
+### Appendix C — Milestone status report template
+
+```text
+Milestone:            M<n> — <name>
+Period:               <start> to <end>
+Exit criteria met:    <yes/no, with evidence>
+Schedule variance:    <days>
+Open risks:           <ids and scores>
+Open issues:          <ids and severity>
+Decisions required:   <list>
+Confidence in next:   <high/medium/low + reason>
+```
+
+### Appendix D — Configuration and documentation management
+
+| Item              | Rule                                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| Branching         | Short-lived feature branches; `main` always releasable            |
+| Commit messages   | Imperative summary; body explains why                             |
+| Pull requests     | Review, green CI and a requirement reference                      |
+| Tags              | `backend-v*` for container releases                               |
+| Secrets           | Never committed; backend host env or repository secrets           |
+| Public keys       | `NEXT_PUBLIC_*` only; origin- and scope-restricted, never secrets |
+| UI source         | Client HTML/CSS template; no bespoke design without a change      |
+| Pre-commit        | Husky: Ruff for Python, ESLint and Prettier for web and mobile    |
+| Driver app        | Separate package in `metroflow-mobile/`; Expo Router, own lockfile and Expo build |
+| Document versions | Increment on a new baseline; revision history updated             |
+| Traceability      | Requirement ids are stable; changes add rows, never renumber      |
+| Unknowns          | `[TBC]` and `«placeholder»` are explicit, never silently invented |
+
+### Appendix E — Decision log
+
+| ID      | Decision                               | Date  | Decided by          | Recorded in                   |
+| ------- | -------------------------------------- | ----- | ------------------- | ----------------------------- |
+| ADR-001 | Alembic owns the schema                | 26 Aug 2026 | Khent U. Lapating     | TSD §6      |
+| ADR-002 | Supabase as hosted Postgres            | 26 Aug 2026 | Khent U. Lapating     | TSD §6      |
+| ADR-007 | RLS deny-by-default                    | 26 Aug 2026 | Josiah Ray S. De Vera | TSD §6      |
+| ADR-014 | Driver client is a native Expo app     | 27 Oct 2026 | Khent U. Lapating     | TSD §6      |
+| ADR-015 | SSE over a durable `event_log` relay   | 27 Oct 2026 | Josiah Ray S. De Vera | TSD §6      |
+| ADR-021 | API-issued HS256 tokens + bcrypt       | 27 Oct 2026 | Josiah Ray S. De Vera | TSD §6      |
+| ADR-023 | Report evidence lives in the report row | 30 Oct 2026 | Josiah Ray S. De Vera | TSD §6      |
+| ADR-018 | Offline uses cached graph              | 27 Oct 2026 | Josiah Ray S. De Vera | TSD §6      |
+| ADR-019 | Portal basemap: MapLibre renderer (refined by ADR-022 to keyless Carto Positron) | 27 Oct 2026 | Josiah Ray S. De Vera | TSD §6 |
+| ADR-022 | Portal basemap is the keyless Carto Positron style        | 29 Oct 2026 | Josiah Ray S. De Vera | TSD §6 |
+| ADR-025 | Dry-state FASTEST routing answers via Mapbox Directions API | 13 Nov 2026 | Khent U. Lapating | TSD §6 |
+| ADR-020 | One live provider; preprocess the rest | 27 Oct 2026 | Josiah Ray S. De Vera | TSD §6 |
+| ADR-026 | Driver app basemap and search migrate to the Mapbox SDK, with keyless Nominatim fallback | 15 Nov 2026 | Khent U. Lapating | TSD §6 |
+
+### Appendix F — Closure and handover
+
+- [x] All `Must` functional requirements accepted (FSD), including BR-013 to BR-018.
+- [x] CI green on `main` (Backend, Web, Mobile, CodeQL).
+- [x] ZAP clean at High/Medium.
+- [x] Hosted database at head, or the limitation documented.
+- [x] Token enforcement on every privileged route; role violations return 403 and change nothing.
+- [x] Offline E2E and hazard publish latency tests pass.
+- [x] Simulated sensors labelled in the product; no CCTV claim.
+- [ ] Document set approved.
+- [ ] Repository access granted per institutional rule.
+- [ ] Handover session delivered to «Client Representative».
+- [x] Known limitations communicated in writing (TSD §7).
+
+The sensor registry stores a `simulated` flag and `/flood-state` labels such a
+reading `SIMULATED`, but the portal does not display the flag yet; the CCTV
+claim is gone from the product. The offline queue and its SQLite cache are
+implemented; what is missing for that line is the measured end-to-end run on a
+device with airplane mode.
+
+Post-implementation review, one month after handover or after the first rain
+event: were the benefits realised, did the system hold up, and what was missing?
+The next release is no longer authentication or intake; candidates are a real
+sensor agreement, a native client, or multi-LGU tenancy, decided by the
+sponsor under change control.

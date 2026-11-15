@@ -83,6 +83,9 @@ they are resolved or explicitly deferred in writing.
 | Date       | Item | Decision | Note |
 | ---------- | ---- | -------- | ---- |
 | 3 Nov 2026 | Live flood-state sources | Approved by the Project Lead | PAGASA telemetry and satellite are the live sources; NOAH is a rain-gated advisory fallback. The Project Lead approves scope decisions under standing authority; adviser and panel acknowledgement is not recorded. `OD-D25` (PAGASA access route) is open |
+| 15 Nov 2026 | CR-009: admin SOS incident location map | Approved by the Project Lead | Standalone single-marker map and Nominatim reverse-geocode in the Dispatch Radar incident panel, implemented 14 Nov 2026. Adviser and panel acknowledgement not recorded. See [CR-009.md](CR-009.md) |
+| 15 Nov 2026 | CR-010: driver app Mapbox basemap, place search, door-to-door | Approved by the Project Lead | `@rnmapbox/maps` replaces `react-native-maps`; Mapbox Geocoding primary search with Nominatim fallback; drop-a-pin; snap-to-road puck; implemented 11-14 Nov 2026. Adviser and panel acknowledgement not recorded. See [CR-010.md](CR-010.md) |
+| 15 Nov 2026 | CR-011: flood simulation recalibrated for the real network | Approved by the Project Lead | Per-node placeholder elevation replacing the flat 10 m default; `depression_factor`/`ponding_amplification` recalibrated so flood state now crosses all three passability bands; `/simulate` serialisation and rain-gauge coverage fixed to match; implemented 14-15 Nov 2026. The hosted-database elevation write was run only after the Project Lead's explicit go-ahead in chat. Adviser and panel acknowledgement not recorded. See [CR-011.md](CR-011.md) |
 
 This decision does not move A-01 to A-09, which remain For Review, and it does
 not close the open design decisions in §2.1. A-13 therefore stays open on
