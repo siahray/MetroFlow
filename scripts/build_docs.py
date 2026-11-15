@@ -32,17 +32,57 @@ except ImportError:  # pragma: no cover - operator guidance
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
+SOURCES = DOCS / "final document"
 TEMPLATES = DOCS / "docx"
 OUTPUT = TEMPLATES / "generated"
 
 DOCUMENTS = [
-    ("PROJECT_CHARTER.md", "Project_Charter.docx"),
+    ("Project_Charter.md", "Project_Charter.docx"),
     ("BRD.md", "BRD.docx"),
-    ("BUSINESS_CASE.md", "Business_Case.docx"),
+    ("Business_Case.md", "Business_Case.docx"),
     ("FSD.md", "FSD.docx"),
     ("TSD.md", "TSD.docx"),
-    ("PROJ_MANAGEMENT_PLAN.md", "Project-Management-Plan.docx"),
+    ("Project-Management-Plan.md", "Project-Management-Plan.docx"),
 ]
+
+MATH_TOKENS = [
+    (r"\\text\{([^{}]*)\}", r"\1"),
+    (r"\\mathcal\{O\}", "O"),
+    (r"\\frac\{([^{}]*)\}\{([^{}]*)\}", r"\1/\2"),
+    (r"\\(?:ge|geq)\b", "≥"),
+    (r"\\(?:le|leq)\b", "≤"),
+    (r"\\(?:rightarrow|to)\b", "→"),
+    (r"\\times\b", "×"),
+    (r"\\approx\b", "≈"),
+    (r"\\pm\b", "±"),
+    (r"\\min\b", "min"),
+    (r"\\max\b", "max"),
+    (r"\\log\b", "log"),
+    (r"\\[lr]eft\b", ""),
+    (r"\\[{}]", ""),
+    (r"\\_", "_"),
+    (r"\\[,;: ]", " "),
+]
+
+
+def latex_to_text(expression: str) -> str:
+    """Flatten the inline LaTeX the Markdown sources use into plain text.
+
+    Word has no TeX engine, so the alternative is literal ``$$`` noise. A
+    ``cases`` environment becomes one ``;``-separated sentence so a passability
+    or urgency rule still reads as a rule.
+    """
+    text = expression.strip().strip("$").strip()
+    if "\\begin{cases}" in text:
+        body = re.sub(r"\\begin\{cases\}|\\end\{cases\}", "", text)
+        text = " ; ".join(part.strip() for part in body.split(r"\\") if part.strip())
+    for pattern, replacement in MATH_TOKENS:
+        text = re.sub(pattern, replacement, text)
+    return re.sub(r"\s+", " ", text.replace("{", "").replace("}", "")).strip()
+
+
+def inline_math(text: str) -> str:
+    return re.sub(r"\$([^$\n]+)\$", lambda m: latex_to_text(m.group(1)), text)
 
 INLINE = re.compile(r"(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\([^)]+\))")
 
@@ -53,7 +93,7 @@ def unescape(text: str) -> str:
 
 def add_runs(paragraph, text: str, *, size: float | None = None) -> None:
     """Add text to a paragraph, honouring **bold**, `code`, *italic* and links."""
-    for part in INLINE.split(unescape(text)):
+    for part in INLINE.split(unescape(inline_math(text))):
         if not part:
             continue
         if part.startswith("**") and part.endswith("**"):
@@ -152,6 +192,22 @@ def build(markdown_path: Path, template_path: Path, output_path: Path) -> None:
             index += 1
             continue
 
+        if stripped.startswith("$$"):
+            index += 1
+            block = stripped[2:]
+            while not block.rstrip().endswith("$$") and index < len(lines):
+                block += " " + lines[index].strip()
+                index += 1
+            paragraph = doc.add_paragraph()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph.paragraph_format.space_before = Pt(6)
+            paragraph.paragraph_format.space_after = Pt(6)
+            run = paragraph.add_run(latex_to_text("$" + block.rstrip().rstrip("$") + "$"))
+            run.font.name = "Cambria"
+            run.font.size = Pt(10)
+            run.italic = True
+            continue
+
         if stripped.startswith("```"):
             index += 1
             block: list[str] = []
@@ -235,7 +291,7 @@ def build(markdown_path: Path, template_path: Path, output_path: Path) -> None:
 
     doc.core_properties.title = markdown_path.stem.replace("_", " ").title()
     doc.core_properties.comments = (
-        f"Generated from docs/{markdown_path.name} on "
+        f"Generated from docs/final document/{markdown_path.name} on "
         f"{datetime.now(UTC).date().isoformat()}."
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -246,7 +302,7 @@ def build(markdown_path: Path, template_path: Path, output_path: Path) -> None:
 def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for markdown_name, template_name in DOCUMENTS:
-        markdown_path = DOCS / markdown_name
+        markdown_path = SOURCES / markdown_name
         template_path = TEMPLATES / template_name
         if not markdown_path.exists():
             print(f"skip: {markdown_path} missing")

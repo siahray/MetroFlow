@@ -4,7 +4,7 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v2.0 (consolidated, 13 November 2026) · **Code baseline:** `main`, 13 November 2026
+**Document baseline:** v2.1 (CR-009 to CR-011 drafted and approved, 15 November 2026) · **Code baseline:** `main`, 15 November 2026
 
 The pilot scope covers an Expo driver app, live hazard publication, fleet
 dispatch, sensor ingestion, authentication, SOS, field reports and moderation,
@@ -34,6 +34,9 @@ per-requirement record.
 | Approval Register              | [APPROVALS.md](APPROVALS.md)                       | MF-APR-001 | Lists every document and gate that needs approval                    | Adviser, panel, team    |
 | Progress Report                | [../PROGRESS_REPORT.md](../PROGRESS_REPORT.md)      | —          | Records what is implemented on the current branch                    | Team, panel             |
 | API Reference                  | [api.md](api.md)                                   | MF-API-001 | Endpoint contracts, parameters, responses and errors                 | Integrators, QA         |
+| Change Request CR-009          | [CR-009.md](CR-009.md)                             | MF-CR-009  | Admin SOS incident location map with a nearby place                  | Project Lead, team      |
+| Change Request CR-010          | [CR-010.md](CR-010.md)                             | MF-CR-010  | Driver app: real Mapbox basemap, place search, drop-a-pin, door-to-door navigation | Project Lead, team |
+| Change Request CR-011          | [CR-011.md](CR-011.md)                             | MF-CR-011  | Flood simulation recalibrated for the real network; door-to-door routing params; rain-gauge re-centring | Project Lead, team |
 
 ## Design artifacts
 
@@ -146,6 +149,7 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 1.8     | 13 Nov 2026 | «Project Team» | EV/HOV/toll "Smart Routing" recorded as declined (no real road-attribute data); dry-state routing hands off to Mapbox Directions (FSD-FR-131, BRULE-017); driver navigation polish (FSD-FR-124 to 129: voice guidance, route preview/Start, speed-aware camera, heading marker, Quick Picks/recent search, alternative routes); live-weather simulation toggle (FSD-FR-130) |
 | 1.9     | 13 Nov 2026 | «Project Team» | Pilot road network scoped to Quezon City (LIM-014 superseded again); NFR-001/002/019 re-measured against the live hosted network and recorded as **not currently met** (LIM-028); project schedule dates corrected against git history across Charter/PMP/Business Case |
 | 2.0     | 13 Nov 2026 | «Project Team» | Consolidated baseline: folded every prior scope addition into the documents as original scope; retired the standalone change-request records |
+| 2.1     | 15 Nov 2026 | «Project Team» | CR-009 to CR-011 drafted and approved by the Project Lead: admin SOS incident location map (CR-009); mobile Mapbox basemap, place search, drop-a-pin and door-to-door routing (CR-010); flood simulation recalibrated for the real Quezon City network, plus the matching `/simulate` serialisation and rain-gauge coverage fixes (CR-011). Identifiers reserved in each CR; not yet folded into the FSD/TSD/BRD bodies — see `docs/CR-009.md` to `docs/CR-011.md` |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same
