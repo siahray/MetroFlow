@@ -240,6 +240,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Bumped by the Retry action so the one-shot location effect runs again.
   const [locationAttempt, setLocationAttempt] = useState(0);
   const [destinationQuery, setDestinationQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   // The place the driver picked from the results ("SM City North EDSA"), kept
   // so the box and route summary name the establishment rather than the road
   // node the flood-safe router snaps to.
@@ -1180,6 +1181,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     // search result -- it reads as a Mapbox/key error there.
                     setError(null);
                   }}
+                  onFocus={() => setSearchFocused(true)}
                   placeholder="Where to?"
                   placeholderTextColor={c.slate400}
                   style={styles.searchInput}
@@ -1216,10 +1218,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             planning ||
             error ||
             refusal ||
-            quickPicks.length > 0 ||
-            recentDestinations.length > 0) ? (
+            (searchFocused && (quickPicks.length > 0 || recentDestinations.length > 0))) ? (
             <View style={styles.searchPanel}>
-              {!destinationQuery && !planning && (quickPicks.length > 0 || recentDestinations.length > 0) ? (
+              {searchFocused &&
+              !destinationQuery &&
+              !planning &&
+              (quickPicks.length > 0 || recentDestinations.length > 0) ? (
                 <View style={{ gap: space[10] }}>
                   {quickPicks.length > 0 ? (
                     <View style={styles.quickPickRow}>
