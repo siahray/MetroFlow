@@ -52,8 +52,9 @@ export default function IndexScreen() {
       const user = await apiLogin(email, password);
       signIn(user);
       goToApp();
-    } catch {
-      setError('Invalid credentials. Check email and password.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Invalid credentials. Check email and password.');
+    } finally {
       setSubmitting(false);
     }
   }
@@ -69,8 +70,9 @@ export default function IndexScreen() {
       const user = await apiRegister({ name, email, password, role: 'DRIVER' });
       signIn(user);
       goToApp();
-    } catch (e: any) {
-      setError(e.message || 'Registration failed.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Registration failed.');
+    } finally {
       setSubmitting(false);
     }
   }
