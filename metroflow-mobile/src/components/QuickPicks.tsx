@@ -156,12 +156,12 @@ export function QuickPicks({
 
   // Places first; named road nodes are the fallback, so a junction name still
   // resolves and works offline like it always did.
-  const visiblePlaces = query.length >= 3 ? placeResults : [];
+  const visiblePlaces = query.length >= 3 ? placeResults.slice(0, 3) : [];
   const nodeMatches =
     query.length > 0 && network && visiblePlaces.length === 0
       ? network.nodes.features
           .filter((n) => (n.properties.name ?? '').toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 4)
+          .slice(0, 3)
       : [];
 
   const draftPoint: LatLng | null = draft?.picked
