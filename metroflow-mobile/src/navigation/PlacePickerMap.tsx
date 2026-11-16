@@ -46,7 +46,8 @@ export function PlacePickerMap({
   // made in the full-screen view) so returning shows the pinned location.
   useEffect(() => {
     if (!focus || fullView) return;
-    miniCameraRef.current?.setCamera({
+    const camera = miniCameraRef.current as { setCamera?: (opts: object) => void } | null;
+    camera?.setCamera?.({
       centerCoordinate: [focus.longitude, focus.latitude],
       zoomLevel: 14,
       animationDuration: 0,

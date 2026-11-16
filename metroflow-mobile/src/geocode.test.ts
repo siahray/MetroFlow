@@ -146,7 +146,8 @@ test("searchMapbox parses POI features with name, subtitle and coordinates", asy
   expect(results).toHaveLength(1);
   expect(results[0]).toMatchObject({
     name: "Market! Market!",
-    subtitle: "McKinley Parkway, Taguig",
+    subtitle: "McKinley Parkway, Taguig, Metro Manila",
+    label: "Market! Market!, McKinley Parkway, Taguig, Metro Manila, Philippines",
     category: "mall",
     latitude: 14.5505,
     longitude: 121.0565,
@@ -182,14 +183,14 @@ test("a Mapbox result outside the pilot box is kept, ranked after curated hits",
   expect(places.some((p) => p.name === "Market! Market!")).toBe(true);
 });
 
-test("reverseGeocodeName resolves a dropped pin's coordinate to a place name", async () => {
+test("reverseGeocodeName resolves a dropped pin's coordinate to an exact address", async () => {
   mockFetch({
     features: [
-      { id: "poi.1", text: "Quezon Memorial Circle", place_name: "Quezon Memorial Circle, Diliman, Quezon City" },
+      { id: "poi.1", text: "Quezon Memorial Circle", place_name: "Quezon Memorial Circle, Diliman, Quezon City, Philippines" },
     ],
   });
   expect(await reverseGeocodeName(14.6517, 121.0493, undefined, "test-token")).toBe(
-    "Quezon Memorial Circle",
+    "Quezon Memorial Circle, Diliman, Quezon City",
   );
 });
 
