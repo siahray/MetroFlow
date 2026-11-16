@@ -115,7 +115,7 @@ the emitted event, not from the device receiving it.
 | User Service          | BR-009 / FSD-FR-048                 | User CRUD with audit trail, role validation, self-protection, last admin protection |
 | Export Service        | BR-012 / FSD-FR-049                 | CSV export for audit logs and incidents with filtering                     |
 | Evidence Store        | BR-014 / FSD-FR-066, 067             | `photo_data` bytes in the report row (ADR-023); MIME check, re-encode, EXIF strip |
-| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074, 105 to 110 | Navigation, alerts, reports, offline cache and SOS; voice guidance, route preview/Start flow, speed/turn-aware driving camera, heading marker, Quick Picks/recent destinations in search |
+| Driver app            | BR-013 to BR-018 / FSD-FR-054 to 074, 105 to 110, 144 to 145 | Navigation, alerts, reports, offline cache and SOS; voice guidance, route preview/Start flow, speed/turn-aware driving camera, heading marker, Quick Picks/recent destinations in search (including saving a searched place or dropped pin as a Quick Pick) |
 | LGU Map UI            | BR-016 / FSD-FR-075, 076, 082–089    | MapLibre layers, draw tools, fleet and dispatch panels                     |
 
 ### Technology stack
