@@ -11,7 +11,7 @@ over the items in that section. Blocked items count against the bar — they
 genuinely aren't done — but no amount of engineering time fixes them, so don't
 read a low bar there as "needs more coding." Out-of-scope features (Evacuation
 Centers, Comms Streams, Crew Profiles, Broadcasts, Air-Asset Escalation,
-CR-002/003 future proposals) and business paperwork (budgets, approvals,
+CR-003 future proposal) and business paperwork (budgets, approvals,
 charter dates) are excluded entirely — they were never engineering work.
 
 ## Overall
@@ -163,8 +163,11 @@ list) — that table is stale, see §6.
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
   Civic Broadcasts, Air-Asset Escalation, functional offline tile caching,
   real CCTV — all in `AGENTS.md`'s scope constraints.
-- **Unapproved future proposals:** CR-002 (offline region packages), CR-003
-  (Sentinel-1 satellite ingestion) — change requests, not committed scope.
+- **Unapproved future proposal:** CR-003 (Sentinel-1 satellite ingestion) —
+  a change request, not committed scope. CR-002 (admin screen split: Operations
+  Dashboard, report-only Moderation, SOS-only Dispatch Radar with responder
+  tracking) is also still **Draft — proposed**, but it has been implemented in
+  the portal working tree; see `BACKLOG.md`.
 - **Business/academic paperwork:** budgets, approvals, charter dates, ROI
   figures in `PROJECT_CHARTER.md`, `BUSINESS_CASE.md`, `PROJ_MANAGEMENT_PLAN.md`,
   `APPROVALS.md`, `CR-001..004.md` — explicitly `[TBC]` placeholders for the
