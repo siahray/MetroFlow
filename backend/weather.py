@@ -1,9 +1,10 @@
 """Live weather ingest for the rain gate (CR-004).
 
-PAGASA publishes bulletins, not an API (CR-004, open decision OD-D25), so the
-interim live source is Open-Meteo: free, keyless, CC BY 4.0. It feeds the same
-``RAIN_GAUGE`` sensor interface the gateway posts through, so PAGASA can
-replace or join it later without redesign.
+Open-Meteo is the system's live rain source: free, keyless, CC BY 4.0. It
+feeds the same ``RAIN_GAUGE`` sensor interface the gateway posts through.
+PAGASA real-time gauge integration was evaluated and removed from scope
+(CR-012, OD-D25 closed) rather than carried indefinitely as a blocked
+requirement.
 
 Fetch-on-read: ``GET /api/v1/flood-state`` refreshes the reading at most once
 per refresh window, so there is no cron, no plan limit and no secret to
