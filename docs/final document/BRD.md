@@ -213,9 +213,9 @@ does, so this document is also an honest statement of scope.
 | BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue and a moderation desk            |
 | BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; native telephony is out of scope |
 | BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented; external PAGASA feed integration (`FSD-FR-094`) remains blocked on `OD-D25` |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented on the Open-Meteo rain gate and GloFAS modelled river discharge; external PAGASA feed integration is out of scope (descoped, `CR-012`) |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
-| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Partly met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled; PAGASA telemetry remains blocked on `OD-D25` |
+| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled as the system's sole flood-state sources; no further external telemetry integration is planned (`CR-012`) |
 
 `Must` requirements define the acceptance boundary. All of them are met in the pilot
 except the external-feed half of BR-017 and BR-019's live flood-state sources, both
@@ -273,7 +273,7 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | BRULE-011 | Only an available unit may be assigned; assignment changes its status to en route          | Double-booking a unit delays both responses                |
 | BRULE-012 | A sensor threshold breach is advisory until a dispatcher confirms it                       | Sensors drift; a human owns the operational decision       |
 | BRULE-013 | Driver location is rounded, device identity is hashed, and retention is at most 24 hours   | Data minimisation under RA 10173                           |
-| BRULE-014 | A NOAH-derived or PAGASA-derived flood state is advisory until a dispatcher confirms it; a modelled flood map is never a closure | A model must not close a road on its own authority |
+| BRULE-014 | A NOAH-derived flood state is advisory until a dispatcher confirms it; a modelled flood map is never a closure | A model must not close a road on its own authority |
 | BRULE-015 | A FASTEST route may be answered by an external provider only because every edge in the graph is already confirmed clear; FLOOD_SAFE never delegates routing | Safety decisions stay with the engine that knows water depth |
 | BRULE-018 | Door-to-door routes pass true GPS coordinates for dry FASTEST routing, while FLOOD_SAFE routes snap to graph nodes | Only the in-house engine needs graph nodes; the provider needs real coordinates |
 
@@ -285,7 +285,7 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Assumption | A-002 | The pilot corridor is representative enough to demonstrate routing        |
 | Assumption | A-003 | Free or institutional service tiers suffice for the pilot                 |
 | Assumption | A-004 | Dispatchers have a modern desktop browser and reliable connectivity       |
-| Assumption | A-005 | Rainfall is supplied manually or from Open-Meteo (live rain gate); OpenWeather is an optional supplementary source; PAGASA telemetry is blocked on OD-D25 |
+| Assumption | A-005 | Rainfall is supplied manually or from Open-Meteo (live rain gate); OpenWeather is an optional supplementary source; Open-Meteo and GloFAS remain the sole rain/river telemetry sources (PAGASA integration descoped, `CR-012`) |
 | Assumption | A-006 | The client provides corridor and barangay naming conventions              |
 | Assumption | A-007 | Drivers have a smartphone with a modern browser, camera and geolocation   |
 | Assumption | A-008 | Cellular data can drop during an event, so offline operation is required  |
@@ -328,7 +328,6 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | MDRRMC            | Disaster Risk Reduction and Management Council                |
 | Node              | An intersection or endpoint on the road graph. The production Quezon City OSM graph has 6,177 nodes and 7,618 edges; the synthetic 34-node / 61-edge lattice (`network_seed.py`) is the local dev fallback only |
 | OSM               | OpenStreetMap — source of the production road graph           |
-| PAGASA            | Philippine Atmospheric, Geophysical and Astronomical Services Administration; real-time gauge integration is blocked on OD-D25 |
 | Passability       | Whether a vehicle can drive an edge given current water depth |
 | PostGIS           | Spatial extension for PostgreSQL                              |
 | Expo              | React Native framework used for the native driver app         |

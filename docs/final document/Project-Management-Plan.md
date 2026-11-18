@@ -245,7 +245,7 @@ Rules:
 | A-002 | Assumption | Pilot corridor is representative enough to demonstrate routing    | PM               | Medium | Open          |
 | A-003 | Assumption | Free or institutional tiers suffice for the pilot                 | PM               | Medium | Open          |
 | A-004 | Assumption | Dispatchers have a modern browser and connectivity                | Business Analyst | High   | Open          |
-| A-005 | Assumption | Rainfall intensity is supplied manually or from Open-Meteo (live rain gate, implemented); OpenWeather is an optional supplementary source; PAGASA telemetry is blocked on OD-D25 | Backend Lead     | Medium | Open          |
+| A-005 | Assumption | Rainfall intensity is supplied manually or from Open-Meteo (live rain gate, implemented); OpenWeather is an optional supplementary source; Open-Meteo and GloFAS are the sole rain/river telemetry sources, PAGASA integration descoped (`CR-012`) | Backend Lead     | Low | Closed        |
 | A-006 | Assumption | Client provides corridor and barangay naming                      | Business Analyst | Low    | Open          |
 | A-007 | Assumption | Drivers have a smartphone with camera and geolocation             | Business Analyst | High   | Open          |
 | A-008 | Assumption | Connectivity can drop during an event                             | PM               | High   | Open          |

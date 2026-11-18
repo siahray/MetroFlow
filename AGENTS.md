@@ -141,7 +141,7 @@ Location: `supabase-migrations/`
 - Native telephony/SMS in SOS
 - Functional SQLite tile caching for offline maps
 - Real CCTV integration
-- Real rain-gauge integration beyond the live sources (PAGASA river telemetry and satellite are the live sources; Project NOAH is the advisory fallback: see `docs/BRD.md` BR-021/BR-017 and `docs/TSD.md` LIM-026/027)
+- Real rain-gauge integration beyond the live sources (Open-Meteo rain gate and GloFAS modelled river discharge are the live sources; Project NOAH is the advisory fallback; PAGASA integration was evaluated and removed from scope, CR-012: see `docs/final document/BRD.md` BR-017/BR-019 and `docs/final document/TSD.md` LIM-026/027)
 
 ### Units
 - All depths: centimeters (cm)

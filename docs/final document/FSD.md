@@ -143,7 +143,7 @@ Implementation Status table for the authoritative per-module record.
 | FSD-FR-091 | BR-017         | Mark roads within the configured impact radius of a threshold breach as advisory                              |
 | FSD-FR-092 | BR-009         | Enforce role permissions on verification, publishing, dispatch and configuration                              |
 | FSD-FR-093 | BR-008         | Write an immutable audit record for every privileged action                                                   |
-| FSD-FR-094 | BR-019         | Ingest river water-level readings from the approved PAGASA access route into the sensor gateway with station identity and timestamp (blocked on OD-D25) |
+| FSD-FR-094 | BR-019         | Ingest river water-level readings from an approved PAGASA access route into the sensor gateway with station identity and timestamp (removed from scope — PAGASA integration descoped, `CR-012`; GloFAS modelled discharge, FSD-FR-103, is the sole river source) |
 | FSD-FR-095 | BR-019         | Allow a dispatcher to enter a river reading manually with its source and observation time; the entry is audited (not implemented) |
 | FSD-FR-096 | BR-019         | Resolve each road segment's flood state from the source-priority rule and store the source and "as of" time (implemented — `GET /api/v1/flood-state`) |
 | FSD-FR-097 | BR-019         | Treat a reading older than the freshness window as stale and fall through to the next source; never treat missing data as safe (implemented) |
@@ -254,7 +254,7 @@ Implementation Status table for the authoritative per-module record.
 | BRULE-011 | BR-016  | FSD-FR-088, FSD-FR-089 | Only an available unit may be assigned; assignment changes it to en route    |
 | BRULE-012 | BR-017  | FSD-FR-091             | A sensor breach is advisory until a dispatcher confirms it                   |
 | BRULE-013 | BR-018  | FSD-FR-067, FSD-FR-068 | Driver location is rounded, device id hashed, and retained at most 24 hours  |
-| BRULE-014 | BR-019  | FSD-FR-098, FSD-FR-099 | A NOAH-derived or PAGASA-derived state is advisory until a dispatcher confirms it; a modelled flood map is never a closure (not implemented) |
+| BRULE-014 | BR-019  | FSD-FR-098, FSD-FR-099 | A NOAH-derived state is advisory until a dispatcher confirms it; a modelled flood map is never a closure (not implemented) |
 | BRULE-015 | BR-003  | FSD-FR-112             | A FASTEST route may be answered by Mapbox only because every edge in the graph is already confirmed clear; FLOOD_SAFE never delegates routing  |
 | BRULE-018 | BR-003  | FSD-FR-143             | Door-to-door routes pass true GPS coordinates for dry FASTEST routing, while FLOOD_SAFE routes snap to graph nodes |
 
@@ -332,7 +332,7 @@ Implementation Status table for the authoritative per-module record.
 | TC-044 | BR-008  | FSD-FR-093                         | Every privileged action writes exactly one attributable audit record        |
 | TC-045 | BR-013  | FSD-FR-056, FSD-FR-075             | With no provider token configured the map still renders basemap tiles and the network, and stays usable |
 | TC-046 | BR-002  | FSD-FR-006, FSD-FR-007             | When OpenWeather is unavailable, rainfall is entered manually and labelled  |
-| TC-047 | BR-019  | FSD-FR-094, FSD-FR-096             | A fresh PAGASA reading above its threshold marks only roads inside the impact radius as advisory (blocked on `OD-D25`) |
+| TC-047 | BR-019  | FSD-FR-094, FSD-FR-096             | Removed — FSD-FR-094 (PAGASA ingestion) is descoped, `CR-012` |
 | TC-048 | BR-019  | FSD-FR-097                         | A reading older than the freshness window is stale and the segment falls back to the next source (implemented) |
 | TC-049 | BR-019  | FSD-FR-098, FSD-FR-099             | With no live data and no rain, NOAH is shown as a map layer only and does not change routing (not implemented) |
 | TC-050 | BR-019  | FSD-FR-099                         | With no live data and rain occurring, NOAH applies a caution and route penalty but does not close a road (not implemented) |
@@ -436,7 +436,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Export                   | FSD-FR-049         | Implemented | CSV export for audit logs and incidents; admin UI with one-click export buttons and toast notifications |
 | Sensor ingestion         | FSD-FR-090, 091   | Implemented | POST /api/v1/sensors/readings with threshold breach detection; sensor registry CRUD; every reading is written to the road edges in the sensor's radius (`edge_advisories`) and a breach flags them as an advisory, read through `GET /api/v1/flood-state` with source, kind and "as of" time (resolver: verified hazard, then fresh live observation, then NOAH fallback); an advisory never closes a road (BRULE-012). The portal has a sensor registry page (`/sensors`, CRUD) and a map layer on the live network map, colour-coded by breach state. Routing (`td_a_star_search`) now applies a soft time penalty to a flagged, fresh advisory edge, so it is preferred around but never blocked, matching BRULE-012 |
 | Portal and driver app UI | FSD-FR-054 to 089 | Implemented | The portal covers the queue, docket, dispatch, moderation, hazards, fleet, users, sensors, exports and the live map; the driver app covers route guidance, reporting, offline operation, SOS, report history and profile. Component and end-to-end tests are still missing (BACKLOG Q-1) |
-| Live flood-state sources | FSD-FR-094 to 104, 142 | Partially implemented | The source-priority resolver and `GET /api/v1/flood-state` exist with tests; Open-Meteo rain (rain gate, FSD-FR-104) and Open-Meteo Flood API / GloFAS discharge (`backend/river_discharge.py`, FSD-FR-103) are live, both labelled and advisory-only; sensor display (FSD-FR-101) and source/freshness display (FSD-FR-100) are implemented. CR-001 re-centred the live rain-gauge coverage radius on the active network's geographic extent (FSD-FR-142). Still missing: PAGASA telemetry (FSD-FR-094, blocked on `OD-D25`), manual river entry (FSD-FR-095), NASA GPM IMERG and NOAH layer data/import (FSD-FR-098, FSD-FR-099) |
+| Live flood-state sources | FSD-FR-094 to 104, 142 | Partially implemented | The source-priority resolver and `GET /api/v1/flood-state` exist with tests; Open-Meteo rain (rain gate, FSD-FR-104) and Open-Meteo Flood API / GloFAS discharge (`backend/river_discharge.py`, FSD-FR-103) are live, both labelled and advisory-only, and are the system's sole live flood-state sources; sensor display (FSD-FR-101) and source/freshness display (FSD-FR-100) are implemented. CR-001 re-centred the live rain-gauge coverage radius on the active network's geographic extent (FSD-FR-142). PAGASA telemetry (FSD-FR-094) is removed from scope (`CR-012`). Still missing: manual river entry (FSD-FR-095), NASA GPM IMERG and NOAH layer data/import (FSD-FR-098, FSD-FR-099) |
 
 ## Actors
 
