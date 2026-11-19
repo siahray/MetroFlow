@@ -25,7 +25,7 @@ type AppShellProps = {
 /** P3-1: power-user shortcuts. `go` paths are portal routes; `focus` targets a DOM id. */
 const SHORTCUTS: { keys: string; label: string; go?: string; focus?: string }[] = [
   { keys: "Ctrl K", label: "Focus incident search", focus: "incident-search" },
-  { keys: "Ctrl T", label: "Go to triage", go: "/triage" },
+  { keys: "Ctrl T", label: "Go to operations dashboard", go: "/triage" },
   { keys: "Ctrl R", label: "Go to dispatch radar", go: "/radar" },
   { keys: "Ctrl H", label: "Go to hazards", go: "/hazards" },
   { keys: "Ctrl F", label: "Go to fleet", go: "/fleet" },

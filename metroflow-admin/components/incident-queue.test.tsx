@@ -41,7 +41,6 @@ const REPORT = incident({ id: "rep-1" });
 function props(overrides: Partial<Parameters<typeof IncidentQueue>[0]> = {}) {
   return {
     incidents: [SOS, REPORT],
-    allIncidents: [SOS, REPORT],
     selectedId: "",
     filter: "all" as const,
     query: "",
@@ -134,43 +133,43 @@ test("queue tabs, quick filters and search all report changes upward", () => {
   );
 
   fireEvent.click(screen.getByRole("button", { name: /Dismissed/ }));
-  fireEvent.click(screen.getByRole("button", { name: /^Photo/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Awaiting unit/ }));
   fireEvent.change(screen.getByLabelText("Search incidents"), { target: { value: "edsa" } });
 
-  expect(seen).toEqual(["view:dismissed", "filter:photo", "query:edsa"]);
+  expect(seen).toEqual(["view:dismissed", "filter:unassigned", "query:edsa"]);
 });
 
-test("advanced panel patches filters and can be cleared", () => {
+test("advanced panel patches the age filter and can be cleared", () => {
   const changes: unknown[] = [];
   render(
     <IncidentQueue
       {...props({
-        advanced: { barangay: "Cubao", type: "report", maxAgeHours: 24, minUrgency: 5 },
+        advanced: { maxAgeHours: 24 },
         onAdvancedChange: (f) => changes.push(f),
       })}
     />,
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Advanced filters" }));
-  fireEvent.change(screen.getByLabelText("Filter by barangay"), { target: { value: "Kamuning" } });
+  fireEvent.change(screen.getByLabelText("Filter by age"), { target: { value: "168" } });
   fireEvent.click(screen.getByRole("button", { name: "Clear" }));
 
-  expect(changes[0]).toMatchObject({ barangay: "Kamuning" });
+  expect(changes[0]).toMatchObject({ maxAgeHours: 168 });
   expect(changes[1]).toEqual(EMPTY_ADVANCED_FILTERS);
 });
 
 test("saving a preset stores it and applying it restores the filters", () => {
   const changes: unknown[] = [];
-  const active = { barangay: "Cubao", type: "sos" as const, maxAgeHours: null, minUrgency: null };
+  const active = { maxAgeHours: 24 };
   render(
     <IncidentQueue {...props({ advanced: active, onAdvancedChange: (f) => changes.push(f) })} />,
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Advanced filters" }));
-  fireEvent.change(screen.getByLabelText("Preset name"), { target: { value: "Cubao SOS" } });
+  fireEvent.change(screen.getByLabelText("Preset name"), { target: { value: "Last day" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-  expect(window.localStorage.getItem("metroflow.queue.presets.v1")).toContain("Cubao SOS");
+  expect(window.localStorage.getItem("metroflow.queue.presets.v1")).toContain("Last day");
 
   // Re-render with an unrelated filter; the saved preset must still apply it.
   cleanup();
@@ -181,7 +180,7 @@ test("saving a preset stores it and applying it restores the filters", () => {
   );
   fireEvent.click(screen.getByRole("button", { name: "Advanced filters" }));
   fireEvent.change(screen.getByLabelText("Saved filter presets"), {
-    target: { value: "Cubao SOS" },
+    target: { value: "Last day" },
   });
 
   expect(changes.at(-1)).toEqual(active);
@@ -207,7 +206,7 @@ test("bulk select dismisses every checked incident after confirmation", async ()
   fireEvent.click(screen.getByRole("button", { name: /Dismiss selected/ }));
   fireEvent.click(screen.getByRole("button", { name: "Dismiss 2 incidents" }));
 
-  await screen.findByText("Incoming Queue");
+  await screen.findByText("SOS queue");
   expect(dismissed.sort()).toEqual(["rep-1", "sos-1"]);
 });
 
@@ -217,7 +216,6 @@ test("error state shows the message and Retry calls onRetry", () => {
     <IncidentQueue
       {...props({
         incidents: [],
-        allIncidents: [],
         error: "Queue offline",
         onRetry: () => retries++,
       })}
@@ -235,8 +233,7 @@ test("empty queue explains itself and offers to clear an active quick filter", (
     <IncidentQueue
       {...props({
         incidents: [],
-        allIncidents: [],
-        filter: "photo",
+        filter: "assigned",
         onFilterChange: (f) => changes.push(f),
       })}
     />,

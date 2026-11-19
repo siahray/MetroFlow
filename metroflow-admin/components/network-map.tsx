@@ -220,10 +220,15 @@ export type DrawnGeometry =
 type NetworkMapProps = {
   /** Layer checkbox in the editor: hide the graph, keep the basemap. */
   showGraph: boolean;
+  /**
+   * The "Live Network Model" simulation/routing panel. Off for read-only
+   * callers (the operations dashboard) that just need the map.
+   */
+  showModel?: boolean;
   /** Toast sink, so simulation and routing results land in the same place. */
   onAction: (message: string) => void;
   /** Called whenever the rendered verdicts or the active route change. */
-  onSummary: (summary: NetworkSummary) => void;
+  onSummary?: (summary: NetworkSummary) => void;
   /**
    * Called with the raw network state whenever a fresh fetch lands, so a
    * caller that just needs edge/node data (e.g. the hazard form's segment
@@ -289,6 +294,7 @@ function buildPopupContent(props: EdgeProperties): HTMLElement {
 
 export function NetworkMap({
   showGraph,
+  showModel = true,
   onAction,
   onSummary,
   onNetworkState,
@@ -1018,7 +1024,7 @@ export function NetworkMap({
   );
 
   useEffect(() => {
-    if (summary) onSummary(summary);
+    if (summary) onSummary?.(summary);
   }, [summary, onSummary]);
 
   // --- Actions -------------------------------------------------------------
@@ -1177,17 +1183,20 @@ export function NetworkMap({
       </div>
 
       {/* Simulation + routing controls: a button so they only cover the map
-          while actually in use, instead of a permanent floating panel. */}
-      <button
-        type="button"
-        onClick={() => setSimulationOpen(true)}
-        className="absolute right-4 bottom-24 z-30 flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/95 px-3 py-2 text-[11px] font-semibold text-slate-200 shadow-sm backdrop-blur hover:border-sky-500 hover:text-sky-300"
-      >
-        <SlidersHorizontal className="h-3.5 w-3.5" />
-        Live Network Model
-      </button>
+          while actually in use, instead of a permanent floating panel. Hidden
+          on read-only callers like the operations dashboard. */}
+      {showModel ? (
+        <button
+          type="button"
+          onClick={() => setSimulationOpen(true)}
+          className="absolute right-4 bottom-24 z-30 flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/95 px-3 py-2 text-[11px] font-semibold text-slate-200 shadow-sm backdrop-blur hover:border-sky-500 hover:text-sky-300"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Live Network Model
+        </button>
+      ) : null}
 
-      {simulationOpen ? (
+      {showModel && simulationOpen ? (
         <div
           role="dialog"
           aria-modal="true"

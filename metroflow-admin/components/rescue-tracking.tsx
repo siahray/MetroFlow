@@ -280,7 +280,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
         </h3>
         {missions.length === 0 ? (
           <p className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500">
-            No unit is assigned to an incident. Dispatch one from the Triage Queue.
+            No unit is assigned to an incident. Dispatch one from the Dispatch Radar.
           </p>
         ) : (
           <ul className="space-y-3">

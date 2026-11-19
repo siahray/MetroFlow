@@ -13,7 +13,7 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { hoursUntilPurge } from "@/lib/dismissed";
@@ -35,8 +35,6 @@ import { IncidentQueueSkeleton } from "./skeleton";
 
 type IncidentQueueProps = {
   incidents: Incident[];
-  /** Unfiltered incidents, used to offer every barangay in the advanced panel. */
-  allIncidents: Incident[];
   selectedId: string;
   filter: QueueFilter;
   query: string;
@@ -95,19 +93,11 @@ const AGE_OPTIONS = [
   { value: "168", label: "Last 7 days" },
 ] as const;
 
-const URGENCY_OPTIONS = [
-  { value: "", label: "Any urgency" },
-  { value: "3", label: "Score ≥ 3" },
-  { value: "5", label: "Score ≥ 5" },
-  { value: "7", label: "Score ≥ 7" },
-] as const;
-
 const selectClass =
   "w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-700 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none";
 
 export function IncidentQueue({
   incidents,
-  allIncidents,
   selectedId,
   filter,
   query,
@@ -138,14 +128,6 @@ export function IncidentQueue({
     null,
   );
   const [pendingBusy, setPendingBusy] = useState(false);
-
-  const barangays = useMemo(
-    () =>
-      [...new Set(allIncidents.map((i) => i.barangay).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    [allIncidents],
-  );
 
   const advancedActive = isAdvancedFilterActive(advanced);
 
@@ -210,7 +192,7 @@ export function IncidentQueue({
       <div className="space-y-3 border-b border-slate-200 p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-slate-900">Incoming Queue</h2>
+            <h2 className="text-sm font-bold text-slate-900">SOS queue</h2>
             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-800">
               {loading ? "..." : incidents.length}
             </span>
@@ -314,7 +296,7 @@ export function IncidentQueue({
               aria-label="Search incidents"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="Search Report ID, Citizen name, Barangay..."
+              placeholder="Search SOS ID or location..."
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pr-3 pl-9 text-xs focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none"
             />
           </div>
@@ -338,77 +320,25 @@ export function IncidentQueue({
 
         {advancedOpen ? (
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
-                Barangay
-                <select
-                  aria-label="Filter by barangay"
-                  value={advanced.barangay}
-                  onChange={(event) => patchAdvanced({ barangay: event.target.value })}
-                  className={cn(selectClass, "mt-1")}
-                >
-                  <option value="">Any barangay</option>
-                  {barangays.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
-                Type
-                <select
-                  aria-label="Filter by incident type"
-                  value={advanced.type}
-                  onChange={(event) =>
-                    patchAdvanced({ type: event.target.value as AdvancedFilters["type"] })
-                  }
-                  className={cn(selectClass, "mt-1")}
-                >
-                  <option value="all">SOS + Reports</option>
-                  <option value="sos">SOS signals</option>
-                  <option value="report">Field reports</option>
-                </select>
-              </label>
-              <label className="block text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
-                Age
-                <select
-                  aria-label="Filter by age"
-                  value={advanced.maxAgeHours === null ? "" : String(advanced.maxAgeHours)}
-                  onChange={(event) =>
-                    patchAdvanced({
-                      maxAgeHours: event.target.value === "" ? null : Number(event.target.value),
-                    })
-                  }
-                  className={cn(selectClass, "mt-1")}
-                >
-                  {AGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
-                Urgency
-                <select
-                  aria-label="Filter by minimum urgency"
-                  value={advanced.minUrgency === null ? "" : String(advanced.minUrgency)}
-                  onChange={(event) =>
-                    patchAdvanced({
-                      minUrgency: event.target.value === "" ? null : Number(event.target.value),
-                    })
-                  }
-                  className={cn(selectClass, "mt-1")}
-                >
-                  {URGENCY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <label className="block text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
+              Age
+              <select
+                aria-label="Filter by age"
+                value={advanced.maxAgeHours === null ? "" : String(advanced.maxAgeHours)}
+                onChange={(event) =>
+                  patchAdvanced({
+                    maxAgeHours: event.target.value === "" ? null : Number(event.target.value),
+                  })
+                }
+                className={cn(selectClass, "mt-1")}
+              >
+                {AGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <div className="flex items-center gap-2">
               {presets.length > 0 ? (
@@ -656,7 +586,7 @@ export function IncidentQueue({
         >
           {pending.verb === "dismiss"
             ? "It leaves the queue and the dispatch radar. Dismissed incidents stay recoverable for 72 hours, then are permanently deleted."
-            : "It returns to the live queue and the dispatch radar for triage."}
+            : "It returns to the live queue and the dispatch radar."}
         </ConfirmDialog>
       ) : null}
     </div>

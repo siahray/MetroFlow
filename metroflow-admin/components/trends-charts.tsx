@@ -19,7 +19,7 @@ import type { HazardZone } from "@/lib/hazards";
 import type { FieldReport } from "@/lib/reports";
 
 /**
- * P2-4: operational charts for the triage page. Everything is computed from
+ * P2-4: operational charts for the operations dashboard. Everything is computed from
  * the live queues the page already polls — there is no historical analytics
  * endpoint, so the volume chart covers the trailing 24 hours of *queued*
  * signals, not all-time traffic.
@@ -126,7 +126,7 @@ export function TrendsCharts({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-lg border border-slate-100 p-3">
           <p className="mb-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
             Signals — last 24 h

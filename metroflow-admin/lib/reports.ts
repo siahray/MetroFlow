@@ -157,6 +157,15 @@ export async function addReportNote(reportId: string, note: string): Promise<Fie
   });
 }
 
+/** Hide a report from the queue; the API keeps it for 72 hours, then deletes it. */
+export async function dismissReport(reportId: string): Promise<FieldReport> {
+  return fetchJSON<FieldReport>(`/api/v1/reports/${reportId}/dismiss`, { method: "POST" });
+}
+
+export async function restoreReport(reportId: string): Promise<FieldReport> {
+  return fetchJSON<FieldReport>(`/api/v1/reports/${reportId}/restore`, { method: "POST" });
+}
+
 export async function getNearestSensorReading(reportId: string): Promise<NearestSensorReading> {
   return fetchJSON<NearestSensorReading>(`/api/v1/reports/${reportId}/nearest-sensor`);
 }

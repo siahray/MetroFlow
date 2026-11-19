@@ -111,6 +111,17 @@ export async function stubApi(
     if (path === "/api/v1/reports") return json(route, []);
     if (path === "/api/v1/vehicles") return json(route, [vehicleRow]);
     if (path === "/api/v1/hazards") return json(route, [hazardRow]);
+    if (path === "/api/v1/sensors") return json(route, []);
+    // The dashboard's network map draws the graph; an empty one keeps it from
+    // showing its "could not load" banner.
+    if (path === "/api/v1/network/state") {
+      return json(route, {
+        clearance_cm: 30,
+        generated_at: "2026-11-05T10:00:00Z",
+        edges: { type: "FeatureCollection", features: [] },
+        nodes: { type: "FeatureCollection", features: [] },
+      });
+    }
 
     return json(route, { detail: `no stub for ${path}` }, 404);
   });
