@@ -7,6 +7,10 @@
 | Version | Date        | Author         | Description                                                        |
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
 | 1.0     | 21 Oct 2026 | «Project Team» | Initial Baseline Release                                            |
+| 1.2     | 20 Nov 2026 | «Project Team» | CR-002 — admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with responder assignment and tracking |
+
+This copy carries CR-002 on top of the 1.0 baseline; the `docs/final document/`
+copy is submission-canonical and also carries CR-001.
 
 ## Approvals
 
@@ -91,7 +95,7 @@ Personas and engagement detail are in [Project-Management-Plan.docx](Project-Man
 ## Functional Requirements
 
 These are the business-level capabilities. The FSD decomposes them into
-`FSD-FR-001` to `FSD-FR-112`; each row here names the business requirement it
+`FSD-FR-001` to `FSD-FR-118`; each row here names the business requirement it
 serves so the traceability chain is never broken.
 
 | Req ID | Requirement                                                                            | Priority |
@@ -114,6 +118,8 @@ serves so the traceability chain is never broken.
 | FR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch (BR-016).        | High     |
 | FR-017 | Ingest river and rain gauge readings and flag impacted roads (BR-017).                 | Medium   |
 | FR-018 | Keep navigation, hazards and reporting usable offline (BR-018).                        | High     |
+| FR-019 | Show the whole operation at a glance on an operations dashboard (BR-004, BR-016).      | Medium   |
+| FR-020 | Assign a specific rescue unit and track it through the response (BR-015, BR-016).      | High     |
 
 The complete business requirements, with current implementation status, are in
 Appendix A.
@@ -199,19 +205,19 @@ does, so this document is also an honest statement of scope.
 | BR-001 | Provide a single, current view of road passability across the pilot corridor | Must     | Met — network state endpoint returns every edge with depth and status                 |
 | BR-002 | Allow the operations unit to ask "what happens if it rains this hard?"       | Must     | Met — rainfall simulation endpoint                                                    |
 | BR-003 | Recommend a route that a vehicle of known clearance can actually drive       | Must     | Met — routing endpoint; a dry (FASTEST) request now hands off to the Mapbox Directions API for a real road network and live traffic, reporting the source used; FLOOD_SAFE routing is unaffected |
-| BR-004 | Present incoming reports as a prioritised queue                              | Must     | Met — queue ordered by urgency score                                                  |
+| BR-004 | Present incoming reports as a prioritised queue                              | Must     | Met — queue ordered by urgency score, and the operations dashboard links active-SOS, pending-report, fleet-readiness and active-hazard counts to their screens and lists the oldest unattended work (CR-002) |
 | BR-005 | Allow narrowing the queue by source and by free-text search                  | Should   | Met — source filters and search                                                       |
-| BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Partly met — evidence panels are populated from the report record                     |
-| BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — decisions append to the operations log                            |
+| BR-006 | Show the evidence behind a report before a decision is made                  | Must     | Met — evidence panels are populated from the report record on Moderation and Evidence, the only report-verification screen; the evidence desk also renders a single-marker map and a reverse-geocoded address line for reports and SOS signals with coordinates (CR-002) |
+| BR-007 | Record a triage decision: reject, escalate, hold or dispatch                 | Must     | Met in the portal — report decisions append to the operations log on Moderation and Evidence, and dispatch actions on the SOS-only Dispatch Radar (CR-002) |
 | BR-008 | Keep an auditable trail of overrides and decisions                           | Must     | Met — every privileged action writes a hash-chained row in the same transaction; `/audit/verify` and CSV export |
 | BR-009 | Restrict access to authorised personnel by role                              | Must     | Met — API-issued tokens, bcrypt credentials and per-route role checks; no route is reachable without a token |
 | BR-010 | Operate on the equipment the LGU already has                                 | Should   | Met — browser-based portal                                                            |
 | BR-011 | Protect the personal data of reporters                                       | Must     | Met — reporters stored as salted hashes, phone numbers masked in the portal, public roles denied at the database |
 | BR-012 | Provide management information after an event                                | Could    | Met — audit and incident CSV export                                                   |
 | BR-013 | Give drivers flood-aware navigation that reroutes around verified hazards    | Must     | Met — destination search, turn-by-turn, live hazard stream, automatic rerouting and proximity alerts |
-| BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue and a moderation desk            |
-| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; native telephony is out of scope |
-| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview |
+| BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue; Moderation and Evidence is the only screen that verifies user reports (CR-002) |
+| BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; the SOS-only Dispatch Radar assigns a specific unit and tracks it during the response (CR-002); native telephony is out of scope |
+| BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview; Dispatch Radar is SOS-only, assigns a specific unit, and tracks it from live telemetry with a derived ETA and a `dispatch_events` mission timeline (CR-002) |
 | BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Partly met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented; external PAGASA feed integration (`FSD-FR-094`) remains blocked on `OD-D25` |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
 | BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Partly met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled; PAGASA telemetry remains blocked on `OD-D25` |
@@ -272,6 +278,9 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | BRULE-011 | Only an available unit may be assigned; assignment changes its status to en route          | Double-booking a unit delays both responses                |
 | BRULE-012 | A sensor threshold breach is advisory until a dispatcher confirms it                       | Sensors drift; a human owns the operational decision       |
 | BRULE-013 | Driver location is rounded, device identity is hashed, and retention is at most 24 hours   | Data minimisation under RA 10173                           |
+| BRULE-019 | Quezon City Hall is the LGU operations base, and rescue units and fleet stage in the same vicinity by default | A single known base makes dispatch and readiness comparable across units (CR-002) |
+
+BRULE-014 to BRULE-018 are defined in the submission-canonical copy.
 
 ### B.2 Assumptions and constraints
 

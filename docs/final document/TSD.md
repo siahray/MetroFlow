@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.1 — CR-001
+Version 1.2 — CR-002
 
 ## Document Control
 
@@ -10,14 +10,15 @@ Version 1.1 — CR-001
 | ----------- | ---------------------------------------------------------------- |
 | Project     | MetroFlow                                                        |
 | Document    | Technical Specification Document                                 |
-| Version     | 1.1                                                              |
+| Version     | 1.2                                                              |
 | Prepared By | Alt F4                                                           |
-| Baseline    | `main`, 15 November 2026                                         |
-| Change      | CR-001 — production network hydrological recalibration, Mapbox driver navigation and door-to-door routing, admin incident location visualizer |
+| Baseline    | `main`, 20 November 2026                                         |
+| Change      | CR-002 — admin screen split (operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar) with responder assignment and dual-mode tracking |
 
 This document describes the architecture for the approved provider keys,
 API-issued session tokens, the Mapbox dry-state routing design (ADR-025,
-BRULE-015) and the CR-001 driver basemap and search migration (ADR-026).
+BRULE-015), the CR-001 driver basemap and search migration (ADR-026) and the
+CR-002 admin screen split with dual-mode responder tracking (ADR-027, BRULE-019).
 Sections marked `Planned` are not implemented in the baseline.
 See FSD §Implementation Status for the current position.
 
@@ -28,19 +29,19 @@ See FSD §Implementation Status for the current position.
 | BR-001 | FSD-FR-001 to FSD-FR-005             | Network State Service, PostGIS geometry               |
 | BR-002 | FSD-FR-006 to FSD-FR-010, FSD-FR-140 to FSD-FR-141 | Hydrology Engine (SCS-CN), elevation assignment, live state writer |
 | BR-003 | FSD-FR-011 to FSD-FR-017, FSD-FR-143 | Routing Engine (Time-Dependent $A^*$), door-to-door coordinate handoff |
-| BR-004 | FSD-FR-024 to FSD-FR-031             | Incident Queue (portal state)                         |
+| BR-004 | FSD-FR-024 to FSD-FR-031, FSD-FR-113 | Incident Queue (portal state) and operations dashboard |
 | BR-005 | FSD-FR-026 to FSD-FR-028             | Queue filter and search                               |
-| BR-006 | FSD-FR-032 to FSD-FR-038             | Incident Detail panel                                 |
-| BR-007 | FSD-FR-039 to FSD-FR-046             | Dispatch actions and operations log                   |
+| BR-006 | FSD-FR-032 to FSD-FR-038, FSD-FR-114 | Incident Detail panel and Moderation evidence desk     |
+| BR-007 | FSD-FR-039 to FSD-FR-046, FSD-FR-114 | Moderation actions and operations log                 |
 | BR-008 | FSD-FR-043 to FSD-FR-047             | Audit log schema and migration                        |
 | BR-009 | FSD-FR-018 to FSD-FR-023, FSD-FR-048 | Access control — API-issued JWT with role checks      |
 | BR-010 | FSD-FR-050 to FSD-FR-052             | API runtime, security middleware, OpenAPI             |
 | BR-011 | FSD-FR-023, FSD-FR-051               | Row-level security, TLS, header policy                |
 | BR-012 | FSD-FR-049                           | Reporting and export (CSV export for audit logs and incidents) |
-| BR-013 | FSD-FR-054 to FSD-FR-064             | Driver app, routing extensions, SSE client            |
-| BR-014 | FSD-FR-065 to FSD-FR-081             | Report service, evidence store, moderation            |
-| BR-015 | FSD-FR-073, 074, 087                 | SOS service and distress incidents                    |
-| BR-016 | FSD-FR-075 to FSD-FR-089             | Map UI, fleet service, dispatch engine                |
+| BR-013 | FSD-FR-054 to FSD-FR-064, FSD-FR-118 | Driver app, routing extensions, SSE client, client-neutral responder contract |
+| BR-014 | FSD-FR-065 to FSD-FR-081, FSD-FR-114 | Report service, evidence store, report-only moderation |
+| BR-015 | FSD-FR-073, 074, 087, 115, 117       | SOS service, distress incidents, SOS-only radar queue and mission timeline |
+| BR-016 | FSD-FR-075 to FSD-FR-089, FSD-FR-113 to 118 | Map UI, fleet service, dispatch engine, operations dashboard, responder tracking |
 | BR-017 | FSD-FR-090, FSD-FR-091               | Sensor service and impact rules                       |
 | BR-018 | FSD-FR-059, 068 to 071               | Native offline cache, queue, sync                     |
 
@@ -102,7 +103,7 @@ the emitted event, not from the device receiving it.
 | Geometry Service      | BR-001 / FSD-FR-004, FSD-FR-053      | Idempotent PostGIS backfill with advisory lock                             |
 | Data Layer            | BR-001 / FSD-FR-001                  | SQLAlchemy models, connection lifecycle, migrations                        |
 | Audit Store           | BR-008 / FSD-FR-047                  | Actor, action, JSON payload, integrity hash (schema only)                  |
-| Dispatch Portal       | BR-004 to BR-007 / FSD-FR-018 to 046 | Login, queue, detail, operations log, dispatch actions                     |
+| Dispatch Portal       | BR-004 to BR-007 / FSD-FR-018 to 046, 113, 114 | Login, operations dashboard, SOS-only radar, report moderation, operations log, dispatch actions |
 | Security Middleware   | BR-011 / FSD-FR-051                  | Response headers on every request                                          |
 | Delivery Pipeline     | BR-008 / FSD-FR-047                  | Lint, test, scan, migrate, publish image                                   |
 | Auth Service          | BR-009 / FSD-FR-092                  | Session token issue and verification, role dependency (audit context planned) |
@@ -111,6 +112,7 @@ the emitted event, not from the device receiving it.
 | Event Stream          | BR-018 / FSD-FR-086                  | `event_log` relay over SSE (40 ms poll) with `Last-Event-ID` reconnect     |
 | Fleet Service         | BR-016 / FSD-FR-075, 076, 088        | Unit registry, status transitions, telemetry, nearest-unit ranking         |
 | Dispatch Service      | BR-016 / FSD-FR-087 to 089           | Distress incidents, assignment, flood-safe rescue route                    |
+| Responder Tracking    | BR-016 / FSD-FR-116 to 118           | Last-known unit position from telemetry and the vehicles SSE feed, live/stale/offline fix state, distance and derived ETA; `dispatch_events` mission timeline; client-neutral responder contract (ADR-027) |
 | Sensor Service        | BR-017 / FSD-FR-090, 091             | Reading validation, thresholds, impact radius, advisory roads (implemented) |
 | User Service          | BR-009 / FSD-FR-048                 | User CRUD with audit trail, role validation, self-protection, last admin protection |
 | Export Service        | BR-012 / FSD-FR-049                 | CSV export for audit logs and incidents with filtering                     |
@@ -350,6 +352,26 @@ Index: btree on `(status, reported_at)`; GiST on `geom`.
 
 Index: btree on `(status, assigned_at desc)`; GiST on `route`.
 
+## Database Design - dispatch_events
+
+Durable per-incident mission milestones, written in the same transaction as the
+change they record (ADR-027). `event_type` is one of `created`, `assigned`,
+`dispatched`, `en_route`, `arrived`, `completed` or `cancelled`; `en_route` is
+derived from the first accepted telemetry ping on a live dispatch, and `arrived`
+from the driver's on-scene action.
+
+| Column       | Type         | Description                                                        |
+| ------------ | ------------ | ------------------------------------------------------------------ |
+| `event_id`   | integer      | Primary key                                                        |
+| `sos_id`     | integer      | FK $\rightarrow$ `sos_requests.sos_id`, cascade on delete          |
+| `vehicle_id` | integer      | FK $\rightarrow$ `vehicles.vehicle_id`, nullable, set null on delete |
+| `event_type` | varchar(20)  | `created`, `assigned`, `dispatched`, `en_route`, `arrived`, `completed`, `cancelled` |
+| `actor`      | varchar(120) | Name or email of who caused the milestone                          |
+| `note`       | text         | Optional free-text detail                                          |
+| `created_at` | timestamptz  | Milestone time                                                     |
+
+Indexes: btree on `sos_id` and on `event_type`.
+
 ## Database Design - sensors
 
 | Column            | Type                  | Description                                    |
@@ -410,6 +432,8 @@ Index: btree on `(sensor_id, recorded_at desc)`; btree on `(breach, received_at)
 | `/api/v1/sos`                     | POST   | BR-015 / FSD-FR-073        |
 | `/api/v1/sos`                     | GET    | BR-015 / FSD-FR-074, 087   |
 | `/api/v1/sos/{id}/assign`         | POST   | BR-016 / FSD-FR-088, 089   |
+| `/api/v1/sos/{id}/arrive`         | POST   | BR-016 / FSD-FR-115, 117   |
+| `/api/v1/dispatch/{id}/events`    | GET    | BR-016 / FSD-FR-117        |
 | `/api/v1/dispatch/{id}/route`     | GET    | BR-016 / FSD-FR-089        |
 | `/api/v1/sensors/readings`        | POST   | BR-017 / FSD-FR-090        |
 | `/api/v1/sensors`                 | GET    | BR-017 / FSD-FR-091        |
@@ -1106,6 +1130,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | ADR-024 | Offline state is on-device SQLite, replays keyed by `client_id` | In-memory queue, raster tile cache | The queue, road graph, hazards and last route must survive an app restart, and `expo-sqlite` is already the app's storage; a device-generated `client_id` makes a report replay after a lost response return the original row instead of a duplicate. Tile storage and licensing stay out of scope (ADR-018, LIM-017) | Accepted 8 Nov 2026 |
 | ADR-025 | A FASTEST-mode route is answered by the Mapbox Directions API, not the in-house engine | Keep the in-house engine for every mode; a second in-house "fastest, flood-blind" search | Only the in-house engine knows about water depth and clearance, so it keeps FLOOD_SAFE exclusively; `routing_mode() == FASTEST` already means every edge in the graph is confirmed clear (BRULE-015), so delegating that one case to a real road network and live traffic improves drive quality with no safety trade-off. A second in-house "flood-blind fastest" mode (the status quo before this ADR) would have kept routing bounded to the imported OSM extent for no safety benefit over the provider | Accepted (13 Nov 2026) |
 | ADR-026 | The driver app renders on the Mapbox SDK (`@rnmapbox/maps`) with Mapbox Geocoding as its primary place search | Keep `react-native-maps` with a raster style; restrict search to graph-node names | A bare graph overlay on a basic raster map gave no street context and made the navigation screen read as a debug view rather than a product. The SDK adds a real street basemap, a `navigation-night` variant for storm mode and POI geocoding, at the cost of a provider token on the client. The token is origin-restricted (C-005) and every provider call fails soft: the style falls back to the OSM raster, and search falls back to keyless Nominatim and then graph-node matching, so a missing or exhausted token degrades search quality rather than breaking navigation | Accepted 15 Nov 2026 |
+| ADR-027 | Responder tracking is dual-mode and client-neutral: live position from vehicle telemetry plus the vehicles SSE feed, and mission milestones from durable `dispatch_events` | Track only via a live GPS stream; track only via periodic manual status updates; build the tracker inside the portal | A live fix alone leaves the incident with no durable record, and a status-only feed cannot show where the unit is. Telemetry gives position with a fix-age badge (live ≤60 s, stale ≤5 min, offline beyond), while `dispatch_events` written in the same transaction as each change gives an ordered, auditable mission timeline. Both are plain API contracts keyed by `vehicle_id` and `sos_id`, so a separate responder app or a responder mode in the driver app writes the same data with no portal change. Unit-level only: there is no person/device responder identity yet (LIM-030) | Accepted 20 Nov 2026 |
 
 ## 7. Known Limitations
 
@@ -1141,6 +1166,7 @@ available for an out-of-band release, but the normal release path is the merge.
 | LIM-028 | `NFR-001`/`NFR-002`/`NFR-019` latency budgets are not met at the real Quezon City network scale over the hosted deployment (13 Nov 2026 re-measurement, p95 11–14.7× over budget) | Network state, routing and SSE delivery are all substantially slower than specified in production-like conditions | **Partially addressed, not closed.** Profiling on 13 Nov 2026 found two distinct, fixable code-level causes beyond the raw database round trip: (1) `/network/state` serialized its ~5.3 MB payload through FastAPI's generic `jsonable_encoder` (~3.2 s for this payload vs. ~0.16 s for Pydantic's own serializer) — fixed by returning a pre-serialized `Response` (`backend/main.py::get_network_state`); (2) `/routing/navigate` fetched every edge's geometry (~7,618 rows) to render a route using a few dozen of them — fixed by scoping `_load_edge_geometry` to the path's own edges; (3) `/simulate` re-serialized a ~13k-feature payload through the same generic encoder — fixed by building responses with `model_construct` and `model_dump_json()` directly. Re-measured after both fixes: routing's median improved ($\approx 2,509\text{ ms}$ vs. $\approx 2,934\text{ ms}$ p95 before) but network-state's p95 got worse ($\approx 52,872\text{ ms}$), traced to a live SSE client holding a pooled database connection open for the whole benchmark run — the same pool-contention pattern `BACKLOG.md`'s simulation-endpoint entries already document, not a flaw in either fix. The underlying hosted-database round trip (Vercel function to the Supabase pooler in `ap-northeast-2`, roughly 1-1.5 s per request end to end) is still unaddressed and is the floor neither fix touches. A clean re-measurement with no concurrent SSE clients, and a decision on the round-trip latency itself (e.g. a database region closer to the deployment, or caching the static graph in process), are both still open. See `BRD.md` NFR-001/002/019 |
 
 | LIM-029 | Node elevation is a deterministic synthetic formula, not terrain data; the ponding coefficients are calibrated, not measured | Flood depth is plausible and consistent, but not predictive of a specific street | Labelled as a model wherever it is shown; ponding is elevation-weighted so it still discriminates between low and high ground; replace the elevation column with a DEM and recalibrate before using depth for an operational decision |
+| LIM-030 | Responder tracking is unit-level only, and its freshness thresholds are stated assumptions | The radar can show which vehicle is responding and how fresh its fix is, but not which person or device; the no-fix, stale and offline badges depend on the 60 s / 5 min cut-offs | `vehicle_id` is the tracking key and the responder client is not built, so a person/device model and a responder client are [TBC]; thresholds are one constant each in `metroflow-admin/lib/tracking.ts`, revisit once real telemetry cadence is measured |
 
 LIM-001 and LIM-022 are closed. Every route except the four auth entry points
 (`login`, `register`, `send-verification`, `verify`) requires a bearer token:

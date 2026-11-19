@@ -6,14 +6,15 @@
 | -------------- | ---------------------------------------------------- |
 | Project        | MetroFlow                                            |
 | Document       | Admin UI Design Baseline                             |
-| Version        | 0.4                                                  |
+| Version        | 0.5                                                  |
 | Status         | For Review — design gate not passed                  |
-| Date           | 22 October 2026                                      |
+| Date           | 20 November 2026                                     |
 | Scope          | LGU admin / dispatch portal only                     |
 | Source         | Client-supplied HTML/CSS, 4 of 4 UIs received        |
 | Behaviour ref  | [FSD](../FSD.md)                                     |
 | Architecture   | [TSD](../TSD.md)                                     |
 | Implementation | Implemented; see the 8 November 2026 status note below |
+| Change         | CR-002 — operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with responder tracking |
 
 This baseline turns the supplied HTML/CSS into a design specification for the
 modelled LGU admin site. It does not approve implementation, cost, schedule or
@@ -140,8 +141,8 @@ comms or air-asset escalation. They are baselined visually here and flagged for 
 scope decision; this document does not add them to the requirements baseline.
 
 The current React prototype is limited to the FSD-backed shell, queue and
-incident detail, Dispatch Radar report verification, Live Map & Hazards editor
-and Rescue Tracking. It omits Civic Broadcasts and the conditional UI 4 crew,
+incident detail, the operations dashboard, Moderation and Evidence, the
+SOS-only Dispatch Radar, Live Map & Hazards editor and Rescue Tracking. It omits Civic Broadcasts and the conditional UI 4 crew,
 comms, payload, battery, safe-haven and air-escalation features until a change
 request resolves them.
 
@@ -239,14 +240,15 @@ Proposed navigation baseline:
 
 | Order | Item                  | Screen                | Source                      |
 | ----- | --------------------- | --------------------- | --------------------------- |
-| 1     | Dispatch Radar        | Report verification   | UI 2 + FSD-FR-024–046       |
-| 2     | Triage & Verification | Queue and detail      | FSD-FR-024–046              |
-| 3     | Live Map & Hazards    | Map and hazard editor | UI 1 + FSD-FR-075–089       |
-| 4     | Rescue Units & Fleet  | Fleet                 | UI 4 + FSD-FR-076           |
-| 5     | Sensors & Water Level | Sensors               | UIs + FSD-FR-090–091        |
-| 6     | Administration        | Users, audit, export  | Conditional; FSD-FR-047–049 |
-| 7     | Evacuation Centers    | —                     | UI 1/3/4 only; not in FSD   |
-| 8     | Civic Broadcasts      | —                     | UI 1/3 only; not in FSD     |
+| 1     | Operations Dashboard  | KPIs and attention band | CR-002 / FSD-FR-113         |
+| 2     | Moderation & Evidence | Report queue and evidence | CR-002 / FSD-FR-114       |
+| 3     | Dispatch Radar        | SOS queue and tracking  | CR-002 / FSD-FR-115–118     |
+| 4     | Live Map & Hazards    | Map and hazard editor | UI 1 + FSD-FR-075–089       |
+| 5     | Rescue Units & Fleet  | Fleet                 | UI 4 + FSD-FR-076           |
+| 6     | Sensors & Water Level | Sensors               | UIs + FSD-FR-090–091        |
+| 7     | Administration        | Users, audit, export  | Conditional; FSD-FR-047–049 |
+| 8     | Evacuation Centers    | —                     | UI 1/3/4 only; not in FSD   |
+| 9     | Civic Broadcasts      | —                     | UI 1/3 only; not in FSD     |
 
 UI 1 marks **Sensors & Water Level** active while showing the hazard
 editor. The editor belongs under **Live Map & Hazards**; the active state must
@@ -301,10 +303,11 @@ baseline; the supplied UI places it at the end of the card.
 | `/login`           | Sign in                    | None             | FSD-FR-018–023          | Reuse prototype    |
 | `/`                | Redirect to dashboard      | None             | —                       | New                |
 | `/dashboard`       | Operational dashboard      | None             | FSD-FR-024              | Reuse prototype    |
-| `/triage`          | Queue                      | None             | FSD-FR-024–031          | Reuse prototype    |
-| `/triage/[id]`     | Report verification detail | Full             | FSD-FR-032–046, 077–081 | UI 2               |
+| `/triage`          | Operations dashboard       | None             | FSD-FR-113              | Implemented; read-only KPIs and attention band |
+| `/triage/[id]`     | Report verification detail | Full             | FSD-FR-032–046, 077–081 | Legacy route; verification moved to `/moderation` under CR-002 |
 | `/map`             | Live map and hazard editor | Partial          | FSD-FR-075–089          | UI 1               |
-| `/moderation`      | Evidence and moderation    | Implemented      | FSD-FR-077–081          | Queue, evidence viewer, approve, reject/duplicate; CCTV cross-reference absent |
+| `/moderation`      | Evidence and moderation    | Implemented      | FSD-FR-032–046, 077–081, 114 | Only report-verification screen; queue, evidence viewer, approve, reject/duplicate, hold, escalate, notes, dismiss, restore |
+| `/radar`           | SOS dispatch and responder tracking | Unit detail link | FSD-FR-087–089, 115–118 | Implemented; SOS-only, unit assignment, tracking and mission timeline |
 | `/fleet`           | Rescue units and fleet     | None             | FSD-FR-076              | New; list          |
 | `/fleet/[id]`      | Rescue unit tracking       | Full layout      | FSD-FR-076, 086–089     | UI 4               |
 | `/dispatch`        | Distress and dispatch      | Unit detail link | FSD-FR-087–089          | New; queue pending |
@@ -1131,6 +1134,13 @@ UI 4 adds these issues:
 | FSD-FR-091     | Advisory roads                  | Partial: impact-radius advisories and routing penalty; no flood-state view | Add the flood-state view                 |
 | FSD-FR-092     | Role enforcement                | Implemented: portal guards and API role checks                | Keep                                                 |
 | FSD-FR-093     | Immutable audit                 | Partial: hash-chained writes and verification; no audit view  | Add an audit view                                    |
+| FSD-FR-113     | Operations dashboard            | Implemented: `/triage` KPI links, attention band and oldest-unattended tables | Keep; no verification or dispatch action  |
+| FSD-FR-114     | Report-only moderation          | Implemented: `/moderation` queue, evidence desk and all report actions | Keep; sole report-verification surface     |
+| FSD-FR-115     | SOS-only radar and unit assignment | Implemented: `/radar` SOS queue, call-in and assign/confirm/undo | Keep                                       |
+| FSD-FR-116     | Responder live tracking         | Implemented: `ResponderTracking` fix state, distance and derived ETA | Keep; unit-level only (LIM-030)           |
+| FSD-FR-117     | Mission timeline                | Implemented: `MissionTimeline` from `/dispatch/{id}/events` | Keep                                                |
+| FSD-FR-118     | Client-neutral responder contract | Defined; no responder client exists                    | Open; separate app or driver-app mode `[TBC]`       |
+| BRULE-019      | Quezon City Hall base           | Label only in the dashboard                               | `[TBC]` coordinates and vicinity rule               |
 | Not in FSD     | Civic broadcasts                | Partial: UI 3 public alert                                    | Scope decision; add requirements or drop the screen  |
 | Not in FSD     | Evacuation centers              | Partial: UI 3/4 cards                                         | Scope decision; add requirements or drop the card    |
 | Not in FSD     | Crew, comms and air escalation  | Partial: UI 4 crew, stream and actions                        | Scope decision; add requirements or remove           |
@@ -1141,11 +1151,11 @@ No slice starts until this baseline is accepted.
 
 | Slice | Output                                                        | FSD reference           | Verification                          |
 | ----- | ------------------------------------------------------------- | ----------------------- | ------------------------------------- |
-| A     | Shell, tokens, login, dashboard, queue, report verification   | FSD-FR-018–049          | Component tests; visual review        |
+| A     | Shell, tokens, login, dashboard, queue, report verification, operations dashboard and moderation split | FSD-FR-018–049, 113–114 | Component tests; visual review        |
 | B     | Map foundation, network, hazards, fleet, SOS layers           | FSD-FR-075–076          | Map render and layer tests            |
 | C     | Hazard editor: draw, edit, validate, save, publish, withdraw  | FSD-FR-082–086          | Geometry validation, publish tests    |
 | D     | Moderation and evidence desk                                  | FSD-FR-077–081          | Approve, reject, duplicate tests      |
-| E     | Dispatch: queue, ranking, route preview, assignment, tracking | FSD-FR-087–089          | Ranking, assignment and mission tests |
+| E     | Dispatch: SOS-only queue, ranking, route preview, assignment, responder tracking and mission timeline | FSD-FR-087–089, 115–118 | Ranking, assignment, tracking and mission tests |
 | F     | Sensors and advisories                                        | FSD-FR-090–091          | Threshold and impact tests            |
 | G     | Administration, roles, audit, export                          | FSD-FR-047–049, 092–093 | RBAC and audit tests                  |
 | H     | Public advisory and civic broadcast (conditional)             | Not in FSD              | Scope decision; CR/FSD extension      |

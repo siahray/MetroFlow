@@ -1,6 +1,6 @@
 # MetroFlow — What's Left to Implement
 
-**As of:** 10 November 2026 · **Source:** cross-checked against `BACKLOG.md`,
+**As of:** 20 November 2026 · **Source:** cross-checked against `BACKLOG.md`,
 `docs/BRD.md`, `docs/TSD.md`, `docs/design/*_BASELINE.md`, and the actual code
 (`backend/main.py`, `models.py`, test suites) — not just what the docs claim.
 
@@ -17,7 +17,7 @@ charter dates) are excluded entirely — they were never engineering work.
 ## Overall
 
 ```
-███████████████░░░░░ 83%  (41.5 / 50 weighted items)
+███████████████░░░░░ 83%  (45.5 / 55 weighted items)
 ```
 
 ---
@@ -158,16 +158,37 @@ list) — that table is stale, see §6.
 
 - [ ] `docs/design/ADMIN_UI_BASELINE.md`'s gap-analysis table (~130 rows) predates the CR-001 build and still lists things as missing that now exist (hold/escalate/notes actions, `vehicles.clearance_cm`, the general hazards list). Needs a pass to mark those resolved — low priority, it's a reference doc, not the authoritative backlog.
 
+## 8. CR-002 — admin screen split (20 Nov 2026)
+
+```
+████████████████░░░░ 80%  (4 / 5 items)
+```
+
+- [x] `FSD-FR-113`: `/triage` is a read-only operations dashboard — four KPI
+  links, attention band, oldest unattended reports/unassigned SOS, read-only map
+  and trends; no verification or dispatch action.
+- [x] `FSD-FR-114`–`115`: `/moderation` is the only report-verification surface;
+  `/radar` is SOS-only (app SOS plus call-in) with specific-unit assignment.
+- [x] `FSD-FR-116`–`117`: unit tracking (live/stale/offline/unknown fix state,
+  distance, derived ETA) and a `dispatch_events` mission timeline; 110 unit and
+  11 e2e tests pass, but there is no browser fixture for `/moderation`.
+- [x] Documentation synced across `final document/`, `md docu/` and
+  `latest md docu/`, plus API, design baseline, README and approval register.
+- [ ] `FSD-FR-118`/`BRULE-019`: responder client (separate app or driver-app
+  mode), person/device-level identity, and Quezon City Hall coordinates with a
+  defined "same vicinity" rule — all `[TBC]`; freshness cut-offs are assumptions
+  (LIM-030).
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
   Civic Broadcasts, Air-Asset Escalation, functional offline tile caching,
   real CCTV — all in `AGENTS.md`'s scope constraints.
 - **Unapproved future proposal:** CR-003 (Sentinel-1 satellite ingestion) —
-  a change request, not committed scope. CR-002 (admin screen split: Operations
-  Dashboard, report-only Moderation, SOS-only Dispatch Radar with responder
-  tracking) is also still **Draft — proposed**, but it has been implemented in
-  the portal working tree; see `BACKLOG.md`.
+  a change request, not committed scope. CR-002 (admin screen split) is also
+  still **Draft — proposed** (sign-offs pending), but it is implemented in the
+  portal and synced into the BRD/FSD/TSD/API/design baseline; its remaining open
+  items are listed in §8 below.
 - **Business/academic paperwork:** budgets, approvals, charter dates, ROI
   figures in `PROJECT_CHARTER.md`, `BUSINESS_CASE.md`, `PROJ_MANAGEMENT_PLAN.md`,
   `APPROVALS.md`, `CR-001..004.md` — explicitly `[TBC]` placeholders for the
