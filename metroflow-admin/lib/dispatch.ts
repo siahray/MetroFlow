@@ -31,6 +31,8 @@ export type Vehicle = {
   current_location_lat: number | null;
   current_location_lon: number | null;
   speed_kmh: number | null;
+  /** Stamped by the telemetry ingest; the freshness of the last reported fix. */
+  updated_at?: string | null;
 };
 
 export type IncidentLogItem = {

@@ -12,9 +12,8 @@ import { isEscalatedReport, reportToIncident, sosToIncident } from "./sos-to-inc
 import type { FieldReport } from "./reports";
 import type { SOSRequest } from "./dispatch";
 
-// Only the flags the queue filters read; the rest of an Incident is irrelevant here.
-const incident = (flags: Partial<Pick<Incident, "hasPhoto" | "escalated" | "sensorMismatch">>) =>
-  ({ hasPhoto: false, escalated: false, sensorMismatch: false, ...flags }) as Incident;
+// Only what the queue filters read; the rest of an Incident is irrelevant here.
+const incident = (tags: string[] = []) => ({ tags }) as Incident;
 
 const report = (over: Partial<FieldReport>): FieldReport =>
   ({
@@ -35,29 +34,29 @@ const report = (over: Partial<FieldReport>): FieldReport =>
   }) as unknown as FieldReport;
 
 describe("queue filters (FSD-FR-026)", () => {
-  test("offers all, photo, sensor mismatch and escalated", () => {
-    expect(QUEUE_FILTERS.map((f) => f.id)).toEqual(["all", "photo", "sensor", "escalated"]);
+  test("offers all, awaiting a unit and unit assigned", () => {
+    expect(QUEUE_FILTERS.map((f) => f.id)).toEqual(["all", "unassigned", "assigned"]);
   });
 
-  test("each filter reads its own flag, so an incident can match several", () => {
-    const both = incident({ hasPhoto: true, escalated: true });
-    expect(matchesQueueFilter(both, "photo")).toBe(true);
-    expect(matchesQueueFilter(both, "escalated")).toBe(true);
-    expect(matchesQueueFilter(both, "sensor")).toBe(false);
-    expect(matchesQueueFilter(both, "all")).toBe(true);
+  test("a signal is either awaiting a unit or has one, never both", () => {
+    const assigned = incident(["Vehicle Assigned", "Active SOS"]);
+    const waiting = incident(["Active SOS"]);
+    expect(matchesQueueFilter(assigned, "assigned")).toBe(true);
+    expect(matchesQueueFilter(assigned, "unassigned")).toBe(false);
+    expect(matchesQueueFilter(waiting, "unassigned")).toBe(true);
+    expect(matchesQueueFilter(waiting, "assigned")).toBe(false);
+    expect(matchesQueueFilter(waiting, "all")).toBe(true);
   });
 
-  test("counts per filter overlap instead of hiding an escalated photo report", () => {
+  test("counts per filter partition the queue", () => {
     const list = [
-      incident({ hasPhoto: true, escalated: true }),
-      incident({ hasPhoto: true }),
-      incident({ sensorMismatch: true }),
-      incident({}),
+      incident(["Vehicle Assigned"]),
+      incident(["Vehicle Assigned", "Escalated"]),
+      incident([]),
     ];
-    expect(countByFilter(list, "all")).toBe(4);
-    expect(countByFilter(list, "photo")).toBe(2);
-    expect(countByFilter(list, "escalated")).toBe(1);
-    expect(countByFilter(list, "sensor")).toBe(1);
+    expect(countByFilter(list, "all")).toBe(3);
+    expect(countByFilter(list, "assigned")).toBe(2);
+    expect(countByFilter(list, "unassigned")).toBe(1);
   });
 
   test("an incident with no photo is not mislabelled as a sensor mismatch", () => {
@@ -96,11 +95,10 @@ describe("report to incident", () => {
     expect(result.tags).toContain("Gauge disagrees");
   });
 
-  test("a plain report with no flags matches only the All filter", () => {
+  test("a plain report is never counted as an assigned SOS", () => {
     const result = reportToIncident(report({}));
-    expect(
-      (["photo", "sensor", "escalated"] as const).some((f) => matchesQueueFilter(result, f)),
-    ).toBe(false);
+    expect(matchesQueueFilter(result, "assigned")).toBe(false);
+    expect(matchesQueueFilter(result, "unassigned")).toBe(true);
   });
 });
 

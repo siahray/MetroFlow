@@ -20,7 +20,12 @@ export type NavItem =
   "triage" | "moderation" | "radar" | "hazards" | "fleet" | "sensors" | "users" | "export";
 
 export const NAV_ITEMS = [
-  { id: "triage" as NavItem, label: "Triage & Verification", href: "/triage", icon: CheckSquare },
+  {
+    id: "triage" as NavItem,
+    label: "Operations Dashboard",
+    href: "/triage",
+    icon: CheckSquare,
+  },
   {
     id: "moderation" as NavItem,
     label: "Moderation & Evidence",

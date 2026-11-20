@@ -75,13 +75,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   headers.set("Content-Type", "application/json");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-  if (!res.ok) {
-    throw await readError(res);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers,
+      signal: init?.signal ?? controller.signal,
+    });
+    if (!res.ok) {
+      throw await readError(res);
+    }
+    // 204 No Content — return undefined cast to T (caller must not use the value).
+    if (res.status === 204) return undefined as unknown as T;
+    return (await res.json()) as T;
+  } catch (e) {
+    if (e instanceof Error) {
+      const msg = e.message.toLowerCase();
+      if (e.name === "AbortError" || msg.includes("aborted") || msg.includes("cancel")) {
+        throw new ApiError(0, "Could not reach the server. Check your connection and API URL.");
+      }
+      if (msg.includes("network request failed") || msg.includes("failed to fetch")) {
+        throw new ApiError(0, "Could not reach the server. Check your connection and API URL.");
+      }
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-  // 204 No Content — return undefined cast to T (caller must not use the value).
-  if (res.status === 204) return undefined as unknown as T;
-  return (await res.json()) as T;
 }
 
 export type AuthUser = {

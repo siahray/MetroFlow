@@ -73,11 +73,15 @@ export type LogEntry = {
   kind: "muted" | "action" | "note";
 };
 
+/**
+ * CR-002 §2.2: the Dispatch Radar queue only carries SOS signals, so its quick
+ * filters ask the one question a dispatcher acts on — does this signal still
+ * need a unit?
+ */
 export const QUEUE_FILTERS = [
   { id: "all", label: "All" },
-  { id: "photo", label: "Photo" },
-  { id: "sensor", label: "Sensor Mismatch" },
-  { id: "escalated", label: "Escalated" },
+  { id: "unassigned", label: "Awaiting unit" },
+  { id: "assigned", label: "Unit assigned" },
 ] as const;
 
 export type QueueFilter = (typeof QUEUE_FILTERS)[number]["id"];
@@ -140,15 +144,13 @@ export function incidentTagClass(tag: string): string {
   return "border-slate-200 bg-white text-slate-600";
 }
 
-/** FSD-FR-026: filters are independent flags, so counts can overlap. */
+/** FSD-FR-026: a signal is either still waiting for a unit or it has one. */
 export function matchesQueueFilter(incident: Incident, filter: QueueFilter): boolean {
   switch (filter) {
-    case "photo":
-      return incident.hasPhoto;
-    case "sensor":
-      return incident.sensorMismatch;
-    case "escalated":
-      return incident.escalated;
+    case "unassigned":
+      return !incident.tags.includes("Vehicle Assigned");
+    case "assigned":
+      return incident.tags.includes("Vehicle Assigned");
     default:
       return true;
   }

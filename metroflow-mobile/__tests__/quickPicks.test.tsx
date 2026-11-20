@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 import { getNetworkState } from '../src/api';
 import { QuickPickList, QuickPicks } from '../src/components/QuickPicks';
+import { searchPlaces } from '../src/geocode';
 import { listQuickPicks, saveQuickPicks, type QuickPick } from '../src/quickPicks';
 
 const mockPush = jest.fn();
@@ -17,6 +18,21 @@ jest.mock('../src/quickPicks', () => ({
   listQuickPicks: jest.fn(),
   saveQuickPicks: jest.fn(),
 }));
+// The picker map is native-only; a plain View keeps the form renderable.
+jest.mock('@rnmapbox/maps', () => {
+  const { View } = require('react-native');
+  return {
+    setAccessToken: jest.fn(() => Promise.resolve()),
+    MapView: View,
+    Camera: View,
+    MarkerView: View,
+  };
+});
+jest.mock('../src/geocode', () => ({
+  searchPlaces: jest.fn(),
+  reverseGeocodeName: jest.fn(),
+  boundingBoxOf: jest.fn(() => null),
+}));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
@@ -24,6 +40,7 @@ jest.mock('react-native-safe-area-context', () => ({
 const mockedList = listQuickPicks as jest.MockedFunction<typeof listQuickPicks>;
 const mockedSave = saveQuickPicks as jest.MockedFunction<typeof saveQuickPicks>;
 const mockedNetwork = getNetworkState as jest.MockedFunction<typeof getNetworkState>;
+const mockedPlaces = searchPlaces as jest.MockedFunction<typeof searchPlaces>;
 
 const work: QuickPick = {
   id: '1',
@@ -68,6 +85,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockedSave.mockResolvedValue();
   mockedNetwork.mockResolvedValue(network);
+  mockedPlaces.mockResolvedValue([]);
 });
 
 function renderModal() {
@@ -118,6 +136,41 @@ describe('empty state', () => {
     );
     expect(await screen.findByText('Work HQ')).toBeTruthy();
     expect(screen.queryByText('No Quick Picks Yet')).toBeNull();
+  });
+
+  it('saves a searched place at the place itself, not the nearest junction', async () => {
+    mockedPlaces.mockResolvedValue([
+      {
+        id: 'place.1',
+        name: 'University of Makati',
+        label: 'University of Makati, Taguig',
+        subtitle: 'J. P. Rizal Extension, Taguig',
+        latitude: 14.5632,
+        longitude: 121.0566,
+      },
+    ]);
+    await renderModal();
+
+    await fireEvent.press(await screen.findByLabelText('Add a Quick Pick'));
+    await fireEvent.changeText(
+      screen.getByLabelText('Search destinations'),
+      'University of Makati',
+    );
+    await fireEvent.press(await screen.findByLabelText('Place: University of Makati'));
+    await fireEvent.press(screen.getByLabelText('Add Quick Pick'));
+
+    await waitFor(() =>
+      expect(mockedSave).toHaveBeenCalledWith([
+        expect.objectContaining({
+          // The place's own name labels the shortcut when nothing was typed.
+          name: 'University of Makati',
+          latitude: 14.5632,
+          longitude: 121.0566,
+          // Still routable: the nearest node is kept for the graph planners.
+          nodeId: 2,
+        }),
+      ]),
+    );
   });
 });
 
@@ -223,7 +276,7 @@ describe('Home section', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/route',
-      params: { destination: '14.6,121' },
+      params: { destination: '14.6,121', name: 'Work HQ' },
     });
   });
 

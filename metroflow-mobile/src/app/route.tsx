@@ -202,7 +202,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const { c, mode, toggle: toggleTheme } = useTheme();
   const styles = useMemo(() => makeStyles(c, mode), [c, mode]);
   const BANNER_COLORS = useMemo(() => bannerColors(c), [c]);
-  const { destination: destinationParam } = useLocalSearchParams<{ destination?: string }>();
+  const { destination: destinationParam, name: destinationNameParam } = useLocalSearchParams<{
+    destination?: string;
+    name?: string;
+  }>();
 
   const [network, setNetwork] = useState<NetworkState | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
@@ -237,6 +240,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Bumped by the Retry action so the one-shot location effect runs again.
   const [locationAttempt, setLocationAttempt] = useState(0);
   const [destinationQuery, setDestinationQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   // The place the driver picked from the results ("SM City North EDSA"), kept
   // so the box and route summary name the establishment rather than the road
   // node the flood-safe router snaps to.
@@ -514,19 +518,24 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     // A dispatch mission carries coordinates ("lat,lon"); snap them to the
     // nearest road node. Anything else is a place-name search.
     const [lat, lon] = destinationParam.split(",").map(Number);
-    const match =
-      destinationParam.includes(",") && Number.isFinite(lat) && Number.isFinite(lon)
-        ? nearestNode(network.nodes.features, { latitude: lat, longitude: lon })
-        : network.nodes.features.find((node) =>
-            (node.properties.name ?? "").toLowerCase().includes(destinationParam.toLowerCase()),
-          );
-    // Opening the screen from a saved destination seeds the search box once.
-    setDestinationQuery(match?.properties.name ?? destinationParam);
-    if (match) {
+    const hasPoint = destinationParam.includes(",") && Number.isFinite(lat) && Number.isFinite(lon);
+    const match = hasPoint
+      ? nearestNode(network.nodes.features, { latitude: lat, longitude: lon })
+      : network.nodes.features.find((node) =>
+          (node.properties.name ?? "").toLowerCase().includes(destinationParam.toLowerCase()),
+        );
+    // Opening the screen from a saved destination seeds the search box once,
+    // and a Quick Pick keeps its own label and exact point (door-to-door).
+    if (hasPoint && destinationNameParam) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPlaceName(destinationNameParam);
+      setPlaceCoords({ latitude: lat, longitude: lon });
+    }
+    setDestinationQuery(destinationNameParam || match?.properties.name || destinationParam);
+    if (match) {
       setSelected(match);
     }
-  }, [network, destinationParam]);
+  }, [network, destinationParam, destinationNameParam]);
 
   // --- Planning ------------------------------------------------------------
   // A plan is reused only for the same destination and routing personality, so
@@ -933,17 +942,23 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   /** A Quick Pick or Recent destination resolves against the live network so
    * it plans through the same `selected` -> `planRoute` path as any other
-   * search result, rather than a parallel route to the same place. */
-  function selectStoredDestination(nodeId: number, name: string) {
+   * search result, rather than a parallel route to the same place. A Quick
+   * Pick also carries the point it was saved at, so the dry route ends there
+   * and the summary shows the driver's own label. */
+  function selectStoredDestination(
+    nodeId: number,
+    name: string,
+    point?: { latitude: number; longitude: number },
+  ) {
     const node = network?.nodes.features.find((row) => row.properties.node_id === nodeId);
     if (!node) {
       setError(`${name} is no longer on the road network.`);
       return;
     }
     setSelected(node);
-    setPlaceName(null);
-    setPlaceCoords(null);
-    setDestinationQuery(node.properties.name ?? name);
+    setPlaceName(point ? name : null);
+    setPlaceCoords(point ?? null);
+    setDestinationQuery(name || node.properties.name || "");
     setError(null);
   }
 
@@ -1166,6 +1181,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     // search result -- it reads as a Mapbox/key error there.
                     setError(null);
                   }}
+                  onFocus={() => setSearchFocused(true)}
                   placeholder="Where to?"
                   placeholderTextColor={c.slate400}
                   style={styles.searchInput}
@@ -1202,10 +1218,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             planning ||
             error ||
             refusal ||
-            quickPicks.length > 0 ||
-            recentDestinations.length > 0) ? (
+            (searchFocused && (quickPicks.length > 0 || recentDestinations.length > 0))) ? (
             <View style={styles.searchPanel}>
-              {!destinationQuery && !planning && (quickPicks.length > 0 || recentDestinations.length > 0) ? (
+              {searchFocused &&
+              !destinationQuery &&
+              !planning &&
+              (quickPicks.length > 0 || recentDestinations.length > 0) ? (
                 <View style={{ gap: space[10] }}>
                   {quickPicks.length > 0 ? (
                     <View style={styles.quickPickRow}>
@@ -1215,7 +1233,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                           <TouchableOpacity
                             key={pick.id}
                             style={styles.quickPickChip}
-                            onPress={() => selectStoredDestination(pick.nodeId, pick.name)}
+                            onPress={() =>
+                              selectStoredDestination(pick.nodeId, pick.name, {
+                                latitude: pick.latitude,
+                                longitude: pick.longitude,
+                              })
+                            }
                           >
                             <View style={styles.quickPickIcon}>
                               <Icon size={16} color={c.blue600} />

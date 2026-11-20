@@ -732,6 +732,8 @@ header.
 | `POST` | `/api/v1/sos`                      | `latitude`, `longitude`, `note?` | `sos`    | BR-015 / FSD-FR-073      |
 | `GET`  | `/api/v1/sos`                      | —                      | `sos[]`  | BR-015 / FSD-FR-074, 087 |
 | `POST` | `/api/v1/sos/{sos_id}/assign`      | `vehicle_id`           | `sos`    | BR-016 / FSD-FR-088–089  |
+| `POST` | `/api/v1/sos/{sos_id}/arrive`      | —                      | `sos`    | BR-016 / FSD-FR-115, 117 |
+| `GET`  | `/api/v1/dispatch/{sos_id}/events` | —                      | `event[]` | BR-016 / FSD-FR-117     |
 | `GET`  | `/api/v1/dispatch/{sos_id}/preview` | —                    | `{ sos_id, units[] }` | BR-016 / FSD-FR-088–089 |
 | `POST` | `/api/v1/dispatch/{sos_id}/confirm` | `note?`               | `sos`    | BR-016 / FSD-FR-089      |
 | `POST` | `/api/v1/dispatch/{sos_id}/undo`    | —                     | `sos`    | BR-016 / FSD-FR-045      |
@@ -769,6 +771,16 @@ appends an internal log entry instead of changing the state. `dismiss` hides an
 incident from the queue for 72 hours; after that the row is purged, so `restore`
 only works inside the window. `GET /sos/{id}/log` returns the same chronological
 `log[]` shape as §9.5.
+
+The portal's Dispatch Radar is SOS-only (FSD-FR-115): a dispatcher call-in
+creates an SOS through `POST /sos`, and a field report never appears in that
+queue. `GET /dispatch/{sos_id}/events` returns the durable `dispatch_events`
+milestones (`created`, `assigned`, `dispatched`, `en_route`, `arrived`,
+`completed`, `cancelled`) in time order; `POST /sos/{sos_id}/arrive` records the
+`arrived` milestone when the unit reaches the incident. The radar's responder
+panel reads the unit's position from `GET /vehicles` and `/vehicles/stream` and
+treats a fix as **live** at 60 seconds or newer, **stale** to 5 minutes,
+**offline** beyond, and **unknown** when no fix exists (FSD-FR-116, ADR-027).
 
 ### 9.3 Hazards
 
@@ -842,6 +854,10 @@ parts and `photo` as the file part. Any authenticated account may report — a
 driver is the witness — while the queue and the decisions are portal roles only.
 The reporter is stored as a salted hash of the account, never as an id (BR-011),
 so the desk can see that two reports came from one device without learning whose.
+
+Moderation and Evidence is the only report-verification surface (`FSD-FR-114`):
+the operations dashboard and the SOS-only Dispatch Radar expose no report
+decision.
 
 `client_id` (a UUID the device generates per report) makes an offline replay
 idempotent: if the first attempt actually landed but its response was lost, the

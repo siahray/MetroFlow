@@ -12,7 +12,7 @@ export default function FleetPage() {
 
   return (
     <AppShell activeItem="fleet" title="Rescue Fleet & Mission Operations">
-      <RescueTracking onBack={() => router.push("/triage")} onAction={show} />
+      <RescueTracking onBack={() => router.push("/radar")} onAction={show} />
     </AppShell>
   );
 }

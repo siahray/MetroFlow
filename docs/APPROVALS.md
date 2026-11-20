@@ -63,6 +63,7 @@ cannot close until its dependencies are approved.
 | A-17 | Final document set and defense | — | All documents accepted and limitations disclosed | «Project Adviser» / panel | Not started | Yes for final acceptance |
 | A-18 | External free-tier service use | — | Supabase, Mapbox/OSM, Copernicus/Sentinel, EAS and GitHub free tiers | «Project Adviser» / `«Project Team Lead»` | For Review | Yes before provisioning accounts |
 | A-19 | Native distribution path (`OD-D07`) | — | EAS/TestFlight/internal build path, bundle identifiers and accounts; public store release remains separate | «Project Adviser» / panel | Open | Yes before a native binary is distributed |
+| A-20 | [Change Request CR-002](Change%20Request/CR-002.md) | — | Admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with unit assignment and dual-mode responder tracking | Project Lead; «Project Adviser» / panel | Proposed — not approved; implemented and documented | No — pilot build proceeds, but the CR is not an approved baseline change |
 
 ### 2.1 Open decisions that block the gate
 
@@ -75,8 +76,9 @@ they are resolved or explicitly deferred in writing.
 | `OD-D07` | Native distribution, EAS, bundle identifiers and store accounts | Engineering | Open |
 | `OD-D23` | Offline provider, licence, package contents, storage limits and stale-data policy | Scenario reviewer / Engineering | Open — final-product scope, not pursued for the pilot |
 | `OD-D24` | Sentinel-1 access route, credential type, processing, confidence, latency and offline retention | Scenario reviewer / Engineering | Open — final-product scope, not pursued for the pilot |
-| `OD-D25` | PAGASA river telemetry access route, station list for the pilot corridor, thresholds, freshness window and licence | Project Lead / Engineering | Open — access route not yet secured |
+| `OD-D25` | PAGASA river telemetry access route, station list for the pilot corridor, thresholds, freshness window and licence | Project Lead / Engineering | Closed 18 Nov 2026 — decided against pursuing PAGASA access; integration removed from scope, `CR-012` |
 | `OD-D26` | Open data sources: Open-Meteo (fair use, attribution) and NASA GPM IMERG (Earthdata token) terms, resolution, and the pilot river points | Project Lead / Engineering | Approved by the Project Lead 3 Nov 2026; terms to confirm |
+| `OD-D27` | Responder client form (separate app or driver-app responder mode), person/device identity model, and Quezon City Hall coordinates with a "same vicinity" rule | Project Lead / LGU operations | Open — implementation is unit-level and the base rule is a label only (`BRULE-019`, `FSD-FR-118`, `LIM-030`) |
 
 ### 2.2 Decision record
 
@@ -86,6 +88,8 @@ they are resolved or explicitly deferred in writing.
 | 15 Nov 2026 | CR-009: admin SOS incident location map | Approved by the Project Lead | Standalone single-marker map and Nominatim reverse-geocode in the Dispatch Radar incident panel, implemented 14 Nov 2026. Adviser and panel acknowledgement not recorded. See [CR-009.md](CR-009.md) |
 | 15 Nov 2026 | CR-010: driver app Mapbox basemap, place search, door-to-door | Approved by the Project Lead | `@rnmapbox/maps` replaces `react-native-maps`; Mapbox Geocoding primary search with Nominatim fallback; drop-a-pin; snap-to-road puck; implemented 11-14 Nov 2026. Adviser and panel acknowledgement not recorded. See [CR-010.md](CR-010.md) |
 | 15 Nov 2026 | CR-011: flood simulation recalibrated for the real network | Approved by the Project Lead | Per-node placeholder elevation replacing the flat 10 m default; `depression_factor`/`ponding_amplification` recalibrated so flood state now crosses all three passability bands; `/simulate` serialisation and rain-gauge coverage fixed to match; implemented 14-15 Nov 2026. The hosted-database elevation write was run only after the Project Lead's explicit go-ahead in chat. Adviser and panel acknowledgement not recorded. See [CR-011.md](CR-011.md) |
+| 18 Nov 2026 | CR-012: PAGASA river-telemetry integration removed from scope | Approved by the Project Lead | A documentation-accuracy review found PAGASA was never integrated — Open-Meteo (rain) and GloFAS via Open-Meteo's Flood API (river discharge) are the system's only live flood-state sources, with PAGASA access (`OD-D25`) blocked indefinitely since CR-004. Rather than keep carrying a blocked, unimplemented requirement, the Project Lead decided to drop PAGASA from scope entirely; `OD-D25` is closed. BRD/FSD/TSD/Project Charter/PMP updated, `FSD-FR-094`/`TC-047` marked descoped, `BRULE-014` and the external-dependency/limitations tables (`LIM-026`/`027`) no longer reference PAGASA. Adviser and panel acknowledgement not recorded. See [CR-012.md](Change%20Request/CR-012.md) |
+| 20 Nov 2026 | CR-002: admin screen split | **Proposed — not approved** | Implemented in the portal and synced into the BRD/FSD/TSD/API/design baseline: `FSD-FR-113`–`118`, `BRULE-019`, `ADR-027`, `TC-069`–`074`. Project Lead and adviser/panel sign-offs in the CR's §6 are still pending; the responder client and `OD-D27` are also open. See [CR-002.md](Change%20Request/CR-002.md) |
 
 This decision does not move A-01 to A-09, which remain For Review, and it does
 not close the open design decisions in §2.1. A-13 therefore stays open on

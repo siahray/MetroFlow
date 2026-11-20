@@ -4,7 +4,7 @@ MetroFlow is an intelligent urban mobility and flood simulation system for Local
 Government Unit (LGU) disaster response. This directory holds the formal project
 documents, the API reference, and the Word templates the documents follow.
 
-**Document baseline:** v2.1 (CR-009 to CR-011 drafted and approved, 15 November 2026) · **Code baseline:** `main`, 15 November 2026
+**Document baseline:** v2.3 (CR-002 synced, 20 November 2026 — Draft, approval pending) · **Code baseline:** `main`, 18 November 2026
 
 The pilot scope covers an Expo driver app, live hazard publication, fleet
 dispatch, sensor ingestion, authentication, SOS, field reports and moderation,
@@ -37,6 +37,8 @@ per-requirement record.
 | Change Request CR-009          | [CR-009.md](CR-009.md)                             | MF-CR-009  | Admin SOS incident location map with a nearby place                  | Project Lead, team      |
 | Change Request CR-010          | [CR-010.md](CR-010.md)                             | MF-CR-010  | Driver app: real Mapbox basemap, place search, drop-a-pin, door-to-door navigation | Project Lead, team |
 | Change Request CR-011          | [CR-011.md](CR-011.md)                             | MF-CR-011  | Flood simulation recalibrated for the real network; door-to-door routing params; rain-gauge re-centring | Project Lead, team |
+| Change Request CR-002          | [Change Request/CR-002.md](Change%20Request/CR-002.md) | MF-CR-002  | Admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with responder assignment and tracking | Project Lead, team |
+| Change Request CR-012          | [Change Request/CR-012.md](Change%20Request/CR-012.md) | MF-CR-012  | PAGASA river-telemetry integration removed from scope (`OD-D25` closed) | Project Lead, team |
 
 ## Design artifacts
 
@@ -150,6 +152,8 @@ depends on one, the formula is shown so the figure can be inserted directly.
 | 1.9     | 13 Nov 2026 | «Project Team» | Pilot road network scoped to Quezon City (LIM-014 superseded again); NFR-001/002/019 re-measured against the live hosted network and recorded as **not currently met** (LIM-028); project schedule dates corrected against git history across Charter/PMP/Business Case |
 | 2.0     | 13 Nov 2026 | «Project Team» | Consolidated baseline: folded every prior scope addition into the documents as original scope; retired the standalone change-request records |
 | 2.1     | 15 Nov 2026 | «Project Team» | CR-009 to CR-011 drafted and approved by the Project Lead: admin SOS incident location map (CR-009); mobile Mapbox basemap, place search, drop-a-pin and door-to-door routing (CR-010); flood simulation recalibrated for the real Quezon City network, plus the matching `/simulate` serialisation and rain-gauge coverage fixes (CR-011). Identifiers reserved in each CR; not yet folded into the FSD/TSD/BRD bodies — see `docs/CR-009.md` to `docs/CR-011.md` |
+| 2.2     | 18 Nov 2026 | «Project Team» | CR-012 approved by the Project Lead: PAGASA river-telemetry integration removed from scope. `OD-D25` closed; `BR-017`/`BR-019` now Met; `FSD-FR-094`/`TC-047` marked removed; `BRULE-014`, `LIM-026`/`027` and the TSD external-dependency table no longer reference PAGASA; Open-Meteo and GloFAS recorded as the system's permanent live rain/river sources, not an interim stand-in — see [Change Request/CR-012.md](Change%20Request/CR-012.md) |
+| 2.3     | 20 Nov 2026 | «Project Team» | CR-002 synced into all three BRD/FSD/TSD copies, the API reference, the Admin UI baseline, implementation status and approval register: `FSD-FR-113`–`118`, `BRULE-019`, `ADR-027`, `TC-069`–`074`; operations dashboard, report-only moderation, SOS-only radar with unit assignment and dual-mode responder tracking. The CR is still **Draft — proposed**; the §6 sign-offs and the responder client remain open |
 
 Each document carries its own revision history and approval block. A change to
 scope, schedule or architecture must update every affected document in the same

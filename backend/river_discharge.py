@@ -69,9 +69,8 @@ def fetch_discharge() -> tuple[float, float] | None:
     """Today's ``(river_discharge, river_discharge_p75)`` in m^3/s, or ``None`` on failure.
 
     ``river_discharge_p75`` is the model's own historical 75th-percentile flow
-    for this day of year: the open-source stand-in for a PAGASA Alert level
-    until OD-D25 is resolved (CR-004 TC-065 -- advisory only, labelled
-    modelled, never a closure).
+    for this day of year, used as the breach threshold (CR-004 TC-065 --
+    advisory only, labelled modelled, never a closure).
 
     GloFAS has no sub-daily reading to timestamp, so the caller stamps this
     with the time it fetched it, not the daily value's own date -- freshness

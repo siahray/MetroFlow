@@ -13,6 +13,16 @@ import { seedSession, stubApi } from "./api-stub";
  */
 
 async function scan(page: import("@playwright/test").Page) {
+  // Pages fade in (`animate-fade-in`); axe reads the half-faded colours as
+  // contrast failures, so let the finite animations settle first.
+  await page.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
   return new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
 }
 
@@ -25,10 +35,20 @@ test("the login screen has no accessibility violations", async ({ page }) => {
   expect(results.violations).toEqual([]);
 });
 
-test("the triage queue has no accessibility violations", async ({ page }) => {
+test("the operations dashboard has no accessibility violations", async ({ page }) => {
   await stubApi(page);
   await seedSession(page);
   await page.goto("/triage");
+  await expect(page.getByRole("heading", { name: "Operations overview" })).toBeVisible();
+
+  const results = await scan(page);
+  expect(results.violations).toEqual([]);
+});
+
+test("the dispatch radar has no accessibility violations", async ({ page }) => {
+  await stubApi(page);
+  await seedSession(page);
+  await page.goto("/radar");
   await expect(page.getByText("#FR-0001").first()).toBeVisible();
 
   const results = await scan(page);
@@ -38,7 +58,7 @@ test("the triage queue has no accessibility violations", async ({ page }) => {
 test("the call-in dialog keeps keyboard focus inside and hands it back", async ({ page }) => {
   await stubApi(page);
   await seedSession(page);
-  await page.goto("/triage");
+  await page.goto("/radar");
 
   const trigger = page.getByRole("button", { name: "Log a call-in distress signal" });
   await trigger.click();

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -31,6 +31,9 @@ import {
 
 import { getNetworkState, type NetworkState, type NodeFeature } from '../api';
 import { listQuickPicks, saveQuickPicks, type QuickPick, type QuickPickIcon } from '../quickPicks';
+import { boundingBoxOf, reverseGeocodeName, searchPlaces, type GeocodeResult } from '../geocode';
+import { PlacePickerMap } from '../navigation/PlacePickerMap';
+import { nearestNode, toLatLng, type LatLng } from '../navigation/geo';
 import { fontSize, space, useTheme } from '../theme';
 
 const ICONS: Record<QuickPickIcon, typeof Home> = {
@@ -42,14 +45,17 @@ const ICONS: Record<QuickPickIcon, typeof Home> = {
   other: Building2,
 };
 
+/** A chosen destination: a searched place, a road node, or a dropped pin. */
+type Picked = LatLng & { label: string };
+
 /** The in-progress edit. `pick` is null while creating a new Quick Pick. */
 type Draft = {
   pick: QuickPick | null;
   name: string;
   icon: QuickPickIcon;
   query: string;
-  /** A newly chosen road-network point; null keeps the pick's saved coordinates. */
-  node: NodeFeature | null;
+  /** A newly chosen point; null keeps the pick's saved coordinates. */
+  picked: Picked | null;
 };
 
 /** At most one confirmation is on screen: save an edit, or remove a pick. */
@@ -73,6 +79,9 @@ export function QuickPicks({
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [placeResults, setPlaceResults] = useState<GeocodeResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const pinGeneration = useRef(0);
 
   const load = useCallback(
     () =>
@@ -110,32 +119,118 @@ export function QuickPicks({
   }, [visible, clearanceCm]);
 
   const draftReady =
-    !!draft && draft.name.trim().length > 0 && (draft.node !== null || draft.pick !== null);
+    !!draft && draft.name.trim().length > 0 && (draft.picked !== null || draft.pick !== null);
 
-  const results =
-    draft && draft.query.trim().length > 0 && network
+  // The same place search the route screen uses -- Mapbox Geocoding, then
+  // Nominatim, then the curated list -- biased to the loaded network's extent.
+  const searchBox = useMemo(
+    () =>
+      network
+        ? boundingBoxOf(network.nodes.features.map((n) => toLatLng(n.geometry.coordinates)))
+        : null,
+    [network],
+  );
+  const query = draft?.picked ? '' : (draft?.query.trim() ?? '');
+  useEffect(() => {
+    if (query.length < 3) return;
+    const controller = new AbortController();
+    // Debounced well under Nominatim's ~1 req/sec usage policy.
+    const timer = setTimeout(() => {
+      setSearching(true);
+      searchPlaces(query, { box: searchBox }, controller.signal)
+        .then((rows) => {
+          if (!controller.signal.aborted) setPlaceResults(rows);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setPlaceResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, 450);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [query, searchBox]);
+
+  // Places first; named road nodes are the fallback, so a junction name still
+  // resolves and works offline like it always did.
+  const visiblePlaces = query.length >= 3 ? placeResults.slice(0, 3) : [];
+  const nodeMatches =
+    query.length > 0 && network && visiblePlaces.length === 0
       ? network.nodes.features
-          .filter((n) =>
-            (n.properties.name ?? '').toLowerCase().includes(draft.query.trim().toLowerCase()),
-          )
-          .slice(0, 6)
+          .filter((n) => (n.properties.name ?? '').toLowerCase().includes(query.toLowerCase()))
+          .slice(0, 3)
       : [];
 
+  const draftPoint: LatLng | null = draft?.picked
+    ? { latitude: draft.picked.latitude, longitude: draft.picked.longitude }
+    : draft?.pick
+      ? { latitude: draft.pick.latitude, longitude: draft.pick.longitude }
+      : null;
+  const networkCenter: LatLng | null = searchBox
+    ? {
+        latitude: (searchBox.south + searchBox.north) / 2,
+        longitude: (searchBox.west + searchBox.east) / 2,
+      }
+    : null;
+
   // The saved point behind an edit, so the form shows where it currently goes.
-  const currentName = draft?.pick
-    ? network?.nodes.features.find((n) => n.properties.node_id === draft.pick?.nodeId)?.properties
-        .name ??
-      `${draft.pick.latitude.toFixed(4)}, ${draft.pick.longitude.toFixed(4)}`
+  const currentPoint = draft?.pick
+    ? `${draft.pick.latitude.toFixed(4)}, ${draft.pick.longitude.toFixed(4)}`
     : null;
 
   function openAdd() {
     setError(null);
-    setDraft({ pick: null, name: '', icon: 'other', query: '', node: null });
+    setPlaceResults([]);
+    setDraft({ pick: null, name: '', icon: 'other', query: '', picked: null });
   }
 
   function openEdit(pick: QuickPick) {
     setError(null);
-    setDraft({ pick, name: pick.name, icon: pick.icon, query: '', node: null });
+    setPlaceResults([]);
+    setDraft({ pick, name: pick.name, icon: pick.icon, query: '', picked: null });
+  }
+
+  function pickPlace(result: GeocodeResult) {
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            query: result.name,
+            // A saved shortcut needs a label; the place's own name is a good one.
+            name: d.name.trim() ? d.name : result.name,
+            picked: { latitude: result.latitude, longitude: result.longitude, label: result.name },
+          }
+        : d,
+    );
+  }
+
+  function pickNode(node: NodeFeature) {
+    const [longitude, latitude] = node.geometry.coordinates;
+    const label = node.properties.name ?? 'Selected point';
+    setDraft((d) => (d ? { ...d, query: label, picked: { latitude, longitude, label } } : d));
+  }
+
+  /** A long-press on the picker map: the pin is chosen immediately, and its
+   * label upgrades in place once the reverse lookup resolves. */
+  function pickPin(point: LatLng) {
+    const generation = ++pinGeneration.current;
+    setDraft((d) =>
+      d ? { ...d, query: 'Dropped pin', picked: { ...point, label: 'Dropped pin' } } : d,
+    );
+    void reverseGeocodeName(point.latitude, point.longitude).then((name) => {
+      if (!name || pinGeneration.current !== generation) return;
+      setDraft((d) =>
+        d &&
+        d.picked &&
+        d.picked.latitude === point.latitude &&
+        d.picked.longitude === point.longitude
+          ? { ...d, query: name, picked: { ...d.picked, label: name } }
+          : d,
+      );
+    });
   }
 
   function cancelDraft() {
@@ -151,16 +246,22 @@ export function QuickPicks({
   async function submitDraft() {
     if (!draft || !draftReady) return;
     const base = draft.pick;
-    const node = draft.node;
-    const [longitude, latitude] = node
-      ? node.geometry.coordinates
-      : [base?.longitude ?? 0, base?.latitude ?? 0];
+    const point =
+      draft.picked ?? (base ? { latitude: base.latitude, longitude: base.longitude } : null);
+    // The pick stays routable -- its point is snapped to the nearest road node,
+    // and the point itself is kept so a dry route can end where it was saved.
+    const nodeId =
+      (point && network
+        ? nearestNode(network.nodes.features, point)?.properties.node_id
+        : undefined) ??
+      base?.nodeId ??
+      0;
     const next: QuickPick = {
       id: base?.id ?? `${Date.now()}`,
       name: draft.name.trim(),
-      nodeId: node?.properties.node_id ?? base?.nodeId ?? 0,
-      latitude,
-      longitude,
+      nodeId,
+      latitude: point?.latitude ?? 0,
+      longitude: point?.longitude ?? 0,
       icon: draft.icon,
     };
     const updated = base
@@ -424,9 +525,9 @@ export function QuickPicks({
                     </Text>
                     <TextInput
                       value={draft.query}
-                      onChangeText={(query) => setDraft((d) => (d ? { ...d, query, node: null } : d))}
+                      onChangeText={(query) => setDraft((d) => (d ? { ...d, query, picked: null } : d))}
                       accessibilityLabel="Search destinations"
-                      placeholder="Search the road network for a named point"
+                      placeholder="Search a place or address"
                       placeholderTextColor={c.slate400}
                       style={{
                         borderWidth: 1,
@@ -438,7 +539,7 @@ export function QuickPicks({
                         color: c.slate900,
                       }}
                     />
-                    {draft.node ? (
+                    {draft.picked ? (
                       <View
                         style={{
                           flexDirection: 'row',
@@ -455,51 +556,80 @@ export function QuickPicks({
                           numberOfLines={1}
                           style={{ flex: 1, fontSize: fontSize.body, fontWeight: '700', color: c.blue700 }}
                         >
-                          {draft.node.properties.name ?? 'Selected point'}
+                          {draft.picked.label}
+                        </Text>
+                        <Text style={{ fontSize: fontSize.caption, color: c.blue700 }}>
+                          {`${draft.picked.latitude.toFixed(4)}, ${draft.picked.longitude.toFixed(4)}`}
                         </Text>
                       </View>
-                    ) : draft.pick ? (
+                    ) : currentPoint ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[6] }}>
                         <MapPin size={13} color={c.slate400} />
                         <Text
                           numberOfLines={1}
                           style={{ flex: 1, fontSize: fontSize.caption, color: c.slate500 }}
                         >
-                          {currentName ? `Current: ${currentName}` : 'Current point saved'}. Search to move it.
+                          {`Current: ${currentPoint}. Search or drop a pin to move it.`}
                         </Text>
                       </View>
                     ) : null}
-                    {results.map((node) => (
+                    {visiblePlaces.map((place, index) => (
                       <TouchableOpacity
-                        key={node.id}
+                        key={`place-${place.id ?? index}`}
                         accessibilityRole="button"
-                        accessibilityLabel={`Destination: ${node.properties.name}`}
-                        onPress={() =>
-                          setDraft((d) =>
-                            d
-                              ? { ...d, node, query: node.properties.name ?? '' }
-                              : d,
-                          )
-                        }
+                        accessibilityLabel={`Place: ${place.name}`}
+                        onPress={() => pickPlace(place)}
                         style={{
                           paddingHorizontal: space[10],
                           paddingVertical: space[10],
                           borderRadius: 8,
-                          backgroundColor: draft.node?.id === node.id ? c.blue50 : c.slate50,
+                          backgroundColor: c.slate50,
+                        }}
+                      >
+                        <Text style={{ fontSize: fontSize.body, color: c.slate800 }} numberOfLines={1}>
+                          {place.name}
+                        </Text>
+                        <Text style={{ fontSize: fontSize.caption, color: c.slate500 }} numberOfLines={1}>
+                          {place.subtitle}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                    {nodeMatches.map((node) => (
+                      <TouchableOpacity
+                        key={`node-${node.id}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Destination: ${node.properties.name}`}
+                        onPress={() => pickNode(node)}
+                        style={{
+                          paddingHorizontal: space[10],
+                          paddingVertical: space[10],
+                          borderRadius: 8,
+                          backgroundColor: c.slate50,
                         }}
                       >
                         <Text style={{ fontSize: fontSize.body, color: c.slate800 }}>
                           {node.properties.name}
                         </Text>
+                        <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>Road</Text>
                       </TouchableOpacity>
                     ))}
-                    {draft.query.trim().length > 0 && !draft.node && results.length === 0 ? (
+                    {query.length > 0 &&
+                    !draft.picked &&
+                    visiblePlaces.length === 0 &&
+                    nodeMatches.length === 0 ? (
                       <Text style={{ fontSize: fontSize.caption, color: c.slate500 }}>
-                        {network
-                          ? 'No matching points on the road network.'
-                          : 'The road network is unavailable. Try again when you are back online.'}
+                        {searching
+                          ? 'Searching…'
+                          : network
+                            ? 'No place matches that search.'
+                            : 'The road network is unavailable. You can still drop a pin.'}
                       </Text>
                     ) : null}
+                    <PlacePickerMap
+                      value={draftPoint}
+                      center={draftPoint ?? networkCenter}
+                      onPick={pickPin}
+                    />
                   </View>
 
                   {error ? (
@@ -872,7 +1002,10 @@ export function QuickPickList({ clearanceCm = 28 }: { clearanceCm?: number }) {
                 onPress={() =>
                   router.push({
                     pathname: '/route',
-                    params: { destination: `${pick.latitude},${pick.longitude}` },
+                    params: {
+                      destination: `${pick.latitude},${pick.longitude}`,
+                      name: pick.name,
+                    },
                   })
                 }
                 style={{

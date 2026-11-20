@@ -679,17 +679,19 @@ export async function searchMapbox(
     .map((feature) => {
       const [longitude, latitude] = feature.center ?? [NaN, NaN];
       const name = (feature.text ?? "").trim() || (feature.place_name ?? "").split(",")[0]?.trim();
-      // place_name is "Name, street, district, city, country"; the subtitle
-      // is everything after the name, trimmed to the two most local parts.
-      const rest = (feature.place_name ?? "")
+      // place_name is "Name, street, district, city, country"; show a fuller
+      // address (like a dropped pin resolves to) so results are easy to tell apart.
+      const parts = (feature.place_name ?? "")
         .split(",")
         .map((part) => part.trim())
-        .filter((part) => part && part !== name && part !== "Philippines");
+        .filter((part) => part && part !== "Philippines");
+      const rest = parts.filter((part) => part !== name);
+      const subtitle = rest.join(", ") || parts.slice(1).join(", ") || "Address";
       return {
         id: feature.id ? `mapbox-${feature.id}` : undefined,
         name: name || "Location",
-        label: name || "Location",
-        subtitle: rest.slice(0, 2).join(", ") || "Address",
+        label: feature.place_name?.trim() || name || "Location",
+        subtitle,
         category: mapboxCategory(feature.place_type ?? [], feature.properties?.category ?? ""),
         latitude,
         longitude,
@@ -727,7 +729,12 @@ export async function reverseGeocodeName(
     const payload = (await response.json()) as { features?: MapboxFeature[] };
     const feature = payload.features?.[0];
     if (!feature) return null;
-    return (feature.text ?? "").trim() || (feature.place_name ?? "").split(",")[0]?.trim() || null;
+    const full = (feature.place_name ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter((part) => part && part !== "Philippines")
+      .join(", ");
+    return full || (feature.text ?? "").trim() || null;
   } catch {
     return null;
   }
