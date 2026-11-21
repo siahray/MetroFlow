@@ -594,6 +594,7 @@ class LiveRainfallResponse(BaseModel):
     as_of: datetime | None = Field(
         default=None, description="When Open-Meteo recorded this reading"
     )
+    source: str = "Open-Meteo"
 
 
 class CurrentWeatherResponse(BaseModel):
@@ -751,7 +752,6 @@ class ReportResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     location_plausible: bool = True
-    barangay: str | None = None
     narrative: str | None = None
     # The stored base score decayed by age, which is what the queue orders on.
     urgency_score: float

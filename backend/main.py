@@ -3783,7 +3783,6 @@ def _report_response(
         location_plausible=latitude is not None
         and longitude is not None
         and reports.location_plausible(latitude, longitude),
-        barangay=report.barangay,
         narrative=report.narrative,
         urgency_score=reports.live_urgency(report.urgency_score, report.submitted_at, now),
         nearby_reports=nearby,
@@ -4123,8 +4122,7 @@ def approve_report(
     obstruction_level, avg_depth_cm = reports.hazard_for(report.depth_level)
     now = datetime.now(UTC).replace(tzinfo=None)
     hazard = models.HazardZone(
-        name=f"Reported {reports.depth_label(report.depth_level).lower()}"
-        + (f" — {report.barangay}" if report.barangay else ""),
+        name=f"Reported {reports.depth_label(report.depth_level).lower()}",
         obstruction_level=obstruction_level,
         avg_depth_cm=avg_depth_cm,
         notes=approval.notes or report.narrative,

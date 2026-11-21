@@ -93,6 +93,47 @@ def test_cached_rain_forecast_reuses_the_result_within_the_ttl(monkeypatch):
     assert len(calls) == 2  # stale cache triggers a refetch
 
 
+def test_current_conditions_url_rejects_non_finite_or_out_of_range_coordinates():
+    for lat, lon in [
+        (float("nan"), 121.064),
+        (14.565, float("inf")),
+        (90.1, 121.064),
+        (14.565, -180.1),
+    ]:
+        with pytest.raises(ValueError):
+            weather._current_conditions_url(lat, lon)
+
+
+def test_fetch_current_conditions_returns_none_for_invalid_coordinates(monkeypatch):
+    assert weather.fetch_current_conditions(float("nan"), 121.064) is None
+    assert weather.fetch_current_conditions(999, 121.064) is None
+
+
+def test_fetch_current_conditions_reads_the_current_fields(monkeypatch):
+    _serve(
+        monkeypatch,
+        {
+            "current": {
+                "time": "2026-11-21T04:00",
+                "temperature_2m": 28.0,
+                "relative_humidity_2m": 80.0,
+                "wind_speed_10m": 12.0,
+                "weather_code": 61,
+            },
+            "hourly": {"precipitation_probability": [52]},
+        },
+    )
+    conditions = weather.fetch_current_conditions(14.565, 121.064)
+    assert conditions == {
+        "temperature_c": 28.0,
+        "humidity_pct": 80.0,
+        "precipitation_chance_pct": 52.0,
+        "wind_kmh": 12.0,
+        "description": "Rain",
+        "as_of": datetime(2026, 11, 21, 4, 0, tzinfo=UTC),
+    }
+
+
 def test_coverage_for_extent_centres_the_gauge_on_the_loaded_network():
     # The seed lattice (CI): centre 14.565 / 121.064, farthest corner ~2.9 km,
     # inside the 5 km floor -- the old fixed gauge already covered it.

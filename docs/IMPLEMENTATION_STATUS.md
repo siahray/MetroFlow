@@ -207,6 +207,29 @@ list) — that table is stale, see §6.
   (never prompts on its own) so it degrades silently when permission isn't
   already granted.
 
+## 11. PR #94 CI fixes (21 Nov 2026)
+
+- [x] CodeQL partial-SSRF finding on `weather._current_conditions_url`:
+  coordinates are now range/finite-validated and URL-encoded with
+  `urlencode` instead of f-string interpolation; invalid input raises
+  `ValueError`, which `fetch_current_conditions` already turned into
+  `None` (new tests cover both in `tests/test_weather.py`).
+- [x] API contract tests were red from an incomplete rollout of the
+  already-approved "drop barangay from incident reports" change
+  (`2057f2a`, migration `e37c7bc39cdb`): `main.py` still read
+  `report.barangay` (column no longer exists → `AttributeError`) in two
+  places, and `schemas.LiveRainfallResponse` had lost its `source` field
+  in an earlier edit this session. Removed the two dead `barangay` reads
+  and `ReportResponse.barangay`; restored `source: str = "Open-Meteo"` on
+  `LiveRainfallResponse`.
+- **Known follow-up, not done here:** `metroflow-admin`'s advanced
+  filters/report views (`lib/reports.ts`, `lib/incidents.ts`,
+  `components/report-desk.tsx`, etc., per BACKLOG U-7) still type and
+  display `barangay` from the report contract that no longer sends it;
+  Web CI doesn't catch this (TS types aren't checked against live API
+  responses), so the portal's barangay filter will silently show nothing
+  until that UI is updated or reverted.
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,

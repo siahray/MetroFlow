@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 # The virtual rain gauge. One point covers the pilot network: rain advisories
@@ -205,13 +206,30 @@ def weather_code_label(code: int) -> str:
 
 
 def _current_conditions_url(lat: float, lon: float) -> str:
-    return (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={lat}&longitude={lon}"
-        "&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code"
-        "&hourly=precipitation_probability&forecast_hours=1"
-        "&timezone=UTC"
+    lat_value = float(lat)
+    lon_value = float(lon)
+    if (
+        not math.isfinite(lat_value)
+        or not math.isfinite(lon_value)
+        or lat_value < -90.0
+        or lat_value > 90.0
+        or lon_value < -180.0
+        or lon_value > 180.0
+    ):
+        raise ValueError("Invalid coordinates")
+    query = urlencode(
+        {
+            "latitude": lat_value,
+            "longitude": lon_value,
+            "current": (
+                "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code"
+            ),
+            "hourly": "precipitation_probability",
+            "forecast_hours": 1,
+            "timezone": "UTC",
+        }
     )
+    return f"https://api.open-meteo.com/v1/forecast?{query}"
 
 
 def fetch_current_conditions(lat: float, lon: float) -> dict | None:
