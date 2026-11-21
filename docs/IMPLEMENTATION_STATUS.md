@@ -230,6 +230,16 @@ list) — that table is stale, see §6.
   responses), so the portal's barangay filter will silently show nothing
   until that UI is updated or reverted.
 
+## 12. Admin portal — loading screen for the pre-session gap (22 Nov 2026)
+
+- [x] New `metroflow-admin/components/loading-screen.tsx`, matching the
+  login screen's wordmark treatment. Replaces `AppShell`'s `return null`
+  (blank flash while the cached session is read) and doubles as the
+  app's first `app/loading.tsx` (Next's route-level loading boundary,
+  previously absent). The driver app's own splash screen was already
+  done — see §10's note and U-4 in the BRD/FSD traceability — this was
+  the admin portal's equivalent gap.
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
