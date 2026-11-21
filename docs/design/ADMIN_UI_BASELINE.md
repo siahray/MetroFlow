@@ -111,7 +111,7 @@ Production adaptation:
 ### In scope
 
 - The LGU admin / dispatch portal on desktop browsers.
-- Login, dashboard, triage queue, incident detail, moderation, live map,
+- Login, operations dashboard, report evidence desk, SOS dispatch radar, live map,
   hazard authoring, fleet, dispatch, sensors and conditional administration.
 - Visual and interaction design derived from the supplied UIs.
 - Data and API deltas needed to support the UIs' fields.

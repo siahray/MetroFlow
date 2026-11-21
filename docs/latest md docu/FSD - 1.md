@@ -68,7 +68,7 @@ authoritative per-module record.
 | FSD-FR-011 | BR-003         | Accept an origin node, a destination node and a vehicle clearance                                             |
 | FSD-FR-012 | BR-003         | Compute the fastest route that avoids every edge whose water depth is at or above the clearance               |
 | FSD-FR-013 | BR-003         | Return the ordered node path, a GeoJSON LineString, per-segment status and estimated travel time in minutes |
-| FSD-FR-014 | BR-003         | Return HTTP 404 with an explanatory message when no safe route exists                                         |
+| FSD-FR-014 | BR-003         | Return HTTP 404 with an explanatory message when no safe route exists; a driver who explicitly opts into `allow_submerged` receives the least-submerged route instead (CR-001 A1) |
 | FSD-FR-015 | BR-003         | Return HTTP 404 naming the available node ids when a requested node does not exist                            |
 | FSD-FR-016 | BR-003         | Treat roads as bidirectional                                                                                  |
 | FSD-FR-017 | BR-003         | Allow a route whose origin equals its destination, returning a degenerate but valid line                      |
@@ -173,10 +173,13 @@ authoritative per-module record.
 | FSD-FR-116 | BR-016         | Show the assigned responder's live position from the vehicle telemetry and vehicles SSE feed, with a live / stale / offline / unknown fix state, distance to the incident and a derived ETA |
 | FSD-FR-117 | BR-015, BR-016 | Show the mission status/ETA timeline from the durable dispatch_events log and refresh it as the dispatch log changes |
 | FSD-FR-118 | BR-013, BR-016 | Define the responder tracking and mission contract as client-neutral, so either a separate responder app or a responder mode in the driver app writes the same telemetry and dispatch events |
+| FSD-FR-146 | BR-003         | Return the least-submerged route with SUBMERGED segments when no flood-safe path exists and the driver explicitly opts in |
+| FSD-FR-147 | BR-013         | Label the fallback in the driver app and warn that the vehicle may be submerged, keeping the warning on reroute, refresh and alternative requests |
 
 > Identifier note: FSD-FR-113 to 118 are allocated to CR-002; FSD-FR-119 to
 > 131 remain unallocated. CR-001 reserved the FSD-FR-132 onward block in the
 > submission-canonical copy, so the gap is a numbering reservation, not a missing
+> CR-001 Amendment A1 adds `FSD-FR-146` and `FSD-FR-147` to the same block.
 > requirement.
 
 ## Screen Specifications
@@ -261,6 +264,7 @@ authoritative per-module record.
 | BRULE-015 | BR-003  | FSD-FR-112             | A FASTEST route may be answered by Mapbox only because every edge in the graph is already confirmed clear; FLOOD_SAFE never delegates routing  |
 | BRULE-018 | BR-003  | FSD-FR-143             | Door-to-door routes pass true GPS coordinates for dry FASTEST routing, while FLOOD_SAFE routes snap to graph nodes |
 | BRULE-019 | BR-016  | FSD-FR-113, FSD-FR-115 to 117 | Quezon City Hall is the LGU operations base; rescue units and fleet are staged in the same vicinity by default, and a live reported unit position takes precedence during an active response |
+| BRULE-020 | BR-003  | FSD-FR-146, FSD-FR-147 | Fallback ranking is submerged distance, then peak depth, then travel time, and applies only on explicit driver opt-in (CR-001 A1) |
 
 ## Interface Requirements
 
@@ -357,6 +361,8 @@ authoritative per-module record.
 | TC-072 | BR-016  | FSD-FR-116                         | An assigned unit's position updates from the vehicles feed, and its badge moves live → stale → offline as the last fix ages |
 | TC-073 | BR-016  | FSD-FR-117                         | The mission timeline renders the dispatch events in order and refreshes when a new event is written |
 | TC-074 | BR-016  | FSD-FR-118                         | A responder client that writes the documented telemetry and mission endpoints produces the same radar tracking with no portal change (planned — no responder client exists) |
+| TC-075 | BR-003  | FSD-FR-146                         | With every edge submerged the default request returns 404, while `allow_submerged=true` returns a route whose segments are all SUBMERGED; engine tests cover distance and depth tie-breaks |
+| TC-076 | BR-013  | FSD-FR-147                         | The offline planner returns the least-submerged path only with the opt-in flag, and the route screen shows the warning chip and notice |
 
 TC-063 to TC-068 belong to CR-001 and appear in the submission-canonical copy.
 
@@ -366,7 +372,7 @@ TC-063 to TC-068 belong to CR-001 and appear in the submission-canonical copy.
 | ------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
 | BR-001  | FSD-FR-001 to 005                  | Every edge carries a status; invalid clearance is rejected; geometry renders            |
 | BR-002  | FSD-FR-006 to 010                  | A simulation returns updated depth and status for the whole graph; overrides survive    |
-| BR-003  | FSD-FR-011 to 017                  | Every returned segment is below the requested clearance, or the system refuses with 404 |
+| BR-003  | FSD-FR-011 to 017, 146                  | Every returned segment is below the requested clearance, or the system refuses with 404; the explicit opt-in returns a warned least-submerged route |
 | BR-004  | FSD-FR-024, FSD-FR-025             | Queue order and counts reflect the underlying data                                      |
 | BR-005  | FSD-FR-026 to 028                  | Filter counts match the data; search matches report id, reporter, location              |
 | BR-006  | FSD-FR-032 to 038                  | Narrative, photo metadata, location context and sensor readings are visible together    |
@@ -432,7 +438,7 @@ statement; the FSD identifiers above remain stable as items move.
 | Moderation and evidence  | FSD-FR-077 to 081, 114 | Implemented | Portal desk at /moderation, the only screen that verifies user-generated reports: urgency-ordered queue with a dismissed toggle, authenticated evidence viewer, EXIF, location map, approve (creates and publishes a hazard), reject, duplicate, hold, escalate, note, dismiss and restore, all audited; nearest rain-gauge cross-reference (FR-079) shown in the report desk |
 | Admin screen split (CR-002) | FSD-FR-113 to 118 | Implemented (partial) | /triage is a read-only operations dashboard (four KPI links, waiting band, oldest unattended reports/unassigned SOS, read-only network map, trends) and carries no verification or dispatch action; /radar is SOS-only (app SOS plus call-in) with assign/confirm/undo and a ResponderTracking panel (live/stale/offline fix state, distance, derived ETA) plus the dispatch_events mission timeline. Unit-level tracking only: no person/device-level responder identity, no responder client, fixed 60 s/5 min freshness assumptions (LIM-030), and no browser fixtures for /moderation |
 | Hazard authoring         | FSD-FR-082 to 086 | Implemented | The API creates, updates and publishes hazards, and streams changes at /api/v1/hazards/stream. The portal publishes a hazard on a chosen road segment (levels CAUTION, LEVEL_2, LEVEL_3, IMPASSABLE) or draws it directly on the map as a flood polygon (FR-082) or a closure line (FR-083); hazard_zones.geometry is a generic PostGIS geometry column for either shape. PATCH /hazards/{id} with active=false withdraws a hazard (FR-085), exposed as a button in the portal. NFR-019 (publish-to-SSE-delivery latency) does not currently hold against the hosted deployment; see BRD.docx |
-| Distress and dispatch    | FSD-FR-087 to 089 | Implemented | A distress incident comes from an app SOS or from the triage screen's call-in entry (FR-087), and both reach the same queue, the map and the SSE feed; assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
+| Distress and dispatch    | FSD-FR-087 to 089 | Implemented | A distress incident comes from an app SOS or from the Dispatch Radar's call-in entry (FR-087, moved off `/triage` under CR-002), and both reach the same queue, the map and the SSE feed; assignment and confirmation; available units ranked by flood-safe travel time and the chosen route previewed in the confirm step (BRULE-011: only available units, undo or reject releases them) |
 | User management          | FSD-FR-048         | Implemented | CRUD endpoints for users with audit trail; admin UI with search, role badges, create/edit modals, delete confirmation; security: role validation, email uniqueness, self-protection, last admin protection |
 | Fleet management         | FSD-FR-075, 076    | Implemented | A super admin adds, edits and removes rescue units from the Fleet screen (a dispatcher sees it read-only); call signs are unique, a unit on a live dispatch cannot be removed, and every change is audited |
 | Export                   | FSD-FR-049         | Implemented | CSV export for audit logs and incidents; admin UI with one-click export buttons and toast notifications |

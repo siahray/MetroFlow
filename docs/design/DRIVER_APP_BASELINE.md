@@ -859,7 +859,7 @@ Production work remains blocked until the unchecked items are closed.
 | FSD-FR-060 | Hazard intersection detection                   | Implemented — geodesic distance to hazard polygons |
 | FSD-FR-061 | Automatic reroute                               | Implemented — auto-rerouting on hazard publication |
 | FSD-FR-062 | Manual refresh and alternatives                 | Implemented — re-query and unsafe alternative option |
-| FSD-FR-063 | Proximity alert                                 | Implemented — 200m proximity banner and hazard card |
+| FSD-FR-063 | Proximity alert                                 | Implemented — 100m proximity banner and hazard card |
 | FSD-FR-064 | Hazard alert detail                             | Implemented — obstruction level and clearance warning |
 | FSD-FR-065 | Flood report depth selector                     | Implemented — ANKLE, KNEE, IMPASSABLE mapped to API |
 | FSD-FR-066 | Camera or file attachment                       | Implemented — expo-image-picker with 4MB size check |
