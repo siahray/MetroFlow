@@ -25,8 +25,10 @@ import {
   ShieldCheck,
   RefreshCw,
   WifiOff,
+  History,
 } from 'lucide-react-native';
-import { ApiError, createSOS, getSOS, type SOSRequest } from '../../api';
+import { ApiError, createSOS } from '../../api';
+import { reverseGeocodeName } from '../../geocode';
 
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
@@ -34,14 +36,12 @@ import { BackButton } from '../../components/BackButton';
 import { isOffline, useOnline } from '../../offline';
 import { loadActiveGarageVehicle } from '../../myVehicle';
 import { useDialog } from '../../components/Dialog';
+import { useSOSTracker } from '../../sosTracker';
 import { fontSize, space, useTheme } from '../../theme';
 type SituationType = 'vehicle' | 'pedestrian' | 'medical';
 
 /** Location staleness limit for SOS submissions (VAL-021). */
 const SOS_LOCATION_MAX_AGE_MS = 60_000;
-
-/** Once an incident reaches one of these states, polling its status is pointless. */
-const FINAL_SOS_STATUSES = new Set(['RESOLVED', 'REJECTED']);
 
 // Unlike a flood report, an SOS is not queued for later: dispatch has to receive
 // it now, so an offline attempt gets an honest message instead of a timeout.
@@ -56,34 +56,42 @@ export default function SOSScreen() {
   const [situation, setSituation] = useState<SituationType>('pedestrian');
   const [sending, setSending] = useState(false);
   const [locating, setLocating] = useState(false);
-  /** SOS record returned on success — drives the status panel (FSD-FR-074). */
-  const [dispatchedSOS, setDispatchedSOS] = useState<SOSRequest | null>(null);
-  const [sosStatus, setSosStatus] = useState<string | null>(null);
+  // The active SOS, its dispatcher log, and the update modal are tracked
+  // app-wide (SOSTrackerProvider, mounted at the root layout) rather than in
+  // this screen's own state, so the modal can pop up on a status change no
+  // matter which tab the driver is on, not only while this screen is focused.
+  const { activeSOS: dispatchedSOS, sosLog, track, refresh, showUpdates, clearActive } = useSOSTracker();
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+  /** The current GPS fix reverse-geocoded to a street/establishment, shown in
+   * the "Your Location" card instead of raw coordinates. Preview only — the
+   * actual SOS still takes a fresh fix at send time (VAL-021). */
+  const [addressPreview, setAddressPreview] = useState<string | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
   const online = useOnline();
   const { c, mode } = useTheme();
 
-  // The SOS change feed is dispatcher-only, so a driver polls its own submission
-  // until the dispatcher's decision arrives (FSD-FR-074).
-  const trackedSOSId = dispatchedSOS?.sos_id ?? null;
-  const trackedSOSFinal = dispatchedSOS
-    ? FINAL_SOS_STATUSES.has(dispatchedSOS.status.toUpperCase())
-    : true;
-
   useEffect(() => {
-    if (trackedSOSId === null || trackedSOSFinal) return;
-    const timer = setInterval(() => {
-      getSOS(trackedSOSId)
-        .then((updated) => {
-          setSosStatus(updated.status);
-          setDispatchedSOS(updated);
-        })
-        .catch(() => {
-          // Keep the last known status; the next poll or manual refresh retries.
-        });
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [trackedSOSId, trackedSOSFinal]);
+    (async () => {
+      try {
+        // Checked-only: never prompt just to preview the address. The real
+        // permission request still happens in handleSOS when the driver
+        // actually sends the request.
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (!perm.granted) {
+          setLocationDenied(true);
+          return;
+        }
+        const current =
+          (await Location.getLastKnownPositionAsync()) ??
+          (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        if (!current) return;
+        const name = await reverseGeocodeName(current.coords.latitude, current.coords.longitude);
+        setAddressPreview(name);
+      } catch {
+        // Leave the generic placeholder; sending the SOS still works either way.
+      }
+    })();
+  }, []);
 
   async function handleSOS() {
     if (sending || locating) return;
@@ -165,8 +173,7 @@ export default function SOSScreen() {
         plate_number: activeVehicle?.plate,
       });
 
-      setDispatchedSOS(result);
-      setSosStatus(result.status);
+      track(result);
     } catch (error) {
       const apiError = error instanceof ApiError ? error : null;
       const needsSignIn = apiError?.status === 401;
@@ -200,14 +207,17 @@ export default function SOSScreen() {
     if (!dispatchedSOS || refreshingStatus) return;
     setRefreshingStatus(true);
     try {
-      const updated = await getSOS(dispatchedSOS.sos_id);
-      setSosStatus(updated.status);
-      setDispatchedSOS(updated);
-    } catch {
-      // Status refresh failure is non-critical; keep showing last known status.
+      await refresh();
     } finally {
       setRefreshingStatus(false);
     }
+  }
+
+  /** The driver dismisses the incident themselves; a resolved/rejected one is
+   * never cleared on its own. */
+  function handleReturnHome() {
+    clearActive();
+    router.replace('/(tabs)/home');
   }
 
   function handleInfo() {
@@ -312,10 +322,12 @@ export default function SOSScreen() {
                 </Text>
               </View>
               <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: c.slate900 }}>
-                {"Shared from your phone's GPS"}
+                {addressPreview ?? "Shared from your phone's GPS"}
               </Text>
               <Text style={{ fontSize: fontSize.body, color: c.slate500, marginTop: space[2] }}>
-                A fresh location fix is taken when you send the request.
+                {locationDenied
+                  ? 'Enable location to preview your address here — a fresh fix is still taken when you send the request.'
+                  : 'A fresh location fix is taken when you send the request.'}
               </Text>
             </View>
           </View>
@@ -389,7 +401,7 @@ export default function SOSScreen() {
                 SOS #{dispatchedSOS.sos_id} •{' '}
                 Status:{' '}
                 <Text style={{ fontWeight: '800', textTransform: 'capitalize' }}>
-                  {sosStatus ?? dispatchedSOS.status}
+                  {dispatchedSOS.status}
                 </Text>
               </Text>
               <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
@@ -407,6 +419,11 @@ export default function SOSScreen() {
               {dispatchedSOS.plate_number ? (
                 <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
                   Vehicle plate: {dispatchedSOS.plate_number}
+                </Text>
+              ) : null}
+              {sosLog.length > 0 ? (
+                <Text style={{ fontSize: fontSize.body, color: c.slate700 }}>
+                  Latest update: {sosLog[sosLog.length - 1].text}
                 </Text>
               ) : null}
 
@@ -436,9 +453,30 @@ export default function SOSScreen() {
                 </Text>
               </TouchableOpacity>
 
+              {/* Full dispatcher action history */}
+              <TouchableOpacity
+                onPress={showUpdates}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: space[6],
+                  paddingVertical: space[10],
+                  backgroundColor: c.white,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: c.emerald100,
+                }}
+              >
+                <History size={14} color={c.green600} />
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.green600 }}>
+                  View Updates
+                </Text>
+              </TouchableOpacity>
+
               {/* Return home */}
               <TouchableOpacity
-                onPress={() => router.replace('/(tabs)/home')}
+                onPress={handleReturnHome}
                 style={{
                   paddingVertical: space[12],
                   backgroundColor: c.slate900,
@@ -527,6 +565,11 @@ export default function SOSScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* The dispatch-update modal itself is rendered app-wide by
+          SOSTrackerProvider (root layout), not here -- it pops up on a status
+          change no matter which tab the driver is on. "View Updates" above
+          just opens it on demand via showUpdates(). */}
     </SafeAreaView>
   );
 }

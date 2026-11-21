@@ -3,7 +3,7 @@ import { ExportPanel } from "@/components/export-panel";
 
 export default function ExportPage() {
   return (
-    <AppShell activeItem="export" title="Data Export">
+    <AppShell activeItem="export" title="Reports & Export">
       <ExportPanel />
     </AppShell>
   );

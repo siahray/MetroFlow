@@ -31,7 +31,7 @@ const SHORTCUTS: { keys: string; label: string; go?: string; focus?: string }[] 
   { keys: "Ctrl F", label: "Go to fleet", go: "/fleet" },
   { keys: "Ctrl M", label: "Go to moderation", go: "/moderation" },
   { keys: "Ctrl U", label: "Go to users", go: "/users" },
-  { keys: "Ctrl E", label: "Go to export", go: "/export" },
+  { keys: "Ctrl E", label: "Go to reports & export", go: "/export" },
   { keys: "?", label: "Show this shortcut list" },
 ];
 

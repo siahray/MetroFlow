@@ -1,6 +1,16 @@
 "use client";
 
-import { ClipboardCheck, Inbox, RefreshCw, Shield, Siren, Truck, Waves } from "lucide-react";
+import {
+  AlertTriangle,
+  ClipboardCheck,
+  Gauge,
+  Inbox,
+  RefreshCw,
+  Shield,
+  Siren,
+  Truck,
+  Waves,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -15,6 +25,7 @@ import { listSOS } from "@/lib/sos-live";
 import { listReports, ageLabel, type FieldReport } from "@/lib/reports";
 import { summarizeOperations } from "@/lib/operations-summary";
 import { listVehicles, type SOSRequest, type Vehicle } from "@/lib/dispatch";
+import { listSensors, type Sensor } from "@/lib/sensors";
 import { subscribeToHazards, subscribeToSOS, subscribeToVehicles } from "@/lib/live-stream";
 
 /**
@@ -33,6 +44,7 @@ export default function OperationsDashboardPage() {
   const [reports, setReports] = useState<FieldReport[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [hazards, setHazards] = useState<HazardZone[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -46,6 +58,7 @@ export default function OperationsDashboardPage() {
         listReports(),
         listVehicles(),
         listHazards(),
+        listSensors(true),
       ]);
       // Only report an error when nothing loaded: one dead feed should not blank
       // the whole board.
@@ -58,21 +71,25 @@ export default function OperationsDashboardPage() {
         setLoading(false);
         return;
       }
-      const [sos, reportRows, vehicleRows, hazardRows] = results;
+      const [sos, reportRows, vehicleRows, hazardRows, sensorRows] = results;
       setError(null);
       if (sos.status === "fulfilled") setSosList(sos.value);
       if (reportRows.status === "fulfilled") setReports(reportRows.value);
       if (vehicleRows.status === "fulfilled") setVehicles(vehicleRows.value);
       if (hazardRows.status === "fulfilled") setHazards(hazardRows.value);
+      if (sensorRows.status === "fulfilled") setSensors(sensorRows.value);
       setLoading(false);
     };
 
     void load();
 
-    // Reports have no stream endpoint yet, so they are polled like on the desk.
+    // Reports and sensors have no stream endpoint yet, so they are polled.
     const poll = setInterval(() => {
       listReports()
         .then(setReports)
+        .catch(() => {});
+      listSensors(true)
+        .then(setSensors)
         .catch(() => {});
     }, 10000);
 
@@ -257,6 +274,8 @@ export default function OperationsDashboardPage() {
             />
           </div>
 
+          <ActiveSensorsPanel sensors={sensors} />
+
           {/* Stretches to the row bottom, so the map's lower edge lines up with
               the Operational trends column on wide screens. */}
           <div
@@ -332,6 +351,85 @@ function WaitingTable({
                 </td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function ActiveSensorsPanel({ sensors }: { sensors: Sensor[] }) {
+  const breaches = sensors.filter((sensor) => sensor.last_flagged).length;
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-sky-100 bg-sky-50 text-sky-600">
+            <Gauge className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-900">Active sensors</h2>
+            <p className="text-[11px] text-slate-500">
+              {sensors.length} active · {breaches} in breach
+            </p>
+          </div>
+        </div>
+        {breaches > 0 ? (
+          <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+            <AlertTriangle className="h-3 w-3" /> Breach detected
+          </span>
+        ) : null}
+      </header>
+      {sensors.length === 0 ? (
+        <p className="px-4 py-3 text-[11px] text-slate-500">No active sensors.</p>
+      ) : (
+        <table className="w-full text-left text-[11px]">
+          <thead>
+            <tr className="border-b border-slate-100 text-[10px] tracking-wider text-slate-500 uppercase">
+              <th scope="col" className="px-4 py-2 font-semibold">
+                Sensor
+              </th>
+              <th scope="col" className="px-2 py-2 font-semibold">
+                Threshold
+              </th>
+              <th scope="col" className="px-2 py-2 font-semibold">
+                Last reading
+              </th>
+              <th scope="col" className="px-4 py-2 text-right font-semibold">
+                Status
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sensors.map((sensor) => {
+              const unit = sensor.threshold_unit === "m" ? "m" : "mm/hr";
+              const reading =
+                sensor.last_value == null ? "No readings" : `${sensor.last_value} ${unit}`;
+              return (
+                <tr key={sensor.sensor_id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-4 py-2">
+                    <div className="font-mono font-semibold text-slate-800">{sensor.sensor_id}</div>
+                    <div className="truncate text-slate-500">{sensor.name}</div>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-slate-600">
+                    {sensor.threshold_value} {unit}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-slate-600">{reading}</td>
+                  <td className="px-4 py-2 text-right">
+                    <span
+                      className={
+                        sensor.last_flagged
+                          ? "rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-800"
+                          : "rounded-full bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-800"
+                      }
+                    >
+                      {sensor.last_flagged ? "BREACH" : "NORMAL"}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

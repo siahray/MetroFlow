@@ -122,6 +122,12 @@ export async function undoDispatch(sosId: number): Promise<SOSRequest> {
   });
 }
 
+/** Close a successful rescue: resolves the SOS, frees the unit and records the
+ * completed milestone on the mission timeline. */
+export async function resolveSOS(sosId: number): Promise<SOSRequest> {
+  return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/resolve`, { method: "POST" });
+}
+
 export async function rejectSOS(sosId: number, reason: string): Promise<SOSRequest> {
   return fetchJSON<SOSRequest>(`/api/v1/sos/${sosId}/reject`, {
     method: "POST",
