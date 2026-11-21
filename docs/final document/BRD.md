@@ -29,7 +29,7 @@ MetroFlow addresses this with a flood simulation engine, a clearance-aware
 routing engine, an LGU dispatch portal and a driver app. The engine computes
 street-level flood depth across a road graph; the router returns the fastest
 path a vehicle of a given clearance can actually drive; the portal presents the
-network state, a live map and a triage queue with evidence and an auditable
+network state, a live map, an operations dashboard, a report evidence desk and an SOS dispatch radar with an auditable
 action trail; the driver app turns verified hazards into navigation warnings and
 reroutes, and carries field reports back to the operations centre even when the
 network drops.
@@ -67,7 +67,7 @@ business case compares options on operational fit, not purchase price alone.
 | BO-003 | Reduce duplicated reports entering the queue               | Duplicate screening rate improves against the M1 baseline `[TBC]`                                      |
 | BO-004 | Make every decision auditable                              | 100% of decisions carry actor, timestamp and action                                                    |
 | BO-005 | Keep the system available during a declared event          | Availability at or above `[TBC]` during rain events                                                    |
-| BO-006 | Give responders a route that respects vehicle clearance    | 100% of route responses contain no segment at or above the requested clearance, or an explicit refusal |
+| BO-006 | Give responders a route that respects vehicle clearance    | Safe route, explicit refusal, or — only on explicit driver opt-in — a warned least-submerged route |
 | BO-007 | Keep drivers out of verified flood hazards                 | 100% of active routes reroute or alert before entering a published hazard polygon                      |
 | BO-008 | Shorten the path from field observation to verified hazard | Median time from report submission to publish decision below the M1 baseline `[TBC]`                   |
 
@@ -80,7 +80,7 @@ because a single dispatch into deep water can be fatal.
 | ----------------------- | ----------------------------------- | -------------------------------------------------- |
 | «Project Sponsor»       | MDRRMC / «Client LGU»               | Funds, authorises and accepts the pilot            |
 | «Client Representative» | LGU operations and IT (CDMO)        | Business owner; provides corridor data and access  |
-| Dispatchers             | Operations centre                   | Primary users of the triage queue                  |
+| Dispatchers             | Operations centre                   | Primary users of the dashboard, report desk and radar |
 | Barangay responders     | Field units                         | Consume routes and dispatch instructions           |
 | Rescue commanders       | MDRRMC operations                   | Approve dispatch and oversee rescue routes         |
 | Drivers and commuters   | Public roads in the pilot corridor  | Receive warnings, reroute and submit field reports |
@@ -216,14 +216,12 @@ does, so this document is also an honest statement of scope.
 | BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue; Moderation and Evidence is the only screen that verifies user reports (CR-002) |
 | BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; the SOS-only Dispatch Radar assigns a specific unit and tracks it during the response (CR-002); native telephony is out of scope |
 | BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview; Dispatch Radar is SOS-only, assigns a specific unit, and tracks it from live telemetry with a derived ETA and a `dispatch_events` mission timeline (CR-002) |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented on the Open-Meteo rain gate and GloFAS modelled river discharge; external PAGASA feed integration is out of scope (descoped, `CR-012`) |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented on the Open-Meteo rain gate and GloFAS modelled river discharge, the system's sole rain/river telemetry sources |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
-| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled as the system's sole flood-state sources; no further external telemetry integration is planned (`CR-012`) |
+| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled as the system's sole flood-state sources |
 
-`Must` requirements define the acceptance boundary. All of them are met in the pilot
-except the external-feed half of BR-017 and BR-019's live flood-state sources, both
-`Should` and only partly met. Deprioritised or out-of-pilot scope is marked above
-rather than assumed.
+`Must` requirements define the acceptance boundary. All of them are met in the pilot.
+Deprioritised or out-of-pilot scope is marked above rather than assumed.
 
 ### A.2 In scope
 
@@ -289,7 +287,7 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Assumption | A-002 | The pilot corridor is representative enough to demonstrate routing        |
 | Assumption | A-003 | Free or institutional service tiers suffice for the pilot                 |
 | Assumption | A-004 | Dispatchers have a modern desktop browser and reliable connectivity       |
-| Assumption | A-005 | Rainfall is supplied manually or from Open-Meteo (live rain gate); OpenWeather is an optional supplementary source; Open-Meteo and GloFAS remain the sole rain/river telemetry sources (PAGASA integration descoped, `CR-012`) |
+| Assumption | A-005 | Rainfall is supplied manually or from Open-Meteo (live rain gate); OpenWeather is an optional supplementary source; Open-Meteo and GloFAS are the system's rain/river telemetry sources |
 | Assumption | A-006 | The client provides corridor and barangay naming conventions              |
 | Assumption | A-007 | Drivers have a smartphone with a modern browser, camera and geolocation   |
 | Assumption | A-008 | Cellular data can drop during an event, so offline operation is required  |

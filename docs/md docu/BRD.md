@@ -31,7 +31,7 @@ MetroFlow addresses this with a flood simulation engine, a clearance-aware
 routing engine, an LGU dispatch portal and a driver app. The engine computes
 street-level flood depth across a road graph; the router returns the fastest
 path a vehicle of a given clearance can actually drive; the portal presents the
-network state, a live map and a triage queue with evidence and an auditable
+network state, a live map, an operations dashboard, a report evidence desk and an SOS dispatch radar with an auditable
 action trail; the driver app turns verified hazards into navigation warnings and
 reroutes, and carries field reports back to the operations centre even when the
 network drops.
@@ -69,7 +69,7 @@ business case compares options on operational fit, not purchase price alone.
 | BO-003 | Reduce duplicated reports entering the queue               | Duplicate screening rate improves against the M1 baseline `[TBC]`                                      |
 | BO-004 | Make every decision auditable                              | 100% of decisions carry actor, timestamp and action                                                    |
 | BO-005 | Keep the system available during a declared event          | Availability at or above `[TBC]` during rain events                                                    |
-| BO-006 | Give responders a route that respects vehicle clearance    | 100% of route responses contain no segment at or above the requested clearance, or an explicit refusal |
+| BO-006 | Give responders a route that respects vehicle clearance    | Safe route, explicit refusal, or — only on explicit driver opt-in — a warned least-submerged route |
 | BO-007 | Keep drivers out of verified flood hazards                 | 100% of active routes reroute or alert before entering a published hazard polygon                      |
 | BO-008 | Shorten the path from field observation to verified hazard | Median time from report submission to publish decision below the M1 baseline `[TBC]`                   |
 
@@ -82,7 +82,7 @@ because a single dispatch into deep water can be fatal.
 | ----------------------- | ----------------------------------- | -------------------------------------------------- |
 | «Project Sponsor»       | MDRRMC / «Client LGU»               | Funds, authorises and accepts the pilot            |
 | «Client Representative» | LGU operations and IT (CDMO)        | Business owner; provides corridor data and access  |
-| Dispatchers             | Operations centre                   | Primary users of the triage queue                  |
+| Dispatchers             | Operations centre                   | Primary users of the dashboard, report desk and radar |
 | Barangay responders     | Field units                         | Consume routes and dispatch instructions           |
 | Rescue commanders       | MDRRMC operations                   | Approve dispatch and oversee rescue routes         |
 | Drivers and commuters   | Public roads in the pilot corridor  | Receive warnings, reroute and submit field reports |

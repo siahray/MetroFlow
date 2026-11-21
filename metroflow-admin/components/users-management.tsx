@@ -1,11 +1,12 @@
 "use client";
 
 import { Shield, Trash2, Edit, Plus, Search, User as UserIcon, Mail, Clock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { listVehicles, type Vehicle } from "@/lib/dispatch";
+import { getSessionUser, subscribeToSession } from "@/lib/session";
 import {
   createUser,
   deleteUser,
@@ -22,6 +23,8 @@ import { Skeleton } from "./skeleton";
 
 export function UsersManagement() {
   const { show } = useToast();
+  const session = useSyncExternalStore(subscribeToSession, getSessionUser, () => null);
+  const isSuperAdmin = session?.role === "SUPER_ADMIN";
   const [users, setUsers] = useState<User[]>([]);
   const [units, setUnits] = useState<Vehicle[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,7 +46,7 @@ export function UsersManagement() {
 
   const loadUsers = async () => {
     try {
-      setUsers(await listUsers());
+      setUsers((await listUsers()).filter((u) => u.role !== "PUBLIC_DRIVER"));
       setLoadError(null);
     } catch {
       setLoadError("Could not load users. Check your connection and retry.");
@@ -56,7 +59,10 @@ export function UsersManagement() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await createUser(formData);
+      await createUser({
+        ...formData,
+        vehicle_id: formData.role === "RESPONDER" ? (formData.vehicle_id ?? null) : null,
+      });
       show("User created successfully");
       setIsCreateModalOpen(false);
       setFormData({ name: "", email: "", password: "", role: "ADMIN", vehicle_id: null });
@@ -77,7 +83,7 @@ export function UsersManagement() {
         name: formData.name,
         email: formData.email,
         role: formData.role,
-        vehicle_id: formData.vehicle_id ?? null,
+        vehicle_id: formData.role === "RESPONDER" ? (formData.vehicle_id ?? null) : null,
       };
       await updateUser(editingUser.user_id, updateData);
       show("User updated successfully");
@@ -128,7 +134,7 @@ export function UsersManagement() {
   useEffect(() => {
     let cancelled = false;
     listUsers()
-      .then((data) => !cancelled && setUsers(data))
+      .then((data) => !cancelled && setUsers(data.filter((u) => u.role !== "PUBLIC_DRIVER")))
       .catch(
         () => !cancelled && setLoadError("Could not load users. Check your connection and retry."),
       )
@@ -340,49 +346,52 @@ export function UsersManagement() {
                 <select
                   id="user-create-role"
                   value={formData.role}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const role = e.target.value as UserCreate["role"];
                     setFormData({
                       ...formData,
-                      role: e.target.value as UserCreate["role"],
-                    })
-                  }
+                      role,
+                      vehicle_id: role === "RESPONDER" ? formData.vehicle_id : null,
+                    });
+                  }}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
                 >
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
-                  <option value="RESPONDER">Responder</option>
-                  <option value="PUBLIC_DRIVER">Public Driver</option>
+                  {isSuperAdmin ? <option value="RESPONDER">Responder</option> : null}
                 </select>
               </div>
-              <div>
-                <label
-                  htmlFor="user-create-vehicle"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
-                >
-                  Rescue unit
-                </label>
-                <select
-                  id="user-create-vehicle"
-                  value={formData.vehicle_id ?? ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      vehicle_id: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
-                >
-                  <option value="">Not linked</option>
-                  {units.map((unit) => (
-                    <option key={unit.vehicle_id} value={unit.vehicle_id}>
-                      {unit.call_sign}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[10px] text-slate-400">
-                  A linked driver reports this unit&apos;s position and receives its dispatch.
-                </p>
-              </div>
+              {formData.role === "RESPONDER" ? (
+                <div>
+                  <label
+                    htmlFor="user-create-vehicle"
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
+                    Rescue unit
+                  </label>
+                  <select
+                    id="user-create-vehicle"
+                    value={formData.vehicle_id ?? ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        vehicle_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  >
+                    <option value="">Not linked</option>
+                    {units.map((unit) => (
+                      <option key={unit.vehicle_id} value={unit.vehicle_id}>
+                        {unit.call_sign}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    A linked responder reports this unit&apos;s position and receives its dispatch.
+                  </p>
+                </div>
+              ) : null}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -452,49 +461,54 @@ export function UsersManagement() {
                 <select
                   id="user-edit-role"
                   value={formData.role}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const role = e.target.value as UserCreate["role"];
                     setFormData({
                       ...formData,
-                      role: e.target.value as UserCreate["role"],
-                    })
-                  }
+                      role,
+                      vehicle_id: role === "RESPONDER" ? formData.vehicle_id : null,
+                    });
+                  }}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
                 >
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
-                  <option value="RESPONDER">Responder</option>
-                  <option value="PUBLIC_DRIVER">Public Driver</option>
+                  {isSuperAdmin || formData.role === "RESPONDER" ? (
+                    <option value="RESPONDER">Responder</option>
+                  ) : null}
                 </select>
               </div>
-              <div>
-                <label
-                  htmlFor="user-edit-vehicle"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
-                >
-                  Rescue unit
-                </label>
-                <select
-                  id="user-edit-vehicle"
-                  value={formData.vehicle_id ?? ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      vehicle_id: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
-                >
-                  <option value="">Not linked</option>
-                  {units.map((unit) => (
-                    <option key={unit.vehicle_id} value={unit.vehicle_id}>
-                      {unit.call_sign}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-[10px] text-slate-400">
-                  A linked driver reports this unit&apos;s position and receives its dispatch.
-                </p>
-              </div>
+              {formData.role === "RESPONDER" ? (
+                <div>
+                  <label
+                    htmlFor="user-edit-vehicle"
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
+                    Rescue unit
+                  </label>
+                  <select
+                    id="user-edit-vehicle"
+                    value={formData.vehicle_id ?? ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        vehicle_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  >
+                    <option value="">Not linked</option>
+                    {units.map((unit) => (
+                      <option key={unit.vehicle_id} value={unit.vehicle_id}>
+                        {unit.call_sign}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    A linked responder reports this unit&apos;s position and receives its dispatch.
+                  </p>
+                </div>
+              ) : null}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"

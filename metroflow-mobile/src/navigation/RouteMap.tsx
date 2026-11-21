@@ -24,6 +24,7 @@ import type { EdgeFeature, HazardInfo, RoutePlan } from "../api";
 import {
   distanceMeters,
   polygonRing,
+  routeBearing,
   routeCoordinates,
   snapToRoute,
   toLatLng,
@@ -83,8 +84,11 @@ type Props = {
    * (route drawn, but no follow camera and no close-up zoom yet). */
   active?: boolean;
   position: LatLng | null;
-  /** Device compass heading in degrees, for the driving-camera bearing. */
+  /** GPS course in degrees, last-resort driving-camera bearing. */
   heading?: number | null;
+  /** Device compass heading in degrees (where the phone points) — primary
+   * bearing while navigating, falling back to the road's own direction. */
+  compassHeading?: number | null;
   /** Speed/turn-aware camera distance (navigation/geo.ts navZoomFor); falls
    * back to the fixed NAV_CAMERA when not supplied. */
   navZoom?: NavCamera | null;
@@ -133,6 +137,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   active = false,
   position,
   heading = null,
+  compassHeading = null,
   navZoom = null,
   destination,
   hazards,
@@ -186,6 +191,18 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
     if (!active || !route || !position) return position;
     return snapToRoute(routeCoordinates(route), position) ?? position;
   }, [active, route, position]);
+
+  // Heading-up bearing: the compass points where the phone is aimed; when it
+  // has no usable reading (stationary, uncalibrated, simulator), the road ahead
+  // keeps the map aligned, and GPS course is the final fallback.
+  const routeHeading = useMemo(
+    () =>
+      active && route && displayPosition
+        ? routeBearing(routeCoordinates(route), displayPosition)
+        : null,
+    [active, route, displayPosition],
+  );
+  const cameraHeading = compassHeading ?? routeHeading ?? heading ?? 0;
 
   const recenter = useCallback(() => {
     setFollowing(true);
@@ -256,7 +273,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
       camera.setCamera({
         centerCoordinate: [displayPosition.longitude, displayPosition.latitude],
         zoomLevel,
-        heading: heading ?? 0,
+        heading: cameraHeading,
         pitch: effectivePitch,
         animationDuration: 450,
         animationMode: "easeTo",
@@ -287,7 +304,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
         animationDuration: 0,
       });
     }
-  }, [following, active, displayPosition, position, heading, zoomLevel, effectivePitch, routeBounds]);
+  }, [following, active, displayPosition, position, cameraHeading, zoomLevel, effectivePitch, routeBounds]);
 
   const routeShape = useMemo<GeoJSON.Feature<GeoJSON.LineString> | null>(() => {
     if (!route) return null;
@@ -567,12 +584,12 @@ function makeStyles(c: ThemeColors, mode: "light" | "storm") {
       left: 8,
       bottom: 22,
       backgroundColor: chromeBg,
-      borderRadius: 8,
-      paddingHorizontal: space[8],
-      paddingVertical: space[6],
-      gap: space[3],
+      borderRadius: 10,
+      paddingHorizontal: space[10],
+      paddingVertical: space[8],
+      gap: space[5],
     },
-    legendRow: { flexDirection: "row", alignItems: "center", gap: space[6] },
+    legendRow: { flexDirection: "row", alignItems: "center", gap: space[8] },
     meHalo: {
       width: 22,
       height: 22,
@@ -617,7 +634,7 @@ function makeStyles(c: ThemeColors, mode: "light" | "storm") {
       borderRightColor: "transparent",
       borderBottomColor: "#ffffff",
     },
-    swatch: { width: 14, height: 4, borderRadius: 2 },
+    swatch: { width: 9, height: 9, borderRadius: 5 },
     legendText: { fontSize: fontSize.micro, color: c.slate600 },
     recenterChip: {
       // Bottom, not top: the top is the instruction card's territory (its

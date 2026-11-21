@@ -597,6 +597,24 @@ class LiveRainfallResponse(BaseModel):
     source: str = "Open-Meteo"
 
 
+class CurrentWeatherResponse(BaseModel):
+    """Current conditions at a driver's own location, for the home screen weather card.
+
+    Display-only, like ``ForecastResponse`` -- never a routing or advisory input.
+    """
+
+    available: bool = Field(description="False when the live feed could not be reached")
+    temperature_c: float | None = None
+    humidity_pct: float | None = None
+    precipitation_chance_pct: float | None = None
+    wind_kmh: float | None = None
+    description: str | None = None
+    as_of: datetime | None = Field(
+        default=None, description="When Open-Meteo recorded this reading"
+    )
+    source: str = "Open-Meteo"
+
+
 class SensorReadingRequest(BaseModel):
     """Gateway posts a sensor reading (FSD-FR-090)."""
 
@@ -734,7 +752,6 @@ class ReportResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     location_plausible: bool = True
-    barangay: str | None = None
     narrative: str | None = None
     # The stored base score decayed by age, which is what the queue orders on.
     urgency_score: float

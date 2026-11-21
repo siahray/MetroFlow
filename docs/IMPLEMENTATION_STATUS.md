@@ -146,7 +146,7 @@ list) — that table is stale, see §6.
 
 - [x] Q-3 — mobile lint in CI, clean again (was red on `main` since the F-4 commit over a `useEffect`-based `setState` in `home.tsx` that a newer `eslint-plugin-react-hooks` rule flags; fixed 10 Nov 2026 in passing while touching that file for NFR-023)
 - [x] Q-5 — `_cleanup_leftover_rows` autouse fixture in `test_api_integration.py` diffs `sos_requests`/`hazard_zones`/`users` ids and deletes what each test added; a user with audit history is left in place (append-only `audit_logs`, by design), everything else no longer accumulates
-- [x] Q-1 — portal component tests now cover `error-notice`, `use-dialog-focus`, `toast-provider`, `sensor-management`, `incident-queue` (9), `dispatch-radar` (8) and `unit-form-modal` (4); the driver app has a jest-expo + `@testing-library/react-native` harness (`jest.config.js`, `__tests__/`, `bun run test:components`) with first coverage on `Avatar`/`initialsOf`/`PasswordField`. Heavier screens still need per-screen native-module mocks
+- [x] Q-1 — portal tests cover `confirm-dialog`, `error-notice`, `incident-queue`, `searchable-select`, `sensor-management`, `toast-provider`, `unit-form-modal` and `use-dialog-focus`, plus `lib/` units (110 tests total); Playwright adds 11 e2e tests for login, dashboard, radar, call-in focus, offline/error and axe (LIM-009). The driver app has a jest-expo + `@testing-library/react-native` harness (`jest.config.js`, `__tests__/`, `bun run test:components`) with first coverage on `Avatar`/`initialsOf`/`PasswordField`. Heavier screens still need per-screen native-module mocks
 - [x] Q-4 — hazard-publish + network/routing latency measured earlier (NFR-019, 001/002); offline-route planning latency measured 10 Nov 2026 via `metroflow-mobile/benchmarks/offline-route.ts` (p50 ~1 ms at 1600-node scale in the JS runtime; on-device confirmation rides with Q-2)
 - [ ] ⛔ Q-2 — offline device test (TC-029/030) — deferred with the pilot/UAT, not an engineering gap right now
 
@@ -178,6 +178,57 @@ list) — that table is stale, see §6.
   mode), person/device-level identity, and Quezon City Hall coordinates with a
   defined "same vicinity" rule — all `[TBC]`; freshness cut-offs are assumptions
   (LIM-030).
+
+## 9. CR-001 amendment A1 — least-submerged fallback (21 Nov 2026)
+
+- [x] `FSD-FR-146`/`BRULE-020`/`ADR-028`: `/routing/navigate` accepts
+  `allow_submerged=true`; the safe search still runs first, then Dijkstra ranks
+  fallback paths by submerged metres, peak depth and travel time. `404` remains
+  for unknown nodes and for graphs with no path at all.
+- [x] `FSD-FR-147`: the driver app's Show Unsafe Route control sends the opt-in
+  on initial planning, reroute, refresh and alternative requests, and shows a
+  "Least-submerged route" chip plus a submersion warning. The offline planner
+  mirrors the fallback.
+- [x] Admin map and SOS dispatch preview deliberately keep the hard clearance
+  gate; `LIM-031` records that the warning is advisory, not a safety guarantee.
+- [ ] Amendment A1 sign-off (Project Lead / QA & Documentation Lead) is pending;
+  the original CR-001 approval is unchanged.
+
+## 10. Driver app — current-conditions weather card (21 Nov 2026)
+
+- [x] Backend: `weather.fetch_current_conditions`/`cached_current_conditions`
+  (temperature, humidity, wind, precipitation chance, WMO description) from the
+  same Open-Meteo source as the CR-004 rain gate — display-only, never a
+  routing/advisory input. `GET /api/v1/weather/current-conditions?lat=&lon=`
+  (`require_user`) serves it, cached 10 minutes per ~1km grid cell.
+- [x] Mobile: Home screen shows a weather card (temperature, condition,
+  precipitation chance, humidity, wind, reverse-geocoded location) above the
+  existing flood advisory card, using a check-only location permission lookup
+  (never prompts on its own) so it degrades silently when permission isn't
+  already granted.
+
+## 11. PR #94 CI fixes (21 Nov 2026)
+
+- [x] CodeQL partial-SSRF finding on `weather._current_conditions_url`:
+  coordinates are now range/finite-validated and URL-encoded with
+  `urlencode` instead of f-string interpolation; invalid input raises
+  `ValueError`, which `fetch_current_conditions` already turned into
+  `None` (new tests cover both in `tests/test_weather.py`).
+- [x] API contract tests were red from an incomplete rollout of the
+  already-approved "drop barangay from incident reports" change
+  (`2057f2a`, migration `e37c7bc39cdb`): `main.py` still read
+  `report.barangay` (column no longer exists → `AttributeError`) in two
+  places, and `schemas.LiveRainfallResponse` had lost its `source` field
+  in an earlier edit this session. Removed the two dead `barangay` reads
+  and `ReportResponse.barangay`; restored `source: str = "Open-Meteo"` on
+  `LiveRainfallResponse`.
+- **Known follow-up, not done here:** `metroflow-admin`'s advanced
+  filters/report views (`lib/reports.ts`, `lib/incidents.ts`,
+  `components/report-desk.tsx`, etc., per BACKLOG U-7) still type and
+  display `barangay` from the report contract that no longer sends it;
+  Web CI doesn't catch this (TS types aren't checked against live API
+  responses), so the portal's barangay filter will silently show nothing
+  until that UI is updated or reverted.
 
 ## Explicitly excluded (not implementation work)
 

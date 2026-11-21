@@ -1,6 +1,54 @@
 import { expect, test } from "bun:test";
 
-import { navZoomFor, snapToRoute } from "./geo";
+import type { RouteSegment } from "../api";
+import {
+  bearingDegrees,
+  formatDurationHrMin,
+  navZoomFor,
+  routeBearing,
+  routeSuccessRate,
+  snapToRoute,
+} from "./geo";
+
+function segment(distance_m: number, water_depth_cm: number): RouteSegment {
+  return {
+    edge_id: 0,
+    start_node_id: 0,
+    end_node_id: 1,
+    road_name: null,
+    distance_m,
+    water_depth_cm,
+    status: "PASSABLE",
+  };
+}
+
+test("routeSuccessRate is 100 for an all-dry route", () => {
+  expect(routeSuccessRate([segment(100, 0), segment(200, 0)], 28)).toBe(100);
+});
+
+test("routeSuccessRate is 0 when every segment is deeper than clearance", () => {
+  expect(routeSuccessRate([segment(100, 30), segment(100, 50)], 28)).toBe(0);
+});
+
+test("routeSuccessRate weights each segment by its distance", () => {
+  // 100 m dry (100%) + 100 m at 14 cm on a 28 cm vehicle (50%) => 75%.
+  expect(routeSuccessRate([segment(100, 0), segment(100, 14)], 28)).toBe(75);
+  // Doubling the dry stretch pulls the score toward 100%.
+  expect(routeSuccessRate([segment(200, 0), segment(100, 14)], 28)).toBe(83);
+});
+
+test("routeSuccessRate returns null with no segments, no clearance, or a zero-length route", () => {
+  expect(routeSuccessRate([], 28)).toBeNull();
+  expect(routeSuccessRate([segment(100, 0)], 0)).toBeNull();
+  expect(routeSuccessRate([segment(0, 0)], 28)).toBeNull();
+});
+
+test("formatDurationHrMin shows hours and minutes, rounding the total", () => {
+  expect(formatDurationHrMin(90)).toBe("1 Hr : 30 Min");
+  expect(formatDurationHrMin(25.6)).toBe("0 Hr : 26 Min");
+  expect(formatDurationHrMin(125)).toBe("2 Hr : 5 Min");
+  expect(formatDurationHrMin(-3)).toBe("0 Hr : 0 Min");
+});
 
 test("navZoomFor zooms in at low speed and out at highway speed", () => {
   // zoom rises and altitude falls together -- they must never disagree on
@@ -66,4 +114,27 @@ test("snapToRoute clamps to an endpoint when the point is past the end of the ro
 
 test("snapToRoute returns null for a degenerate (single-point) route", () => {
   expect(snapToRoute([{ latitude: 14.6, longitude: 121.0 }], { latitude: 14.6, longitude: 121.0 })).toBeNull();
+});
+
+test("bearingDegrees points clockwise from north", () => {
+  const here = { latitude: 14.6, longitude: 121.0 };
+  expect(bearingDegrees(here, { latitude: 14.61, longitude: 121.0 })).toBeCloseTo(0, 0);
+  expect(bearingDegrees(here, { latitude: 14.6, longitude: 121.01 })).toBeCloseTo(90, 0);
+  expect(bearingDegrees(here, { latitude: 14.59, longitude: 121.0 })).toBeCloseTo(180, 0);
+  expect(bearingDegrees(here, { latitude: 14.6, longitude: 120.99 })).toBeCloseTo(270, 0);
+});
+
+test("routeBearing looks 30m ahead along the route, including around a corner", () => {
+  const route = [
+    { latitude: 14.6, longitude: 121.0 },
+    { latitude: 14.6, longitude: 121.01 },
+    { latitude: 14.61, longitude: 121.01 },
+  ];
+  expect(routeBearing(route, { latitude: 14.6, longitude: 121.005 })).toBeCloseTo(90, 0);
+  // ~10m before the corner, the 30m lookahead has already turned north.
+  expect(routeBearing(route, { latitude: 14.6, longitude: 121.0099 })).toBeCloseTo(0, 0);
+});
+
+test("routeBearing returns null without enough route to look ahead", () => {
+  expect(routeBearing([{ latitude: 14.6, longitude: 121.0 }], { latitude: 14.6, longitude: 121.0 })).toBeNull();
 });

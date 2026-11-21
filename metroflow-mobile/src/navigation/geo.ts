@@ -1,4 +1,4 @@
-import type { GeoJsonPolygon, NodeFeature, RouteInstruction, RoutePlan } from "../api";
+import type { GeoJsonPolygon, NodeFeature, RouteInstruction, RoutePlan, RouteSegment } from "../api";
 
 export type LatLng = { latitude: number; longitude: number };
 
@@ -113,6 +113,67 @@ export function progressAlongRoute(
 }
 
 /**
+ * Route-level "will the vehicle make it through?" score: the share of the
+ * route's distance the vehicle can actually clear, weighted by segment length
+ * so a long dry stretch counts more than a short flooded one. A segment deeper
+ * than the vehicle contributes nothing; a dry one contributes all of its length.
+ * Returns null when there is nothing to score (no segments, no clearance, or a
+ * zero-length route).
+ */
+export function routeSuccessRate(segments: RouteSegment[], clearanceCm: number): number | null {
+  if (clearanceCm <= 0 || segments.length === 0) return null;
+  let passableM = 0;
+  let totalM = 0;
+  for (const segment of segments) {
+    const fraction = Math.max(0, Math.min(1, (clearanceCm - segment.water_depth_cm) / clearanceCm));
+    passableM += fraction * segment.distance_m;
+    totalM += segment.distance_m;
+  }
+  return totalM > 0 ? Math.round((passableM / totalM) * 100) : null;
+}
+
+/** Compass bearing in degrees from one point to another (0 = north, clockwise). */
+export function bearingDegrees(from: LatLng, to: LatLng): number {
+  const fromLat = (from.latitude * Math.PI) / 180;
+  const toLat = (to.latitude * Math.PI) / 180;
+  const dLon = ((to.longitude - from.longitude) * Math.PI) / 180;
+  const y = Math.sin(dLon) * Math.cos(toLat);
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) -
+    Math.sin(fromLat) * Math.cos(toLat) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/** Which segment a point `metres` along the polyline falls on. */
+function segmentAtDistance(coordinates: LatLng[], metres: number): number | null {
+  if (coordinates.length < 2) return null;
+  let remaining = Math.max(metres, 0);
+  for (let index = 0; index < coordinates.length - 1; index += 1) {
+    const length = distanceMeters(coordinates[index], coordinates[index + 1]);
+    if (remaining <= length) return index;
+    remaining -= length;
+  }
+  return coordinates.length - 2;
+}
+
+/**
+ * Direction the road runs from the driver's current position. Looking ~30 m
+ * ahead starts turning the camera before the actual junction, and using that
+ * segment's own bearing (rather than a chord to it) keeps the view aligned with
+ * the road instead of cutting across the corner. Used when the compass has no
+ * usable reading.
+ */
+export function routeBearing(coordinates: LatLng[], point: LatLng): number | null {
+  if (coordinates.length < 2) return null;
+  const { progressM } = progressAlongRoute(coordinates, point);
+  const segment = segmentAtDistance(coordinates, progressM + 30);
+  if (segment === null) return null;
+  const start = coordinates[segment];
+  const end = coordinates[segment + 1];
+  return distanceMeters(start, end) < 1 ? null : bearingDegrees(start, end);
+}
+
+/**
  * The nearest point on the route line to `point`, for a map-matched position
  * marker -- the same "always on the road" puck behaviour a turn-by-turn app
  * gives, instead of the raw GPS fix (which can sit metres off the road, or
@@ -192,6 +253,12 @@ export function formatDistance(metres: number): string {
 export function formatDuration(minutes: number): string {
   if (minutes < 1) return "< 1 min";
   return `${Math.round(minutes)} min`;
+}
+
+/** Remaining travel time as "H Hr : M Min", e.g. "1 Hr : 30 Min". */
+export function formatDurationHrMin(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  return `${Math.floor(total / 60)} Hr : ${total % 60} Min`;
 }
 
 export type NavCamera = {

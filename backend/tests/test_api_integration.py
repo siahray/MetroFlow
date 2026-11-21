@@ -383,6 +383,27 @@ def test_route_returns_404_when_every_edge_is_submerged(client):
     assert "no safe route" in response.json()["detail"].lower()
 
 
+def test_route_can_opt_into_least_submerged_when_every_edge_is_submerged(client):
+    client.post(
+        "/api/v1/simulation/rain",
+        params={"rainfall_mm_hr": 120, "clearance_cm": 20},
+    )
+    response = client.get(
+        "/api/v1/routing/navigate",
+        params={
+            "start_node": 1,
+            "target_node": 4,
+            "clearance_cm": 20,
+            "allow_submerged": True,
+        },
+    )
+
+    assert response.status_code == 200
+    segments = response.json()["segments"]
+    assert segments
+    assert all(segment["status"] == "SUBMERGED" for segment in segments)
+
+
 def test_reverse_route_is_supported(client):
     """Regression: the seed graph is one-directional, the API graph is not."""
     response = client.get(
@@ -567,7 +588,6 @@ def test_report_submission_enters_the_queue_with_evidence_metadata(client, creat
             "depth_level": "KNEE",
             "latitude": "14.5764",
             "longitude": "121.0851",
-            "barangay": "San Antonio",
             "narrative": "Knee-deep outside the barangay hall",
         },
         files={"photo": ("evidence.jpg", photo, "image/jpeg")},
@@ -579,7 +599,6 @@ def test_report_submission_enters_the_queue_with_evidence_metadata(client, creat
     assert body["status"] == "PENDING"
     assert body["source"] == "PHOTO"
     assert body["depth_label"] == "Knee-Deep"
-    assert body["barangay"] == "San Antonio"
     assert body["urgency_score"] > 0
     assert body["location_plausible"] is True
     assert len(body["reporter_hash"]) == 64
@@ -632,7 +651,7 @@ def test_nearby_reports_are_flagged_as_possible_duplicates_but_kept(client, crea
 
 
 def test_approving_a_report_creates_and_publishes_a_hazard(client, created_records):
-    report = submit_report(client, created_records, depth="KNEE", barangay="San Antonio")
+    report = submit_report(client, created_records, depth="KNEE")
 
     response = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
     assert response.status_code == 200, response.text
@@ -662,7 +681,7 @@ def test_approving_a_report_creates_and_publishes_a_hazard(client, created_recor
 
 
 def test_hazard_detail_matches_the_list_row(client, created_records):
-    report = submit_report(client, created_records, depth="KNEE", barangay="San Antonio")
+    report = submit_report(client, created_records, depth="KNEE")
     approved = client.post(f"/api/v1/reports/{report['report_id']}/approve", json={})
     hazard_id = approved.json()["hazard_id"]
     created_records[1].append(hazard_id)
@@ -2346,6 +2365,29 @@ def test_open_meteo_rain_drives_the_rain_gate_and_the_advisory(client, monkeypat
         assert cleared[hit[0]["edge_id"]]["has_live_data"] is True
     finally:
         # Other flood-state tests assert per-edge live coverage; drop the virtual gauge.
+        client.delete(f"/api/v1/sensors/{weather.SENSOR_ID}")
+
+
+def test_existing_rain_gauge_adopts_the_live_threshold(client, monkeypatch):
+    """A gauge stored under the old threshold must not swallow a light rain reading."""
+    monkeypatch.setattr(settings, "weather_ingest", True)
+    monkeypatch.setattr(weather, "_last_fetch", None)
+    monkeypatch.setattr(
+        weather, "fetch_rain_rate", lambda *_: (0.2, datetime.now(UTC).replace(microsecond=0))
+    )
+    _make_sensor(
+        client,
+        weather.SENSOR_ID,
+        weather.CORRIDOR_LAT,
+        weather.CORRIDOR_LON,
+        radius_m=weather.IMPACT_RADIUS_M,
+        threshold=0.5,
+    )
+    try:
+        state = _flood_state(client)
+        assert state["raining"] is True
+        assert any(e["basis"] == "LIVE_ADVISORY" for e in state["edges"])
+    finally:
         client.delete(f"/api/v1/sensors/{weather.SENSOR_ID}")
 
 

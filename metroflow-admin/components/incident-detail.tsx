@@ -34,6 +34,7 @@ import {
   listVehicles,
   previewDispatchRoute,
   rejectSOS,
+  resolveSOS,
   undoDispatch,
   type DispatchPreview,
 } from "@/lib/dispatch";
@@ -122,6 +123,8 @@ export function IncidentDetail({
   // FSD-FR-045: Undo window state
   const [undoSeconds, setUndoSeconds] = useState<number | null>(null);
   const [confirmingUndo, setConfirmingUndo] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [completedId, setCompletedId] = useState<number | null>(null);
 
   // FSD-FR-046: State constraints
   const isDispatched =
@@ -367,6 +370,27 @@ export function IncidentDetail({
       setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
     } catch {
       // The Action Log refreshes on the next incident change.
+    }
+  }
+
+  async function handleRescueCompleted() {
+    const sosId = parseInt(incident.id.replace(/\D/g, ""), 10);
+    if (!isSosIncident || isNaN(sosId)) return;
+    setCompleting(true);
+    try {
+      await resolveSOS(sosId);
+      setCompletedId(sosId);
+      setUndoSeconds(null);
+      onAction(`Rescue completed for #${incident.id}.`);
+      const fetched = await fetchIncidentLog(incident);
+      if (fetched.length > 0) {
+        setLiveLogs(fetched.map((f) => ({ time: f.time, text: f.text, kind: f.kind })));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Could not mark rescue completed";
+      onAction(`Could not mark rescue completed: ${msg}`);
+    } finally {
+      setCompleting(false);
     }
   }
 
@@ -655,10 +679,23 @@ export function IncidentDetail({
           <span className="flex-1" />
 
           {isDispatched ? (
-            <span className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-              Unit dispatched
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                Unit dispatched
+              </span>
+              {isSosIncident && completedId !== sosIdNum ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRescueCompleted()}
+                  disabled={completing}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                  {completing ? "Completing..." : "Rescue Completed"}
+                </button>
+              ) : null}
+            </div>
           ) : isRejected ? (
             <span className="flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-800">
               <X className="h-3.5 w-3.5 text-rose-600" />

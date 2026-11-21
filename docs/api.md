@@ -434,7 +434,10 @@ cannot be recovered through the API.
 ## 4. `GET /api/v1/routing/navigate`
 
 Returns the fastest path that avoids every edge whose depth is at or above the
-requested clearance.
+requested clearance. With the explicit `allow_submerged` opt-in, a driver who
+would otherwise get a 404 receives the least-submerged route instead: the safe
+search always runs first, and the returned segments carry `SUBMERGED` status so
+the client can warn before the driver starts (CR-001 amendment A1).
 
 ### 4.1 Parameters
 
@@ -445,6 +448,7 @@ requested clearance.
 | `clearance_cm` | query | number  | no       | `30`    | `> 0`, `<= 200` |
 | `routing_mode` | query | string  | no       | auto    | `FASTEST` or `FLOOD_SAFE` |
 | `ignore_hazards` | query | boolean | no | `false` | Plan through verified hazards anyway (the explicit unsafe alternative) |
+| `allow_submerged` | query | boolean | no | `false` | If no flood-safe path exists, return the least-submerged route with `SUBMERGED` segments instead of 404 |
 | `avoid_edges`  | query | integer[] | no    | `[]`    | Edge ids to exclude, for requesting an alternative to a previously returned route |
 
 `routing_mode` forces a personality from §4.3 instead of letting the network
@@ -453,7 +457,8 @@ decide — the driver app sends `FASTEST` while its map is in normal
 would give. The clearance gate still applies in both modes. `ignore_hazards`
 and `avoid_edges` both also mean "route on our own graph on purpose" and skip
 the Mapbox handoff in §4.3 even when the network would otherwise choose
-`FASTEST`.
+`FASTEST`. `allow_submerged` does the same and is only honoured after the safe
+search has failed; admin and dispatch clients never set it.
 
 ### 4.2 Response `200`
 
@@ -610,13 +615,16 @@ The direct edge 1 → 4 survives at `18.67 cm`, so the response becomes:
 | ------ | ------------------------------------- | --------------------------------------------------------- |
 | `404`  | Origin does not exist                 | `Unknown start_node 99. Available nodes: [1, 2, 3, 4]`    |
 | `404`  | Destination does not exist            | `Unknown target_node 99. Available nodes: [1, 2, 3, 4]`   |
-| `404`  | Every path is blocked                 | `No safe route available under current flood conditions.` |
+| `404`  | Every path is blocked (no opt-in)      | `No safe route available under current flood conditions.` |
 | `422`  | Missing `start_node` or `target_node` | Validation object                                         |
 | `422`  | `clearance_cm` outside `(0, 200]`     | Validation object                                         |
 
 A blocked route is a `404`, never a `200` with an empty path. Clients should
 treat the two node errors and the blocked-route error differently: the first
-two indicate a client bug, the third is a legitimate operational answer.
+two indicate a client bug, the third is a legitimate operational answer. The
+one exception is the explicit `allow_submerged` opt-in: that returns `200` with
+a warned least-submerged route, never silently. Fallback ranking is submerged
+metres, then peak depth, then travel time (`BRULE-020`).
 
 ---
 

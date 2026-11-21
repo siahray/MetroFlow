@@ -195,6 +195,27 @@ def test_submerged_edge_is_never_traversed():
     assert path == [1, 4]
 
 
+def test_least_submerged_fallback_minimises_submerged_distance_first():
+    # Direct: 200 m underwater. Detour: 100 m underwater + 900 m dry.
+    graph = {
+        1: [(2, 100.0, 50.0, 35.0, False), (4, 200.0, 50.0, 60.0, False)],
+        2: [(1, 100.0, 50.0, 35.0, False), (4, 900.0, 50.0, 0.0, False)],
+        4: [(1, 200.0, 50.0, 60.0, False), (2, 900.0, 50.0, 0.0, False)],
+    }
+    path, _ = td_a_star_search(NODES, graph, 1, 4, 30.0, allow_submerged=True)
+    assert path == [1, 2, 4]
+
+
+def test_least_submerged_fallback_breaks_ties_by_peak_depth():
+    graph = {
+        1: [(2, 100.0, 50.0, 31.0, False), (4, 100.0, 50.0, 60.0, False)],
+        2: [(1, 100.0, 50.0, 31.0, False), (4, 1.0, 50.0, 0.0, False)],
+        4: [(1, 100.0, 50.0, 60.0, False), (2, 1.0, 50.0, 0.0, False)],
+    }
+    path, _ = td_a_star_search(NODES, graph, 1, 4, 30.0, allow_submerged=True)
+    assert path == [1, 2, 4]
+
+
 def test_advisory_penalty_prefers_the_unflagged_detour_but_never_blocks():
     """BRULE-012: a flagged sensor advisory never closes a road, only discourages it."""
     nodes = {1: (14.6000, 121.0000), 2: (14.6000, 121.0090), 3: (14.6010, 121.0045)}

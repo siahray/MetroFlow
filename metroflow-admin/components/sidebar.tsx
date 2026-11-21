@@ -3,7 +3,6 @@ import {
   CheckSquare,
   ClipboardCheck,
   Download,
-  Gauge,
   LogOut,
   Map,
   Radar,
@@ -16,8 +15,7 @@ import {
 import { cn } from "@/lib/cn";
 import type { SessionUser } from "@/lib/session";
 
-export type NavItem =
-  "triage" | "moderation" | "radar" | "hazards" | "fleet" | "sensors" | "users" | "export";
+export type NavItem = "triage" | "moderation" | "radar" | "hazards" | "fleet" | "users" | "export";
 
 export const NAV_ITEMS = [
   {
@@ -35,9 +33,8 @@ export const NAV_ITEMS = [
   { id: "radar" as NavItem, label: "Dispatch Radar", href: "/radar", icon: Radar },
   { id: "hazards" as NavItem, label: "Live Map & Hazards", href: "/hazards", icon: Map },
   { id: "fleet" as NavItem, label: "Rescue Units & Fleet", href: "/fleet", icon: Truck },
-  { id: "sensors" as NavItem, label: "Sensor Registry", href: "/sensors", icon: Gauge },
   { id: "users" as NavItem, label: "User Management", href: "/users", icon: Users },
-  { id: "export" as NavItem, label: "Data Export", href: "/export", icon: Download },
+  { id: "export" as NavItem, label: "Reports & Export", href: "/export", icon: Download },
 ] as const;
 
 type SidebarProps = {

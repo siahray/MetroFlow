@@ -118,6 +118,76 @@ function aStarSearch(
   return null;
 }
 
+/** Opt-in fallback when every safe path is submerged (CR-001 amendment A1).
+ *
+ * Mirrors backend/routing.py::_least_submerged_search: rank by submerged
+ * metres, then peak depth, then travel time. No heuristic is needed because
+ * the primary cost is distance, not time.
+ */
+function leastSubmergedSearch(
+  adjacency: Map<number, Hop[]>,
+  nodeCoords: Map<number, LatLng>,
+  startNode: number,
+  targetNode: number,
+  clearanceCm: number,
+  floodAware: boolean,
+): { path: number[]; hops: Hop[]; seconds: number } | null {
+  if (!nodeCoords.has(startNode) || !nodeCoords.has(targetNode)) return null;
+  if (startNode === targetNode) return { path: [startNode], hops: [], seconds: 0 };
+
+  type Cost = [number, number, number];
+  const g = new Map<number, Cost>([[startNode, [0, 0, 0]]]);
+  const cameFrom = new Map<number, Hop>();
+  const settled = new Set<number>();
+  const open: { id: number; cost: Cost }[] = [{ id: startNode, cost: [0, 0, 0] }];
+
+  const isLess = (a: Cost, b: Cost) =>
+    a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] < b[2])));
+
+  while (open.length > 0) {
+    let bestIndex = 0;
+    for (let i = 1; i < open.length; i += 1) {
+      if (isLess(open[i].cost, open[bestIndex].cost)) bestIndex = i;
+    }
+    const current = open.splice(bestIndex, 1)[0];
+    const settledCost = g.get(current.id) ?? [Infinity, Infinity, Infinity];
+    if (settled.has(current.id) || isLess(settledCost, current.cost)) continue;
+    settled.add(current.id);
+
+    if (current.id === targetNode) {
+      const path = [targetNode];
+      const hops: Hop[] = [];
+      let cursor = targetNode;
+      while (cameFrom.has(cursor)) {
+        const hop = cameFrom.get(cursor) as Hop;
+        hops.unshift(hop);
+        cursor = hop.forward ? hop.edge.properties.start_node_id : hop.edge.properties.end_node_id;
+        path.unshift(cursor);
+      }
+      return { path, hops, seconds: current.cost[2] };
+    }
+
+    const [submergedM, peakCm, seconds] = current.cost;
+    for (const hop of adjacency.get(current.id) ?? []) {
+      const { water_depth_cm, max_speed_kmh, distance_m } = hop.edge.properties;
+      const isSubmerged = water_depth_cm >= clearanceCm;
+      const waterPenalty = floodAware ? 1.0 + Math.pow(water_depth_cm / 10.0, 1.8) : 1.0;
+      const effectiveSpeedMs = Math.max(max_speed_kmh / 3.6 / waterPenalty, 0.5);
+      const cost: Cost = [
+        submergedM + (isSubmerged ? distance_m : 0),
+        isSubmerged ? Math.max(peakCm, water_depth_cm) : peakCm,
+        seconds + distance_m / effectiveSpeedMs,
+      ];
+      if (isLess(cost, g.get(hop.neighbor) ?? [Infinity, Infinity, Infinity])) {
+        g.set(hop.neighbor, cost);
+        cameFrom.set(hop.neighbor, hop);
+        open.push({ id: hop.neighbor, cost });
+      }
+    }
+  }
+  return null;
+}
+
 // --- Turn-by-turn instructions, ported from build_instructions ------------
 
 const STRAIGHT_THRESHOLD_DEG = 20.0;
@@ -254,8 +324,9 @@ function buildInstructions(
 
 /**
  * Plan a route over the cached graph without the network. Returns null when
- * the graph is missing the requested nodes or no safe path exists (the caller
- * treats that the same as the API's 404).
+ * the graph is missing the requested nodes or no path exists (the caller
+ * treats that the same as the API's 404). With `allowSubmerged`, a flooded-only
+ * graph returns the least-submerged route instead, matching the API fallback.
  */
 export function planRouteOffline(
   network: NetworkState,
@@ -265,6 +336,7 @@ export function planRouteOffline(
   clearanceCm: number,
   ignoreHazards = false,
   forcedMode?: "FASTEST" | "FLOOD_SAFE",
+  allowSubmerged = false,
 ): RoutePlan | null {
   const allBlocked = blockedEdgeIds(hazards);
   const blocked = ignoreHazards ? new Set<number>() : allBlocked;
@@ -285,7 +357,7 @@ export function planRouteOffline(
     nodeNames.set(node.properties.node_id, node.properties.name);
   }
 
-  const result = aStarSearch(
+  let result = aStarSearch(
     network,
     adjacency,
     nodeCoords,
@@ -294,6 +366,16 @@ export function planRouteOffline(
     clearanceCm,
     floodAware,
   );
+  if (!result && allowSubmerged) {
+    result = leastSubmergedSearch(
+      adjacency,
+      nodeCoords,
+      startNode,
+      targetNode,
+      clearanceCm,
+      floodAware,
+    );
+  }
   if (!result) return null;
   const { path, hops: searchHops, seconds } = result;
 

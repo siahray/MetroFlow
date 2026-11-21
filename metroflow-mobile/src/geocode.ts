@@ -661,7 +661,7 @@ export async function searchMapbox(
   const params = new URLSearchParams({
     access_token: token,
     autocomplete: "true",
-    limit: "8",
+    limit: "10",
     country: "ph",
     language: "en",
     types: "poi,address,place,locality,neighborhood",
@@ -675,6 +675,7 @@ export async function searchMapbox(
   if (!response.ok) return [];
 
   const payload = (await response.json()) as { features?: MapboxFeature[] };
+  
   return (payload.features ?? [])
     .map((feature) => {
       const [longitude, latitude] = feature.center ?? [NaN, NaN];
@@ -735,6 +736,38 @@ export async function reverseGeocodeName(
       .filter((part) => part && part !== "Philippines")
       .join(", ");
     return full || (feature.text ?? "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reverse geocoding for a city/locality label only (e.g. "Pasig"), for
+ * display next to current conditions -- never the full street address a
+ * dropped pin or report needs. Same endpoint as `reverseGeocodeName`, just
+ * fenced to `place`-type features and returning the feature's own short name.
+ */
+export async function reverseGeocodeCity(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+  token: string = MAPBOX_TOKEN,
+): Promise<string | null> {
+  if (!token) return null;
+  const params = new URLSearchParams({
+    access_token: token,
+    limit: "1",
+    language: "en",
+    types: "place",
+  });
+  try {
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?${params.toString()}`,
+      { signal },
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { features?: MapboxFeature[] };
+    return (payload.features?.[0]?.text ?? "").trim() || null;
   } catch {
     return null;
   }
@@ -817,11 +850,14 @@ export async function searchPlaces(
   }
 
   try {
-    const liveResults = mapboxToken
-      ? await searchMapbox(query, proximity, signal, mapboxToken)
-      : box
-        ? await searchAddress(query, box, signal)
-        : [];
+    // Always try Mapbox first if token is available
+    const mapboxResults = mapboxToken ? await searchMapbox(query, proximity, signal, mapboxToken) : [];
+    
+    // If Mapbox returns results, use them; otherwise fall back to Nominatim
+    const liveResults = mapboxResults.length > 0 
+      ? mapboxResults
+      : await searchAddress(query, box || { south: 14.5, west: 121.0, north: 14.8, east: 121.2 }, signal);
+    
     // Combine and deduplicate against curated results
     const combined = [...curated];
     for (const item of liveResults) {
@@ -835,8 +871,9 @@ export async function searchPlaces(
         combined.push(item);
       }
     }
-    return combined.slice(0, 8);
-  } catch {
+    return combined.slice(0, 10);
+  } catch (error) {
+    // Fallback to curated if search fails
     return curated;
   }
 }

@@ -132,6 +132,20 @@ describe("planRouteOffline", () => {
     expect(plan).toBeNull();
   });
 
+  test("allowSubmerged returns the least-submerged route when every road is flooded", () => {
+    // Direct: 900 m underwater. Detour: 100 m underwater + 1900 m dry.
+    const flooded = { ...direct, depthCm: 60 };
+    const shortWade = { ...outbound, distanceM: 100, depthCm: 50 };
+    const dry = { ...inbound, distanceM: 1900, depthCm: 0 };
+
+    const safe = planRouteOffline(graph([flooded, shortWade, dry]), [], 1, 2, 40);
+    const fallback = planRouteOffline(graph([flooded, shortWade, dry]), [], 1, 2, 40, false, undefined, true);
+
+    expect(safe).toBeNull();
+    expect(fallback?.optimal_path_nodes).toEqual([1, 3, 2]);
+    expect(fallback?.segments.some((segment) => segment.water_depth_cm >= 40)).toBe(true);
+  });
+
   test("ignore_hazards uses the blocked road again", () => {
     const plan = planRouteOffline(
       graph([direct, outbound, inbound]),
