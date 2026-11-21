@@ -272,6 +272,69 @@ def _max_graph_speed_kmh(
     return max(speeds) if speeds else 50.0
 
 
+def _least_submerged_search(
+    graph_nodes: dict[int, tuple[float, float]],
+    graph_edges: dict[int, list[tuple[int, float, float, float, bool]]],
+    start_node: int,
+    target_node: int,
+    vehicle_clearance_cm: float,
+    flood_aware: bool,
+) -> tuple[list[int], float]:
+    """Dijkstra over a lexicographic cost: submerged metres, peak depth, time.
+
+    Only used as the explicit opt-in fallback when the clearance gate makes every
+    safe path impossible. Minimising submerged distance first can pick a long
+    shallow detour over a short deep one; that is the stated contract (CR-001
+    amendment, BRULE-020).
+    """
+    if start_node not in graph_nodes or target_node not in graph_nodes:
+        return [], float("inf")
+    if start_node == target_node:
+        return [start_node], 0.0
+
+    infinity = (float("inf"), float("inf"), float("inf"))
+    g_score: dict[int, tuple[float, float, float]] = {node: infinity for node in graph_nodes}
+    g_score[start_node] = (0.0, 0.0, 0.0)
+    came_from: dict[int, int] = {}
+    settled: set[int] = set()
+    pq: list[tuple[tuple[float, float, float], int]] = [(g_score[start_node], start_node)]
+
+    while pq:
+        cost, current = heapq.heappop(pq)
+        if current in settled or cost > g_score[current]:
+            continue
+        settled.add(current)
+
+        if current == target_node:
+            path = [target_node]
+            while path[-1] in came_from:
+                path.append(came_from[path[-1]])
+            return path[::-1], cost[2]
+
+        submerged_m, peak_cm, seconds = cost
+        for neighbor, length_m, speed_kmh, water_depth_cm, advisory_flagged in graph_edges.get(
+            current, []
+        ):
+            is_submerged = water_depth_cm >= vehicle_clearance_cm
+            water_penalty = 1.0 + math.pow(water_depth_cm / 10.0, 1.8) if flood_aware else 1.0
+            effective_speed_m_s = max((speed_kmh / 3.6) / water_penalty, 0.5)
+            traversal_time_s = length_m / effective_speed_m_s
+            if flood_aware and advisory_flagged:
+                traversal_time_s *= ADVISORY_PENALTY
+            next_cost = (
+                submerged_m + (length_m if is_submerged else 0.0),
+                max(peak_cm, water_depth_cm) if is_submerged else peak_cm,
+                seconds + traversal_time_s,
+            )
+
+            if next_cost < g_score.get(neighbor, infinity):
+                came_from[neighbor] = current
+                g_score[neighbor] = next_cost
+                heapq.heappush(pq, (next_cost, neighbor))
+
+    return [], float("inf")
+
+
 def td_a_star_search(
     graph_nodes: dict[int, tuple[float, float]],  # node_id -> (lat, lon)
     graph_edges: dict[
@@ -281,6 +344,7 @@ def td_a_star_search(
     target_node: int,
     vehicle_clearance_cm: float = 30.0,
     flood_aware: bool = True,
+    allow_submerged: bool = False,
 ) -> tuple[list[int], float]:
     """
     Time-Dependent A* Pathfinding Engine with Min-Heap Priority Queue.
@@ -289,7 +353,9 @@ def td_a_star_search(
 
     ``flood_aware=False`` is the dry-network personality (``FASTEST``): the same
     search on the posted speed limit alone. The clearance gate stays in both,
-    because a road under water is never drivable whatever the mode says.
+    because a road under water is never drivable whatever the mode says --
+    unless the caller explicitly opted into ``allow_submerged``, which uses the
+    least-submerged fallback instead of the hard gate.
 
     Time Complexity: O(E log V)  -- guaranteed by the settled set below.
     Optimality:    guaranteed -- the heuristic divides by the fastest speed in
@@ -302,6 +368,16 @@ def td_a_star_search(
 
     if start_node == target_node:
         return [start_node], 0.0
+
+    if allow_submerged:
+        return _least_submerged_search(
+            graph_nodes,
+            graph_edges,
+            start_node,
+            target_node,
+            vehicle_clearance_cm,
+            flood_aware,
+        )
 
     def haversine(coord1: tuple[float, float], coord2: tuple[float, float]) -> float:
         R = 6371000.0  # Earth radius in meters

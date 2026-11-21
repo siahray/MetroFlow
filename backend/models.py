@@ -364,7 +364,6 @@ class IncidentReport(Base):
         String(20), nullable=False, default="PHOTO", comment="PHOTO, SENSOR, CCTV or CALL"
     )
     geometry = Column(Geometry(geometry_type="POINT", srid=4326), nullable=True)
-    barangay = Column(String(120), nullable=True)
     narrative = Column(Text, nullable=True)
     depth_level = Column(
         String(20), nullable=False, index=True, comment="ANKLE, KNEE or IMPASSABLE"

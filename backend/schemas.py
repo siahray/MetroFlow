@@ -594,6 +594,23 @@ class LiveRainfallResponse(BaseModel):
     as_of: datetime | None = Field(
         default=None, description="When Open-Meteo recorded this reading"
     )
+
+
+class CurrentWeatherResponse(BaseModel):
+    """Current conditions at a driver's own location, for the home screen weather card.
+
+    Display-only, like ``ForecastResponse`` -- never a routing or advisory input.
+    """
+
+    available: bool = Field(description="False when the live feed could not be reached")
+    temperature_c: float | None = None
+    humidity_pct: float | None = None
+    precipitation_chance_pct: float | None = None
+    wind_kmh: float | None = None
+    description: str | None = None
+    as_of: datetime | None = Field(
+        default=None, description="When Open-Meteo recorded this reading"
+    )
     source: str = "Open-Meteo"
 
 

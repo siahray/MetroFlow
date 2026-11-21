@@ -102,9 +102,9 @@ class Settings(BaseSettings):
 
     # --- Driver navigation (FSD-FR-063) ----------------------------------------
     # How close a driver has to be to a verified hazard before the app raises a
-    # proximity alert. 200 m is about the braking plus decision distance at the
-    # corridor's 50 km/h limit, and the TSD lists the value as configurable.
-    warning_radius_m: int = 200
+    # proximity alert. ~100 m gives a short heads-up at the corridor's 50 km/h
+    # limit, and the TSD lists the value as configurable.
+    warning_radius_m: int = 100
 
     # --- Dry-state routing provider --------------------------------------------
     # Used only when routing_mode() has already decided every edge in the graph

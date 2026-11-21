@@ -47,6 +47,7 @@ from schemas import (
     AuditResponse,
     AuditVerifyResponse,
     ConfirmRequest,
+    CurrentWeatherResponse,
     DispatchEventItem,
     DispatchPreviewResponse,
     DispatchPreviewUnit,
@@ -802,6 +803,15 @@ def get_optimal_route(
             )
         ),
     ] = False,
+    allow_submerged: Annotated[
+        bool,
+        Query(
+            description=(
+                "Opt-in fallback: when no flood-safe route exists, return the "
+                "least-submerged route instead of a 404. Never used by dispatch."
+            )
+        ),
+    ] = False,
     requested_mode: Annotated[
         Literal["FASTEST", "FLOOD_SAFE"] | None,
         Query(
@@ -855,7 +865,10 @@ def get_optimal_route(
     Active hazards whose obstruction level blocks the vehicle are excluded
     from the graph unless ``ignore_hazards`` is set (TSD §2.6). Returns 404
     when no route is passable for the given clearance, including when
-    ``avoid_edges`` rules out the only remaining safe path.
+    ``avoid_edges`` rules out the only remaining safe path. A driver who
+    explicitly opts into ``allow_submerged`` gets the least-submerged route
+    instead: the returned segments carry SUBMERGED status so the client can
+    warn that the vehicle may end up underwater.
     """
     nodes, edges, states = _load_graph(db)
     _require_node(nodes, start_node, "start_node")
@@ -890,6 +903,7 @@ def get_optimal_route(
     if (
         mode == FASTEST
         and not ignore_hazards
+        and not allow_submerged
         and not avoid_edges
         and start_node != target_node
         and settings.mapbox_directions_enabled
@@ -922,6 +936,20 @@ def get_optimal_route(
         vehicle_clearance_cm=clearance_cm,
         flood_aware=mode == FLOOD_SAFE,
     )
+
+    if not path and allow_submerged:
+        # The driver explicitly asked to go anyway. Only now relax the clearance
+        # gate; the fallback ranks paths by submerged distance, then peak depth,
+        # then travel time, and the segments below disclose every SUBMERGED hop.
+        path, travel_time_s = td_a_star_search(
+            graph_nodes,
+            graph_edges,
+            start_node,
+            target_node,
+            vehicle_clearance_cm=clearance_cm,
+            flood_aware=mode == FLOOD_SAFE,
+            allow_submerged=True,
+        )
 
     if not path:
         raise HTTPException(
@@ -2203,10 +2231,17 @@ def get_dispatch_events(
 @app.get("/api/v1/sos/{sos_id}/log", response_model=list[IncidentLogItem])
 def get_sos_log(
     sos_id: int,
-    _user: models.User = Depends(require_admin),
+    _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    """Chronological operations log for an SOS incident (FSD-FR-036, FSD-FR-043)."""
+    """Chronological operations log for an SOS incident (FSD-FR-036, FSD-FR-043).
+
+    Open to any authenticated user, not just admins: this is also how the
+    reporting driver sees what a dispatcher actually did with their request
+    (FSD-FR-074), the same posture `get_sos` already takes -- an SOS has no
+    reporter/owner column to check against, so there is nothing stricter to
+    scope this to.
+    """
     import models
 
     db_sos = db.query(models.SOSRequest).filter(models.SOSRequest.sos_id == sos_id).first()
@@ -3147,6 +3182,8 @@ def _ingest_weather(db: Session) -> None:
     else:
         sensor.geom = _point(lat, lon)
         sensor.impact_radius_m = radius_m
+        # A gauge created under an older threshold must not keep swallowing rain.
+        sensor.threshold_value = weather.RAIN_THRESHOLD_MM_HR
     _record_sensor_reading(db, sensor, value, "mm_hr", recorded_at)
     db.commit()
 
@@ -3365,6 +3402,23 @@ def get_live_rainfall(_user: models.User = Depends(require_admin)):
         return LiveRainfallResponse(available=False, rainfall_mm_hr=0.0)
     value, as_of = result
     return LiveRainfallResponse(available=True, rainfall_mm_hr=value, as_of=as_of)
+
+
+@app.get("/api/v1/weather/current-conditions", response_model=CurrentWeatherResponse)
+def get_current_weather_conditions(
+    lat: Annotated[float, Query(ge=-90, le=90)],
+    lon: Annotated[float, Query(ge=-180, le=180)],
+    _user: models.User = Depends(require_user),
+):
+    """
+    Current temperature/humidity/wind/precipitation chance at the driver's own
+    location, for the home screen weather card. Same Open-Meteo source as the
+    rain gate, display-only like ``get_forecast`` -- never a routing input.
+    """
+    result = weather.cached_current_conditions(lat, lon)
+    if result is None:
+        return CurrentWeatherResponse(available=False)
+    return CurrentWeatherResponse(available=True, **result)
 
 
 @app.get("/api/v1/sensors", response_model=list[SensorResponse])
@@ -3794,14 +3848,13 @@ def submit_report(
     depth_level: Annotated[str, Form(description="ANKLE, KNEE or IMPASSABLE")],
     latitude: Annotated[float, Form(ge=-90, le=90)],
     longitude: Annotated[float, Form(ge=-180, le=180)],
+    photo: Annotated[UploadFile, File(description="Photo evidence (required)")],
     narrative: Annotated[str | None, Form(max_length=1000)] = None,
-    barangay: Annotated[str | None, Form(max_length=120)] = None,
     captured_at: Annotated[str | None, Form(description="Device capture time, ISO 8601")] = None,
     source: Annotated[str | None, Form(description="PHOTO, SENSOR, CCTV or CALL")] = None,
     client_id: Annotated[
         UUID | None, Form(description="Device id; makes a replay idempotent")
     ] = None,
-    photo: Annotated[UploadFile | None, File()] = None,
     _user: models.User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -3836,25 +3889,25 @@ def submit_report(
             status_code=422, detail=f"source must be one of {list(reports.SOURCES)}"
         )
 
-    photo_bytes: bytes | None = None
-    photo_mime: str | None = None
-    exif: dict[str, Any] | None = None
-    if photo is not None and photo.filename:
-        # Read one byte past the ceiling so the ceiling is what rejects it: a
-        # size check against the declared Content-Length would trust the client.
-        photo_bytes = photo.file.read(settings.report_photo_max_bytes + 1)
-        if len(photo_bytes) > settings.report_photo_max_bytes:
-            raise HTTPException(
-                status_code=413,
-                detail=f"photo must be {settings.report_photo_max_bytes} bytes or smaller",
-            )
-        # The declared Content-Type is a claim; the bytes decide (SEC-006).
-        photo_mime = reports.sniff_image_mime(photo_bytes)
-        if photo_mime is None:
-            raise HTTPException(status_code=415, detail="photo must be a JPEG, PNG or WebP image")
-        exif = reports.read_exif(photo_bytes) or None
+    # Photo is now required
+    if not photo or not photo.filename:
+        raise HTTPException(status_code=422, detail="photo is required")
 
-    source = source or ("PHOTO" if photo_bytes is not None else "CALL")
+    # Read one byte past the ceiling so the ceiling is what rejects it: a
+    # size check against the declared Content-Length would trust the client.
+    photo_bytes = photo.file.read(settings.report_photo_max_bytes + 1)
+    if len(photo_bytes) > settings.report_photo_max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"photo must be {settings.report_photo_max_bytes} bytes or smaller",
+        )
+    # The declared Content-Type is a claim; the bytes decide (SEC-006).
+    photo_mime = reports.sniff_image_mime(photo_bytes)
+    if photo_mime is None:
+        raise HTTPException(status_code=415, detail="photo must be a JPEG, PNG or WebP image")
+    exif = reports.read_exif(photo_bytes) or None
+
+    source = source or "PHOTO"
     now = datetime.now(UTC).replace(tzinfo=None)
     point = _point(latitude, longitude)
     window_start = now - timedelta(minutes=settings.report_duplicate_window_minutes)
@@ -3881,12 +3934,11 @@ def submit_report(
         reporter_hash=reports.reporter_hash(_user.user_id, settings.report_hash_salt),
         source=source,
         geometry=point,
-        barangay=barangay,
         narrative=narrative,
         depth_level=depth_level,
         photo_data=photo_bytes,
         photo_mime=photo_mime,
-        photo_sha256=None if photo_bytes is None else reports.photo_digest(photo_bytes),
+        photo_sha256=reports.photo_digest(photo_bytes),
         exif=exif,
         captured_at=submitted,
         submitted_at=now,
