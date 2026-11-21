@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ import { Avatar } from '../../components/Avatar';
 import { BackButton } from '../../components/BackButton';
 import { useDialog } from '../../components/Dialog';
 import { enqueueReport, isOffline, newClientId } from '../../offline';
+import { reverseGeocodeName } from '../../geocode';
 import {
   ApiError,
   submitReport,
@@ -119,11 +120,12 @@ export default function ReportScreen() {
   const [depth, setDepth] = useState<Depth>('knee');
   const [passability, setPassability] = useState<Passability>('high');
   const [notes, setNotes] = useState('');
-  const [barangay, setBarangay] = useState('');
   const [photo, setPhoto] = useState<(ReportPhoto & { capturedAt: string }) | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [position, setPosition] = useState<Location.LocationObjectCoords | null>(null);
   const [fixAt, setFixAt] = useState<string | null>(null);
+  const [placeName, setPlaceName] = useState<string | null>(null);
+  const placeNameGeneration = useRef(0);
   const [locationState, setLocationState] = useState<LocationState>('locating');
   const [locationError, setLocationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -178,6 +180,25 @@ export default function ReportScreen() {
       await readPosition();
     })();
   }, [readPosition]);
+
+  // Resolve the GPS fix to a human address, same reverse-geocode as the
+  // driver app's drop-a-pin: the pin label leads with the real place, not
+  // raw coordinates, which stay as a smaller supporting detail below it.
+  // Clearing the stale name on a new fix is React's "adjust state during
+  // render" pattern (see `RouteMap.tsx`'s `prevActiveForFollow`), not a
+  // synchronous setState in the effect body below.
+  const [prevPositionForPlaceName, setPrevPositionForPlaceName] = useState(position);
+  if (position !== prevPositionForPlaceName) {
+    setPrevPositionForPlaceName(position);
+    setPlaceName(null);
+  }
+  useEffect(() => {
+    if (!position) return;
+    const generation = ++placeNameGeneration.current;
+    void reverseGeocodeName(position.latitude, position.longitude).then((name) => {
+      if (placeNameGeneration.current === generation) setPlaceName(name);
+    });
+  }, [position]);
 
   function handleToggleTag(tag: string) {
     const cleanTag = tag.replace(/^\+\s*/, '');
@@ -264,12 +285,17 @@ export default function ReportScreen() {
       );
       return;
     }
+    if (!photo) {
+      setMsgTone('error');
+      setMsg('A photo is required to submit a flood report. Please take or attach a photo.');
+      return;
+    }
 
     const selected = DEPTH_OPTIONS.find((d) => d.id === depth)!;
 
     const confirmed = await confirm({
       title: 'Submit report?',
-      message: `${selected.label} at your current pin${photo ? ' with a photo' : ''}. The moderation desk reviews it before it shows on the map.`,
+      message: `${selected.label} at your current pin with a photo. The moderation desk reviews it before it shows on the map.`,
       confirmLabel: 'Submit Report',
     });
     if (!confirmed) return;
@@ -284,9 +310,8 @@ export default function ReportScreen() {
       depthLevel: selected.api,
       latitude: position.latitude,
       longitude: position.longitude,
-      barangay: barangay.trim() || null,
-      capturedAt: photo?.capturedAt ?? new Date().toISOString(),
-      photo: photo ? { uri: photo.uri, name: photo.name, type: photo.type } : null,
+      capturedAt: photo.capturedAt,
+      photo: { uri: photo.uri, name: photo.name, type: photo.type },
     };
     let narrative = '';
     try {
@@ -356,8 +381,8 @@ export default function ReportScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
           <BackButton
             onPress={() => {
-              // A half-filled report (photo, notes, barangay) would be lost silently.
-              if (!photo && !notes.trim() && !barangay.trim()) {
+              // A half-filled report (photo, notes) would be lost silently.
+              if (!photo && !notes.trim()) {
                 router.back();
                 return;
               }
@@ -412,9 +437,9 @@ export default function ReportScreen() {
         <View style={{ gap: space[10] }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>
-              1. Take a Photo <Text style={{ color: c.slate400, fontWeight: '400' }}>(optional)</Text>
+              1. Take a Photo <Text style={{ color: c.red500 }}>*</Text>
             </Text>
-            <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.blue600 }}>Speeds up verification</Text>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: c.blue600 }}>Required for verification</Text>
           </View>
 
           {photo ? (
@@ -493,8 +518,17 @@ export default function ReportScreen() {
               {locationState === 'ready' && position ? (
                 <>
                   <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900, marginTop: space[1] }}>
-                    {formatCoordinate(position.latitude, 'N', 'S')}, {formatCoordinate(position.longitude, 'E', 'W')}
+                    {placeName ?? (
+                      <>
+                        {formatCoordinate(position.latitude, 'N', 'S')}, {formatCoordinate(position.longitude, 'E', 'W')}
+                      </>
+                    )}
                   </Text>
+                  {placeName ? (
+                    <Text style={{ fontSize: fontSize.micro, color: c.slate400, marginTop: space[1] }}>
+                      {formatCoordinate(position.latitude, 'N', 'S')}, {formatCoordinate(position.longitude, 'E', 'W')}
+                    </Text>
+                  ) : null}
                   <Text style={{ fontSize: fontSize.caption, color: c.slate500, marginTop: space[1] }}>
                     {position.accuracy != null ? `±${Math.round(position.accuracy)} m • ` : ''}
                     {fixAt ? `Pin taken ${formatClock(fixAt)}` : 'Pin taken'}
@@ -524,21 +558,6 @@ export default function ReportScreen() {
                 <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: c.blue700 }}>Retry</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-
-          {/* Barangay */}
-          <View style={{ borderWidth: 1, borderColor: c.slate200, borderRadius: 14, paddingHorizontal: space[14], paddingVertical: space[10], backgroundColor: c.white }}>
-            <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: c.slate400, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              Barangay (optional)
-            </Text>
-            <TextInput
-              value={barangay}
-              onChangeText={setBarangay}
-              placeholder="e.g. Barangay 309"
-              placeholderTextColor={c.slate400}
-              maxLength={120}
-              style={{ fontSize: fontSize.label, color: c.slate900, paddingVertical: space[4] }}
-            />
           </View>
 
           <Text style={{ fontSize: fontSize.body, fontWeight: '500', color: c.slate500, marginTop: space[2] }}>

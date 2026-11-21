@@ -89,7 +89,7 @@ import {
   distanceMeters,
   distanceToPolygonMeters,
   formatDistance,
-  formatDuration,
+  formatDurationHrMin,
   instructionIndexForProgress,
   navZoomFor,
   nearestNode,
@@ -97,6 +97,7 @@ import {
   progressAlongRoute,
   remainingOnStep,
   routeCoordinates,
+  routeSuccessRate,
   toLatLng,
   type LatLng,
 } from "../navigation/geo";
@@ -232,6 +233,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   const [speedKmh, setSpeedKmh] = useState<number | null>(null);
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
   const [headingDeg, setHeadingDeg] = useState<number | null>(null);
+  const [compassHeading, setCompassHeading] = useState<number | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const online = useOnline();
   const prefs = usePrefs();
@@ -278,7 +280,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // status wins on a flagged segment; traffic shows through on a clear one).
   const [mapView, setMapView] = useState<MapViewMode>("passability");
   // Normal map mode plans like a general-purpose map app: fastest path, flood
-  // cost ignored (the clearance gate still refuses a road under water).
+  // cost ignored. The clearance gate still refuses water unless the driver
+  // explicitly opts into the least-submerged alternative.
   const routingMode = mapView === "traffic" ? ("FASTEST" as const) : undefined;
   const routingModeRef = useRef(routingMode);
 
@@ -293,7 +296,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // Guards a dropped pin's reverse-geocode reply against overwriting a
   // newer selection (a second pin, or a search result picked meanwhile)
   // made before the lookup resolves.
-  const longPressGeneration = useRef(0);
+  const selectionGeneration = useRef(0);
   const initialDestinationHandled = useRef(false);
   const hazardsInitialised = useRef(false);
   const arrivedRef = useRef(false);
@@ -303,6 +306,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // (FSD-FR-072, VAL-020). The unit comes from the signed-in driver's account.
   const lastTelemetrySentMs = useRef<number>(0);
   const telemetryVehicleId = user?.vehicle_id ?? null;
+  // Compass callbacks fire far faster than the screen needs to redraw.
+  const lastCompassUpdateMs = useRef(0);
 
   useEffect(() => {
     routeRef.current = route;
@@ -335,6 +340,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       target_node: number;
       clearance_cm: number;
       ignore_hazards?: boolean;
+      allow_submerged?: boolean;
       avoid_edges?: number[];
       origin?: LatLng;
       destination?: LatLng;
@@ -352,6 +358,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               params.clearance_cm,
               params.ignore_hazards ?? false,
               routingModeRef.current,
+              params.allow_submerged ?? false,
             )
           : null;
         if (!plan) {
@@ -446,6 +453,37 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       subscription?.remove();
     };
   }, [user, telemetryVehicleId, locationAttempt, started]);
+
+  // --- Phone compass (heading-up navigation camera) ------------------------
+  // GPS course is null while stationary; the magnetometer gives the direction
+  // the phone actually points. Only needed once navigation starts.
+  useEffect(() => {
+    if (!user || !started) return;
+    let cancelled = false;
+    let subscription: Location.LocationSubscription | null = null;
+
+    Location.watchHeadingAsync((heading) => {
+      if (cancelled || heading.accuracy === 0) return;
+      const now = Date.now();
+      if (now - lastCompassUpdateMs.current < 100) return;
+      lastCompassUpdateMs.current = now;
+      const value = heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+      setCompassHeading(Number.isFinite(value) ? value : null);
+    })
+      .then((sub) => {
+        if (cancelled) sub.remove();
+        else subscription = sub;
+      })
+      .catch(() => {
+        // No compass on this device — the map falls back to the road bearing.
+      });
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+      setCompassHeading(null);
+    };
+  }, [user, started]);
 
   // --- Road network --------------------------------------------------------
   useEffect(() => {
@@ -564,6 +602,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           target_node: target.properties.node_id,
           clearance_cm: clearanceCm,
           ignore_hazards: unsafe,
+          allow_submerged: unsafe,
           // Door-to-door when the provider allows it: the true GPS origin and
           // the searched place's own coordinates. The graph planners ignore
           // these and keep their snapped nodes.
@@ -643,6 +682,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           target_node: current.target_node,
           clearance_cm: current.vehicle_clearance_cm,
           ignore_hazards: unsafeRef.current,
+          allow_submerged: unsafeRef.current,
         });
         void saveCache("route", next);
         if (samePath(current, next)) {
@@ -690,6 +730,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         target_node: current.target_node,
         clearance_cm: current.vehicle_clearance_cm,
         ignore_hazards: unsafeRef.current,
+        allow_submerged: unsafeRef.current,
       });
       const changed = !samePath(current, next);
       void saveCache("route", next);
@@ -752,6 +793,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         target_node: current.target_node,
         clearance_cm: current.vehicle_clearance_cm,
         ignore_hazards: unsafeRef.current,
+        allow_submerged: unsafeRef.current,
         avoid_edges: avoidEdges,
       });
       void saveCache("route", next);
@@ -786,7 +828,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
       const ring = polygonRing(hazard.geometry);
       if (ring.length === 0) continue;
       const distance = distanceToPolygonMeters(position, ring);
-      const radius = hazard.warning_radius_m || 200;
+      const radius = hazard.warning_radius_m || 100;
 
       if (distance <= radius && !alertedHazards.current.has(hazard.hazard_id)) {
         alertedHazards.current.add(hazard.hazard_id);
@@ -892,10 +934,10 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setGeocoding(true);
-      // Proximity from the ref, not state: a GPS tick must not re-fire the search.
+      // Search without bounding box restriction to get more results
       searchPlaces(
         needle,
-        { box: searchBox, proximity: positionRef.current },
+        { proximity: positionRef.current },
         controller.signal,
       )
         .then((results) => {
@@ -907,12 +949,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
         .finally(() => {
           if (!controller.signal.aborted) setGeocoding(false);
         });
-    }, 500);
+    }, 300); // Reduced delay for faster results
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [addressSearchActive, destinationQuery, searchBox]);
+  }, [addressSearchActive, destinationQuery]);
 
   const instruction = route?.instructions[currentStep];
   const remaining = progress ? Math.max(progress.totalM - progress.progressM, 0) : null;
@@ -962,26 +1004,35 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     setError(null);
   }
 
-  /** A long-press on the basemap: drop a pin and plan to it immediately,
-   * same as picking any other search result -- `selected`/`planRoute`'s own
-   * effect does the planning. The place name starts generic and upgrades in
-   * place once the reverse lookup resolves, so the route starts right away
-   * rather than waiting on a network call first. */
-  function handleMapLongPress(point: LatLng) {
-    if (started || !network) return;
+  /** Pick an exact point -- a dropped pin or a search result. The real
+   * coordinates drive the marker and door-to-door routing; the nearest road
+   * node anchors the graph planner, so both paths take the same planning route. */
+  function selectPointDestination(point: LatLng, name: string): number | null {
+    if (started || !network) return null;
     const nearest = nearestNode(network.nodes.features, point);
     if (!nearest) {
       setError("That point is outside the mapped road network.");
-      return;
+      return null;
     }
-    const generation = ++longPressGeneration.current;
+    plannedFor.current = null;
+    const generation = ++selectionGeneration.current;
     setSelected(nearest);
     setPlaceCoords(point);
-    setPlaceName("Dropped pin");
-    setDestinationQuery("Dropped pin");
+    setPlaceName(name);
+    setDestinationQuery(name);
     setError(null);
+    return generation;
+  }
+
+  /** A long-press on the basemap: drop a pin and plan to it immediately. The
+   * place name starts generic and upgrades in place once the reverse lookup
+   * resolves, so the route starts right away rather than waiting on a network
+   * call first. */
+  function handleMapLongPress(point: LatLng) {
+    const generation = selectPointDestination(point, "Dropped pin");
+    if (generation === null) return;
     void reverseGeocodeName(point.latitude, point.longitude).then((name) => {
-      if (!name || longPressGeneration.current !== generation) return;
+      if (!name || selectionGeneration.current !== generation) return;
       setPlaceName(name);
       setDestinationQuery(name);
     });
@@ -1045,7 +1096,15 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
     );
   }, [currentSegment, network]);
 
-  const safetyMarginCm = currentSegment ? clearanceCm - currentSegment.water_depth_cm : null;
+  // Route-level traversal success: distance-weighted share of the whole plan
+  // the vehicle can clear, so a long dry stretch outweighs a short flooded one.
+  const passabilityPct = routeSuccessRate(route?.segments ?? [], clearanceCm);
+  // A fallback route keeps SUBMERGED segments in the plan; the chip and warning
+  // must not claim it is flood-safe (CR-001 amendment A1).
+  const hasSubmergedSegment = useMemo(
+    () => route?.segments.some((segment) => segment.status === "SUBMERGED") ?? false,
+    [route],
+  );
   const congestion = currentEdgeMeta ? congestionFromSpeeds(currentEdgeMeta.avg_speed_kmh, currentEdgeMeta.max_speed_kmh) : null;
   // A small margin over the posted limit avoids flagging ordinary GPS jitter.
   const speeding =
@@ -1107,6 +1166,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           active={started}
           position={position}
           heading={headingDeg}
+          compassHeading={compassHeading}
           navZoom={navZoom}
           destination={destinationCoordinate}
           destinationName={destinationLabel}
@@ -1130,36 +1190,42 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.instructionText}>{instruction.text}</Text>
-                  <Text style={styles.instructionMeta}>
+                  <Text style={styles.instructionMeta} numberOfLines={1}>
                     {instruction.manoeuvre === "ARRIVE"
                       ? "Destination ahead"
                       : stepRemaining !== null
                         ? `in ${formatDistance(stepRemaining)}`
                         : ""}
-                    {instruction.road_name ? ` • ${instruction.road_name}` : ""}
-                    {remainingMinutes !== null ? ` • ETA ${formatEta(remainingMinutes)}` : ""}
-                    {streamError ? " • live alerts offline" : ""}
+                    {instruction.road_name ? ` · ${instruction.road_name}` : ""}
+                    {streamError ? " · live alerts offline" : ""}
                   </Text>
                 </View>
-                {currentEdgeMeta ? (
-                  <View
-                    style={[
-                      styles.speedLimitSign,
-                      speeding ? { borderColor: c.red600 } : null,
-                    ]}
-                  >
-                    <Text style={[styles.speedLimitValue, speeding ? { color: c.red600 } : null]}>
-                      {Math.round(currentEdgeMeta.max_speed_kmh)}
-                    </Text>
-                  </View>
-                ) : null}
-                {speedKmh !== null ? (
-                  <View style={styles.speedBadge}>
-                    <Text style={[styles.speedBadgeValue, speeding ? { color: c.red400 } : null]}>
-                      {Math.round(speedKmh)}
-                    </Text>
-                    <Text style={styles.speedBadgeUnit}>km/h</Text>
-                  </View>
+                {currentEdgeMeta || speedKmh !== null ? (
+                  <>
+                    <View style={styles.instructionDivider} />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: space[8] }}>
+                      {currentEdgeMeta ? (
+                        <View
+                          style={[
+                            styles.speedLimitSign,
+                            speeding ? { borderColor: c.red600 } : null,
+                          ]}
+                        >
+                          <Text style={[styles.speedLimitValue, speeding ? { color: c.red600 } : null]}>
+                            {Math.round(currentEdgeMeta.max_speed_kmh)}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {speedKmh !== null ? (
+                        <View style={styles.speedBadge}>
+                          <Text style={[styles.speedBadgeValue, speeding ? { color: c.red400 } : null]}>
+                            {Math.round(speedKmh)}
+                          </Text>
+                          <Text style={styles.speedBadgeUnit}>km/h</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </>
                 ) : null}
               </View>
             ) : null
@@ -1182,10 +1248,11 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     setError(null);
                   }}
                   onFocus={() => setSearchFocused(true)}
-                  placeholder="Where to?"
+                  placeholder="Search address, place, or landmark..."
                   placeholderTextColor={c.slate400}
                   style={styles.searchInput}
                   autoCorrect={false}
+                  autoCapitalize="none"
                 />
                 {destinationQuery ? (
                   <TouchableOpacity
@@ -1311,7 +1378,8 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                   <Text style={styles.refusalTitle}>No safe route</Text>
                   <Text style={styles.refusalBody}>
                     Every verified route to {destinationLabel ?? "this destination"} is blocked
-                    for your {clearanceCm} cm clearance.
+                    for your {clearanceCm} cm clearance. You can still request the least-submerged
+                    route with a warning.
                   </Text>
                   <View style={styles.panelButtons}>
                     <TouchableOpacity
@@ -1336,20 +1404,12 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                     <TouchableOpacity
                       key={`place-${result.id ?? index}`}
                       style={styles.resultRow}
-                      onPress={() => {
-                        const nearest = network
-                          ? nearestNode(network.nodes.features, {
-                              latitude: result.latitude,
-                              longitude: result.longitude,
-                            })
-                          : null;
-                        if (!nearest) return;
-                        setSelected(nearest);
-                        setPlaceName(result.name);
-                        setPlaceCoords({ latitude: result.latitude, longitude: result.longitude });
-                        setDestinationQuery(result.name);
-                        setError(null);
-                      }}
+                      onPress={() =>
+                        selectPointDestination(
+                          { latitude: result.latitude, longitude: result.longitude },
+                          result.name,
+                        )
+                      }
                     >
                       <View style={styles.resultIcon}>
                         <MapPin size={14} color={c.blue600} />
@@ -1489,22 +1549,25 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
               )}
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Zoom in"
-            onPress={() => mapRef.current?.zoomIn()}
-            style={styles.controlButton}
-          >
-            <ZoomIn size={17} color={c.slate800} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Zoom out"
-            onPress={() => mapRef.current?.zoomOut()}
-            style={styles.controlButton}
-          >
-            <ZoomOut size={17} color={c.slate800} />
-          </TouchableOpacity>
+          <View style={styles.zoomGroup}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Zoom in"
+              onPress={() => mapRef.current?.zoomIn()}
+              style={styles.zoomButton}
+            >
+              <ZoomIn size={17} color={c.slate800} />
+            </TouchableOpacity>
+            <View style={styles.zoomDivider} />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Zoom out"
+              onPress={() => mapRef.current?.zoomOut()}
+              style={styles.zoomButton}
+            >
+              <ZoomOut size={17} color={c.slate800} />
+            </TouchableOpacity>
+          </View>
           {!started ? (
             <TouchableOpacity
               accessibilityRole="button"
@@ -1567,41 +1630,59 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
           </View>
 
           <ScrollView style={expanded ? styles.sheetScroll : undefined} contentContainerStyle={{ gap: space[10] }}>
-          <View style={styles.routeSummary}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.routeDestination} numberOfLines={1}>
+          <View>
+            <View style={styles.routeSummary}>
+              <Text style={[styles.routeDestination, { flex: 1 }]} numberOfLines={1}>
                 {destinationLabel ?? "Destination"}
               </Text>
-              <Text style={styles.routeMeta}>
-                {[
-                  remaining !== null ? `${formatDistance(remaining)} remaining` : null,
-                  formatDuration(route.estimated_travel_time_minutes),
-                  remainingMinutes !== null ? `ETA ${formatEta(remainingMinutes)}` : null,
-                  `${clearanceCm} cm clearance`,
-                ]
-                  .filter(Boolean)
-                  .join(" • ")}
-              </Text>
+              {hasSubmergedSegment ? (
+                <View style={styles.hazardChip}>
+                  <AlertTriangle size={12} color={c.red700} />
+                  <Text style={styles.hazardChipText}>Least-submerged route</Text>
+                </View>
+              ) : route.hazards.length > 0 ? (
+                <View style={styles.hazardChip}>
+                  <AlertTriangle size={12} color={c.amber700} />
+                  <Text style={styles.hazardChipText}>
+                    {route.hazards.length} hazard{route.hazards.length === 1 ? "" : "s"}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.safeChip}>
+                  <CheckCircle2 size={12} color={c.green700} />
+                  <Text style={styles.safeChipText}>
+                    {route.routing_mode !== "FASTEST"
+                      ? "Flood-safe route"
+                      : route.source === "MAPBOX"
+                        ? "Fastest route · live traffic"
+                        : "Fastest route"}
+                  </Text>
+                </View>
+              )}
             </View>
-            {route.hazards.length > 0 ? (
-              <View style={styles.hazardChip}>
-                <AlertTriangle size={12} color={c.amber700} />
-                <Text style={styles.hazardChipText}>
-                  {route.hazards.length} hazard{route.hazards.length === 1 ? "" : "s"}
+
+            <View style={styles.statRow}>
+              <View style={styles.statCell}>
+                <Text style={styles.statValue}>
+                  {remaining !== null ? formatDistance(remaining) : "—"}
                 </Text>
+                <Text style={styles.statLabel}>{clearanceCm} cm</Text>
               </View>
-            ) : (
-              <View style={styles.safeChip}>
-                <CheckCircle2 size={12} color={c.green700} />
-                <Text style={styles.safeChipText}>
-                  {route.routing_mode !== "FASTEST"
-                    ? "Flood-safe route"
-                    : route.source === "MAPBOX"
-                      ? "Fastest route · live traffic"
-                      : "Fastest route"}
+              <View style={styles.statDivider} />
+              <View style={styles.statCell}>
+                <Text style={styles.statValue}>
+                  {remainingMinutes !== null ? formatEta(remainingMinutes) : "—"}
                 </Text>
+                <Text style={styles.statLabel}>ETA</Text>
               </View>
-            )}
+              <View style={styles.statDivider} />
+              <View style={styles.statCell}>
+                <Text style={styles.statValue}>
+                  {remainingMinutes !== null ? formatDurationHrMin(remainingMinutes) : "—"}
+                </Text>
+                <Text style={styles.statLabel}>Travel time</Text>
+              </View>
+            </View>
           </View>
 
           {expanded && currentSegment ? (
@@ -1614,16 +1695,16 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
                 </Text>
               </View>
               <View style={styles.metricCell}>
-                <Text style={styles.metricLabel}>SAFETY MARGIN</Text>
+                <Text style={styles.metricLabel}>PASSABILITY</Text>
                 <Text
                   style={[
                     styles.metricValue,
-                    { color: (safetyMarginCm ?? 0) >= 0 ? c.green700 : c.red700 },
+                    { color: (passabilityPct ?? 0) >= 50 ? c.green700 : c.red700 },
                   ]}
                 >
-                  {safetyMarginCm !== null ? `${safetyMarginCm >= 0 ? "+" : ""}${safetyMarginCm} cm` : "—"}
+                  {passabilityPct !== null ? `${passabilityPct}%` : "—"}
                 </Text>
-                <Text style={styles.metricSub}>clearance</Text>
+                <Text style={styles.metricSub}>route success rate</Text>
               </View>
               <View style={styles.metricCell}>
                 <Text style={styles.metricLabel}>CONGESTION</Text>
@@ -1647,11 +1728,13 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
             </View>
           ) : null}
 
-          {unsafeRoute ? (
+          {unsafeRoute && (hasSubmergedSegment || route?.hazards.length) ? (
             <View style={styles.unsafeNotice}>
               <AlertTriangle size={14} color={c.red700} />
               <Text style={styles.unsafeNoticeText}>
-                Unsafe alternative — this route crosses a verified hazard.
+                {hasSubmergedSegment
+                  ? "Least-submerged route — water on this route is deeper than your clearance. You may end up submerged."
+                  : "Unsafe alternative — this route crosses a verified hazard."}
               </Text>
             </View>
           ) : null}
@@ -1868,6 +1951,7 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     justifyContent: "center",
   },
   instructionText: { fontSize: fontSize.lead, fontWeight: "800", color: c.onInk },
+  instructionDivider: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.14)" },
   speedBadge: {
     alignItems: "center",
     justifyContent: "center",
@@ -1947,6 +2031,17 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     gap: space[10],
     alignItems: "flex-end",
   },
+  zoomGroup: {
+    width: 42,
+    borderRadius: 21,
+    backgroundColor: c.white,
+    borderWidth: 1,
+    borderColor: c.slate200,
+    overflow: "hidden",
+    ...shadow,
+  },
+  zoomButton: { height: 42, alignItems: "center", justifyContent: "center" },
+  zoomDivider: { height: 1, backgroundColor: c.slate200 },
   viewButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -2000,7 +2095,18 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
   },
   routeSummary: { flexDirection: "row", alignItems: "center", gap: space[10] },
   routeDestination: { fontSize: fontSize.lead, fontWeight: "800", color: c.slate900 },
-  routeMeta: { fontSize: fontSize.caption, color: c.slate500, marginTop: space[2] },
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: space[10],
+    backgroundColor: c.slate50,
+    borderRadius: 12,
+    paddingVertical: space[8],
+  },
+  statCell: { flex: 1, alignItems: "center", gap: space[1] },
+  statValue: { fontSize: fontSize.label, fontWeight: "800", color: c.slate900 },
+  statLabel: { fontSize: fontSize.tiny, color: c.slate500 },
+  statDivider: { width: 1, alignSelf: "stretch", marginVertical: space[4], backgroundColor: c.slate200 },
   hazardChip: {
     flexDirection: "row",
     alignItems: "center",

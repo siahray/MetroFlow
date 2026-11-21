@@ -1,5 +1,10 @@
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
+// Loading the full road graph from the hosted Postgres takes tens of seconds on
+// a slow link (TSD LIM-028). Only the two map endpoints that load it get this
+// budget; auth and small calls still fail fast on a dead connection.
+const MAP_REQUEST_TIMEOUT_MS = 60_000;
+
 /** The bearer token for the current app session; null for guests. */
 let authToken: string | null = null;
 
@@ -70,13 +75,13 @@ async function readError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, `Request failed: ${res.status}`, retryAfter);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
@@ -93,7 +98,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (e instanceof Error) {
       const msg = e.message.toLowerCase();
       if (e.name === "AbortError" || msg.includes("aborted") || msg.includes("cancel")) {
-        throw new ApiError(0, "Could not reach the server. Check your connection and API URL.");
+        throw new ApiError(0, "The server took too long to respond. Please try again.");
       }
       if (msg.includes("network request failed") || msg.includes("failed to fetch")) {
         throw new ApiError(0, "Could not reach the server. Check your connection and API URL.");
@@ -200,6 +205,21 @@ export function listMySOS(): Promise<SOSRequest[]> {
 
 export function getSOS(sosId: number): Promise<SOSRequest> {
   return request<SOSRequest>(`/api/v1/sos/${sosId}`);
+}
+
+export type IncidentLogItem = {
+  log_id: number;
+  time: string;
+  created_at: string;
+  action_type: string;
+  actor_name: string;
+  text: string;
+  kind: "muted" | "action" | "note";
+};
+
+/** What a dispatcher has done with this SOS so far, oldest first. */
+export function getSOSLog(sosId: number): Promise<IncidentLogItem[]> {
+  return request<IncidentLogItem[]>(`/api/v1/sos/${sosId}/log`);
 }
 
 export type Vehicle = {
@@ -396,6 +416,8 @@ export type RoutePlan = {
 export function getNetworkState(clearanceCm: number): Promise<NetworkState> {
   return request<NetworkState>(
     `/api/v1/network/state?clearance_cm=${encodeURIComponent(clearanceCm)}`,
+    undefined,
+    MAP_REQUEST_TIMEOUT_MS,
   );
 }
 
@@ -404,6 +426,8 @@ export function getRoute(params: {
   target_node: number;
   clearance_cm: number;
   ignore_hazards?: boolean;
+  /** Opt into the least-submerged route when no flood-safe route exists. */
+  allow_submerged?: boolean;
   /** Force a personality; omitted means the network decides. */
   routing_mode?: "FASTEST" | "FLOOD_SAFE";
   /** Edge ids to exclude, for requesting an alternative to a previous route. */
@@ -423,6 +447,7 @@ export function getRoute(params: {
     clearance_cm: String(params.clearance_cm),
   });
   if (params.ignore_hazards) query.set("ignore_hazards", "true");
+  if (params.allow_submerged) query.set("allow_submerged", "true");
   if (params.routing_mode) query.set("routing_mode", params.routing_mode);
   for (const edgeId of params.avoid_edges ?? []) query.append("avoid_edges", String(edgeId));
   if (params.origin) {
@@ -434,7 +459,7 @@ export function getRoute(params: {
     query.set("dest_lon", String(params.destination.longitude));
   }
   if (params.destination_name) query.set("dest_name", params.destination_name);
-  return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`);
+  return request<RoutePlan>(`/api/v1/routing/navigate?${query.toString()}`, undefined, MAP_REQUEST_TIMEOUT_MS);
 }
 
 export function listActiveHazards(): Promise<HazardInfo[]> {
@@ -491,6 +516,23 @@ export type ForecastResponse = {
 
 export function getForecast(): Promise<ForecastResponse> {
   return request<ForecastResponse>("/api/v1/forecast");
+}
+
+/** Display-only current conditions at a point: never a routing or advisory input. */
+export type CurrentWeather = {
+  available: boolean;
+  temperature_c: number | null;
+  humidity_pct: number | null;
+  precipitation_chance_pct: number | null;
+  wind_kmh: number | null;
+  description: string | null;
+  as_of: string | null;
+};
+
+export function getCurrentWeather(lat: number, lon: number): Promise<CurrentWeather> {
+  return request<CurrentWeather>(
+    `/api/v1/weather/current-conditions?lat=${lat}&lon=${lon}`,
+  );
 }
 
 // ---------------------------------------------------------------------------

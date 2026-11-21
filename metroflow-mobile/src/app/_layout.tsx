@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../auth';
 import { DialogProvider } from '../components/Dialog';
+import { SOSTrackerProvider } from '../sosTracker';
 import { ThemeProvider } from '../theme';
 
 // Keep the native splash up until the session is known, then fade into the
@@ -26,13 +27,15 @@ export default function RootLayout() {
         <AuthProvider>
           <AppReady>
             <SafeAreaProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="route" />
-                <Stack.Screen name="offline" />
-                <Stack.Screen name="report-history" />
-              </Stack>
+              <SOSTrackerProvider>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="index" />
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="route" />
+                  <Stack.Screen name="offline" />
+                  <Stack.Screen name="report-history" />
+                </Stack>
+              </SOSTrackerProvider>
             </SafeAreaProvider>
           </AppReady>
         </AuthProvider>

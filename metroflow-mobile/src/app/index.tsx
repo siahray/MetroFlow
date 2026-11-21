@@ -227,7 +227,7 @@ export default function IndexScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity style={{ alignItems: 'center', paddingVertical: space[6] }} onPress={goToApp}>
-            <Text style={{ fontSize: fontSize.body, color: c.slate400 }}>Continue</Text>
+            <Text style={{ fontSize: fontSize.body, color: c.slate400 }}>Continue as Guest</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
