@@ -240,6 +240,23 @@ list) — that table is stale, see §6.
   done — see §10's note and U-4 in the BRD/FSD traceability — this was
   the admin portal's equivalent gap.
 
+## 13. Mobile — real splash icon, replacing the Expo placeholder (22 Nov 2026)
+
+- [x] `assets/splash-icon.png` was the unmodified Expo template placeholder
+  (a bullseye glyph with the design tool's artboard grid baked into the
+  exported PNG). Replaced with a generated transparent waves mark
+  matching the admin portal's `Waves` (`lucide-react`) icon, so both
+  clients share one brand mark. `app.json`'s splash config (background
+  color, size, `contain`) is unchanged.
+- [ ] Not rebuilt on a simulator/device — `ios/`/`android/` need
+  `expo prebuild` to pick up the new asset, and this repo's own
+  `metroflow-mobile/AGENTS.md` flags that as a full from-source iOS
+  build; verified instead with a static composite of the new image
+  over the configured background color.
+- [ ] `assets/icon.png` (the home-screen app icon) has the same
+  placeholder-grid problem and was left alone — not part of what was
+  asked.
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
