@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { OfflineBanner } from "./error-notice";
-import { LoadingScreen } from "./loading-screen";
 import { Sidebar, type NavItem } from "./sidebar";
 import { listReports } from "@/lib/reports";
 import { listSOS } from "@/lib/sos-live";
@@ -186,7 +185,7 @@ export function AppShell({ activeItem, title, children }: AppShellProps) {
       .toUpperCase() || "DO";
 
   if (!user) {
-    return <LoadingScreen />;
+    return null;
   }
 
   return (

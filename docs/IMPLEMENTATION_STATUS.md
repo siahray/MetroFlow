@@ -230,15 +230,13 @@ list) — that table is stale, see §6.
   responses), so the portal's barangay filter will silently show nothing
   until that UI is updated or reverted.
 
-## 12. Admin portal — loading screen for the pre-session gap (22 Nov 2026)
+## 12. Admin portal — loading screen for the pre-session gap (22 Nov 2026, reverted same day)
 
-- [x] New `metroflow-admin/components/loading-screen.tsx`, matching the
-  login screen's wordmark treatment. Replaces `AppShell`'s `return null`
-  (blank flash while the cached session is read) and doubles as the
-  app's first `app/loading.tsx` (Next's route-level loading boundary,
-  previously absent). The driver app's own splash screen was already
-  done — see §10's note and U-4 in the BRD/FSD traceability — this was
-  the admin portal's equivalent gap.
+- [x] ~~New `metroflow-admin/components/loading-screen.tsx`...~~ **Reverted
+  at the user's request**: `AppShell`'s pre-session gap is back to
+  `return null`, and `app/loading.tsx` is removed. The user asked for
+  the splash/loading moment to live on the driver app instead — see
+  §17.
 
 ## 13. Mobile — real splash icon, replacing the Expo placeholder (22 Nov 2026)
 
@@ -298,6 +296,17 @@ list) — that table is stale, see §6.
   (flips brightness per theme) to the fixed `rgba(255,255,255,0.14)`
   the turn-instruction card already uses for the same always-dark-card
   divider role.
+
+## 17. Mobile — JS splash screen for app launch (22 Nov 2026)
+
+- [x] New `metroflow-mobile/src/components/AppSplash.tsx`: the waves
+  mark (matching `assets/splash-icon.png`), a looping pulse ring, and
+  the "MetroFlow" wordmark, on the same `#0f172a` background as the
+  native splash config. `_layout.tsx`'s `AppReady` renders it in place
+  of the app while the auth check (`ready`) is still resolving, and
+  for 450ms past that — the native splash's own 300ms fade had
+  previously revealed the first real screen directly, with no JS
+  splash moment at all.
 
 ## Explicitly excluded (not implementation work)
 
