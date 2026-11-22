@@ -132,6 +132,20 @@ export const stormColors: Partial<ThemeColors> = {
   red800: "#fecaca",
   green600: "#4ade80",
   green700: "#86efac",
+  green800: "#bbf7d0",
+  green200: "#15803d",
+  // Emerald and orange had no storm override at all: their cards (the report
+  // screen's success panel and guest banner, both full-width) rendered as
+  // bright light-mode panels dropped into an otherwise dark screen, and the
+  // green family's own 800 shade stayed dark-on-dark against its 50 card.
+  emerald50: "#052e1b",
+  emerald100: "#065f46",
+  emerald200: "#047857",
+  emerald700: "#6ee7b7",
+  emerald800: "#a7f3d0",
+  orange50: "#2e1605",
+  orange200: "#9a3412",
+  orange800: "#fdba74",
   amber100: "#3a2a06",
   amber600: "#fbbf24",
   amber800: "#fcd34d",

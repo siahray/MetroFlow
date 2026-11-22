@@ -271,6 +271,18 @@ list) — that table is stale, see §6.
   `navigation-night-v1` basemap.
 - [ ] Not verified live on a device/simulator (declined this session).
 
+## 15. Mobile — storm-mode color audit: emerald/orange had no night override (22 Nov 2026)
+
+- [x] `theme.ts`'s `stormColors` gained `emerald50/100/200/700/800`,
+  `green200/800`, and `orange50/200/800`. Those families had no storm
+  override at all (or, for `green800`, only a dark background override
+  with no matching bright-text override), so three real panels broke:
+  the report screen's guest banner and "Report Submitted" success card
+  rendered as bright light-mode cards in a dark screen, and the SOS
+  screen's "Rescue Request Sent" title was dark-green-on-near-black.
+  Verified with a static mockup of the real hex values, not just read
+  from the palette.
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
