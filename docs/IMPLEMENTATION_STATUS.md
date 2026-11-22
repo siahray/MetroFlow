@@ -257,6 +257,20 @@ list) — that table is stale, see §6.
   placeholder-grid problem and was left alone — not part of what was
   asked.
 
+## 14. Mobile — map style-toggle race fixed; storm-mode flood colors brightened (22 Nov 2026)
+
+- [x] `RouteMap.tsx`'s `<MapView>` is now keyed on `mode`, so switching
+  storm/day fully remounts the map's sources/layers against the style
+  that's actually loaded, instead of racing a stale layer update against
+  the native SDK's style reload (`"Layer 'hazard-closed-fill' is not in
+  style"`). Camera position is restored immediately after via a new
+  effect dependency rather than waiting for the next GPS tick.
+- [x] `theme.ts`'s `stormColors` gained `amber600`/`rose600` overrides —
+  the flood-status colors on the map (`LIGHT_FLOOD`/`SUBMERGED`) had no
+  night-mode override and read as muted against the dark
+  `navigation-night-v1` basemap.
+- [ ] Not verified live on a device/simulator (declined this session).
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,

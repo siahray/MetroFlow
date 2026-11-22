@@ -265,6 +265,17 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   const appliedZoom = useRef(zoomLevel);
   const centredOnce = useRef(false);
 
+  // Switching storm/day re-keys <MapView> below (so its style reload doesn't
+  // race the hazard/flood layers -- see the key comment there), which mounts
+  // a brand-new native Camera with no notion of where the map was framed.
+  // Clearing these lets the effect below re-apply the current camera state
+  // to it immediately, instead of leaving it on the SDK's default view until
+  // the next GPS tick happens to change a dependency.
+  useEffect(() => {
+    fittedBounds.current = null;
+    centredOnce.current = false;
+  }, [mode]);
+
   useEffect(() => {
     const camera = cameraRef.current;
     if (!camera) return;
@@ -304,7 +315,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
         animationDuration: 0,
       });
     }
-  }, [following, active, displayPosition, position, cameraHeading, zoomLevel, effectivePitch, routeBounds]);
+  }, [following, active, displayPosition, position, cameraHeading, zoomLevel, effectivePitch, routeBounds, mode]);
 
   const routeShape = useMemo<GeoJSON.Feature<GeoJSON.LineString> | null>(() => {
     if (!route) return null;
@@ -424,6 +435,16 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap({
   return (
     <View style={styles.container}>
       <MapView
+        // Keyed on the style itself: switching styleURL makes the native SDK
+        // reload the whole style, which drops every source/layer. React still
+        // sees the same ShapeSource/FillLayer elements and just pushes a prop
+        // update to them, which lands after the reload has already dropped
+        // them -- the native side rejects it ("Layer 'X' is not in style").
+        // The key forces a full unmount/remount of this subtree instead, so
+        // the layers are freshly (re)created against the style that's
+        // actually loaded. The effect above restores the camera position
+        // immediately after, since a fresh native Camera has no memory of it.
+        key={mode}
         style={StyleSheet.absoluteFill}
         styleURL={mode === "storm" ? MAPBOX_STYLE_NIGHT : MAPBOX_STYLE_DAY}
         scaleBarEnabled={false}

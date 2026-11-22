@@ -125,6 +125,7 @@ export const stormColors: Partial<ThemeColors> = {
   sky600: "#38bdf8",
   sky700: "#7dd3fc",
   red50: "#3a0a0a",
+  red200: "#7f1d1d",
   red500: "#f87171",
   red600: "#f87171",
   red700: "#fca5a5",
@@ -132,8 +133,14 @@ export const stormColors: Partial<ThemeColors> = {
   green600: "#4ade80",
   green700: "#86efac",
   amber100: "#3a2a06",
+  amber600: "#fbbf24",
   amber800: "#fcd34d",
   amberSurface: "#3a2a06",
+  // Flood-status colours on the night/storm map (navigation-night-v1 is a
+  // dark basemap): the light-mode shades read as muted/low-contrast on it,
+  // which is the one place storm mode must not go quieter -- a flood warning
+  // has to stay at least as visible after dark as it is in daylight.
+  rose600: "#fb7185",
   surface: "#111c2e",
   surfaceAlt: "#0a1220",
   surfaceHigh: "#223046",
