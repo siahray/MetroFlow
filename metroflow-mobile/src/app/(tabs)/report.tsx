@@ -412,7 +412,7 @@ export default function ReportScreen() {
       >
         {/* Banner */}
         <View style={{ backgroundColor: c.surfaceAlt, borderRadius: 18, padding: space[16], flexDirection: 'row', gap: space[14] }}>
-          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(224,242,254,0.7)', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: c.sky50, alignItems: 'center', justifyContent: 'center' }}>
             <Droplet size={20} color={c.sky600} />
           </View>
           <View style={{ flex: 1 }}>

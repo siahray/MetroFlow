@@ -380,7 +380,17 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: c.slate700, paddingTop: space[14] }}>
+          {/* A subtle divider on this permanently-dark card, same convention as
+              route.tsx's instructionDivider -- a theme token would flip
+              brightness with the mode even though this card never does. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              borderTopWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+              paddingTop: space[14],
+            }}
+          >
             {stats.map((stat, i) => {
               const Icon = stat.icon;
               return (
@@ -391,7 +401,7 @@ export default function ProfileScreen() {
                     alignItems: 'center',
                     gap: space[3],
                     borderLeftWidth: i > 0 ? 1 : 0,
-                    borderColor: c.slate700,
+                    borderColor: 'rgba(255,255,255,0.14)',
                   }}
                 >
                   <Icon size={15} color={c.inkMuted} />

@@ -266,7 +266,7 @@ export default function SOSScreen() {
 
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="About this screen"
             onPress={handleInfo}
-            style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(226,232,240,0.6)', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.slate100, alignItems: 'center', justifyContent: 'center' }}
           >
             <Info size={18} color={c.slate700} />
           </TouchableOpacity>

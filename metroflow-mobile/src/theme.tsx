@@ -159,7 +159,12 @@ export const stormColors: Partial<ThemeColors> = {
   surfaceAlt: "#0a1220",
   surfaceHigh: "#223046",
   green50: "#052e1b",
-  inkBg: "#1d4ed8",
+  // inkBg deliberately has NO storm override: its own contract ("reads as
+  // ink regardless of theme", same as onInk/inkMuted below) means the
+  // profile identity card, the route turn-instruction card and the avatar
+  // fallback badge must all stay a dark card in every theme. An override
+  // used to sit here, turning all three into a bright royal-blue card in
+  // storm mode instead of the one dark card the screen comment describes.
   onInk: "#ffffff",
   inkMuted: "#cbd5e1",
 };

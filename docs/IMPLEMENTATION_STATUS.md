@@ -283,6 +283,22 @@ list) — that table is stale, see §6.
   Verified with a static mockup of the real hex values, not just read
   from the palette.
 
+## 16. Mobile — storm-mode identity card and two hardcoded icon badges (22 Nov 2026)
+
+- [x] `inkBg` no longer has a storm override — it broke that token's own
+  "reads as ink regardless of theme" contract, turning the profile
+  identity card, the route screen's turn-instruction card, and the
+  avatar fallback badge into a bright blue card in storm mode instead
+  of the dark card all three are meant to be.
+- [x] Two icon badges (`report.tsx`'s flood-watch banner, `sos.tsx`'s
+  info button) used a hardcoded `rgba(...)` background instead of a
+  theme token, so they ignored storm mode entirely — now `c.sky50`/
+  `c.slate100`.
+- [x] The identity card's two internal dividers moved from `c.slate700`
+  (flips brightness per theme) to the fixed `rgba(255,255,255,0.14)`
+  the turn-instruction card already uses for the same always-dark-card
+  divider role.
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
