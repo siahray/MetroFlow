@@ -8,15 +8,21 @@
 
 | Item            | Detail                                                          |
 | --------------- | --------------------------------------------------------------- |
-| Project Sponsor | «Project Sponsor»                                               |
-| Business Owner  | «Client Representative» — LGU Operations (CDMO)                 |
-| Project Cost    | PHP 634,710 (illustrative: ₱588,500 CAPEX + ₱46,210 Year-1 OPEX, §7) |
-| Recommendation  | **APPROVE** — Option 4, the scoped pilot, subject to conditions |
+| Context         | Academic capstone project — not commissioned, funded, endorsed or hosted by an LGU; all sign-offs `[TBC]` |
+| Project Sponsor | «Project Sponsor» — intended evaluation scenario; no LGU sponsor exists |
+| Business Owner  | «Client Representative» — scenario reviewer (advisory), no official endorsement |
+| Project Cost    | PHP 634,710 (illustrative planning figure, not an approved budget: ₱588,500 CAPEX + ₱46,210 Year-1 OPEX, §7) |
+| Recommendation  | **Option 4** — the scoped academic pilot, subject to conditions; no LGU approval sought |
 
-During a rain event, the LGU operations centre decides where to send rescue
-resources using information it cannot verify. Two failures follow: responders are
-committed to roads that are already impassable, and decisions cannot be reviewed
-afterwards.
+Per `docs/APPROVALS.md` §1, LGU, dispatcher and rescue-unit references describe
+the intended evaluation scenario, not a real deployment or client. Cost tables
+are academic planning material, not an approved budget, and LGU feedback is
+advisory rather than an approval.
+
+In the intended LGU evaluation scenario, during a rain event the operations
+centre decides where to send rescue resources using information it cannot verify.
+Two failures follow: responders are committed to roads that are already
+impassable, and decisions cannot be reviewed afterwards.
 
 Four alternatives were assessed: continue as-is, formalise a manual GIS
 procedure, licence a commercial platform, or build a focused pilot. The
@@ -27,9 +33,10 @@ LGU owns) are the two that commercial platforms customise least and charge most
 for.
 
 The pilot is scoped to one corridor and deliberately excludes public App Store
-and Play Store releases, real CCTV, carrier-grade SOS and multi-LGU tenancy. It
-includes the driver side of the loop: a native Expo app, live hazard
-publication, fleet dispatch and labelled sensor ingestion.
+and Play Store releases, CCTV (only a legacy report `source` label exists),
+carrier-grade SOS and multi-LGU tenancy. It includes the driver side of the loop:
+a native Expo app, live hazard publication, fleet dispatch and labelled sensor
+ingestion.
 
 Monetary figures (13 Nov 2026) are an **illustrative projection** for planning
 discussion, not a quotation or a funding commitment: OPEX lines are priced
@@ -141,15 +148,23 @@ and fits the academic term.
 The recommendation is conditional on:
 
 1. The driver-app scope boundary held: native Expo app with EAS internal
-   distribution rather than a public store release, labelled demo CCTV,
-   simulated gauges where real data is unavailable, and no carrier-grade SOS.
+   distribution rather than a public store release, no CCTV (only a legacy
+   report `source` label), simulated gauges where real data is unavailable,
+   and no carrier-grade SOS.
 2. Baseline data collection scheduled in M1 so benefits can be measured.
 3. Authentication and RBAC (BR-009) delivered as a release gate, not
    deferred past acceptance: sign-in, roles and route-level enforcement before
    any real data is handled.
 4. A decision review at M8, before final defence, using the conservative
    scenario.
-5. Every simulated sensor or demo video source labelled as such in the product.
+5. Every simulated sensor source labelled as such in the product.
+
+Portal deliverables follow the CR-002 screen split (implemented; Approved 23 Nov
+2026 and part of the approved baseline): `/triage` is a read-only operations
+dashboard, `/moderation` owns report verification, and `/radar` owns SOS-only
+assignment and tracking. Driver accounts are `PUBLIC_DRIVER` (self-registered) or
+`RESPONDER` (linked to a rescue unit); `ADMIN`/`SUPER_ADMIN` are the portal
+administration roles.
 
 ## 7. Cost Estimate
 
@@ -200,7 +215,7 @@ re-priced if usage grows.
 | 6   | EAS build and app distribution    | Free tier covers it at pilot cadence (15 Android + 15 iOS builds/mo, [expo.dev/pricing](https://expo.dev/pricing)); Starter $19/mo + credit if build volume grows | ₱0 | ₱0 | ₱0 |
 | 7   | Evidence photo storage            | `bytea` in the `incident_reports` row (ADR-023), not a separate object-storage service — folded into line 1's 8 GB database / 100 GB file-storage allowance | included in line 1 | included in line 1 | included in line 1 |
 | 8   | Redis / event infrastructure      | Not provisioned in the hosted deployment — the event stream polls Postgres instead (`docs/TSD.md` §5.3, ADR-015); Redis runs only in the local dev `docker-compose` stack | ₱0        | ₱0        | ₱0        |
-| 9   | Map, weather and imagery services | Mapbox Directions (dry-state routing): 100,000 free requests/mo, then $2.00/1,000 ([mapbox.com/pricing](https://www.mapbox.com/pricing)). OpenWeather, OpenTopography and Copernicus stay free/offline (`CA-009`) | ₱0        | ₱0        | ₱0        |
+| 9   | Map, weather and imagery services | Mapbox Directions (dry-state routing): 100,000 free requests/mo, then $2.00/1,000 ([mapbox.com/pricing](https://www.mapbox.com/pricing)). OpenTopography and Copernicus stay free/offline; OpenWeather was considered but is not integrated (`CA-009`) | ₱0        | ₱0        | ₱0        |
 |     | **Total OPEX**                    |                                | **₱46,210** | **₱127,210** | **₱127,210** |
 
 Lines 1–3 and 6–9 are priced against each vendor's current rate card (§7.2.1).
@@ -230,8 +245,8 @@ adviser/client's own rate before this projection is treated as a real budget.
 | CA-005 | Year-2 maintenance assumes dependency and security updates only, no major feature work                                                 |
 | CA-006 | The driver client is a native Expo app. EAS internal builds (§7.2 line 6) are the preferred no-cost path for the pilot. If a public store release is ever pursued (out of pilot scope), published fees are Apple Developer Program $99/year (≈₱6,090) and Google Play one-time $25 (≈₱1,538); neither is budgeted here |
 | CA-007 | Evidence storage grows with report volume; the pilot assumes a capped volume (4 MB/report, `report_photo_max_bytes`) and a 90-day retention period as an illustrative placeholder, pending the client's own records-retention policy |
-| CA-008 | Simulated gauges and demo CCTV carry no data-supplier licence in the pilot                                                             |
-| CA-009 | Mapbox Directions usage (dry-state routing) stays within its 100,000-request/month free tier at pilot scale; overage is $2.00 per 1,000 requests ([mapbox.com/pricing](https://www.mapbox.com/pricing), checked 13 Nov 2026). OpenWeather, OpenTopography and Copernicus remain free/offline, no change |
+| CA-008 | Simulated gauges carry no data-supplier licence in the pilot; no CCTV feed exists — `CCTV` is only a legacy report `source` label |
+| CA-009 | Mapbox Directions usage (dry-state routing) stays within its 100,000-request/month free tier at pilot scale; overage is $2.00 per 1,000 requests ([mapbox.com/pricing](https://www.mapbox.com/pricing), checked 13 Nov 2026). OpenTopography and Copernicus remain free/offline; OpenWeather was considered but is not integrated |
 
 ## 8. Benefits Assessment
 
@@ -288,7 +303,7 @@ thing to put a number on; they are recorded as a non-monetised benefit.
 | Drivers do not adopt the app               | Field evidence stays thin               | Usability tests; QR onboarding; synthetic reports as fallback                         |
 | Location data re-identifies a driver       | Privacy breach and legal exposure       | 50 m rounding, salted hash, 24-hour retention, role-only access                       |
 | Background location limits on iOS          | Telemetry gaps                          | Foreground-only telemetry; documented limitation                                      |
-| Sensor or demo CCTV mistaken for live data | Wrong operational decision              | Label simulated and demo sources in the API and UI                                    |
+| Simulated sensor reading mistaken for live data | Wrong operational decision         | Label simulated sources in the API and UI; no CCTV feed exists — `CCTV` is only a legacy `source` label |
 
 Full scoring and owners are in [Project-Management-Plan.md](Project-Management-Plan.md).
 
@@ -361,14 +376,15 @@ client's own data, and these effects recompute the same way.
 | M1  | Charter and requirements approved   | August 20, 2026 — Completed  |
 | M2  | Architecture and data design frozen | August 26, 2026 — Completed  |
 | M3  | API engine operational              | October 1, 2026 — Completed  |
-| M4  | Dispatch portal operational         | November 5, 2026 — Completed |
 | M5  | Hardening complete                  | October 25, 2026 — Completed |
 | M6  | Baseline documentation accepted     | October 27, 2026 — Completed |
 | M7  | Realtime, reports and fleet API     | November 4, 2026 — Completed |
 | M8  | LGU map, moderation and dispatch    | November 4, 2026 — Completed |
+| M4  | Dispatch portal operational         | November 5, 2026 — Completed |
 | M9  | Driver app, sensors and defence     | Panel defence **projected November 27, 2026** (planning projection, pending the panel's own scheduling) |
 
-Approval is requested at M1. The baseline demonstration fell on 28 October 2026,
+Academic approval is requested at M1 and remains `[TBC]` (`docs/APPROVALS.md`).
+The baseline demonstration fell on 28 October 2026,
 between M6 and the start of the driver-app work — it has no separate M-number
 of its own in this list. The final demonstration/defence is part of M9. The
 baseline ran about 10 weeks (18 Aug – 27 Oct 2026); the driver-app work, live
@@ -384,10 +400,14 @@ not a confirmed institutional or panel date.
 
 | Decision               | Authority               | Recorded in                        |
 | ---------------------- | ----------------------- | ---------------------------------- |
-| Scope changes          | «Project Sponsor»       | PMP change control log             |
+| Scope changes          | «Project Sponsor» (scenario); Project Lead in practice | PMP change control log             |
 | Academic acceptance    | Sigfred Jayme       | Document approval blocks           |
 | Architecture decisions | Khent U. Lapating     | TSD §6 Architecture Decisions      |
-| Operational acceptance | «Client Representative» | Charter approval and demo sign-off |
+| Operational acceptance | «Client Representative» — scenario reviewer, advisory only | Charter approval and demo sign-off — `[TBC]` |
+
+All named sponsor/client roles are placeholders for the intended evaluation
+scenario; no LGU approval or endorsement is recorded and every sign-off is
+`[TBC]` (`docs/APPROVALS.md` §§1, 5).
 
 ### 13.2 Assumptions and dependencies
 
@@ -407,20 +427,24 @@ not a confirmed institutional or panel date.
 
 ## 14. Approval Recommendation
 
-Approve **Option 4**, the pilot build, including the driver-app scope, on
-the conditions in §6.
+The recommendation is **Option 4**, the pilot build as an academic prototype,
+including the driver-app scope, on the conditions in §6; no LGU approval is
+requested or implied.
 
 | Decision           | Detail                                                                 |
 | ------------------ | ---------------------------------------------------------------------- |
-| Decision requested | Approve Option 4 and the full pilot scope                             |
-| Decision maker     | «Project Sponsor»                                                      |
+| Decision requested | Approve Option 4 and the full pilot scope as an academic deliverable   |
+| Decision maker     | Academic Adviser / panel (no LGU approver; all sign-offs `[TBC]`)       |
 | Decision           | [TBC]                                                                  |
 | Date               | [TBC]                                                                  |
-| Conditions         | Driver-app scope boundary, authentication/RBAC gate, labelled demo data, Expo native app |
-| Budget approved    | PHP 634,710 proposed (§7, illustrative projection — Decision/Date below are genuinely pending, not assumed) |
+| Conditions         | Driver-app scope boundary, authentication/RBAC gate, labelled simulated data (no CCTV), Expo native app |
+| Cost basis         | PHP 634,710 **illustrative planning figure, not an approved budget** (§7); no funding requested |
 
 | Role            | Name                    | Signature | Date  |
 | --------------- | ----------------------- | --------- | ----- |
 | Project Sponsor | «Project Sponsor»       |           | [TBC] |
 | Business Owner  | «Client Representative» |           | [TBC] |
 | Project Adviser | Sigfred Jayme       |           | [TBC] |
+
+No LGU party signs this table: LGU representatives are scenario reviewers only
+(`docs/APPROVALS.md` §1).

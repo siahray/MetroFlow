@@ -10,11 +10,12 @@ Version 1.0
 | --------------- | ----------------------------------------------- |
 | Document Title  | Project Management Plan (PMP)                   |
 | Project Name    | MetroFlow                                       |
-| Project Sponsor | «Project Sponsor»                               |
-| Business Owner  | «Client Representative» — LGU Operations (CDMO) |
+| Formal Approver | «Project Adviser» and academic panel — all sign-offs `[TBC]` (`docs/APPROVALS.md` §§1–2) |
+| Scenario Reviewer | «Client Representative» — intended LGU Operations (CDMO); non-binding feedback only |
 | Project Manager | Khent U. Lapating                             |
-| Budget          | PHP634,710 proposed (standardized with Business_Case.md §7 and Project_Charter.md §B: CAPEX PHP588,500 + Year-1 OPEX PHP46,210; see the Cost Management table below) |
-| Go-Live         | [TBC]                                           |
+| Budget          | PHP634,710 illustrative planning figure, not an approved budget and with no LGU funding requested (standardized with Business_Case.md §7 and Project_Charter.md §B: CAPEX PHP588,500 + Year-1 OPEX PHP46,210; see the Cost Management table below) |
+| Go-Live         | [TBC] — hosted API and portal are deployed; no LGU go-live in this academic capstone |
+| Approval Register Note | A-06 lists v1.0, matching this canonical file; no version bump implied |
 
 ## Revision History
 
@@ -22,15 +23,16 @@ Version 1.0
 | ------- | ----------- | ----------------- | ------------------------ | ------ |
 | 1.0     | 21 Oct 2026 | Khent U. Lapating | Initial Baseline Release | Review |
 | 1.1     | 15 Nov 2026 | Khent U. Lapating | CR-001 accepted — production network recalibration, Mapbox driver navigation and admin incident location visualizer | Review |
+| —       | 20–21 Nov 2026; approved 23 Nov 2026 | Khent U. Lapating | Approved 23 Nov 2026 and part of the approved baseline: CR-002 admin screen split, CR-002 A1 and CR-001 Amendments A1/A2 are implemented, documented and approved (`APPROVALS.md` A-20/A-21) | Review |
 
 ## Approval Sign-Off
 
-| Approver                | Role             | Signature | Date  |
-| ----------------------- | ---------------- | --------- | ----- |
-| «Project Sponsor»       | Project Sponsor  |           | [TBC] |
-| «Client Representative» | Business Owner   |           | [TBC] |
-| Sigfred Jayme       | Academic Adviser |           | [TBC] |
-| Khent U. Lapating     | Project Manager  |           | [TBC] |
+| Approver                | Role                                | Signature | Date  |
+| ----------------------- | ----------------------------------- | --------- | ----- |
+| Sigfred Jayme           | Academic Adviser                    |           | [TBC] |
+| «Panel»                 | Academic Panel                      |           | [TBC] |
+| «Client Representative» | Scenario LGU Reviewer (non-binding) |           | [TBC] |
+| Khent U. Lapating       | Project Manager                     |           | [TBC] |
 
 ## Table of Contents
 
@@ -49,21 +51,25 @@ Version 1.0
 
 ## Executive Summary
 
-MetroFlow gives the LGU operations centre a verified picture of road passability
-during flooding, a traceable path from field report to dispatch decision, and a
-way to warn and reroute drivers before they enter the water. The pilot covers one
-corridor, a simulation and routing API, a browser-based dispatch portal and a
-native Expo driver app.
+MetroFlow demonstrates, for an intended LGU operations-centre evaluation scenario,
+a verified picture of road passability during flooding, a traceable path from
+field report to dispatch decision, and a way to warn and reroute drivers before
+they enter the water. The pilot covers one corridor, a simulation and routing
+API, a browser-based dispatch portal and a native Expo driver app. This is an
+academic capstone: the LGU is a scenario reviewer, not a funded or endorsing
+client, and all formal sign-offs remain `[TBC]` (`docs/APPROVALS.md` §1).
 
 This plan defines how the work is executed and controlled: schedule, resources,
 cost, risk, quality, communication and change. The project is delivered
 through sequential Waterfall phases with documented phase gates.
 
-Current position: the baseline API, schema and portal are built and tested, and so is
-the driver-app — authentication, report intake and moderation, live map, hazard
-publishing and drawing, fleet dispatch, sensors, exports, offline operation and the
-driver app are implemented and hosted. Every unconfirmed date or amount is marked
-`[TBC]`; remaining work is test depth and operations (BACKLOG.md).
+Current position (23 Nov 2026): the API and portal are built, tested and hosted
+(Vercel); the driver app is implemented with an internal Android EAS build, but there
+is no public store release and the iOS build is deferred. Authentication, report intake
+and moderation, live map, hazard publishing and drawing, fleet dispatch, sensors,
+exports and offline operation are implemented. Every unconfirmed date or amount is
+marked `[TBC]`; remaining work is hardware-bound test depth and operations
+(Q-2, S-4, S-5 in `docs/IMPLEMENTATION_STATUS.md`).
 
 ## Project Overview
 
@@ -74,6 +80,14 @@ driver app are implemented and hosted. Every unconfirmed date or amount is marke
 | Deliverables | API engine, LGU portal, driver app, versioned database, CI/CD pipeline, document set, demonstration   |
 | Out of scope | Native store builds, real CCTV, carrier-grade SOS, offline tiles, multi-LGU tenancy, public portal    |
 | Constraints  | Academic term, part-time effort, no paid Code Security, synthetic data only                           |
+
+LGU roles above are the intended evaluation scenario, not a sponsor, funder or
+acceptance authority (`docs/APPROVALS.md` §1). The portal is split into `/triage`
+(read-only operations dashboard), `/moderation` (report verification only) and
+`/radar` (SOS-only dispatch with unit assignment); RBAC roles are `SUPER_ADMIN`,
+`ADMIN`, `RESPONDER` and `PUBLIC_DRIVER` (CR-002, Approved 23 Nov 2026). Tracking is
+unit-level `vehicle_id` telemetry only — no person/device responder identity
+(CR-002 §5, `LIM-030`).
 
 ### Delivery approach
 
@@ -129,7 +143,10 @@ Request → Log → Impact assessment → Decision → Update documents → Impl
 ```
 
 No change is implemented before a decision is recorded. Emergency fixes for a
-broken `main` may proceed, with the request raised the same day.
+broken `main` may proceed, with the request raised the same day. CR-002, CR-002 A1
+and CR-001 Amendments A1/A2 were implemented ahead of formal sign-off; they are
+recorded in the change log and were Approved 23 Nov 2026, making them part of the
+approved baseline (`APPROVALS.md` A-20/A-21).
 
 ## Project Schedule
 
@@ -139,8 +156,8 @@ broken `main` may proceed, with the request raised the same day.
 | System Design            | August 21, 2026  | August 26, 2026  | Completed   |
 | Implementation — API     | August 27, 2026  | October 1, 2026  | Completed   |
 | Implementation — Portal  | October 2, 2026  | November 5, 2026 | Completed   |
-| Verification / Testing   | November 6, 2026 | November 23, 2026| In Progress |
-| Deployment / Maintenance | November 24, 2026| November 27, 2026| Planned     |
+| Verification / Testing   | November 6, 2026 | November 23, 2026| Largely complete — offline device test (Q-2), UAT (NFR-009) and device-performance checks remain open (as of 23 Nov 2026) |
+| Deployment / Maintenance | November 24, 2026| November 27, 2026| Hosted API and portal deployed on Vercel; Android internal EAS APK built, no store release; live restore-over-prod and iOS build remain gated (as of 23 Nov 2026) |
 
 Dates above are as recorded in the git history and work logs. The
 projected end date is a planning estimate based on the 18 Aug 2026 start date
@@ -195,17 +212,18 @@ may hold more than one role; every role must have a named person before M2.
 | Application hosting                         | PHP14,760    |
 | EAS build, app distribution and developer accounts | PHP0 (free tier at pilot cadence; public store fees not budgeted, CA-006) |
 | Evidence storage                            | PHP0 (included in the hosted-database line — stored in the report row, not a separate service) |
-| Map, weather and data services              | PHP0 (Mapbox free tier at pilot volume; OpenWeather/OpenTopography/Copernicus free or offline) |
+| Map, weather and data services              | PHP0 (Mapbox free tier at pilot volume; Open-Meteo/Copernicus free or offline; OpenWeather considered but not integrated) |
 | Domain and TLS                              | PHP3,000     |
 | Test devices and data                       | PHP15,000    |
 | Training and handover                       | PHP10,000    |
 | Contingency (10% of CAPEX lines only: 520,000+15,000=535,000) | PHP53,500 |
 | **Total**                                   | **PHP634,710** |
 
-Illustrative projection (not a quotation or a funding request, CA-001):
-priced against each vendor's current rate card for the OPEX lines and a
-market junior-developer rate for in-kind student effort; see
-Business_Case.md §7 for the full cost model and sources. The budget
+Illustrative projection (not a quotation, an approved budget or a funding
+request, CA-001): no LGU funds are requested; these figures are academic planning
+material only (`docs/APPROVALS.md` §1). Priced against each vendor's current rate
+card for the OPEX lines and a market junior-developer rate for in-kind student
+effort; see Business_Case.md §7 for the full cost model and sources. The budget
 convention is standardized at PHP634,710 across every project document
 (this PMP, Business_Case.md §7, Project_Charter.md §B): CAPEX
 (PHP535,000 + 10% contingency = PHP588,500) plus Year-1 OPEX (PHP46,210,
@@ -213,7 +231,7 @@ no contingency applied).
 
 Rules:
 
-1. No paid service is subscribed without sponsor approval.
+1. No paid service is subscribed without adviser/panel approval.
 2. Free tiers are the default; exceeding one requires a documented reason.
 3. Effort is tracked weekly so the in-kind cost in the business case is real.
 
@@ -245,16 +263,16 @@ Rules:
 | A-002 | Assumption | Pilot corridor is representative enough to demonstrate routing    | PM               | Medium | Open          |
 | A-003 | Assumption | Free or institutional tiers suffice for the pilot                 | PM               | Medium | Open          |
 | A-004 | Assumption | Dispatchers have a modern browser and connectivity                | Business Analyst | High   | Open          |
-| A-005 | Assumption | Rainfall intensity is supplied manually or from Open-Meteo (live rain gate, implemented); OpenWeather is an optional supplementary source; Open-Meteo and GloFAS are the sole rain/river telemetry sources | Backend Lead     | Low | Closed        |
+| A-005 | Assumption | Rainfall intensity is supplied manually or from Open-Meteo (live rain gate, implemented); Open-Meteo and GloFAS are the live rain/river telemetry sources with a rain-gated NOAH advisory fallback (`APPROVALS.md` §2.2); OpenWeather considered but not integrated | Backend Lead     | Low | Closed        |
 | A-006 | Assumption | Client provides corridor and barangay naming                      | Business Analyst | Low    | Open          |
 | A-007 | Assumption | Drivers have a smartphone with camera and geolocation             | Business Analyst | High   | Open          |
 | A-008 | Assumption | Connectivity can drop during an event                             | PM               | High   | Open          |
 | A-009 | Assumption | Sensor data may be simulated but is labelled                      | Backend Lead     | Medium | Open          |
-| A-010 | Assumption | Mapbox Directions API used for dry-state routing (ADR-025); portal basemap is keyless Carto Positron (ADR-022); OSM raster remains the swap-in fallback | Frontend Lead    | Low    | Open          |
+| A-010 | Assumption | Mapbox Directions API used for dry-state routing (ADR-025); portal basemap is keyless Carto Positron (ADR-022); no OSM raster fallback — an unset driver Mapbox token leaves a blank basemap while the cached graph still renders (ADR-026) | Frontend Lead    | Low    | Open          |
 | I-001 | Issue      | No authentication on the baseline API or portal                   | PM               | High   | Closed        |
 | I-002 | Issue      | Incident data in the baseline portal is mock data                 | Frontend Lead    | Medium | Closed        |
-| I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Workaround    |
-| I-004 | Issue      | CCTV is out of scope and gauges may be simulated                  | Business Analyst | Low    | Accepted      |
+| I-003 | Issue      | CodeQL cannot run on the private repository                       | QA               | Medium | Resolved 10 Nov 2026 — repository went public; CodeQL (`security-extended`) now runs natively in CI, 0 High/Medium alerts (`TSD.md` SEC-004/LIM-010) |
+| I-004 | Issue      | CCTV is out of scope (no feed; only a report-source code label) and gauges may be simulated | Business Analyst | Low    | Accepted      |
 | I-005 | Issue      | Driver-app scope is planned, not implemented                     | PM               | High   | Closed        |
 | D-001 | Dependency | Hosted database connection string supplied as a repository secret | Business Analyst | High   | Open          |
 | D-002 | Dependency | Adviser and panel availability for reviews                        | PM               | Medium | Open          |
@@ -271,8 +289,8 @@ Risk scoring and detailed responses are in Appendix A.
 
 R = responsible, A = accountable, C = consulted, I = informed.
 
-| Activity               | Sponsor | PM  | BA  | DEV | QA  |
-| ---------------------- | ------- | --- | --- | --- | --- |
+| Activity               | Adviser/Panel | PM  | BA  | DEV | QA  |
+| ---------------------- | ------------- | --- | --- | --- | --- |
 | Requirements           | A       | C   | R   | I   | I   |
 | Architecture           | I       | A   | C   | R   | C   |
 | Backend development    | I       | A   | I   | R   | C   |
@@ -287,28 +305,35 @@ R = responsible, A = accountable, C = consulted, I = informed.
 | UAT and demonstration  | A       | R   | C   | C   | C   |
 | Change approval        | A       | R   | C   | I   | I   |
 
+Portal work is split across `/triage`, `/moderation` and `/radar` (CR-002, Approved
+23 Nov 2026); the `RESPONDER` role is Super Admin-managed in the portal and tracking is
+unit-level `vehicle_id` telemetry only, not a person/device identity (CR-002 §5,
+`LIM-030`).
+
 ## Communication Management
 
 | Audience              | Frequency     | Method                                |
 | --------------------- | ------------- | ------------------------------------- |
 | Project team          | Twice weekly  | Progress meeting                      |
 | Project adviser       | Bi-weekly     | Review meeting                        |
-| Project sponsor       | At milestones | Written status report                 |
-| Dispatcher users      | M4, M5 and M8 | Demo and usability session            |
-| Rescue commanders     | M8            | Dispatch walkthrough                  |
+| Academic panel        | At milestones | Written status report                 |
+| Scenario reviewers (dispatcher/driver) | M4, M5, M8 and M9 | Demo and non-binding feedback session |
+| Rescue commanders     | M8            | Dispatch walkthrough (scenario)       |
 | Driver pilot group    | M9            | Guided install and offline field test |
-| Steering stakeholders | Monthly       | Progress briefing                     |
+| Academic stakeholders | Monthly       | Progress briefing                     |
 | Panel                 | M9            | Document submission and demonstration |
 
 **Escalation:** blocker at the progress meeting → owner resolves within one day → Project
-Team Lead (Khent U. Lapating) → Sigfred Jayme / «Project Sponsor» for scope. Academic or ethical
-concerns go to the adviser immediately.
+Team Lead (Khent U. Lapating) → Sigfred Jayme / academic panel for scope. Academic or ethical
+concerns go to the adviser immediately; LGU scenario reviewers give non-binding feedback only.
 
 ### Change log
 
 | CR      | Date        | Scope                                                                 | Status   |
 | ------- | ----------- | --------------------------------------------------------------------- | -------- |
 | CR-001  | 15 Nov 2026 | Production network hydrological recalibration, Mapbox driver navigation and door-to-door routing, admin incident location visualizer. Affects BRD, FSD, TSD, PMP and Project Charter | Approved 15 Nov 2026 |
+| CR-002  | 20 Nov 2026 | Admin screen split: `/triage` operations dashboard, `/moderation` report-only, `/radar` SOS-only with unit tracking; A1 adds the read-only Active sensors modal in `/triage` | Approved 23 Nov 2026 (including A1) and part of the approved baseline; implemented and documented (`APPROVALS.md` A-20); responder client and person/device identity `[TBC]` |
+| CR-001 A1/A2 | 21 Nov 2026 | Opt-in least-submerged fallback; driver weather card, report contract tightening and proximity tuning | Approved 23 Nov 2026 and part of the approved baseline; implemented and documented (`APPROVALS.md` A-21); original CR-001 approval unchanged |
 
 ## Testing Management
 
@@ -332,8 +357,8 @@ concerns go to the adviser immediately.
 | Unit                   | pytest (`-m "not integration"`)            |
 | Contract / integration | pytest (`-m integration`) against PostGIS  |
 | Web lint and types     | ESLint, `next build`                       |
-| Web unit               | Bun test (`bun test lib`)                  |
-| Driver unit            | Bun test (planned)                         |
+| Web unit               | Bun test (`bun test lib components`)       |
+| Driver unit            | `bun test src` (pure modules) plus a jest-expo component suite (`bun run test:components`), both in Mobile CI |
 | Browser E2E            | Playwright (online; portal smoke in Web CI) |
 | Security               | OWASP ZAP API scan, CodeQL (when licensed) |
 | Migration              | Alembic                                    |
@@ -341,8 +366,11 @@ concerns go to the adviser immediately.
 
 This table is the agreed test strategy. Present in the repository today: pytest
 suites, ESLint and `next build`, `tsc --noEmit` for the driver app, `bun test`
-over `metroflow-admin/lib`, a Playwright smoke over the portal (`metroflow-admin/e2e`,
-API stubbed in the browser), Alembic, the ZAP API scan workflow and CodeQL.
+over `metroflow-admin/lib` and components, `bun test src` plus a jest component suite
+in Mobile CI (`.github/workflows/mobile.yml`), a Playwright suite over the portal
+(`metroflow-admin/e2e`, API stubbed in the browser), Alembic, the ZAP API scan workflow
+and CodeQL. The offline device run (Q-2) and UAT (NFR-009) remain blocked on hardware
+and real sessions.
 
 ## Success Metrics
 
@@ -469,8 +497,8 @@ Confidence in next:   <high/medium/low + reason>
 - [x] ZAP clean at High/Medium.
 - [x] Hosted database at head, or the limitation documented.
 - [x] Token enforcement on every privileged route; role violations return 403 and change nothing.
-- [x] Offline E2E and hazard publish latency tests pass.
-- [x] Simulated sensors labelled in the product; no CCTV claim.
+- [ ] Offline end-to-end device run and hosted hazard-publish latency target not yet demonstrated: Q-2 needs an airplane-mode device run; NFR-019 hosted p95 ≈1,374 ms against the ≤100 ms target. Planner tests and benchmarks exist but do not substitute (`BRD.md` NFR-019, `docs/IMPLEMENTATION_STATUS.md` §§1, 6).
+- [x] Simulated sensors labelled in the product; no CCTV feed or claim (CCTV remains only in the report-source code comments and is not accepted by the API).
 - [ ] Document set approved.
 - [ ] Repository access granted per institutional rule.
 - [ ] Handover session delivered to «Client Representative».
@@ -479,11 +507,12 @@ Confidence in next:   <high/medium/low + reason>
 The sensor registry stores a `simulated` flag and `/flood-state` labels such a
 reading `SIMULATED`, but the portal does not display the flag yet; the CCTV
 claim is gone from the product. The offline queue and its SQLite cache are
-implemented; what is missing for that line is the measured end-to-end run on a
-device with airplane mode.
+implemented and the planner is benchmarked; what is missing for that line is the
+measured end-to-end run on a device with airplane mode (Q-2). The hazard-publish
+latency benchmark also exists, but the hosted p95 is still over budget (NFR-019).
 
 Post-implementation review, one month after handover or after the first rain
 event: were the benefits realised, did the system hold up, and what was missing?
 The next release is no longer authentication or intake; candidates are a real
 sensor agreement, a native client, or multi-LGU tenancy, decided by the
-sponsor under change control.
+academic adviser/panel under change control (LGU input is non-binding).
