@@ -30,6 +30,8 @@ jest.mock('@rnmapbox/maps', () => {
 });
 jest.mock('../src/geocode', () => ({
   searchPlaces: jest.fn(),
+  searchTokens: (text: string) => text.toLowerCase().split(/\s+/),
+  matchesTokens: (needles: string[], words: string[]) => needles.every((n) => words.some((w) => w.includes(n))),
   reverseGeocodeName: jest.fn(),
   boundingBoxOf: jest.fn(() => null),
 }));

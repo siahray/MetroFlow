@@ -32,7 +32,7 @@ import {
 
 import { getNetworkState, type NetworkState, type NodeFeature } from '../api';
 import { listQuickPicks, saveQuickPicks, type QuickPick, type QuickPickIcon } from '../quickPicks';
-import { boundingBoxOf, reverseGeocodeName, searchPlaces, type GeocodeResult } from '../geocode';
+import { boundingBoxOf, matchesTokens, reverseGeocodeName, searchPlaces, searchTokens, type GeocodeResult } from '../geocode';
 import { PlacePickerMap } from '../navigation/PlacePickerMap';
 import { nearestNode, toLatLng, type LatLng } from '../navigation/geo';
 import { fontSize, space, useTheme } from '../theme';
@@ -122,8 +122,8 @@ export function QuickPicks({
   const draftReady =
     !!draft && draft.name.trim().length > 0 && (draft.picked !== null || draft.pick !== null);
 
-  // The same place search the route screen uses -- Mapbox Geocoding, then
-  // Nominatim, then the curated list -- biased to the loaded network's extent.
+  // The same place search the route screen uses -- Mapbox Geocoding with an
+  // OSM fallback -- both bounded to Metro Manila.
   const searchBox = useMemo(
     () =>
       network
@@ -138,7 +138,7 @@ export function QuickPicks({
     // Debounced well under Nominatim's ~1 req/sec usage policy.
     const timer = setTimeout(() => {
       setSearching(true);
-      searchPlaces(query, { box: searchBox }, controller.signal)
+      searchPlaces(query, undefined, controller.signal)
         .then((rows) => {
           if (!controller.signal.aborted) setPlaceResults(rows);
         })
@@ -153,16 +153,19 @@ export function QuickPicks({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, searchBox]);
+  }, [query]);
 
   // Places first; named road nodes are the fallback, so a junction name still
   // resolves and works offline like it always did.
   const visiblePlaces = query.length >= 3 ? placeResults.slice(0, 3) : [];
+  const nodeWords = useMemo(
+    () => network?.nodes.features.map((node) => ({ node, words: searchTokens(node.properties.name ?? '') })) ?? [],
+    [network],
+  );
+  const nodeNeedles = searchTokens(query);
   const nodeMatches =
-    query.length > 0 && network && visiblePlaces.length === 0
-      ? network.nodes.features
-          .filter((n) => (n.properties.name ?? '').toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 3)
+    query.length > 0 && visiblePlaces.length === 0
+      ? nodeWords.filter(({ words }) => matchesTokens(nodeNeedles, words)).slice(0, 3).map(({ node }) => node)
       : [];
 
   const draftPoint: LatLng | null = draft?.picked

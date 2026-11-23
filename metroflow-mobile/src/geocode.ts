@@ -25,442 +25,6 @@ export type GeocodeResult = {
 
 export type BoundingBox = { south: number; west: number; north: number; east: number };
 
-export type CuratedPlace = {
-  id: string;
-  name: string;
-  subtitle: string;
-  category: PlaceCategory;
-  latitude: number;
-  longitude: number;
-  aliases: string[];
-};
-
-/**
- * Curated directory of prominent establishments, landmarks, hospitals,
- * universities, and government hubs in Quezon City and the pilot corridor.
- * Provides instant, zero-latency, offline-capable results as the driver types.
- */
-export const CURATED_PLACES: CuratedPlace[] = [
-  // --- Malls & Commercial Centers ---
-  {
-    id: "curated-sm-north",
-    name: "SM City North EDSA",
-    subtitle: "North Ave cor. EDSA, Quezon City",
-    category: "mall",
-    latitude: 14.6565,
-    longitude: 121.0286,
-    aliases: ["sm north", "sm edsa", "sm north edsa", "north edsa", "sm"],
-  },
-  {
-    id: "curated-trinoma",
-    name: "TriNoma Mall",
-    subtitle: "EDSA cor. North Ave, Quezon City",
-    category: "mall",
-    latitude: 14.6536,
-    longitude: 121.0332,
-    aliases: ["trinoma", "tri noma", "ayala trinoma"],
-  },
-  {
-    id: "curated-vertis-north",
-    name: "Ayala Malls Vertis North",
-    subtitle: "North Ave, Diliman, Quezon City",
-    category: "mall",
-    latitude: 14.6508,
-    longitude: 121.0384,
-    aliases: ["vertis north", "vertis", "ayala vertis"],
-  },
-  {
-    id: "curated-gateway-mall",
-    name: "Gateway Mall",
-    subtitle: "Araneta City, Cubao, Quezon City",
-    category: "mall",
-    latitude: 14.6221,
-    longitude: 121.0531,
-    aliases: ["gateway", "gateway mall", "araneta cubao mall"],
-  },
-  {
-    id: "curated-ali-mall",
-    name: "Ali Mall",
-    subtitle: "Araneta City, Cubao, Quezon City",
-    category: "mall",
-    latitude: 14.62,
-    longitude: 121.0558,
-    aliases: ["ali mall", "alimall", "araneta ali mall"],
-  },
-  {
-    id: "curated-robinsons-magnolia",
-    name: "Robinsons Magnolia",
-    subtitle: "Aurora Blvd, New Manila, Quezon City",
-    category: "mall",
-    latitude: 14.6148,
-    longitude: 121.0337,
-    aliases: ["robinsons magnolia", "rob magnolia", "magnolia"],
-  },
-  {
-    id: "curated-fisher-mall",
-    name: "Fisher Mall",
-    subtitle: "Quezon Ave, Diliman, Quezon City",
-    category: "mall",
-    latitude: 14.6366,
-    longitude: 121.0189,
-    aliases: ["fisher mall", "fisher"],
-  },
-  {
-    id: "curated-up-town-center",
-    name: "UP Town Center",
-    subtitle: "Katipunan Ave, Diliman, Quezon City",
-    category: "mall",
-    latitude: 14.6514,
-    longitude: 121.0747,
-    aliases: ["up town center", "uptc", "up town"],
-  },
-  {
-    id: "curated-eastwood-mall",
-    name: "Eastwood Mall",
-    subtitle: "Eastwood City, Bagumbayan, Quezon City",
-    category: "mall",
-    latitude: 14.6106,
-    longitude: 121.0805,
-    aliases: ["eastwood mall", "eastwood", "eastwood city"],
-  },
-  {
-    id: "curated-ayala-cloverleaf",
-    name: "Ayala Malls Cloverleaf",
-    subtitle: "A. Bonifacio Ave, Balingasa, Quezon City",
-    category: "mall",
-    latitude: 14.6582,
-    longitude: 121.0039,
-    aliases: ["cloverleaf", "ayala cloverleaf"],
-  },
-  {
-    id: "curated-sm-fairview",
-    name: "SM City Fairview",
-    subtitle: "Quirino Hwy, Novaliches, Quezon City",
-    category: "mall",
-    latitude: 14.7337,
-    longitude: 121.0578,
-    aliases: ["sm fairview", "fairview mall"],
-  },
-  {
-    id: "curated-robinsons-galleria",
-    name: "Robinsons Galleria",
-    subtitle: "EDSA cor. Ortigas Ave, Quezon City",
-    category: "mall",
-    latitude: 14.5906,
-    longitude: 121.0594,
-    aliases: ["robinsons galleria", "rob galleria", "galleria"],
-  },
-  {
-    id: "curated-sm-megamall",
-    name: "SM Megamall",
-    subtitle: "EDSA cor. Doña Julia Vargas, Mandaluyong",
-    category: "mall",
-    latitude: 14.5847,
-    longitude: 121.0567,
-    aliases: ["sm megamall", "megamall"],
-  },
-
-  // --- Hospitals & Healthcare ---
-  {
-    id: "curated-qc-gen-hospital",
-    name: "Quezon City General Hospital",
-    subtitle: "Seminary Rd, Project 8, Quezon City",
-    category: "hospital",
-    latitude: 14.6653,
-    longitude: 121.0181,
-    aliases: ["qcgh", "quezon city general hospital", "qc general"],
-  },
-  {
-    id: "curated-st-lukes-qc",
-    name: "St. Luke's Medical Center - Quezon City",
-    subtitle: "E. Rodriguez Sr. Ave, New Manila, Quezon City",
-    category: "hospital",
-    latitude: 14.6227,
-    longitude: 121.0232,
-    aliases: ["st lukes", "st lukes qc", "saint lukes", "slmc qc", "st luke"],
-  },
-  {
-    id: "curated-heart-center",
-    name: "Philippine Heart Center",
-    subtitle: "East Ave, Diliman, Quezon City",
-    category: "hospital",
-    latitude: 14.6433,
-    longitude: 121.0475,
-    aliases: ["philippine heart center", "heart center", "phc"],
-  },
-  {
-    id: "curated-east-ave-medical",
-    name: "East Avenue Medical Center",
-    subtitle: "East Ave, Diliman, Quezon City",
-    category: "hospital",
-    latitude: 14.6405,
-    longitude: 121.0496,
-    aliases: ["east ave medical", "east avenue medical center", "eamc", "east ave hospital"],
-  },
-  {
-    id: "curated-nkti",
-    name: "National Kidney and Transplant Institute",
-    subtitle: "East Ave, Diliman, Quezon City",
-    category: "hospital",
-    latitude: 14.6457,
-    longitude: 121.0494,
-    aliases: ["nkti", "kidney institute", "national kidney"],
-  },
-  {
-    id: "curated-lung-center",
-    name: "Lung Center of the Philippines",
-    subtitle: "Quezon Ave, Diliman, Quezon City",
-    category: "hospital",
-    latitude: 14.6468,
-    longitude: 121.0442,
-    aliases: ["lung center", "lcp"],
-  },
-  {
-    id: "curated-pcmc",
-    name: "Philippine Children's Medical Center",
-    subtitle: "Quezon Ave cor. Agham Rd, Quezon City",
-    category: "hospital",
-    latitude: 14.6461,
-    longitude: 121.0401,
-    aliases: ["pcmc", "childrens medical center", "philippine childrens"],
-  },
-  {
-    id: "curated-veterans-hospital",
-    name: "Veterans Memorial Medical Center",
-    subtitle: "North Ave, Diliman, Quezon City",
-    category: "hospital",
-    latitude: 14.6596,
-    longitude: 121.0416,
-    aliases: ["veterans hospital", "veterans memorial", "vmmc"],
-  },
-  {
-    id: "curated-capitol-medical",
-    name: "Capitol Medical Center",
-    subtitle: "Quezon Ave cor. Sct. Magbanua, Quezon City",
-    category: "hospital",
-    latitude: 14.6319,
-    longitude: 121.0211,
-    aliases: ["capitol medical center", "capitol medical", "cmc"],
-  },
-  {
-    id: "curated-world-citi-med",
-    name: "World Citi Medical Center",
-    subtitle: "Aurora Blvd, Cubao, Quezon City",
-    category: "hospital",
-    latitude: 14.6256,
-    longitude: 121.0664,
-    aliases: ["world citi", "world citi med"],
-  },
-  {
-    id: "curated-quirino-memorial",
-    name: "Quirino Memorial Medical Center",
-    subtitle: "Katipunan Ave, Project 4, Quezon City",
-    category: "hospital",
-    latitude: 14.6229,
-    longitude: 121.0743,
-    aliases: ["qmmc", "quirino medical", "quirino memorial"],
-  },
-
-  // --- Government & Civic Centers ---
-  {
-    id: "curated-qc-hall",
-    name: "Quezon City Hall",
-    subtitle: "Elliptical Rd, Diliman, Quezon City",
-    category: "government",
-    latitude: 14.6464,
-    longitude: 121.05,
-    aliases: ["qc hall", "city hall", "quezon city hall", "quezon hall"],
-  },
-  {
-    id: "curated-batasan",
-    name: "Batasang Pambansa Complex",
-    subtitle: "Batasan Hills, Quezon City",
-    category: "government",
-    latitude: 14.6931,
-    longitude: 121.095,
-    aliases: ["batasan", "batasang pambansa", "house of representatives", "congress"],
-  },
-  {
-    id: "curated-sss-main",
-    name: "Social Security System (SSS) Main",
-    subtitle: "East Ave, Diliman, Quezon City",
-    category: "government",
-    latitude: 14.6425,
-    longitude: 121.046,
-    aliases: ["sss main", "sss east ave", "social security system"],
-  },
-  {
-    id: "curated-lto-central",
-    name: "Land Transportation Office (LTO) Central",
-    subtitle: "East Ave, Diliman, Quezon City",
-    category: "government",
-    latitude: 14.6401,
-    longitude: 121.0435,
-    aliases: ["lto central", "lto main", "lto east ave"],
-  },
-  {
-    id: "curated-pagasa-office",
-    name: "PAGASA Central Office",
-    subtitle: "Agham Rd, Diliman, Quezon City",
-    category: "government",
-    latitude: 14.6439,
-    longitude: 121.0437,
-    aliases: ["pagasa", "pagasa office", "weather bureau"],
-  },
-
-  // --- Universities & Schools ---
-  {
-    id: "curated-up-diliman",
-    name: "University of the Philippines Diliman",
-    subtitle: "Diliman, Quezon City",
-    category: "university",
-    latitude: 14.6538,
-    longitude: 121.0685,
-    aliases: ["up diliman", "upd", "university of the philippines", "peyups", "up"],
-  },
-  {
-    id: "curated-ateneo",
-    name: "Ateneo de Manila University",
-    subtitle: "Katipunan Ave, Loyola Heights, Quezon City",
-    category: "university",
-    latitude: 14.6397,
-    longitude: 121.0778,
-    aliases: ["ateneo", "admu", "ateneo de manila"],
-  },
-  {
-    id: "curated-miriam-college",
-    name: "Miriam College",
-    subtitle: "Katipunan Ave, Loyola Heights, Quezon City",
-    category: "university",
-    latitude: 14.6442,
-    longitude: 121.0772,
-    aliases: ["miriam college", "miriam"],
-  },
-  {
-    id: "curated-tip-qc",
-    name: "Technological Institute of the Philippines QC",
-    subtitle: "Aurora Blvd, Cubao, Quezon City",
-    category: "university",
-    latitude: 14.6247,
-    longitude: 121.0669,
-    aliases: ["tip qc", "tip cubao"],
-  },
-
-  // --- Landmarks & Recreation ---
-  {
-    id: "curated-qc-circle",
-    name: "Quezon Memorial Circle",
-    subtitle: "Elliptical Rd, Diliman, Quezon City",
-    category: "landmark",
-    latitude: 14.6517,
-    longitude: 121.0493,
-    aliases: ["qc circle", "quezon memorial circle", "circle", "quezon monument"],
-  },
-  {
-    id: "curated-araneta-coliseum",
-    name: "Smart Araneta Coliseum",
-    subtitle: "Araneta City, Cubao, Quezon City",
-    category: "landmark",
-    latitude: 14.6204,
-    longitude: 121.0528,
-    aliases: ["araneta", "araneta coliseum", "big dome", "smart araneta"],
-  },
-  {
-    id: "curated-ninoy-aquino-wildlife",
-    name: "Ninoy Aquino Parks and Wildlife Center",
-    subtitle: "Elliptical Rd, Diliman, Quezon City",
-    category: "landmark",
-    latitude: 14.6495,
-    longitude: 121.0435,
-    aliases: ["parks and wildlife", "ninoy aquino wildlife", "wildlife park"],
-  },
-  {
-    id: "curated-amoranto-sports",
-    name: "Amoranto Sports Complex",
-    subtitle: "Roces Ave, Diliman, Quezon City",
-    category: "landmark",
-    latitude: 14.6347,
-    longitude: 121.0094,
-    aliases: ["amoranto", "amoranto stadium", "amoranto sports"],
-  },
-  {
-    id: "curated-la-mesa-ecopark",
-    name: "La Mesa Eco Park",
-    subtitle: "Dunhill St, Fairview, Quezon City",
-    category: "landmark",
-    latitude: 14.7153,
-    longitude: 121.0747,
-    aliases: ["la mesa", "la mesa ecopark", "eco park"],
-  },
-
-  // --- Transit Terminals & Stations ---
-  {
-    id: "curated-mrt-north-ave",
-    name: "MRT-3 North Avenue Station",
-    subtitle: "EDSA cor. North Ave, Quezon City",
-    category: "transit",
-    latitude: 14.6528,
-    longitude: 121.0322,
-    aliases: ["mrt north", "mrt north ave", "north ave station"],
-  },
-  {
-    id: "curated-mrt-quezon-ave",
-    name: "MRT-3 Quezon Avenue Station",
-    subtitle: "EDSA cor. Quezon Ave, Quezon City",
-    category: "transit",
-    latitude: 14.6427,
-    longitude: 121.0383,
-    aliases: ["mrt q ave", "mrt quezon ave", "quezon ave station"],
-  },
-  {
-    id: "curated-mrt-cubao",
-    name: "MRT-3 Araneta Center-Cubao Station",
-    subtitle: "EDSA cor. Aurora Blvd, Cubao, Quezon City",
-    category: "transit",
-    latitude: 14.6196,
-    longitude: 121.0514,
-    aliases: ["mrt cubao", "cubao mrt", "araneta cubao station"],
-  },
-  {
-    id: "curated-lrt-cubao",
-    name: "LRT-2 Araneta Center-Cubao Station",
-    subtitle: "Aurora Blvd, Cubao, Quezon City",
-    category: "transit",
-    latitude: 14.6225,
-    longitude: 121.0536,
-    aliases: ["lrt cubao", "cubao lrt"],
-  },
-  {
-    id: "curated-lrt-katipunan",
-    name: "LRT-2 Katipunan Station",
-    subtitle: "Aurora Blvd cor. Katipunan Ave, Quezon City",
-    category: "transit",
-    latitude: 14.6315,
-    longitude: 121.0728,
-    aliases: ["lrt katipunan", "katipunan station"],
-  },
-
-  // --- Fallback & Corridor Connectors ---
-  {
-    id: "curated-ortigas-center",
-    name: "Ortigas Center",
-    subtitle: "Ortigas Ave, Pasig / Mandaluyong",
-    category: "commercial",
-    latitude: 14.5866,
-    longitude: 121.0617,
-    aliases: ["ortigas", "ortigas center"],
-  },
-  {
-    id: "curated-medical-city-ortigas",
-    name: "The Medical City Ortigas",
-    subtitle: "Ortigas Ave, Pasig",
-    category: "hospital",
-    latitude: 14.5894,
-    longitude: 121.0694,
-    aliases: ["medical city", "tmc ortigas", "the medical city"],
-  },
-];
-
 /** The box every result must fall inside, from whatever points are on screen. */
 export function boundingBoxOf(points: LatLng[]): BoundingBox | null {
   if (points.length === 0) return null;
@@ -477,56 +41,6 @@ export function boundingBoxOf(points: LatLng[]): BoundingBox | null {
   return { south, west, north, east };
 }
 
-/** Check whether a point is inside a bounding box with a small buffer. */
-export function isInsideBox(lat: number, lon: number, box: BoundingBox, bufferDeg = 0.05): boolean {
-  return (
-    lat >= box.south - bufferDeg &&
-    lat <= box.north + bufferDeg &&
-    lon >= box.west - bufferDeg &&
-    lon <= box.east + bufferDeg
-  );
-}
-
-/**
- * Instant local search through curated establishments and landmarks.
- * Matches against place name, subtitle, and popular aliases.
- */
-export function searchCuratedPlaces(
-  query: string,
-  box?: BoundingBox | null,
-  limit = 6,
-): GeocodeResult[] {
-  const q = query.trim().toLowerCase();
-  if (q.length < 2) return [];
-
-  const tokens = q.split(/\s+/).filter(Boolean);
-
-  const matched = CURATED_PLACES.filter((place) => {
-    if (box && !isInsideBox(place.latitude, place.longitude, box)) {
-      return false;
-    }
-    const nameLower = place.name.toLowerCase();
-    const subtitleLower = place.subtitle.toLowerCase();
-    const matchesAllTokens = tokens.every(
-      (tok) =>
-        nameLower.includes(tok) ||
-        subtitleLower.includes(tok) ||
-        place.aliases.some((alias) => alias.toLowerCase().includes(tok)),
-    );
-    return matchesAllTokens;
-  });
-
-  return matched.slice(0, limit).map((p) => ({
-    id: p.id,
-    name: p.name,
-    label: p.name,
-    subtitle: p.subtitle,
-    category: p.category,
-    latitude: p.latitude,
-    longitude: p.longitude,
-  }));
-}
-
 function cleanEstablishmentName(rawName?: string, displayName?: string): string {
   if (rawName && rawName.trim().length > 0) {
     return rawName.trim();
@@ -541,6 +55,7 @@ type NominatimAddress = {
   road?: string;
   suburb?: string;
   neighbourhood?: string;
+  village?: string;
   city_district?: string;
   city?: string;
   town?: string;
@@ -550,7 +65,7 @@ type NominatimAddress = {
 
 function formatSubtitle(address?: NominatimAddress, displayName?: string): string {
   if (address) {
-    const primary = address.road || address.neighbourhood || address.suburb;
+    const primary = address.road || address.suburb || address.neighbourhood || address.village;
     const secondary = address.city || address.town || address.municipality || address.county;
     if (primary && secondary && primary !== secondary) {
       return `${primary}, ${secondary}`;
@@ -617,6 +132,215 @@ function inferCategory(category?: string, type?: string): PlaceCategory {
 
 const MIN_QUERY_LENGTH = 3;
 
+/** Fixed Metro Manila fence used when no caller box applies: west,south,east,north. */
+const METRO_MANILA_BOX: BoundingBox = { south: 14.35, west: 120.9, north: 14.78, east: 121.15 };
+
+const QUERY_ABBREVIATIONS: Record<string, string> = {
+  "brgy.": "Barangay",
+  brgy: "Barangay",
+  "bgy.": "Barangay",
+  bgy: "Barangay",
+  "subd.": "Subdivision",
+  subd: "Subdivision",
+  "q.c.": "Quezon City",
+  "q.c": "Quezon City",
+  qc: "Quezon City",
+  "st.": "Street",
+  st: "Street",
+  "ave.": "Avenue",
+  ave: "Avenue",
+  "blvd.": "Boulevard",
+  blvd: "Boulevard",
+  "rd.": "Road",
+  rd: "Road",
+  "dr.": "Drive",
+  dr: "Drive",
+  "hosp.": "Hospital",
+  hosp: "Hospital",
+  "ctr.": "Center",
+  ctr: "Center",
+  "cntr.": "Center",
+  cntr: "Center",
+  "univ.": "University",
+  univ: "University",
+  "mkt.": "Market",
+  mkt: "Market",
+  "pob.": "Poblacion",
+  pob: "Poblacion",
+  "dist.": "District",
+  dist: "District",
+  "elem.": "Elementary",
+  elem: "Elementary",
+  "h.s.": "High School",
+  hs: "High School",
+};
+
+/** Expand local address shorthand so every tier searches the same full words. */
+export function normalizeSearchQuery(query: string): string {
+  return query
+    .trim()
+    .split(/\s+/)
+    .map((token) => QUERY_ABBREVIATIONS[token.toLowerCase()] ?? token)
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Words as the matcher sees them: abbreviations expanded, punctuation gone. */
+export function searchTokens(text: string): string[] {
+  return normalizeSearchQuery(text)
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
+
+/** One insertion, deletion, substitution or adjacent letter swap. */
+function hasOneTypo(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i += 1;
+    else if (a.length < b.length) j += 1;
+    else if (a[i + 1] === b[j] && a[i] === b[j + 1]) {
+      i += 2; // "Qeuzon" -> "Quezon"
+      j += 2;
+    } else {
+      i += 1;
+      j += 1;
+    }
+  }
+  return true;
+}
+
+/** Initials of the meaningful words, so "up" can mean University Philippines. */
+function initialsOf(words: string[]): string {
+  return words
+    .filter((word) => !["of", "the", "and", "de", "del", "la"].includes(word))
+    .map((word) => word[0])
+    .join("");
+}
+
+/**
+ * True when every query word appears in the text words, as an acronym's
+ * initials, or with one small typo in a longer word. Short words stay exact
+ * so "hall" never matches "fall".
+ */
+export function matchesTokens(needles: string[], words: string[]): boolean {
+  if (needles.length === 0) return false;
+  const initials = initialsOf(words);
+  return needles.every(
+    (needle) =>
+      words.some((word) => word.includes(needle)) ||
+      (needle.length >= 2 && needle.length <= 5 && initials.includes(needle)) ||
+      (needle.length >= 5 && words.some((word) => word.length >= 5 && hasOneTypo(needle, word))),
+  );
+}
+
+/** Convenience for a single query/text pair; callers with many texts precompute tokens once. */
+export function matchesSearchQuery(query: string, text: string): boolean {
+  return matchesTokens(searchTokens(query), searchTokens(text));
+}
+
+/**
+ * Score a result against the query: whole-string closeness first, then every
+ * word must account for itself (exact, prefix, substring, or one typo).
+ * Zero means "not a match"; higher means a better match.
+ */
+export function searchScore(query: string, text: string): number {
+  const needles = searchTokens(query);
+  const words = searchTokens(text);
+  if (needles.length === 0 || words.length === 0) return 0;
+
+  const compactQuery = needles.join("");
+  const compactText = words.join("");
+  let score =
+    compactQuery === compactText
+      ? 100
+      : compactText.startsWith(compactQuery)
+        ? 80
+        : compactText.includes(compactQuery)
+          ? 60
+          : hasOneTypo(compactQuery, compactText)
+            ? 30
+            : 0;
+
+  const initials = initialsOf(words);
+  for (const needle of needles) {
+    const best = Math.max(
+      ...words.map((word) => {
+        if (word === needle) return 4;
+        if (word.startsWith(needle)) return 3;
+        if (word.includes(needle)) return 2;
+        return needle.length >= 5 && word.length >= 5 && hasOneTypo(needle, word) ? 1 : 0;
+      }),
+      needle.length >= 2 && needle.length <= 5 && initials.includes(needle) ? 1 : 0,
+    );
+    if (best === 0) return 0;
+    score += best;
+  }
+  return score;
+}
+
+/** Generic words used to split glued shorthand and fix a letter out of place. */
+const PLACE_WORDS = new Set([
+  ...Object.values(QUERY_ABBREVIATIONS).flatMap(searchTokens),
+  "north",
+  "south",
+  "east",
+  "west",
+  "city",
+  "hall",
+  "mall",
+  "center",
+  "hospital",
+  "medical",
+  "university",
+  "market",
+  "road",
+  "avenue",
+  "street",
+]);
+
+/** Brand/place prefixes locals glue to the next word: "smnorth", "qchall". */
+const GLUED_PREFIXES = ["sm", "up", "st", "brgy", "qc", "tri"];
+
+/** Split only a glued token whose prefix is shorthand and whose rest looks like a word. */
+export function splitGluedShorthand(query: string): string {
+  return query
+    .split(/\s+/)
+    .flatMap((word) => {
+      const lower = word.toLowerCase();
+      const prefix = GLUED_PREFIXES.find((candidate) => lower.startsWith(candidate));
+      if (!prefix || PLACE_WORDS.has(lower) || word.length <= prefix.length + 2) return [word];
+      return [prefix, word.slice(prefix.length)];
+    })
+    .join(" ");
+}
+
+/** Fix a one-letter typo when the word is a known local place word. */
+export function correctPlaceTypos(query: string): string {
+  return query
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const token = searchTokens(word)[0];
+      if (!token || token.length < 5 || PLACE_WORDS.has(token)) return word;
+      for (const known of PLACE_WORDS) {
+        if (known.length >= 5 && hasOneTypo(token, known)) return known;
+      }
+      return word;
+    })
+    .join(" ");
+}
+
 /** Same token the Mapbox map itself renders with (a public pk token). */
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "";
 
@@ -643,11 +367,9 @@ type MapboxFeature = {
 
 /**
  * Place and address autocomplete via the Mapbox Geocoding API (the same
- * provider as the basemap and dry-state directions). Unlike the Nominatim
- * fallback below this includes POIs -- malls, hospitals, terminals -- and
- * ranks by relevance around `proximity` instead of hard-filtering to a box,
- * which is how a general-purpose map app answers "Market Market" from
- * Quezon City with the Taguig mall, nearest first.
+ * provider as the basemap and dry-state directions). Includes POIs -- malls,
+ * hospitals, terminals -- inside the Metro Manila bbox, ranked by relevance
+ * around `proximity`.
  */
 export async function searchMapbox(
   query: string,
@@ -655,7 +377,7 @@ export async function searchMapbox(
   signal?: AbortSignal,
   token: string = MAPBOX_TOKEN,
 ): Promise<GeocodeResult[]> {
-  const trimmed = query.trim();
+  const trimmed = normalizeSearchQuery(query);
   if (trimmed.length < MIN_QUERY_LENGTH || !token) return [];
 
   const params = new URLSearchParams({
@@ -664,7 +386,8 @@ export async function searchMapbox(
     limit: "10",
     country: "ph",
     language: "en",
-    types: "poi,address,place,locality,neighborhood",
+    bbox: "120.90,14.35,121.15,14.78",
+    types: "poi,address,neighborhood,locality,place",
   });
   if (proximity) params.set("proximity", `${proximity.longitude},${proximity.latitude}`);
 
@@ -774,25 +497,24 @@ export async function reverseGeocodeCity(
 }
 
 /**
- * Free-text address and establishment search via Nominatim (OSM's own geocoder).
- * Request addressdetails to separate place name from street/city subtitle.
- * The viewbox is a ranking bias, not a fence: a result outside the pilot
- * network (a Taguig mall searched from Quezon City) is still a real
- * destination, so `bounded` stays off.
+ * Free-text address and establishment search via Nominatim (OSM's own geocoder),
+ * bounded to Metro Manila so the fallback cannot drift outside the pilot area.
+ * Address details separate the place name from its road/barangay/city subtitle.
  */
 export async function searchAddress(
   query: string,
-  box: BoundingBox,
+  box: BoundingBox = METRO_MANILA_BOX,
   signal?: AbortSignal,
 ): Promise<GeocodeResult[]> {
-  const trimmed = query.trim();
+  const trimmed = normalizeSearchQuery(query);
   if (trimmed.length < MIN_QUERY_LENGTH) return [];
 
   const params = new URLSearchParams({
     q: trimmed,
     format: "jsonv2",
     limit: "5",
-    viewbox: `${box.west},${box.north},${box.east},${box.south}`,
+    viewbox: `${box.west.toFixed(2)},${box.north.toFixed(2)},${box.east.toFixed(2)},${box.south.toFixed(2)}`,
+    bounded: "1",
     addressdetails: "1",
     countrycodes: "ph",
   });
@@ -832,48 +554,80 @@ export async function searchAddress(
     .filter((row) => Number.isFinite(row.latitude) && Number.isFinite(row.longitude));
 }
 
+/** Tier results can overlap: same name, or essentially the same coordinates. */
+function mergeUnique(places: GeocodeResult[]): GeocodeResult[] {
+  const merged: GeocodeResult[] = [];
+  for (const place of places) {
+    const duplicate = merged.some(
+      (other) =>
+        other.name.toLowerCase() === place.name.toLowerCase() ||
+        Math.abs(other.latitude - place.latitude) + Math.abs(other.longitude - place.longitude) < 0.001,
+    );
+    if (!duplicate) merged.push(place);
+  }
+  return merged;
+}
+
+function distanceTo(place: GeocodeResult, point: LatLng): number {
+  return Math.abs(place.latitude - point.latitude) + Math.abs(place.longitude - point.longitude);
+}
+
 /**
- * Unified place search: instant curated establishments first, then live
- * geocoding -- Mapbox (POIs, proximity-ranked, no geographic fence) when a
- * token is configured, Nominatim inside the network box otherwise.
+ * Unified place search: Mapbox inside Metro Manila (biased to the driver),
+ * with OSM as a second live tier. OSM is consulted when Mapbox has no exact
+ * name hit, so a fuzzy "Avenue Extension" cannot outrank the actual avenue.
+ * Results are deduplicated, exact names ranked first, then the closest to
+ * the driver.
  */
 export async function searchPlaces(
   query: string,
-  opts: { box?: BoundingBox | null; proximity?: LatLng | null; mapboxToken?: string } = {},
+  opts: { proximity?: LatLng | null; mapboxToken?: string } = {},
   signal?: AbortSignal,
 ): Promise<GeocodeResult[]> {
-  const { box = null, proximity = null, mapboxToken = MAPBOX_TOKEN } = opts;
-  const curated = searchCuratedPlaces(query, box, 5);
+  const { proximity = null, mapboxToken = MAPBOX_TOKEN } = opts;
+  const normalizedQuery = normalizeSearchQuery(query);
+  // The geocoders know words, not glued shorthand or common misspellings.
+  const providerQuery = correctPlaceTypos(normalizeSearchQuery(splitGluedShorthand(query)));
+  const scores = new Map<GeocodeResult, number>();
+  const scoreOf = (place: GeocodeResult) => {
+    let score = scores.get(place);
+    if (score === undefined) {
+      score = searchScore(providerQuery, `${place.name} ${place.subtitle}`);
+      scores.set(place, score);
+    }
+    return score;
+  };
+  // Autocomplete happily returns "Fall Street" for "hall": keep only results
+  // that actually match the searched words before ranking them.
+  const matchesQuery = (place: GeocodeResult) => scoreOf(place) > 0;
+  const isExactName = (place: GeocodeResult) => place.name.toLowerCase() === normalizedQuery.toLowerCase();
 
-  if (query.trim().length < MIN_QUERY_LENGTH) {
-    return curated;
+  if (normalizedQuery.length < MIN_QUERY_LENGTH) {
+    return [];
   }
 
   try {
-    // Always try Mapbox first if token is available
-    const mapboxResults = mapboxToken ? await searchMapbox(query, proximity, signal, mapboxToken) : [];
-    
-    // If Mapbox returns results, use them; otherwise fall back to Nominatim
-    const liveResults = mapboxResults.length > 0 
-      ? mapboxResults
-      : await searchAddress(query, box || { south: 14.5, west: 121.0, north: 14.8, east: 121.2 }, signal);
-    
-    // Combine and deduplicate against curated results
-    const combined = [...curated];
-    for (const item of liveResults) {
-      const alreadyPresent = combined.some((c) => {
-        const nameMatch = c.name.toLowerCase() === item.name.toLowerCase();
-        const distDiff =
-          Math.abs(c.latitude - item.latitude) + Math.abs(c.longitude - item.longitude);
-        return nameMatch || distDiff < 0.001; // ~100m
-      });
-      if (!alreadyPresent) {
-        combined.push(item);
-      }
-    }
-    return combined.slice(0, 10);
-  } catch (error) {
-    // Fallback to curated if search fails
-    return curated;
+    const mapboxResults = mapboxToken
+      ? (await searchMapbox(providerQuery, proximity, signal, mapboxToken)).filter(matchesQuery)
+      : [];
+    // One bounded OSM request at most: only when Mapbox has no exact hit.
+    const osmResults =
+      mapboxResults.some(isExactName)
+        ? []
+        : (await searchAddress(providerQuery, METRO_MANILA_BOX, signal)).filter(matchesQuery);
+
+    const merged = mergeUnique([...mapboxResults, ...osmResults]);
+    merged.sort((a, b) => {
+      const exact = Number(isExactName(b)) - Number(isExactName(a));
+      return (
+        scoreOf(b) - scoreOf(a) ||
+        exact ||
+        (proximity ? distanceTo(a, proximity) - distanceTo(b, proximity) : 0)
+      );
+    });
+    return merged.slice(0, 8);
+  } catch {
+    // A failed or aborted search simply has nothing to show.
+    return [];
   }
 }
