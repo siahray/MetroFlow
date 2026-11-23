@@ -59,13 +59,13 @@ links to its full writeup via the ID.
 ███████████████░░░░░ 78%  (19.5 / 25)
 ```
 
-- [x] NFR-001, 002 — network state / routing latency within budget (measured, `bench_latency.py`)
+- [ ] NFR-001, 002 — network state / routing latency not currently met: 13 Nov 2026 hosted p95 ≈11× / 14.7× over budget (`BRD.md` NFR-001/002, `TSD.md` LIM-028; Q-4 re-measurement reversed the earlier pass)
 - [x] NFR-004 — ZAP scan, 0 High/Medium (false-positive root-caused and fixed; awaiting a live CI run to confirm)
 - [x] NFR-005, 006, 007 — secrets, RLS, PII protection
 - [x] NFR-008, 010, 011 — triage interaction count, browser support, accessibility (axe-core in CI)
 - [x] NFR-012, 013, 014, 015 — migrations-only schema, external config, audit attribution, horizontal scaling
 - [x] NFR-017 — units and timezone
-- [x] NFR-019 — SSE publish latency ≤100ms p95 (was failing, fixed by lowering the poll interval)
+- [ ] NFR-019 — SSE publish latency ≤100 ms p95 not currently met: 13 Nov 2026 hosted p95 ≈1,374 ms, 13.7× over budget (`BRD.md` NFR-019, `TSD.md` LIM-028; Q-4 re-measurement reversed the earlier pass)
 - [x] NFR-020, 021, 022 — role checks, location privacy, telemetry throttle
   - [ ] 🔶 NFR-016 — RPO/RTO defined; `scripts/backup-db.sh` now runs nightly via a launchd job (03:00, 14-dump retention) and the drill on the hosted cluster matched prod row counts exactly; a restore *over* prod stays a go-ahead-gated runbook step — the free tier has no managed backups to restore from
 - [x] NFR-023 — storm/night theme now covers the driver app's navigation screen plus Home, SOS, Report and Report History (10 Nov 2026); the admin portal stays single-theme by standing scope decision, not a gap
@@ -147,7 +147,7 @@ list) — that table is stale, see §6.
 - [x] Q-3 — mobile lint in CI, clean again (was red on `main` since the F-4 commit over a `useEffect`-based `setState` in `home.tsx` that a newer `eslint-plugin-react-hooks` rule flags; fixed 10 Nov 2026 in passing while touching that file for NFR-023)
 - [x] Q-5 — `_cleanup_leftover_rows` autouse fixture in `test_api_integration.py` diffs `sos_requests`/`hazard_zones`/`users` ids and deletes what each test added; a user with audit history is left in place (append-only `audit_logs`, by design), everything else no longer accumulates
 - [x] Q-1 — portal tests cover `confirm-dialog`, `error-notice`, `incident-queue`, `searchable-select`, `sensor-management`, `toast-provider`, `unit-form-modal` and `use-dialog-focus`, plus `lib/` units (110 tests total); Playwright adds 11 e2e tests for login, dashboard, radar, call-in focus, offline/error and axe (LIM-009). The driver app has a jest-expo + `@testing-library/react-native` harness (`jest.config.js`, `__tests__/`, `bun run test:components`) with first coverage on `Avatar`/`initialsOf`/`PasswordField`. Heavier screens still need per-screen native-module mocks
-- [x] Q-4 — hazard-publish + network/routing latency measured earlier (NFR-019, 001/002); offline-route planning latency measured 10 Nov 2026 via `metroflow-mobile/benchmarks/offline-route.ts` (p50 ~1 ms at 1600-node scale in the JS runtime; on-device confirmation rides with Q-2)
+- [x] Q-4 — hazard-publish + network/routing latency measured earlier (NFR-019, 001/002), but the 13 Nov 2026 hosted re-measurement reversed the earlier pass on all three (BRD figures, LIM-028); offline-route planning latency measured 10 Nov 2026 via `metroflow-mobile/benchmarks/offline-route.ts` (p50 ~1 ms at 1600-node scale in the JS runtime; on-device confirmation rides with Q-2)
 - [ ] ⛔ Q-2 — offline device test (TC-029/030) — deferred with the pilot/UAT, not an engineering gap right now
 
 ## 7. Documentation hygiene (not code)
@@ -166,7 +166,9 @@ list) — that table is stale, see §6.
 
 - [x] `FSD-FR-113`: `/triage` is a read-only operations dashboard — four KPI
   links, attention band, oldest unattended reports/unassigned SOS, read-only map
-  and trends; no verification or dispatch action.
+  and trends; no verification or dispatch action. The Active sensors view is a
+  read-only modal opened from `/triage` (`active-sensors-modal.tsx`, component
+  test), not an inline panel; no `/sensors` admin page exists.
 - [x] `FSD-FR-114`–`115`: `/moderation` is the only report-verification surface;
   `/radar` is SOS-only (app SOS plus call-in) with specific-unit assignment.
 - [x] `FSD-FR-116`–`117`: unit tracking (live/stale/offline/unknown fix state,
@@ -191,8 +193,9 @@ list) — that table is stale, see §6.
   mirrors the fallback.
 - [x] Admin map and SOS dispatch preview deliberately keep the hard clearance
   gate; `LIM-031` records that the warning is advisory, not a safety guarantee.
-- [ ] Amendment A1 sign-off (Project Lead / QA & Documentation Lead) is pending;
-  the original CR-001 approval is unchanged.
+- [x] Amendment A1 sign-off recorded 23 Nov 2026 (Project Lead 21 Nov;
+  QA/Documentation Lead, Academic Adviser and Academic Panel 23 Nov); part of the
+  approved baseline. The original CR-001 approval is unchanged.
 
 ## 10. Driver app — current-conditions weather card (21 Nov 2026)
 
@@ -308,16 +311,34 @@ list) — that table is stale, see §6.
   previously revealed the first real screen directly, with no JS
   splash moment at all.
 
+## 18. Mobile — SOS screen's "white buttons" root-caused and fixed app-wide (22 Nov 2026)
+
+- [x] `sos.tsx` had been rewritten with its own local `storm` boolean and
+  hand-rolled per-mode ternaries instead of the shared theme; several
+  of them picked a `c.slate700/800/900` token as the storm-mode choice,
+  which is itself storm-overridden to a bright *text* shade, so the
+  background came out bright instead of dark (the info button, the
+  Active Geo-Lock pill, the Your Location card, the SOS and Cancel
+  buttons). Fixed each at its call site; `report.tsx` was audited and
+  found not to have the bug.
+- [x] The identical "always-dark ink button using a theme-flipping
+  slate token" mistake was also present, independently, in
+  `home.tsx`'s mission Navigate button, `index.tsx` (4 spots),
+  `QuickPicks.tsx` (2), `SOSUpdateModal.tsx`, and `VehicleGarage.tsx`
+  — all moved to the constant `c.inkBg`/`c.onInk` pair.
+- [x] Fixed three real compile errors surfaced in the process:
+  `red900`/`green900`/`amber400` didn't exist on `ThemeColors`; added
+  as fixed (non-storm-overridden) values in `lightColors`.
+
 ## Explicitly excluded (not implementation work)
 
 - **Out of scope by design:** Evacuation Centers, Comms Streams, Crew Profiles,
   Civic Broadcasts, Air-Asset Escalation, functional offline tile caching,
   real CCTV — all in `AGENTS.md`'s scope constraints.
 - **Unapproved future proposal:** CR-003 (Sentinel-1 satellite ingestion) —
-  a change request, not committed scope. CR-002 (admin screen split) is also
-  still **Draft — proposed** (sign-offs pending), but it is implemented in the
-  portal and synced into the BRD/FSD/TSD/API/design baseline; its remaining open
-  items are listed in §8 below.
+  a change request, not committed scope. CR-002 (admin screen split) is
+  Approved 23 Nov 2026 and included in the approved baseline; remaining open
+  items are in §8.
 - **Business/academic paperwork:** budgets, approvals, charter dates, ROI
   figures in `PROJECT_CHARTER.md`, `BUSINESS_CASE.md`, `PROJ_MANAGEMENT_PLAN.md`,
   `APPROVALS.md`, `CR-001..004.md` — explicitly `[TBC]` placeholders for the

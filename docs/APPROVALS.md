@@ -7,7 +7,7 @@
 | Project        | MetroFlow                                                             |
 | Document       | Approval Register                                                     |
 | Version        | 1.0                                                                   |
-| Status         | For Review — scope baseline (including driver app, live hazards, fleet dispatch, sensors and live flood-state sources) approved; A-01 to A-09 remain For Review |
+| Status         | For Review — scope baseline (including driver app, live hazards, fleet dispatch, sensors and live flood-state sources) approved; all change requests approved; A-01 to A-09 remain For Review |
 | Date           | 23 October 2026                                                       |
 | Context        | Academic capstone project — not an official LGU project               |
 | Cost boundary  | No project fee; free tiers, open data and institutional resources only |
@@ -48,14 +48,14 @@ cannot close until its dependencies are approved.
 
 | ID   | Item | Version | What is being approved | Approver | Status | Blocks implementation? |
 | ---- | ---- | ------- | ---------------------- | -------- | ------ | ---------------------- |
-| A-01 | [Project Charter](PROJECT_CHARTER.md) | 1.4 | Academic authorisation, scope, objectives and success criteria | «Project Adviser» / panel | For Review | Yes |
-| A-02 | [Business Requirements Document](BRD.md) | 1.4 | Problem statement, business requirements and stakeholders | «Project Adviser» / panel | For Review | Yes |
-| A-03 | [Business Case](BUSINESS_CASE.md) | 1.4 | Option choice, benefits and the no-fee cost boundary | «Project Adviser» / panel | For Review | Yes |
-| A-04 | [Functional Specification](FSD.md) | 1.3 | Functional behaviour, actors, requirements and tests | «Project Adviser» / panel | For Review | Yes |
-| A-05 | [Technical Specification](TSD.md) | 1.4 | Architecture, data model, security and technical decisions | «Project Adviser» / panel | For Review | Yes |
-| A-06 | [Project Management Plan](PROJ_MANAGEMENT_PLAN.md) | 1.6 | Schedule, quality, risk, communication and change control | «Project Adviser» / panel | For Review | Yes |
-| A-07 | [API Reference](api.md) | 1.4 | Implemented API contracts and error model | «Project Adviser» / panel; technical review by «Project Team Lead» | Draft | Yes |
-| A-08 | [Admin UI Design Baseline](design/ADMIN_UI_BASELINE.md) | 0.4 | Admin design gate, components, states and traceability | «Project Adviser» / panel | For Review | Yes |
+| A-01 | [Project Charter](final%20document/Project_Charter.md) | 1.1 | Academic authorisation, scope, objectives and success criteria | «Project Adviser» / panel | For Review | Yes |
+| A-02 | [Business Requirements Document](final%20document/BRD.md) | 1.2 | Problem statement, business requirements and stakeholders | «Project Adviser» / panel | For Review | Yes |
+| A-03 | [Business Case](final%20document/Business_Case.md) | 1.0 | Option choice, benefits and the no-fee cost boundary | «Project Adviser» / panel | For Review | Yes |
+| A-04 | [Functional Specification](final%20document/FSD.md) | 1.2 | Functional behaviour, actors, requirements and tests | «Project Adviser» / panel | For Review | Yes |
+| A-05 | [Technical Specification](final%20document/TSD.md) | 1.2 | Architecture, data model, security and technical decisions | «Project Adviser» / panel | For Review | Yes |
+| A-06 | [Project Management Plan](final%20document/Project-Management-Plan.md) | 1.0 | Schedule, quality, risk, communication and change control | «Project Adviser» / panel | For Review | Yes |
+| A-07 | [API Reference](api.md) | 2.0 | Implemented API contracts and error model | «Project Adviser» / panel; technical review by «Project Team Lead» | Draft | Yes |
+| A-08 | [Admin UI Design Baseline](design/ADMIN_UI_BASELINE.md) | 0.5 | Admin design gate, components, states and traceability | «Project Adviser» / panel | For Review | Yes |
 | A-09 | [Driver App Design Baseline](design/DRIVER_APP_BASELINE.md) | 0.7 | Driver design gate, screens, states and traceability | «Project Adviser» / panel | For Review | Yes |
 | A-13 | Implementation start gate | — | A-01 to A-09 approved or formally deferred; open decisions closed | «Project Adviser» / panel | Partly cleared — A-01 to A-09 still For Review | Yes |
 | A-14 | Data and privacy approach | — | Synthetic/public data, no real personal data, no live CCTV | «Project Adviser» / panel | For Review | Yes before any real data |
@@ -63,8 +63,8 @@ cannot close until its dependencies are approved.
 | A-17 | Final document set and defense | — | All documents accepted and limitations disclosed | «Project Adviser» / panel | Not started | Yes for final acceptance |
 | A-18 | External free-tier service use | — | Supabase, Mapbox/OSM, Copernicus/Sentinel, EAS and GitHub free tiers | «Project Adviser» / `«Project Team Lead»` | For Review | Yes before provisioning accounts |
 | A-19 | Native distribution path (`OD-D07`) | — | EAS/TestFlight/internal build path, bundle identifiers and accounts; public store release remains separate | «Project Adviser» / panel | Open | Yes before a native binary is distributed |
-| A-20 | [Change Request CR-002](Change%20Request/CR-002.md) | — | Admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with unit assignment and dual-mode responder tracking | Project Lead; «Project Adviser» / panel | Proposed — not approved; implemented and documented | No — pilot build proceeds, but the CR is not an approved baseline change |
-| A-21 | [CR-001 Amendment A1](Change%20Request/CR-001.md#5-amendment-a1--opt-in-least-submerged-route-21-november-2026) | — | Opt-in least-submerged route with a submersion warning when no flood-safe route exists | Project Lead; «Project Adviser» / panel | Proposed — not approved; implemented and documented 21 Nov 2026 | No — original CR-001 approval is unchanged |
+| A-20 | [Change Request CR-002](Change%20Request/CR-002.md) | — | Admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with unit assignment and dual-mode responder tracking | Project Lead; «Project Adviser» / panel | Approved — 23 Nov 2026; implemented and documented | No — included in the approved baseline |
+| A-21 | [CR-001 Amendments A1 and A2](Change%20Request/CR-001.md) | — | Opt-in least-submerged route with a submersion warning when no flood-safe route exists; driver weather card, report contract tightening and proximity tuning | Project Lead; «Project Adviser» / panel | Approved — 23 Nov 2026; implemented and documented | No — included in the approved baseline |
 
 ### 2.1 Open decisions that block the gate
 
@@ -88,7 +88,7 @@ they are resolved or explicitly deferred in writing.
 | 15 Nov 2026 | CR-009: admin SOS incident location map | Approved by the Project Lead | Standalone single-marker map and Nominatim reverse-geocode in the Dispatch Radar incident panel, implemented 14 Nov 2026. Adviser and panel acknowledgement not recorded. See [CR-009.md](CR-009.md) |
 | 15 Nov 2026 | CR-010: driver app Mapbox basemap, place search, door-to-door | Approved by the Project Lead | `@rnmapbox/maps` replaces `react-native-maps`; Mapbox Geocoding primary search with Nominatim fallback; drop-a-pin; snap-to-road puck; implemented 11-14 Nov 2026. Adviser and panel acknowledgement not recorded. See [CR-010.md](CR-010.md) |
 | 15 Nov 2026 | CR-011: flood simulation recalibrated for the real network | Approved by the Project Lead | Per-node placeholder elevation replacing the flat 10 m default; `depression_factor`/`ponding_amplification` recalibrated so flood state now crosses all three passability bands; `/simulate` serialisation and rain-gauge coverage fixed to match; implemented 14-15 Nov 2026. The hosted-database elevation write was run only after the Project Lead's explicit go-ahead in chat. Adviser and panel acknowledgement not recorded. See [CR-011.md](CR-011.md) |
-| 20 Nov 2026 | CR-002: admin screen split | **Proposed — not approved** | Implemented in the portal and synced into the BRD/FSD/TSD/API/design baseline: `FSD-FR-113`–`118`, `BRULE-019`, `ADR-027`, `TC-069`–`074`. Project Lead and adviser/panel sign-offs in the CR's §6 are still pending; the responder client and `OD-D27` are also open. See [CR-002.md](Change%20Request/CR-002.md) |
+| 20 Nov 2026 | CR-002: admin screen split | **Approved by the Project Lead 21 Nov 2026; all formal sign-offs recorded 23 Nov 2026** | Implemented in the portal and synced into the BRD/FSD/TSD/API/design baseline: `FSD-FR-113`–`118`, `BRULE-019`, `ADR-027`, `TC-069`–`074`. All CR-002 §6 sign-offs are recorded, as are the CR-001 Amendment A1/A2 approvals; the responder client and `OD-D27` remain open implementation items. See [CR-002.md](Change%20Request/CR-002.md) |
 
 This decision does not move A-01 to A-09, which remain For Review, and it does
 not close the open design decisions in §2.1. A-13 therefore stays open on
