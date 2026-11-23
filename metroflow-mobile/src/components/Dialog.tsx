@@ -163,7 +163,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   backgroundColor: pending?.destructive ? c.red600 : c.slate900,
                 }}
               >
-                <Text style={{ fontSize: fontSize.label, fontWeight: "800", color: c.white }}>
+                <Text
+                  style={{
+                    fontSize: fontSize.label,
+                    fontWeight: "800",
+                    color: pending?.destructive ? c.onInk : c.white,
+                  }}
+                >
                   {pending?.confirmLabel ?? "OK"}
                 </Text>
               </TouchableOpacity>

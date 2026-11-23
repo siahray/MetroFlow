@@ -129,6 +129,7 @@ export default function HomeScreen() {
   const online = useOnline();
   const pendingReports = usePendingReports();
   const { c, mode } = useTheme();
+  const storm = mode === 'storm';
   const VEHICLE_STATUS_COLOR = vehicleStatusColor(c);
 
   const displayName = user?.name || user?.email || 'Guest';
@@ -374,6 +375,10 @@ export default function HomeScreen() {
               backgroundColor: c.white,
               alignItems: 'center',
               justifyContent: 'center',
+              shadowColor: c.blue400,
+              shadowOpacity: storm ? 0.5 : 0,
+              shadowRadius: storm ? 8 : 0,
+              elevation: storm ? 4 : 0,
             }}
           >
             <Waves size={22} color={c.blue600} />
@@ -390,7 +395,16 @@ export default function HomeScreen() {
           accessibilityLabel="Open profile"
           onPress={() => router.push('/(tabs)/profile')}
         >
-          <Avatar name={user?.name || user?.email} size={40} />
+          <View
+            style={{
+              shadowColor: c.blue400,
+              shadowOpacity: storm ? 0.5 : 0,
+              shadowRadius: storm ? 8 : 0,
+              elevation: storm ? 4 : 0,
+            }}
+          >
+            <Avatar name={user?.name || user?.email} size={40} />
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -488,13 +502,13 @@ export default function HomeScreen() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: space[6],
-                  backgroundColor: c.slate900,
+                  backgroundColor: c.inkBg,
                   borderRadius: 10,
                   paddingVertical: space[12],
                 }}
               >
-                <Navigation size={16} color={c.white} />
-                <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.white }}>
+                <Navigation size={16} color={c.onInk} />
+                <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.onInk }}>
                   Navigate
                 </Text>
               </TouchableOpacity>
@@ -578,12 +592,18 @@ export default function HomeScreen() {
           onPress={() => router.push('/map')}
           activeOpacity={0.9}
           style={{
-            backgroundColor: c.slate900,
+            backgroundColor: storm ? c.white : c.slate900,
             borderRadius: 16,
             padding: space[16],
             flexDirection: 'row',
             alignItems: 'center',
             gap: space[12],
+            borderWidth: storm ? 1 : 0,
+            borderColor: storm ? c.blue300 : undefined,
+            shadowColor: storm ? c.blue400 : undefined,
+            shadowOpacity: storm ? 0.5 : undefined,
+            shadowRadius: storm ? 8 : undefined,
+            elevation: storm ? 4 : undefined,
           }}
         >
           <View
@@ -599,8 +619,8 @@ export default function HomeScreen() {
             <RouteIcon size={22} color={c.white} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: c.white }}>Plan a Safe Route</Text>
-            <Text style={{ fontSize: fontSize.body, color: c.slate300, marginTop: space[2] }} numberOfLines={1}>
+            <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: storm ? c.slate900 : c.white }}>Plan a Safe Route</Text>
+            <Text style={{ fontSize: fontSize.body, color: storm ? c.slate500 : c.slate300, marginTop: space[2] }} numberOfLines={1}>
               Find safer routes &amp; avoid flooded roads
             </Text>
           </View>
@@ -609,12 +629,12 @@ export default function HomeScreen() {
               width: 34,
               height: 34,
               borderRadius: 17,
-              backgroundColor: c.slate700,
+              backgroundColor: storm ? c.slate200 : c.slate700,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <ArrowRight size={17} color={c.white} />
+            <ArrowRight size={17} color={storm ? c.slate900 : c.white} />
           </View>
         </TouchableOpacity>
 

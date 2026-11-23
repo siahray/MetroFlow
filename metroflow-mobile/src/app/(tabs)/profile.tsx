@@ -277,6 +277,10 @@ export default function ProfileScreen() {
             backgroundColor: c.white,
             alignItems: 'center',
             justifyContent: 'center',
+            shadowColor: c.blue400,
+            shadowOpacity: themeMode === 'storm' ? 0.5 : 0,
+            shadowRadius: themeMode === 'storm' ? 8 : 0,
+            elevation: themeMode === 'storm' ? 4 : 0,
           }}
         >
           <Waves size={22} color={c.blue600} />
@@ -295,7 +299,20 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Identity: the one dark card on the screen, same treatment as Home's route card */}
-        <View style={{ backgroundColor: c.inkBg, borderRadius: 20, padding: space[20], gap: space[16] }}>
+        <View
+          style={{
+            backgroundColor: c.inkBg,
+            borderRadius: 20,
+            padding: space[20],
+            gap: space[16],
+            borderWidth: themeMode === 'storm' ? 1 : 0,
+            borderColor: themeMode === 'storm' ? c.blue300 : undefined,
+            shadowColor: themeMode === 'storm' ? c.blue400 : undefined,
+            shadowOpacity: themeMode === 'storm' ? 0.5 : undefined,
+            shadowRadius: themeMode === 'storm' ? 8 : undefined,
+            elevation: themeMode === 'storm' ? 4 : undefined,
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[14] }}>
             <View
               style={{

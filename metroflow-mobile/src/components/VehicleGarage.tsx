@@ -406,11 +406,11 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
                     alignItems: 'center',
                     borderRadius: 10,
                     paddingVertical: space[12],
-                    backgroundColor: c.slate900,
+                    backgroundColor: c.inkBg,
                     opacity: saving || !draft?.name.trim() ? 0.5 : 1,
                   }}
                 >
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>Save</Text>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>

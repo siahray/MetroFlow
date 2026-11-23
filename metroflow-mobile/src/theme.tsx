@@ -3,82 +3,103 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 
 import { savePrefs, usePrefs } from "./prefs";
 
-/** Brand palette. Primary is slate-900, success emerald (AGENTS.md); use these, not raw hex. */
+/**
+ * Brand palette. Primary is slate-900, success emerald (AGENTS.md); use these, not raw hex.
+ * Grouped by family, and each shade names the UI that consumes it so a token can
+ * be retuned without hunting through every screen. "Reserved" means no callers yet.
+ */
 export const lightColors = {
-  white: "#ffffff",
-  black: "#000000",
-  slate50: "#f8fafc",
-  slate100: "#f1f5f9",
-  slate200: "#e2e8f0",
-  slate300: "#cbd5e1",
-  slate400: "#94a3b8",
-  slate500: "#64748b",
-  slate600: "#475569",
-  slate700: "#334155",
-  slate800: "#1e293b",
-  slate900: "#0f172a",
-  blue50: "#eff6ff",
-  blue100: "#dbeafe",
-  blue200: "#bfdbfe",
-  blue300: "#93c5fd",
-  blue400: "#60a5fa",
-  blue500: "#3b82f6",
-  blue600: "#2563eb",
-  blue700: "#1d4ed8",
-  blue800: "#1e40af",
-  blue900: "#1e3a8a",
-  sky50: "#f0f9ff",
-  sky200: "#bae6fd",
-  sky400: "#38bdf8",
-  sky600: "#0284c7",
-  sky700: "#0369a1",
-  cyan600: "#0891b2",
-  red50: "#fef2f2",
-  red100: "#fee2e2",
-  red200: "#fecaca",
-  red300: "#fca5a5",
-  red400: "#f87171",
-  red500: "#ef4444",
-  red600: "#dc2626",
-  red700: "#b91c1c",
-  red800: "#991b1b",
-  rose600: "#e11d48",
-  green50: "#f0fdf4",
-  green200: "#bbf7d0",
-  green300: "#86efac",
-  green400: "#4ade80",
-  green600: "#16a34a",
-  green700: "#15803d",
-  green800: "#166534",
-  emerald50: "#ecfdf5",
-  emerald100: "#d1fae5",
-  emerald200: "#a7f3d0",
-  emerald600: "#059669",
-  emerald700: "#047857",
-  emerald800: "#065f46",
-  emerald950: "#052e1b",
-  amber100: "#fef3c7",
-  amber200: "#fde68a",
-  amber300: "#fcd34d",
-  amber500: "#f59e0b",
-  amber600: "#d97706",
-  amber700: "#b45309",
-  amber800: "#92400e",
-  orange50: "#fff7ed",
-  orange200: "#fed7aa",
-  orange800: "#9a3412",
-  /** Warning/info banner surface; dark counterpart lives in stormColors. */
+  // ── Neutrals: surfaces, borders, and the body/title text ramp ─────────────
+  white: "#ffffff", // card, input and chip surfaces; icon strokes on dark/ink fills
+  black: "#000000", // shadowColor on elevated cards; PlacePickerMap canvas
+  slate50: "#f8fafc", // page background (login, offline); route notice cards
+  slate100: "#f1f5f9", // subtle icon tiles, header dividers, neutral status chips
+  slate200: "#e2e8f0", // default card/input/chip borders and list separators
+  slate300: "#cbd5e1", // tertiary text, disabled borders, empty-state icon
+  slate400: "#94a3b8", // placeholder/muted text, inactive chip labels, tab tint
+  slate500: "#64748b", // secondary and helper t ext beneath titles/labels
+  slate600: "#475569", // form labels and route alert body copy
+  slate700: "#334155", // field labels, section subtitles, offline headings
+  slate800: "#1e293b", // emphasized captions, map control icons, auth accents
+  slate900: "#0f172a", // screen titles, hero wordmark, primary buttons (text + bg role)
+
+  // ── Blue: primary actions, info panels and selection ──────────────────────
+  blue50: "#eff6ff", // info card fills: SOS update modal, route alerts, login CTA
+  blue100: "#dbeafe", // live-network badge, soft card tints and borders
+  blue200: "#bfdbfe", // login CTA border, report form focus border
+  blue300: "#93c5fd", // storm-mode selected chip borders, profile card outlines
+  blue400: "#60a5fa", // storm-mode glow on selected cards and buttons
+  blue500: "#3b82f6", // reserved: no current callers
+  blue600: "#2563eb", // primary buttons, map pins, focus icons, nav glyphs
+  blue700: "#1d4ed8", // accent text on info cards, quick-pick labels, login link
+  blue800: "#1e40af", // route screen header pill text
+  blue900: "#1e3a8a", // login link emphasis
+
+  // ── Sky / cyan: connectivity and login identity ───────────────────────────
+  sky50: "#f0f9ff", // offline info banner surface
+  sky200: "#bae6fd", // offline info banner border
+  sky400: "#38bdf8", // login hero wave icon
+  sky600: "#0284c7", // active tab tint, offline banner icon
+  sky700: "#0369a1", // offline banner body text
+  cyan600: "#0891b2", // login shield-check badge
+
+  // ── Red / rose: danger, errors, SOS and rejected states ───────────────────
+  red50: "#fef2f2", // danger card fill, rejected status chip, required-field hint
+  red100: "#fee2e2", // reserved: no current callers
+  red200: "#fecaca", // danger borders: offline, garage, profile, SOS alert
+  red300: "#fca5a5", // reserved: no current callers
+  red400: "#f87171", // storm-mode danger glow, speeding readout
+  red500: "#ef4444", // required-field asterisks, danger chip outlines
+  red600: "#dc2626", // error text/icons, destructive buttons, map alert borders
+  red700: "#b91c1c", // danger body copy, rejected chip text, passability warnings
+  red800: "#991b1b", // route refusal title and body
+  red900: "#7f1d1d", // reserved: no current callers
+  rose600: "#e11d48", // flood map SUBMERGED status (RouteMap)
+
+  // ── Green: success, verified, safe and online ─────────────────────────────
+  green50: "#f0fdf4", // success card fill, SOS status panel, verified chip
+  green200: "#bbf7d0", // success card borders (route, SOS panel)
+  green300: "#86efac", // storm-mode success icons on the SOS status panel
+  green400: "#4ade80", // profile verified check
+  green600: "#16a34a", // success icons, garage check, modal step rail
+  green700: "#15803d", // success text, verified chip, online/offline status
+  green800: "#166534", // SOS status panel title (light mode)
+  green900: "#14532d", // SOS status panel fill in storm mode
+
+  // ── Emerald: passability and route safety (brand success) ─────────────────
+  emerald50: "#ecfdf5", // report-form privacy/success panel fill
+  emerald100: "#d1fae5", // SOS status panel borders (light mode)
+  emerald200: "#a7f3d0", // report-form success panel border
+  emerald600: "#059669", // RouteMap PASSABLE, home online/shield, ready pin
+  emerald700: "#047857", // report-form success panel body text
+  emerald800: "#065f46", // report-form success panel title
+  emerald950: "#052e1b", // reserved: no current callers
+
+  // ── Amber / orange: warnings, pending review and guest callouts ───────────
+  amber100: "#fef3c7", // pending chip (report history), SOS modal, warning dialog
+  amber200: "#fde68a", // route hazard chip border
+  amber300: "#fcd34d", // reserved: no current callers
+  amber400: "#fbbf24", // storm-mode SOS warning text
+  amber500: "#f59e0b", // route warning banner border, RouteMap marker fill
+  amber600: "#d97706", // RouteMap LIGHT_FLOOD, warning icons (home, QuickPicks)
+  amber700: "#b45309", // warning copy in route and SOS screens (light mode)
+  amber800: "#92400e", // pending/warning text, dialog and SOS modal accents
+  /** Warning banner surface; the storm counterpart lives in stormColors. */
   amberSurface: "#fffbeb",
-  /** Off-white card/surface tints used on the report form. */
-  surface: "#fafbfc",
-  surfaceAlt: "#f4f7fa",
+  orange50: "#fff7ed", // report guest/info banner fill
+  orange200: "#fed7aa", // report guest/info banner border
+  orange800: "#9a3412", // report guest/info banner text
+
+  // ── Semantic surfaces and the ink pairs ───────────────────────────────────
+  surface: "#fafbfc", // reserved off-white card tint: no current callers
+  surfaceAlt: "#f4f7fa", // reserved alternate card tint: no current callers
   /** Modal/dialog surface: a step above cards so pop-ups read as elevated. */
-  surfaceHigh: "#ffffff",
+  surfaceHigh: "#ffffff", // Dialog, SOSUpdateModal, QuickPicks sheet, VehicleGarage
   /** Backgrounds for a chip/button that needs to read as "ink" regardless of theme. */
-  inkBg: "#0f172a",
+  inkBg: "#0f172a", // login mark/CTA, route turn card, avatar, QuickPicks, garage
   /** Text on a permanently dark surface (turn card, ink button): light in every theme. */
-  onInk: "#ffffff",
-  inkMuted: "#cbd5e1",
+  onInk: "#ffffff", // login CTAs, route turn/speed readouts, modal buttons
+  inkMuted: "#cbd5e1", // muted copy on ink surfaces: route meta, profile card, avatar
 } as const;
 
 export type ThemeColors = { [K in keyof typeof lightColors]: string };
@@ -104,69 +125,83 @@ export type ThemeColors = { [K in keyof typeof lightColors]: string };
  * everything else falls back to its light value when the palettes merge.
  */
 export const stormColors: Partial<ThemeColors> = {
-  white: "#0b1220",
-  slate50: "#111c2e",
-  slate100: "#1e293b",
-  slate200: "#334155",
-  slate300: "#475569",
-  slate400: "#94a3b8",
-  slate500: "#cbd5e1",
-  slate600: "#e2e8f0",
-  slate700: "#f1f5f9",
-  slate800: "#f8fafc",
-  slate900: "#f8fafc",
-  blue50: "#0c2338",
-  blue100: "#123450",
-  blue600: "#60a5fa",
-  blue700: "#93c5fd",
-  blue900: "#bfdbfe",
-  sky50: "#082f49",
-  sky200: "#075985",
-  sky600: "#38bdf8",
-  sky700: "#7dd3fc",
-  red50: "#3a0a0a",
-  red200: "#7f1d1d",
-  red500: "#f87171",
-  red600: "#f87171",
-  red700: "#fca5a5",
-  red800: "#fecaca",
-  green600: "#4ade80",
-  green700: "#86efac",
-  green800: "#bbf7d0",
-  green200: "#15803d",
-  // Emerald and orange had no storm override at all: their cards (the report
-  // screen's success panel and guest banner, both full-width) rendered as
-  // bright light-mode panels dropped into an otherwise dark screen, and the
-  // green family's own 800 shade stayed dark-on-dark against its 50 card.
-  emerald50: "#052e1b",
-  emerald100: "#065f46",
-  emerald200: "#047857",
-  emerald700: "#6ee7b7",
-  emerald800: "#a7f3d0",
-  orange50: "#2e1605",
-  orange200: "#9a3412",
-  orange800: "#fdba74",
-  amber100: "#3a2a06",
-  amber600: "#fbbf24",
-  amber800: "#fcd34d",
-  amberSurface: "#3a2a06",
+  // Neutrals — light shades become dark surfaces, dark shades become light text.
+  white: "#0b1220", // dark card/input/chip surface; icon strokes on ink fills
+  slate50: "#111c2e", // page background (login, offline); route notice cards
+  slate100: "#1e293b", // subtle icon tiles, header dividers, neutral status chips
+  slate200: "#334155", // card/input/chip borders and list separators
+  slate300: "#475569", // tertiary  text, disabled borders, empty-state icon
+  slate400: "#94a3b8", // placeholder/muted text, inactive chip labels, tab tint
+  slate500: "#cbd5e1", // secondary and helper text beneath titles/labels
+  slate600: "#e2e8f0", // form labels and route alert body copy
+  slate700: "#f1f5f9", // field labels, section subtitles, offline headings
+  slate800: "#f8fafc", // emphasized captions, map control icons, auth accents
+  slate900: "#f8fafc", // light screen titles, wordmark, primary buttons
+
+  // Blue — info panels and selected states.
+  blue50: "#0c2338", // info card fills: SOS update modal, route alerts, login CTA
+  blue100: "#123450", // live-network badge, soft card tints and borders
+  blue600: "#60a5fa", // primary buttons, map pins, focus icons, nav glyphs
+  blue700: "#93c5fd", // info-card accent text, quick-pick labels, login link
+  blue900: "#bfdbfe", // login link emphasis
+
+  // Sky — connectivity and login identity.
+  sky50: "#082f49", // offline info banner surface
+  sky200: "#075985", // offline info banner border
+  sky600: "#38bdf8", // active tab tint, offline banner icon
+  sky700: "#7dd3fc", // offline banner body text
+
+  // Red / rose — danger, plus flood-map status.
+  red50: "#3a0a0a", // danger card fill, rejected chip, required-field hint
+  red200: "#7f1d1d", // danger borders: offline, garage, profile, SOS alert
+  red500: "#f87171", // required-field asterisks, danger chip outlines
+  red600: "#f87171", // error text/icons, destructive buttons, map alert borders
+  red700: "#fca5a5", // danger body copy, rejected chip text, passability warnings
+  red800: "#fecaca", // route refusal title and body
   // Flood-status colours on the night/storm map (navigation-night-v1 is a
   // dark basemap): the light-mode shades read as muted/low-contrast on it,
   // which is the one place storm mode must not go quieter -- a flood warning
   // has to stay at least as visible after dark as it is in daylight.
-  rose600: "#fb7185",
-  surface: "#111c2e",
-  surfaceAlt: "#0a1220",
-  surfaceHigh: "#223046",
-  green50: "#052e1b",
-  // inkBg deliberately has NO storm override: its own contract ("reads as
-  // ink regardless of theme", same as onInk/inkMuted below) means the
-  // profile identity card, the route turn-instruction card and the avatar
-  // fallback badge must all stay a dark card in every theme. An override
-  // used to sit here, turning all three into a bright royal-blue card in
-  // storm mode instead of the one dark card the screen comment describes.
-  onInk: "#ffffff",
-  inkMuted: "#cbd5e1",
+  rose600: "#fb7185", // flood map SUBMERGED status (RouteMap)
+
+  // Green — success, verified, safe and online.
+  green50: "#052e1b", // success card fill, SOS status panel, verified chip
+  green200: "#8acca2", // success card borders (route, SOS panel)
+  green600: "#4ade80", // success icons, garage check, modal step rail
+  green700: "#86efac", // success text, verified chip, online/offline status
+  green800: "#bbf7d0", // SOS panel title here; light mode uses green800
+
+  // Emerald / orange — passability, report success panel, guest banner.
+  // These had no storm override at all: their full-width cards rendered as
+  // bright light-mode panels dropped into an otherwise dark screen, and green
+  // 800 stayed dark-on-dark against its own 50 card.
+  emerald50: "#052e1b", // report privacy/success panel fill
+  emerald100: "#065f46", // SOS status panel borders
+  emerald200: "#047857", // report-form success panel border
+  emerald700: "#6ee7b7", // report-form success panel body text
+  emerald800: "#a7f3d0", // report-form success panel title
+  orange50: "#2e1605", // report guest/info banner fill
+  orange200: "#9a3412", // report guest/info banner border
+  orange800: "#fdba74", // report guest/info banner text
+
+  // Amber — warnings and pending review.
+  amber100: "#3a2a06", // pending chip (report history), SOS modal, warning dialog
+  amber600: "#fbbf24", // RouteMap LIGHT_FLOOD, warning icons (home, QuickPicks)
+  amber800: "#fcd34d", // pending/warning text, dialog and SOS modal accents
+  amberSurface: "#3a2a06", // route warning banner surface
+
+  // Semantic surfaces.
+  surface: "#111c2e", // reserved card tint: no current callers
+  surfaceAlt: "#0a1220", // reserved alternate card tint: no current callers
+  surfaceHigh: "#091830ff", // Dialog, SOSUpdateModal, QuickPicks sheet, VehicleGarage
+
+  // Ink pairs — onInk/inkMuted stay light; inkBg deliberately has NO override.
+  // Its contract ("reads as ink regardless of theme") keeps the profile identity
+  // card, the route turn-instruction card and the avatar fallback dark in both
+  // themes. An override used to sit here, turning all three into a bright
+  // royal-blue card instead of the one dark card the screen comment describes.
+  onInk: "#ffffff", // login CTAs, route turn/speed readouts, modal buttons
+  inkMuted: "#cbd5e1", // route meta, profile card, avatar
 };
 
 /**
@@ -236,7 +271,7 @@ export function modeForHour(hour: number): ThemeMode {
 
 const ThemeContext = createContext<ThemeState>({
   mode: "light",
-  toggle: () => {},
+  toggle: () => { },
   c: lightColors,
 });
 
@@ -274,7 +309,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const next: ThemeMode = mode === "light" ? "storm" : "light";
         if (prefs.autoTheme) void savePrefs({ ...prefs, autoTheme: false });
         setManualMode(next);
-        AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
+        AsyncStorage.setItem(STORAGE_KEY, next).catch(() => { });
       },
       c: mode === "storm" ? { ...lightColors, ...stormColors } : lightColors,
     }),

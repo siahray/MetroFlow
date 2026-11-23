@@ -250,9 +250,9 @@ export function SOSUpdateModal({
             onPress={onClose}
             accessibilityRole="button"
             accessibilityLabel="Got it"
-            style={{ paddingVertical: space[14], backgroundColor: c.slate900, borderRadius: 14, alignItems: 'center' }}
+            style={{ paddingVertical: space[14], backgroundColor: c.inkBg, borderRadius: 14, alignItems: 'center' }}
           >
-            <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>Got it</Text>
+            <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>Got it</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>

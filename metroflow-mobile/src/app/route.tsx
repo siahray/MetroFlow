@@ -2220,7 +2220,7 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     alignItems: "center",
     justifyContent: "center",
   },
-  dangerButtonText: { fontSize: fontSize.body, fontWeight: "700", color: c.white },
+  dangerButtonText: { fontSize: fontSize.body, fontWeight: "700", color: c.onInk },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",

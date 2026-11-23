@@ -672,14 +672,14 @@ export function QuickPicks({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: space[6],
-                        backgroundColor: c.slate900,
+                        backgroundColor: c.inkBg,
                         borderRadius: 10,
                         paddingVertical: space[12],
                         opacity: !draftReady || busy ? 0.5 : 1,
                       }}
                     >
-                      {busy ? <ActivityIndicator size="small" color={c.white} /> : null}
-                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
+                      {busy ? <ActivityIndicator size="small" color={c.onInk} /> : null}
+                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>
                         {draft.pick ? 'Save Changes' : 'Add Quick Pick'}
                       </Text>
                     </TouchableOpacity>
@@ -720,15 +720,15 @@ export function QuickPicks({
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: space[6],
-                      backgroundColor: c.slate900,
+                      backgroundColor: c.inkBg,
                       borderRadius: 10,
                       paddingHorizontal: space[20],
                       paddingVertical: space[12],
                       marginTop: space[4],
                     }}
                   >
-                    <Plus size={16} color={c.white} />
-                    <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
+                    <Plus size={16} color={c.onInk} />
+                    <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>
                       Add a Quick Pick
                     </Text>
                   </TouchableOpacity>
@@ -922,8 +922,14 @@ export function QuickPicks({
                     opacity: busy ? 0.5 : 1,
                   }}
                 >
-                  {busy ? <ActivityIndicator size="small" color={c.white} /> : null}
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
+                  {busy ? <ActivityIndicator size="small" color={confirmRemove ? c.onInk : c.white} /> : null}
+                  <Text
+                    style={{
+                      fontSize: fontSize.label,
+                      fontWeight: '800',
+                      color: confirmRemove ? c.onInk : c.white,
+                    }}
+                  >
                     {confirmRemove ? 'Remove' : 'Save Changes'}
                   </Text>
                 </TouchableOpacity>
