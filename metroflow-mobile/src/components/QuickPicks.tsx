@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ModalBlur } from './ModalBlur';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -349,8 +350,10 @@ export function QuickPicks({
           onPress={() => {
             if (!draft && !confirm) close();
           }}
-          style={{ ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.55)' }}
-        />
+          style={{ ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.3)' }}
+        >
+          <ModalBlur />
+        </Pressable>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           pointerEvents="box-none"

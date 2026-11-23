@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { ModalBlur } from './ModalBlur';
 import { CheckCircle2, Clock3, X, XCircle } from 'lucide-react-native';
 import type { SOSRequest } from '../api';
 import {
@@ -98,9 +99,10 @@ export function SOSUpdateModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'center', padding: space[20] }}
+        style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.3)', justifyContent: 'center', padding: space[20] }}
         onPress={onClose}
       >
+        <ModalBlur />
         <Pressable
           accessibilityViewIsModal
           onPress={() => {}}

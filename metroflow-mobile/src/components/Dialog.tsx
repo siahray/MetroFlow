@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { ModalBlur } from "./ModalBlur";
 import { AlertTriangle, Info } from "lucide-react-native";
 
 import { fontSize, space, useTheme } from "../theme";
@@ -86,11 +87,12 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           onPress={() => close(false)}
           style={{
             flex: 1,
-            backgroundColor: "rgba(15,23,42,0.45)",
+            backgroundColor: "rgba(15,23,42,0.3)",
             justifyContent: "center",
             padding: space[20],
           }}
         >
+          <ModalBlur />
           <Pressable
             accessibilityViewIsModal
             onPress={() => {}}

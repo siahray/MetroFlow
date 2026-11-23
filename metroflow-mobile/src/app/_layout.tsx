@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../auth';
 import { AppSplash } from '../components/AppSplash';
 import { DialogProvider } from '../components/Dialog';
+import { ModalBlurProvider } from '../components/ModalBlur';
 import { SOSTrackerProvider } from '../sosTracker';
 import { ThemeProvider } from '../theme';
 
@@ -36,23 +37,25 @@ function AppReady({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <DialogProvider>
-        <AuthProvider>
-          <AppReady>
-            <SafeAreaProvider>
-              <SOSTrackerProvider>
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="route" />
-                  <Stack.Screen name="offline" />
-                  <Stack.Screen name="report-history" />
-                </Stack>
-              </SOSTrackerProvider>
-            </SafeAreaProvider>
-          </AppReady>
-        </AuthProvider>
-      </DialogProvider>
+      <ModalBlurProvider>
+        <DialogProvider>
+          <AuthProvider>
+            <AppReady>
+              <SafeAreaProvider>
+                <SOSTrackerProvider>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="route" />
+                    <Stack.Screen name="offline" />
+                    <Stack.Screen name="report-history" />
+                  </Stack>
+                </SOSTrackerProvider>
+              </SafeAreaProvider>
+            </AppReady>
+          </AuthProvider>
+        </DialogProvider>
+      </ModalBlurProvider>
     </ThemeProvider>
   );
 }
