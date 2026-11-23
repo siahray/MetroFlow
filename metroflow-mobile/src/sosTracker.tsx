@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { getSOS, getSOSLog, type IncidentLogItem, type SOSRequest } from './api';
 import { SOSUpdateModal } from './components/SOSUpdateModal';
 import { loadCache, saveCache } from './offline';
+import { sosPhase } from './sosStatus';
 
 /** Once an incident reaches one of these states, polling its status is pointless. */
 const FINAL_SOS_STATUSES = new Set(['RESOLVED', 'REJECTED']);
@@ -11,7 +12,7 @@ const ACTIVE_SOS_KEY = 'active_sos';
 type PersistedSOS = { sosId: number; lastSeenStatus: string };
 
 type SOSTrackerValue = {
-  /** The driver's own open incident (FSD-FR-074) — null once resolved/rejected or dismissed. */
+  /** The driver's own open incident (FSD-FR-074) — null once resolved or dismissed. */
   activeSOS: SOSRequest | null;
   sosLog: IncidentLogItem[];
   /** Call right after a successful `createSOS` to start tracking it. */
@@ -20,7 +21,7 @@ type SOSTrackerValue = {
   refresh: () => Promise<void>;
   /** Open the update modal on demand (the "View Updates" button). */
   showUpdates: () => void;
-  /** The driver explicitly returns home; a resolved/rejected incident is never cleared on its own. */
+  /** The driver explicitly returns home; a rejected incident stays until then. */
   clearActive: () => void;
 };
 
@@ -41,6 +42,9 @@ export function useSOSTracker(): SOSTrackerValue {
 export function SOSTrackerProvider({ children }: { children: React.ReactNode }) {
   const [activeSOS, setActiveSOS] = useState<SOSRequest | null>(null);
   const [sosLog, setSosLog] = useState<IncidentLogItem[]>([]);
+  // Kept separate so the completion notice can still show the finished
+  // incident after `activeSOS` is cleared and the screen resets.
+  const [modalSOS, setModalSOS] = useState<SOSRequest | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
   // The status the driver last actually saw, so a change -- whether noticed by
@@ -58,12 +62,23 @@ export function SOSTrackerProvider({ children }: { children: React.ReactNode }) 
 
   function applyUpdated(updated: SOSRequest, { announce }: { announce: boolean }) {
     setActiveSOS(updated);
-    if (updated.status === lastSeenStatus.current) return;
+    const changed = updated.status !== lastSeenStatus.current;
     lastSeenStatus.current = updated.status;
-    const toSave: PersistedSOS = { sosId: updated.sos_id, lastSeenStatus: updated.status };
-    void saveCache(ACTIVE_SOS_KEY, toSave);
-    void refreshLog(updated.sos_id);
-    if (announce) setModalVisible(true);
+    if (sosPhase(updated.status) === 'completed') {
+      // Rescue is over: the SOS screen returns to its empty form. The modal
+      // keeps this incident so the driver still sees "You are all clear".
+      setActiveSOS(null);
+      lastSeenStatus.current = null;
+      void saveCache(ACTIVE_SOS_KEY, null);
+    } else {
+      const toSave: PersistedSOS = { sosId: updated.sos_id, lastSeenStatus: updated.status };
+      void saveCache(ACTIVE_SOS_KEY, toSave);
+    }
+    if (changed) {
+      setModalSOS(updated);
+      void refreshLog(updated.sos_id);
+      if (announce) setModalVisible(true);
+    }
   }
 
   // Resume an SOS still open from a previous app session, as soon as the app
@@ -105,6 +120,7 @@ export function SOSTrackerProvider({ children }: { children: React.ReactNode }) 
 
   function track(sos: SOSRequest) {
     setActiveSOS(sos);
+    setModalSOS(sos);
     lastSeenStatus.current = sos.status;
     void saveCache(ACTIVE_SOS_KEY, { sosId: sos.sos_id, lastSeenStatus: sos.status } satisfies PersistedSOS);
     void refreshLog(sos.sos_id);
@@ -126,6 +142,7 @@ export function SOSTrackerProvider({ children }: { children: React.ReactNode }) 
 
   function clearActive() {
     setActiveSOS(null);
+    setModalSOS(null);
     setSosLog([]);
     lastSeenStatus.current = null;
     void saveCache(ACTIVE_SOS_KEY, null);
@@ -136,7 +153,7 @@ export function SOSTrackerProvider({ children }: { children: React.ReactNode }) 
       {children}
       <SOSUpdateModal
         visible={modalVisible}
-        sos={activeSOS}
+        sos={modalSOS}
         onClose={() => setModalVisible(false)}
       />
     </SOSTrackerContext.Provider>
