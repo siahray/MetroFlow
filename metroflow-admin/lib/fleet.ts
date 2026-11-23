@@ -21,19 +21,18 @@ export type UnitFormValues = {
   vehicleType: string;
   clearanceCm: string;
   status: string;
-  latitude: string;
-  longitude: string;
 };
 
 export type UnitFormErrors = Partial<Record<keyof UnitFormValues, string>>;
+
+/** Quezon City Hall staging base (CR-002 vicinity; coordinates not official). */
+export const UNIT_BASE_LOCATION = { lat: 14.6464, lon: 121.0503 };
 
 export const EMPTY_UNIT_FORM: UnitFormValues = {
   callSign: "",
   vehicleType: "",
   clearanceCm: "",
   status: "AVAILABLE",
-  latitude: "",
-  longitude: "",
 };
 
 export function unitToForm(unit: Vehicle): UnitFormValues {
@@ -42,8 +41,6 @@ export function unitToForm(unit: Vehicle): UnitFormValues {
     vehicleType: unit.vehicle_type,
     clearanceCm: unit.clearance_cm != null ? String(unit.clearance_cm) : "",
     status: unit.status.toUpperCase(),
-    latitude: unit.current_location_lat != null ? String(unit.current_location_lat) : "",
-    longitude: unit.current_location_lon != null ? String(unit.current_location_lon) : "",
   };
 }
 
@@ -69,18 +66,6 @@ export function validateUnitForm(
   else if (!Number.isInteger(clearance) || clearance < 1 || clearance > 300)
     errors.clearanceCm = "Use a whole number from 1 to 300 cm.";
 
-  const hasLat = values.latitude.trim() !== "";
-  const hasLon = values.longitude.trim() !== "";
-  const lat = Number(values.latitude);
-  const lon = Number(values.longitude);
-  if (hasLat !== hasLon) {
-    errors[hasLat ? "longitude" : "latitude"] = "Give both latitude and longitude, or neither.";
-  } else if (hasLat && hasLon) {
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90) errors.latitude = "Latitude is -90 to 90.";
-    if (!Number.isFinite(lon) || lon < -180 || lon > 180)
-      errors.longitude = "Longitude is -180 to 180.";
-  }
-
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   return {
@@ -90,7 +75,8 @@ export function validateUnitForm(
       vehicle_type: vehicleType,
       clearance_cm: clearance,
       status: values.status,
-      ...(hasLat && hasLon ? { current_location_lat: lat, current_location_lon: lon } : {}),
+      current_location_lat: UNIT_BASE_LOCATION.lat,
+      current_location_lon: UNIT_BASE_LOCATION.lon,
     },
   };
 }

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+import { UNIT_BASE_LOCATION } from "@/lib/fleet";
 import { UnitFormModal } from "./unit-form-modal";
 
 function renderModal(onSubmit = async () => {}, onClose = () => {}) {
@@ -57,6 +58,8 @@ test("a valid submit passes the parsed payload to onSubmit", async () => {
     vehicle_type: "Rescue Utility",
     clearance_cm: 45,
     status: "AVAILABLE",
+    current_location_lat: UNIT_BASE_LOCATION.lat,
+    current_location_lon: UNIT_BASE_LOCATION.lon,
   });
 });
 

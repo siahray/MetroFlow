@@ -191,53 +191,15 @@ export function UnitFormModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label
-              htmlFor="unit-latitude"
-              className="mb-1 block text-xs font-semibold text-slate-700"
-            >
-              Latitude (optional)
-            </label>
-            <input
-              id="unit-latitude"
-              inputMode="decimal"
-              value={values.latitude}
-              onChange={(e) => set("latitude")(e.target.value)}
-              aria-invalid={Boolean(errors.latitude)}
-              aria-describedby={errors.latitude ? "unit-latitude-error" : undefined}
-              className={`${field} ${borders("latitude")}`}
-            />
-            {errorText("latitude")}
-          </div>
-          <div>
-            <label
-              htmlFor="unit-longitude"
-              className="mb-1 block text-xs font-semibold text-slate-700"
-            >
-              Longitude (optional)
-            </label>
-            <input
-              id="unit-longitude"
-              inputMode="decimal"
-              value={values.longitude}
-              onChange={(e) => set("longitude")(e.target.value)}
-              aria-invalid={Boolean(errors.longitude)}
-              aria-describedby={errors.longitude ? "unit-longitude-error" : undefined}
-              className={`${field} ${borders("longitude")}`}
-            />
-            {errorText("longitude")}
-          </div>
-        </div>
-        <p className="text-[11px] text-slate-500">
-          A starting position lets dispatch rank the unit by travel time. A unit that reports its
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          New units are stationed at the Quezon City Hall base by default. A unit that reports its
           own position updates it later.
         </p>
 
         {serverError ? (
           <p
             role="alert"
-            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400"
           >
             {serverError}
           </p>
