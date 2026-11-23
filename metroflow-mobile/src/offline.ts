@@ -96,6 +96,15 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Clear cached offline data (graph, hazards, last route). Report queue is kept. */
+export async function clearCache(): Promise<void> {
+  try {
+    await (await db()).runAsync("DELETE FROM cache");
+  } catch {
+    // A missing store is already clear.
+  }
+}
+
 // --- Report queue (FSD-FR-068, 069) -----------------------------------------
 
 async function readQueue(): Promise<(QueuedReport & { seq: number })[]> {
