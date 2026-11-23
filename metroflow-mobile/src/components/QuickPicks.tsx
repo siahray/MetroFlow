@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ModalBlur } from './ModalBlur';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -31,7 +32,7 @@ import {
 
 import { getNetworkState, type NetworkState, type NodeFeature } from '../api';
 import { listQuickPicks, saveQuickPicks, type QuickPick, type QuickPickIcon } from '../quickPicks';
-import { boundingBoxOf, reverseGeocodeName, searchPlaces, type GeocodeResult } from '../geocode';
+import { boundingBoxOf, matchesTokens, reverseGeocodeName, searchPlaces, searchTokens, type GeocodeResult } from '../geocode';
 import { PlacePickerMap } from '../navigation/PlacePickerMap';
 import { nearestNode, toLatLng, type LatLng } from '../navigation/geo';
 import { fontSize, space, useTheme } from '../theme';
@@ -121,8 +122,8 @@ export function QuickPicks({
   const draftReady =
     !!draft && draft.name.trim().length > 0 && (draft.picked !== null || draft.pick !== null);
 
-  // The same place search the route screen uses -- Mapbox Geocoding, then
-  // Nominatim, then the curated list -- biased to the loaded network's extent.
+  // The same place search the route screen uses -- Mapbox Geocoding with an
+  // OSM fallback -- both bounded to Metro Manila.
   const searchBox = useMemo(
     () =>
       network
@@ -137,7 +138,7 @@ export function QuickPicks({
     // Debounced well under Nominatim's ~1 req/sec usage policy.
     const timer = setTimeout(() => {
       setSearching(true);
-      searchPlaces(query, { box: searchBox }, controller.signal)
+      searchPlaces(query, undefined, controller.signal)
         .then((rows) => {
           if (!controller.signal.aborted) setPlaceResults(rows);
         })
@@ -152,16 +153,19 @@ export function QuickPicks({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, searchBox]);
+  }, [query]);
 
   // Places first; named road nodes are the fallback, so a junction name still
   // resolves and works offline like it always did.
   const visiblePlaces = query.length >= 3 ? placeResults.slice(0, 3) : [];
+  const nodeWords = useMemo(
+    () => network?.nodes.features.map((node) => ({ node, words: searchTokens(node.properties.name ?? '') })) ?? [],
+    [network],
+  );
+  const nodeNeedles = searchTokens(query);
   const nodeMatches =
-    query.length > 0 && network && visiblePlaces.length === 0
-      ? network.nodes.features
-          .filter((n) => (n.properties.name ?? '').toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 3)
+    query.length > 0 && visiblePlaces.length === 0
+      ? nodeWords.filter(({ words }) => matchesTokens(nodeNeedles, words)).slice(0, 3).map(({ node }) => node)
       : [];
 
   const draftPoint: LatLng | null = draft?.picked
@@ -349,8 +353,10 @@ export function QuickPicks({
           onPress={() => {
             if (!draft && !confirm) close();
           }}
-          style={{ ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.55)' }}
-        />
+          style={{ ...StyleSheet.absoluteFill, backgroundColor: 'rgba(15,23,42,0.3)' }}
+        >
+          <ModalBlur />
+        </Pressable>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           pointerEvents="box-none"
@@ -672,14 +678,14 @@ export function QuickPicks({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: space[6],
-                        backgroundColor: c.slate900,
+                        backgroundColor: c.inkBg,
                         borderRadius: 10,
                         paddingVertical: space[12],
                         opacity: !draftReady || busy ? 0.5 : 1,
                       }}
                     >
-                      {busy ? <ActivityIndicator size="small" color={c.white} /> : null}
-                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
+                      {busy ? <ActivityIndicator size="small" color={c.onInk} /> : null}
+                      <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>
                         {draft.pick ? 'Save Changes' : 'Add Quick Pick'}
                       </Text>
                     </TouchableOpacity>
@@ -720,15 +726,15 @@ export function QuickPicks({
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: space[6],
-                      backgroundColor: c.slate900,
+                      backgroundColor: c.inkBg,
                       borderRadius: 10,
                       paddingHorizontal: space[20],
                       paddingVertical: space[12],
                       marginTop: space[4],
                     }}
                   >
-                    <Plus size={16} color={c.white} />
-                    <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
+                    <Plus size={16} color={c.onInk} />
+                    <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>
                       Add a Quick Pick
                     </Text>
                   </TouchableOpacity>
@@ -922,8 +928,14 @@ export function QuickPicks({
                     opacity: busy ? 0.5 : 1,
                   }}
                 >
-                  {busy ? <ActivityIndicator size="small" color={c.white} /> : null}
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>
+                  {busy ? <ActivityIndicator size="small" color={confirmRemove ? c.onInk : c.white} /> : null}
+                  <Text
+                    style={{
+                      fontSize: fontSize.label,
+                      fontWeight: '800',
+                      color: confirmRemove ? c.onInk : c.white,
+                    }}
+                  >
                     {confirmRemove ? 'Remove' : 'Save Changes'}
                   </Text>
                 </TouchableOpacity>

@@ -1,10 +1,11 @@
-import { View, Text, StatusBar } from 'react-native';
+import { TouchableOpacity, View, Text, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Map, HardDrive, Info } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { Map, HardDrive, Info, Trash2 } from 'lucide-react-native';
+import { useCallback, useEffect, useState } from 'react';
 
 import { BackButton } from '../components/BackButton';
-import { cacheStats, formatBytes, type CacheStats } from '../offline';
+import { useDialog } from '../components/Dialog';
+import { cacheStats, clearCache, formatBytes, type CacheStats } from '../offline';
 import { fontSize, space, useTheme } from '../theme';
 
 function StatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
@@ -21,15 +22,41 @@ function StatusRow({ label, value, ok }: { label: string; value: string; ok: boo
 
 export default function OfflineMapsScreen() {
   const { c, mode: themeMode } = useTheme();
+  const { confirm } = useDialog();
   const [stats, setStats] = useState<CacheStats | null>(null);
+  const [clearing, setClearing] = useState(false);
+
+  const refreshStats = useCallback(() => {
+    void cacheStats().then(setStats);
+  }, []);
 
   // Read once per visit: the cache fills as the driver navigates, and the screen
   // is opened from the profile, so entering it is the natural refresh point.
   useEffect(() => {
-    void cacheStats().then(setStats);
-  }, []);
+    refreshStats();
+  }, [refreshStats]);
 
   const saved = stats !== null && (stats.network || stats.hasRoute);
+
+  const handleClearCache = useCallback(async () => {
+    const confirmed = await confirm({
+      title: 'Clear offline cache?',
+      message:
+        'This removes the saved road graph, hazards, and last route from this device. Pending reports are not removed.',
+      tone: 'danger',
+      confirmLabel: 'Clear Cache',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setClearing(true);
+    try {
+      await clearCache();
+      refreshStats();
+    } finally {
+      setClearing(false);
+    }
+  }, [confirm, refreshStats]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.white }}>
@@ -81,6 +108,29 @@ export default function OfflineMapsScreen() {
             ok={stats?.hasRoute ?? false}
           />
         </View>
+
+        <TouchableOpacity
+          style={{
+            width: '100%',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: space[8],
+            paddingVertical: space[12],
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: c.red200,
+            backgroundColor: c.red50,
+            opacity: clearing ? 0.6 : 1,
+          }}
+          onPress={handleClearCache}
+          disabled={clearing}
+        >
+          <Trash2 size={16} color={c.red600} />
+          <Text style={{ fontSize: fontSize.label, fontWeight: '600', color: c.red700 }}>
+            {clearing ? 'Clearing...' : 'Clear Cache'}
+          </Text>
+        </TouchableOpacity>
 
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space[8], backgroundColor: c.sky50, padding: space[14], borderRadius: 12, borderWidth: 1, borderColor: c.sky200, width: '100%' }}>
           <Info size={15} color={c.sky600} />

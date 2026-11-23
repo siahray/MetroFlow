@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ModalBlur } from './ModalBlur';
 import { Bike, Car, CarFront, Check, Gauge, Pencil, Plus, Trash2, Truck, X } from 'lucide-react-native';
 
 import { useDialog } from './Dialog';
@@ -241,8 +242,10 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
           <Pressable
             accessibilityLabel="Dismiss"
             onPress={() => !saving && setDraft(null)}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.5)' }}
-          />
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.3)' }}
+          >
+            <ModalBlur />
+          </Pressable>
           <View style={{ flex: 1, justifyContent: 'center', padding: space[20] }} pointerEvents="box-none">
             <View
               style={{
@@ -406,11 +409,11 @@ export function VehicleGarage({ onActiveChange }: { onActiveChange?: () => void 
                     alignItems: 'center',
                     borderRadius: 10,
                     paddingVertical: space[12],
-                    backgroundColor: c.slate900,
+                    backgroundColor: c.inkBg,
                     opacity: saving || !draft?.name.trim() ? 0.5 : 1,
                   }}
                 >
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.white }}>Save</Text>
+                  <Text style={{ fontSize: fontSize.label, fontWeight: '800', color: c.onInk }}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>

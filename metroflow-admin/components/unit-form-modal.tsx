@@ -25,7 +25,7 @@ type UnitFormModalProps = {
 };
 
 const field =
-  "w-full rounded-lg border bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-slate-900 focus:outline-none";
+  "w-full rounded-lg border bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-slate-900 focus:outline-none dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500";
 
 export function UnitFormModal({
   title,
@@ -65,25 +65,30 @@ export function UnitFormModal({
 
   const errorText = (key: keyof UnitFormValues) =>
     errors[key] ? (
-      <p id={`unit-${key}-error`} className="mt-1 text-[11px] text-rose-600">
+      <p id={`unit-${key}-error`} className="mt-1 text-[11px] text-rose-600 dark:text-rose-400">
         {errors[key]}
       </p>
     ) : null;
   const borders = (key: keyof UnitFormValues) =>
-    errors[key] ? "border-rose-400" : "border-slate-200";
+    errors[key]
+      ? "border-rose-400 dark:border-rose-500/60"
+      : "border-slate-200 dark:border-slate-700";
 
   return (
-    <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4">
+    <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80">
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby="unit-form-title"
         onSubmit={handleSubmit}
         noValidate
-        className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+        className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]"
       >
         <div className="flex items-center justify-between">
-          <h2 id="unit-form-title" className="text-base font-bold text-slate-900">
+          <h2
+            id="unit-form-title"
+            className="text-base font-bold text-slate-900 dark:text-slate-100"
+          >
             {title}
           </h2>
           <button
@@ -91,7 +96,7 @@ export function UnitFormModal({
             aria-label="Close"
             onClick={onClose}
             disabled={saving}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+            className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" />
           </button>
@@ -100,7 +105,7 @@ export function UnitFormModal({
         <div>
           <label
             htmlFor="unit-callSign"
-            className="mb-1 block text-xs font-semibold text-slate-700"
+            className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
           >
             Call sign
           </label>
@@ -120,7 +125,7 @@ export function UnitFormModal({
         <div>
           <label
             htmlFor="unit-vehicleType"
-            className="mb-1 block text-xs font-semibold text-slate-700"
+            className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
           >
             Unit type
           </label>
@@ -145,7 +150,7 @@ export function UnitFormModal({
           <div>
             <label
               htmlFor="unit-clearanceCm"
-              className="mb-1 block text-xs font-semibold text-slate-700"
+              className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Ground clearance (cm)
             </label>
@@ -163,7 +168,7 @@ export function UnitFormModal({
           <div>
             <label
               htmlFor="unit-status"
-              className="mb-1 block text-xs font-semibold text-slate-700"
+              className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
             >
               Status
             </label>
@@ -171,7 +176,7 @@ export function UnitFormModal({
               id="unit-status"
               value={values.status}
               onChange={(e) => set("status")(e.target.value)}
-              className={`${field} border-slate-200`}
+              className={`${field} border-slate-200 dark:border-slate-700`}
             >
               {/* A unit on a live dispatch shows DISPATCHED; it is set by the dispatch flow. */}
               {!UNIT_STATUSES.some((s) => s.id === values.status) && (
@@ -186,53 +191,15 @@ export function UnitFormModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label
-              htmlFor="unit-latitude"
-              className="mb-1 block text-xs font-semibold text-slate-700"
-            >
-              Latitude (optional)
-            </label>
-            <input
-              id="unit-latitude"
-              inputMode="decimal"
-              value={values.latitude}
-              onChange={(e) => set("latitude")(e.target.value)}
-              aria-invalid={Boolean(errors.latitude)}
-              aria-describedby={errors.latitude ? "unit-latitude-error" : undefined}
-              className={`${field} ${borders("latitude")}`}
-            />
-            {errorText("latitude")}
-          </div>
-          <div>
-            <label
-              htmlFor="unit-longitude"
-              className="mb-1 block text-xs font-semibold text-slate-700"
-            >
-              Longitude (optional)
-            </label>
-            <input
-              id="unit-longitude"
-              inputMode="decimal"
-              value={values.longitude}
-              onChange={(e) => set("longitude")(e.target.value)}
-              aria-invalid={Boolean(errors.longitude)}
-              aria-describedby={errors.longitude ? "unit-longitude-error" : undefined}
-              className={`${field} ${borders("longitude")}`}
-            />
-            {errorText("longitude")}
-          </div>
-        </div>
-        <p className="text-[11px] text-slate-500">
-          A starting position lets dispatch rank the unit by travel time. A unit that reports its
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          New units are stationed at the Quezon City Hall base by default. A unit that reports its
           own position updates it later.
         </p>
 
         {serverError ? (
           <p
             role="alert"
-            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400"
           >
             {serverError}
           </p>
@@ -243,14 +210,14 @@ export function UnitFormModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-sky-600 dark:hover:bg-sky-500"
           >
             {saving ? "Saving…" : submitLabel}
           </button>

@@ -32,7 +32,6 @@ import { reverseGeocodeName } from '../../geocode';
 
 import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
-import { BackButton } from '../../components/BackButton';
 import { isOffline, useOnline } from '../../offline';
 import { loadActiveGarageVehicle } from '../../myVehicle';
 import { useDialog } from '../../components/Dialog';
@@ -69,6 +68,7 @@ export default function SOSScreen() {
   const [locationDenied, setLocationDenied] = useState(false);
   const online = useOnline();
   const { c, mode } = useTheme();
+  const storm = mode === 'storm';
 
   useEffect(() => {
     (async () => {
@@ -213,8 +213,8 @@ export default function SOSScreen() {
     }
   }
 
-  /** The driver dismisses the incident themselves; a resolved/rejected one is
-   * never cleared on its own. */
+  /** The driver dismisses a still-open incident themselves; a resolved one
+   * clears itself, but a rejected one stays until the driver returns home. */
   function handleReturnHome() {
     clearActive();
     router.replace('/(tabs)/home');
@@ -228,149 +228,272 @@ export default function SOSScreen() {
     });
   }
 
+  const card = {
+    backgroundColor: c.white,
+    borderRadius: 16,
+    shadowColor: c.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: c.slate100,
+  } as const;
+
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.slate50 }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.white }}>
       <StatusBar barStyle={mode === 'storm' ? 'light-content' : 'dark-content'} />
 
-      {/* Header */}
-      <View style={{ paddingHorizontal: space[20], paddingTop: space[10], paddingBottom: space[10], backgroundColor: c.slate50 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space[12] }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
-            <View style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: c.blue100, backgroundColor: c.white, alignItems: 'center', justifyContent: 'center' }}>
-              <Waves size={18} color={c.blue600} />
-            </View>
-            <View>
-              <Text style={{ fontSize: fontSize.tiny, fontWeight: '800', color: c.blue600, textTransform: 'uppercase', letterSpacing: 0.8, lineHeight: 12 }}>
-                METROFLOW
-              </Text>
-              <Text style={{ fontSize: fontSize.heading, fontWeight: '800', color: c.slate900, lineHeight: 20 }}>
-                SOS Rescue Dispatch
-              </Text>
-            </View>
+      {/* Header — identical to Home navbar */}
+      <View
+        style={{
+          paddingHorizontal: space[20],
+          paddingVertical: space[12],
+          borderBottomWidth: 1,
+          borderColor: c.slate100,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: c.white,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: c.blue100,
+              backgroundColor: c.white,
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: c.blue400,
+              shadowOpacity: storm ? 0.5 : 0,
+              shadowRadius: storm ? 8 : 0,
+              elevation: storm ? 4 : 0,
+            }}
+          >
+            <Waves size={22} color={c.blue600} />
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[12] }}>
-            <Avatar name={user?.name || user?.email} size={32} />
+          <View>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.blue600, letterSpacing: 0.8 }}>
+              METROFLOW
+            </Text>
+            <Text style={{ fontSize: fontSize.title, fontWeight: '800', color: c.slate900 }}>
+              SOS Rescue
+            </Text>
           </View>
         </View>
 
-        {/* Subheader */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: space[2] }}>
-          <BackButton />
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[6], backgroundColor: c.red50, paddingHorizontal: space[14], paddingVertical: space[6], borderRadius: 999, borderWidth: 1, borderColor: c.red100 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.red500 }} />
-            <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.red600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-              PRIORITY SOS LINE
-            </Text>
-          </View>
-
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="About this screen"
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[10] }}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="About SOS Rescue"
             onPress={handleInfo}
-            style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(226,232,240,0.6)', alignItems: 'center', justifyContent: 'center' }}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: c.slate100,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            <Info size={18} color={c.slate700} />
+            <Info size={18} color={c.slate600} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            onPress={() => router.push('/(tabs)/profile')}
+          >
+            <View
+              style={{
+                shadowColor: c.blue400,
+                shadowOpacity: storm ? 0.5 : 0,
+                shadowRadius: storm ? 8 : 0,
+                elevation: storm ? 4 : 0,
+              }}
+            >
+              <Avatar name={user?.name || user?.email} size={40} />
+            </View>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Scrollable Content */}
+      {/* Scrollable Content — matching Home's c.slate50 surface */}
       <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: space[20], paddingTop: space[4], paddingBottom: space[28] }}
+        style={{ flex: 1, backgroundColor: c.slate50 }}
+        contentContainerStyle={{ padding: space[20], gap: space[16], flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Priority Line Badge */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            alignSelf: 'center',
+            gap: space[8],
+            backgroundColor: storm ? 'rgba(239, 68, 68, 0.16)' : c.red50,
+            paddingHorizontal: space[14],
+            paddingVertical: space[6],
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: storm ? 'rgba(248, 113, 113, 0.4)' : c.red200,
+          }}
+        >
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: storm ? '#f87171' : c.red600 }} />
+          <Text
+            style={{
+              fontSize: fontSize.caption,
+              fontWeight: '800',
+              color: storm ? '#fca5a5' : c.red700,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+            }}
+          >
+            Priority SOS Dispatch Line
+          </Text>
+        </View>
+
         {/* Hero Graphic */}
-        <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: space[6], marginBottom: space[12], position: 'relative' }}>
-          <View style={{ width: 128, height: 128, borderRadius: 64, backgroundColor: c.blue50, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: c.blue100, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: c.white, alignItems: 'center', justifyContent: 'center', shadowColor: c.black, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 }}>
-                <Target size={38} color={c.blue600} />
+        <View style={{ alignItems: 'center', justifyContent: 'center', marginVertical: space[4], position: 'relative' }}>
+          <View style={{ width: 124, height: 124, borderRadius: 62, backgroundColor: storm ? '#0d1f38' : c.blue50, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 92, height: 92, borderRadius: 46, backgroundColor: storm ? '#132c4f' : c.blue100, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: c.white, alignItems: 'center', justifyContent: 'center', shadowColor: c.blue400, shadowOpacity: storm ? 0.4 : 0.1, shadowRadius: 6, elevation: 3 }}>
+                <Target size={34} color={c.blue600} />
               </View>
             </View>
           </View>
 
           {/* Overlapping Geo-Lock Badge */}
-          <View style={{ position: 'absolute', bottom: -10, backgroundColor: c.slate900, paddingHorizontal: space[14], paddingVertical: space[5], borderRadius: 999, borderWidth: 2, borderColor: c.white, flexDirection: 'row', alignItems: 'center', gap: space[6], shadowColor: c.black, shadowOpacity: 0.12, shadowRadius: 4, elevation: 4 }}>
-            <Lock size={11} color={c.white} />
-            <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: c.white, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          <View style={{ position: 'absolute', bottom: -8, backgroundColor: storm ? c.white : c.slate900, paddingHorizontal: space[14], paddingVertical: space[5], borderRadius: 999, borderWidth: 1, borderColor: storm ? c.blue300 : c.slate800, flexDirection: 'row', alignItems: 'center', gap: space[6], shadowColor: c.black, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 }}>
+            <Lock size={12} color={storm ? c.blue300 : c.white} />
+            <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: storm ? c.blue300 : c.white, textTransform: 'uppercase', letterSpacing: 0.8 }}>
               Active Geo-Lock
             </Text>
           </View>
         </View>
 
         {/* Title & Description */}
-        <View style={{ alignItems: 'center', marginTop: space[18], marginBottom: space[18], paddingHorizontal: space[4] }}>
-          <Text style={{ fontSize: fontSize.jumbo, fontWeight: '800', color: c.slate900, marginBottom: space[6] }}>
+        <View style={{ alignItems: 'center', marginTop: space[10], marginBottom: space[2], paddingHorizontal: space[8] }}>
+          <Text style={{ fontSize: fontSize.jumbo, fontWeight: '800', color: c.slate900, marginBottom: space[6], textAlign: 'center' }}>
             Need Assistance?
           </Text>
-          <Text style={{ fontSize: fontSize.label, color: c.slate500, textAlign: 'center', lineHeight: 20, paddingHorizontal: space[8] }}>
+          <Text style={{ fontSize: fontSize.lead, color: c.slate500, textAlign: 'center', lineHeight: 20 }}>
             If you are stranded or your vehicle is trapped in rising floodwaters, request immediate deployment. Civic dispatch units are active in your sector.
           </Text>
         </View>
 
         {/* Info Cards */}
-        <View style={{ gap: space[12], marginBottom: space[18] }}>
-          {/* Identified Location */}
-          <View style={{ backgroundColor: c.white, borderRadius: 18, padding: space[14], flexDirection: 'row', gap: space[14], borderWidth: 1, borderColor: c.slate100, shadowColor: c.black, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: c.slate100, alignItems: 'center', justifyContent: 'center' }}>
-              <MapPin size={20} color={c.slate900} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space[2] }}>
-                <Text style={{ fontSize: fontSize.micro, fontWeight: '800', color: c.blue600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                  YOUR LOCATION
-                </Text>
-              </View>
-              <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: c.slate900 }}>
-                {addressPreview ?? "Shared from your phone's GPS"}
-              </Text>
-              <Text style={{ fontSize: fontSize.body, color: c.slate500, marginTop: space[2] }}>
-                {locationDenied
-                  ? 'Enable location to preview your address here — a fresh fix is still taken when you send the request.'
-                  : 'A fresh location fix is taken when you send the request.'}
-              </Text>
-            </View>
+        <View style={{ ...card, padding: space[16], flexDirection: 'row', gap: space[14], alignItems: 'flex-start' }}>
+          <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: c.slate100, alignItems: 'center', justifyContent: 'center' }}>
+            <MapPin size={22} color={c.blue600} />
           </View>
-
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '800', color: c.blue600, letterSpacing: 0.6, marginBottom: space[2] }}>
+              YOUR LOCATION
+            </Text>
+            <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: c.slate900 }}>
+              {addressPreview ?? "Shared from your phone's GPS"}
+            </Text>
+            <Text style={{ fontSize: fontSize.body, color: c.slate500, marginTop: space[4] }}>
+              {locationDenied
+                ? 'Enable location in Settings to preview your address — a fresh GPS fix is taken upon sending.'
+                : 'A fresh location fix is taken when you send the request.'}
+            </Text>
+          </View>
         </View>
 
         {/* Situation Type */}
-        <View style={{ marginBottom: space[18] }}>
+        <View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: space[10] }}>
-            <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.slate900 }}>Situation Type</Text>
-            <Text style={{ fontSize: fontSize.caption, fontWeight: '500', color: c.slate500 }}>Tap to refine</Text>
+            <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: c.slate900 }}>Situation Type</Text>
+            <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: c.slate500 }}>Tap to refine</Text>
           </View>
 
           <View style={{ flexDirection: 'row', gap: space[8] }}>
             {/* Vehicle Stuck */}
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Situation: Vehicle Stuck"
               onPress={() => setSituation('vehicle')}
-              style={{ flex: 1, paddingVertical: space[14], paddingHorizontal: space[4], borderRadius: 18, borderWidth: situation === 'vehicle' ? 1.5 : 1, borderColor: situation === 'vehicle' ? c.slate900 : c.slate200, backgroundColor: situation === 'vehicle' ? c.slate900 : c.white, alignItems: 'center', justifyContent: 'center', gap: space[6], shadowColor: c.black, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 }}
+              style={{
+                flex: 1,
+                paddingVertical: space[14],
+                paddingHorizontal: space[4],
+                borderRadius: 16,
+                borderWidth: situation === 'vehicle' ? 1.5 : 1,
+                borderColor: situation === 'vehicle' ? (storm ? c.blue300 : c.blue600) : c.slate100,
+                backgroundColor: c.white,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: space[6],
+                shadowColor: situation === 'vehicle' ? c.blue400 : c.black,
+                shadowOpacity: situation === 'vehicle' ? 0.35 : 0.04,
+                shadowRadius: situation === 'vehicle' ? 6 : 2,
+                elevation: situation === 'vehicle' ? 3 : 1,
+              }}
             >
-              <Car size={20} color={situation === 'vehicle' ? c.white : c.slate900} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'vehicle' ? c.white : c.slate900, textAlign: 'center' }}>
+              <Car size={20} color={situation === 'vehicle' ? (storm ? c.blue300 : c.blue600) : c.slate500} />
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'vehicle' ? (storm ? c.blue300 : c.blue600) : c.slate700, textAlign: 'center' }}>
                 Vehicle Stuck
               </Text>
             </TouchableOpacity>
 
             {/* Pedestrian */}
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Situation: Pedestrian"
               onPress={() => setSituation('pedestrian')}
-              style={{ flex: 1, paddingVertical: space[14], paddingHorizontal: space[4], borderRadius: 18, borderWidth: situation === 'pedestrian' ? 1.5 : 1, borderColor: situation === 'pedestrian' ? c.slate900 : c.slate200, backgroundColor: situation === 'pedestrian' ? c.slate900 : c.white, alignItems: 'center', justifyContent: 'center', gap: space[6], shadowColor: c.black, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 }}
+              style={{
+                flex: 1,
+                paddingVertical: space[14],
+                paddingHorizontal: space[4],
+                borderRadius: 16,
+                borderWidth: situation === 'pedestrian' ? 1.5 : 1,
+                borderColor: situation === 'pedestrian' ? (storm ? c.blue300 : c.blue600) : c.slate100,
+                backgroundColor: c.white,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: space[6],
+                shadowColor: situation === 'pedestrian' ? c.blue400 : c.black,
+                shadowOpacity: situation === 'pedestrian' ? 0.35 : 0.04,
+                shadowRadius: situation === 'pedestrian' ? 6 : 2,
+                elevation: situation === 'pedestrian' ? 3 : 1,
+              }}
             >
-              <User size={20} color={situation === 'pedestrian' ? c.white : c.slate900} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'pedestrian' ? c.white : c.slate900, textAlign: 'center' }}>
+              <User size={20} color={situation === 'pedestrian' ? (storm ? c.blue300 : c.blue600) : c.slate500} />
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'pedestrian' ? (storm ? c.blue300 : c.blue600) : c.slate700, textAlign: 'center' }}>
                 Pedestrian
               </Text>
             </TouchableOpacity>
 
             {/* Medical Need */}
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Situation: Medical Need"
               onPress={() => setSituation('medical')}
-              style={{ flex: 1, paddingVertical: space[14], paddingHorizontal: space[4], borderRadius: 18, borderWidth: situation === 'medical' ? 1.5 : 1, borderColor: situation === 'medical' ? c.slate900 : c.slate200, backgroundColor: situation === 'medical' ? c.slate900 : c.white, alignItems: 'center', justifyContent: 'center', gap: space[6], shadowColor: c.black, shadowOpacity: 0.02, shadowRadius: 3, elevation: 1 }}
+              style={{
+                flex: 1,
+                paddingVertical: space[14],
+                paddingHorizontal: space[4],
+                borderRadius: 16,
+                borderWidth: situation === 'medical' ? 1.5 : 1,
+                borderColor: situation === 'medical' ? (storm ? c.blue300 : c.blue600) : c.slate100,
+                backgroundColor: c.white,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: space[6],
+                shadowColor: situation === 'medical' ? c.blue400 : c.black,
+                shadowOpacity: situation === 'medical' ? 0.35 : 0.04,
+                shadowRadius: situation === 'medical' ? 6 : 2,
+                elevation: situation === 'medical' ? 3 : 1,
+              }}
             >
-              <BriefcaseMedical size={20} color={situation === 'medical' ? c.white : c.slate900} />
-              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'medical' ? c.white : c.slate900, textAlign: 'center' }}>
+              <BriefcaseMedical size={20} color={situation === 'medical' ? (storm ? c.blue300 : c.blue600) : c.slate500} />
+              <Text style={{ fontSize: fontSize.caption, fontWeight: '700', color: situation === 'medical' ? (storm ? c.blue300 : c.blue600) : c.slate700, textAlign: 'center' }}>
                 Medical Need
               </Text>
             </TouchableOpacity>
@@ -383,46 +506,46 @@ export default function SOSScreen() {
             /* ---- Post-submission status panel ---- */
             <View
               style={{
-                backgroundColor: c.green50,
+                backgroundColor: storm ? c.green900 : c.green50,
                 borderRadius: 18,
                 padding: space[18],
                 borderWidth: 1,
-                borderColor: c.green200,
+                borderColor: storm ? c.green700 : c.green200,
                 gap: space[10],
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[8] }}>
-                <CheckCircle2 size={20} color={c.green600} />
-                <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: c.green800 }}>
+                <CheckCircle2 size={20} color={storm ? c.green300 : c.green600} />
+                <Text style={{ fontSize: fontSize.subtitle, fontWeight: '800', color: storm ? c.green200 : c.green800 }}>
                   Rescue Request Sent
                 </Text>
               </View>
-              <Text style={{ fontSize: fontSize.label, color: c.green700 }}>
+              <Text style={{ fontSize: fontSize.label, color: storm ? c.green300 : c.green700 }}>
                 SOS #{dispatchedSOS.sos_id} •{' '}
                 Status:{' '}
                 <Text style={{ fontWeight: '800', textTransform: 'capitalize' }}>
                   {dispatchedSOS.status}
                 </Text>
               </Text>
-              <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
+              <Text style={{ fontSize: fontSize.body, color: storm ? c.inkMuted : c.slate500 }}>
                 Coords: {dispatchedSOS.latitude.toFixed(5)}, {dispatchedSOS.longitude.toFixed(5)}
               </Text>
               {dispatchedSOS.reporter_phone ? (
-                <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
+                <Text style={{ fontSize: fontSize.body, color: storm ? c.inkMuted : c.slate500 }}>
                   Call-back: {dispatchedSOS.reporter_phone}
                 </Text>
               ) : (
-                <Text style={{ fontSize: fontSize.body, color: c.amber700 }}>
+                <Text style={{ fontSize: fontSize.body, color: storm ? c.amber400 : c.amber700 }}>
                   No call-back number saved. Add one in Profile so dispatch can reach you.
                 </Text>
               )}
               {dispatchedSOS.plate_number ? (
-                <Text style={{ fontSize: fontSize.body, color: c.slate500 }}>
+                <Text style={{ fontSize: fontSize.body, color: storm ? c.inkMuted : c.slate500 }}>
                   Vehicle plate: {dispatchedSOS.plate_number}
                 </Text>
               ) : null}
               {sosLog.length > 0 ? (
-                <Text style={{ fontSize: fontSize.body, color: c.slate700 }}>
+                <Text style={{ fontSize: fontSize.body, color: storm ? c.onInk : c.slate700 }}>
                   Latest update: {sosLog[sosLog.length - 1].text}
                 </Text>
               ) : null}
@@ -440,15 +563,15 @@ export default function SOSScreen() {
                   backgroundColor: c.white,
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: c.emerald100,
+                  borderColor: storm ? c.slate200 : c.emerald100,
                 }}
               >
                 {refreshingStatus ? (
-                  <ActivityIndicator size="small" color={c.green600} />
+                  <ActivityIndicator size="small" color={storm ? c.green300 : c.green600} />
                 ) : (
-                  <RefreshCw size={14} color={c.green600} />
+                  <RefreshCw size={14} color={storm ? c.green300 : c.green600} />
                 )}
-                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.green600 }}>
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: storm ? c.green300 : c.green600 }}>
                   Check Status
                 </Text>
               </TouchableOpacity>
@@ -465,11 +588,11 @@ export default function SOSScreen() {
                   backgroundColor: c.white,
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: c.emerald100,
+                  borderColor: storm ? c.slate200 : c.emerald100,
                 }}
               >
-                <History size={14} color={c.green600} />
-                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.green600 }}>
+                <History size={14} color={storm ? c.green300 : c.green600} />
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: storm ? c.green300 : c.green600 }}>
                   View Updates
                 </Text>
               </TouchableOpacity>
@@ -479,19 +602,19 @@ export default function SOSScreen() {
                 onPress={handleReturnHome}
                 style={{
                   paddingVertical: space[12],
-                  backgroundColor: c.slate900,
+                  backgroundColor: storm ? c.white : c.slate900,
                   borderRadius: 12,
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.white }}>
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: storm ? c.slate900 : c.white }}>
                   Return to Home
                 </Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
-              {/* Offline indicator: the CTA below cannot reach dispatch. */}
+              {/* Offline indicator */}
               {!online && (
                 <View
                   style={{
@@ -500,15 +623,13 @@ export default function SOSScreen() {
                     gap: space[8],
                     paddingVertical: space[10],
                     paddingHorizontal: space[12],
-                    marginBottom: space[10],
+                    marginBottom: space[6],
                     borderRadius: 12,
                     backgroundColor: c.amber100,
                   }}
                 >
                   <WifiOff size={14} color={c.amber800} />
-                  <Text
-                    style={{ flex: 1, fontSize: fontSize.body, fontWeight: '700', color: c.amber800 }}
-                  >
+                  <Text style={{ flex: 1, fontSize: fontSize.body, fontWeight: '700', color: c.amber800 }}>
                     Offline: a rescue request needs a live connection.
                   </Text>
                 </View>
@@ -516,51 +637,86 @@ export default function SOSScreen() {
 
               {/* Primary SOS CTA */}
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Request Emergency Rescue"
                 onPress={handleSOS}
                 disabled={sending || locating}
-                style={{ backgroundColor: c.slate900, paddingVertical: space[16], borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: space[8], shadowColor: c.black, shadowOpacity: 0.15, shadowRadius: 10, elevation: 4 }}
+                activeOpacity={0.9}
+                style={{
+                  backgroundColor: storm ? c.white : c.slate900,
+                  paddingVertical: space[16],
+                  borderRadius: 16,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: space[8],
+                  borderWidth: 2,
+                  borderColor: storm ? '#f87171' : '#dc2626',
+                  shadowColor: storm ? '#f87171' : '#dc2626',
+                  shadowOpacity: storm ? 0.45 : 0.2,
+                  shadowRadius: 10,
+                  elevation: 5,
+                }}
               >
                 {locating ? (
                   <>
-                    <ActivityIndicator color={c.white} />
-                    <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: c.white }}>
-                      Getting Location…
+                    <ActivityIndicator color={storm ? c.slate900 : c.white} />
+                    <Text style={{ fontSize: fontSize.lead, fontWeight: '700', color: storm ? c.slate900 : c.white }}>
+                      Acquiring Location…
                     </Text>
                   </>
                 ) : sending ? (
-                  <ActivityIndicator color={c.white} />
+                  <ActivityIndicator color={storm ? c.slate900 : c.white} />
                 ) : (
                   <>
-                    <Text style={{ fontSize: fontSize.subtitle, fontWeight: '900', color: c.white, letterSpacing: 0.8 }}>
-                      SOS
-                    </Text>
-                    <Text style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: c.white }}>
+                    <View
+                      style={{
+                        backgroundColor: c.red600,
+                        paddingHorizontal: space[8],
+                        paddingVertical: space[2],
+                        borderRadius: 6,
+                        marginRight: space[2],
+                      }}
+                    >
+                      <Text style={{ fontSize: fontSize.caption, fontWeight: '900', color: c.onInk, letterSpacing: 0.8 }}>
+                        SOS
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: fontSize.lead, fontWeight: '800', color: storm ? c.slate900 : c.white }}>
                       Request Rescue
                     </Text>
-                    <ArrowRight size={16} color={c.white} />
+                    <ArrowRight size={18} color={storm ? c.slate900 : c.white} />
                   </>
                 )}
               </TouchableOpacity>
 
-              {/* Secondary Buttons Row */}
-              <View style={{ flexDirection: 'row', gap: space[10] }}>
-                <TouchableOpacity
-                  onPress={() => router.back()}
-                  style={{ flex: 1, paddingVertical: space[14], backgroundColor: c.white, borderWidth: 1, borderColor: c.slate200, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate600 }}>
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              {/* Cancel Button */}
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Cancel and return to Home"
+                onPress={() => router.replace('/(tabs)/home')}
+                style={{
+                  paddingVertical: space[14],
+                  backgroundColor: c.white,
+                  borderWidth: 1,
+                  borderColor: c.slate200,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: fontSize.label, fontWeight: '700', color: c.slate600 }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
 
         {/* Monitored Response Footer */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space[6], marginTop: space[4] }}>
-          <ShieldCheck size={14} color={c.sky600} />
-          <Text style={{ fontSize: fontSize.micro, fontWeight: '600', color: c.slate500 }}>
+          <ShieldCheck size={15} color={c.blue600} />
+          <Text style={{ fontSize: fontSize.caption, fontWeight: '600', color: c.slate500 }}>
             Metro Emergency Dispatch • 24/7 Monitored Response
           </Text>
         </View>

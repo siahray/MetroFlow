@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { EMPTY_UNIT_FORM, unitToForm, validateUnitForm, type UnitFormValues } from "./fleet";
+import {
+  EMPTY_UNIT_FORM,
+  UNIT_BASE_LOCATION,
+  unitToForm,
+  validateUnitForm,
+  type UnitFormValues,
+} from "./fleet";
 import type { Vehicle } from "./dispatch";
 
 const valid: UnitFormValues = {
@@ -8,8 +14,6 @@ const valid: UnitFormValues = {
   vehicleType: "Rescue boat",
   clearanceCm: "60",
   status: "AVAILABLE",
-  latitude: "",
-  longitude: "",
 };
 
 describe("unit form validation", () => {
@@ -22,6 +26,8 @@ describe("unit form validation", () => {
         vehicle_type: "Rescue boat",
         clearance_cm: 60,
         status: "AVAILABLE",
+        current_location_lat: UNIT_BASE_LOCATION.lat,
+        current_location_lon: UNIT_BASE_LOCATION.lon,
       },
     });
   });
@@ -44,17 +50,12 @@ describe("unit form validation", () => {
     }
   });
 
-  test("a position needs both coordinates, inside range", () => {
-    const onlyLat = validateUnitForm({ ...valid, latitude: "14.6" });
-    expect(onlyLat.ok).toBe(false);
-    if (!onlyLat.ok) expect(onlyLat.errors.longitude).toBeDefined();
-
-    expect(validateUnitForm({ ...valid, latitude: "91", longitude: "121" }).ok).toBe(false);
-    const both = validateUnitForm({ ...valid, latitude: "14.585", longitude: "121.056" });
-    expect(both.ok).toBe(true);
-    if (both.ok) {
-      expect(both.payload.current_location_lat).toBe(14.585);
-      expect(both.payload.current_location_lon).toBe(121.056);
+  test("units default to the base location", () => {
+    const result = validateUnitForm(valid);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.current_location_lat).toBe(UNIT_BASE_LOCATION.lat);
+      expect(result.payload.current_location_lon).toBe(UNIT_BASE_LOCATION.lon);
     }
   });
 
@@ -81,12 +82,10 @@ describe("editing a unit", () => {
       vehicleType: "Ambulance",
       clearanceCm: "40",
       status: "OUT_OF_SERVICE",
-      latitude: "14.6",
-      longitude: "121.01",
     });
   });
 
-  test("a unit with no position and no clearance gives empty fields, not 'null'", () => {
+  test("a unit with no clearance gives an empty clearance field, not 'null'", () => {
     const form = unitToForm({
       vehicle_id: 1,
       call_sign: "X",
@@ -97,6 +96,6 @@ describe("editing a unit", () => {
       current_location_lon: null,
       speed_kmh: null,
     });
-    expect([form.clearanceCm, form.latitude, form.longitude]).toEqual(["", "", ""]);
+    expect(form.clearanceCm).toBe("");
   });
 });

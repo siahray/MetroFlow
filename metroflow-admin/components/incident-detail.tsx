@@ -719,10 +719,10 @@ export function IncidentDetail({
 
       {/* FSD-FR-044: MANDATORY ACTION REASON MODAL */}
       {actionModalOpen && activeAction && (
-        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-bold text-slate-900">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-700/80">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 {activeAction === "reject"
                   ? "Reject Incident (False Alarm)"
                   : activeAction === "hold"
@@ -732,7 +732,7 @@ export function IncidentDetail({
               <button
                 type="button"
                 onClick={() => setActionModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -742,7 +742,7 @@ export function IncidentDetail({
               <div className="space-y-1">
                 <label
                   htmlFor="incident-escalation-agency"
-                  className="block text-xs font-bold text-slate-700"
+                  className="block text-xs font-bold text-slate-700 dark:text-slate-300"
                 >
                   Target Escalation Agency
                 </label>
@@ -750,7 +750,7 @@ export function IncidentDetail({
                   id="incident-escalation-agency"
                   value={actionAgency}
                   onChange={(e) => setActionAgency(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 >
                   <option value="BFP">BFP — Bureau of Fire Protection</option>
                   <option value="Coast Guard">Philippine Coast Guard</option>
@@ -763,7 +763,7 @@ export function IncidentDetail({
             <div className="space-y-1">
               <label
                 htmlFor="incident-action-reason"
-                className="block text-xs font-bold text-slate-700"
+                className="block text-xs font-bold text-slate-700 dark:text-slate-300"
               >
                 Mandatory Operational Reason (FSD-FR-044)
               </label>
@@ -774,7 +774,7 @@ export function IncidentDetail({
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 placeholder="Provide justification or sensor cross-check finding..."
-                className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs focus:border-sky-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
               <span className="text-[10px] text-slate-400">
                 Minimum 3 characters. This action is permanently recorded in the tamper-evident
@@ -812,17 +812,19 @@ export function IncidentDetail({
 
       {/* 3-STEP DISPATCH MODAL */}
       {dispatchModalOpen ? (
-        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl animate-modal-in space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80">
+          <div className="w-full max-w-xl animate-modal-in space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-700/80">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                <h3 className="text-base font-bold text-slate-900">Flood-Safe Dispatch Workflow</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Flood-Safe Dispatch Workflow
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setDispatchModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
                 <X className="h-5 w-5" />
               </button>

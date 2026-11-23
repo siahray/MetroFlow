@@ -76,7 +76,7 @@ import {
 import { useAuth } from "../auth";
 import { BackButton } from "../components/BackButton";
 import { useDialog } from "../components/Dialog";
-import { boundingBoxOf, reverseGeocodeName, searchPlaces, type GeocodeResult } from "../geocode";
+import { matchesTokens, normalizeSearchQuery, reverseGeocodeName, searchPlaces, searchTokens, type GeocodeResult } from "../geocode";
 import { congestionFromSpeeds, RouteMap, type MapViewMode, type RouteMapHandle } from "../navigation/RouteMap";
 import { subscribeToHazards } from "../navigation/hazard-stream";
 import { planRouteOffline } from "../navigation/offline-route";
@@ -250,7 +250,7 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
   // The picked place's real coordinates. A dry Mapbox route navigates to the
   // place itself; the snapped node only anchors the graph-based planners.
   const [placeCoords, setPlaceCoords] = useState<LatLng | null>(null);
-  // Place search (curated establishments + Nominatim), alongside the instant
+  // Live place search (Mapbox + OSM), alongside the instant
   // road-node name match below -- a driver can type either a place or a junction.
   const [addressResults, setAddressResults] = useState<GeocodeResult[]>([]);
   const [geocoding, setGeocoding] = useState(false);
@@ -908,33 +908,33 @@ export default function RouteScreen({ edges }: { edges?: Edge[] } = {}) {
 
   useEffect(() => () => void Speech.stop(), []);
 
-  const matches = useMemo(() => {
-    const needle = destinationQuery.trim().toLowerCase();
-    if (!needle || !network || route) return [];
-    return network.nodes.features
-      .filter((node) => (node.properties.name ?? "").toLowerCase().includes(needle))
-      .slice(0, 8);
-  }, [destinationQuery, network, route]);
-
-  // Address search (Nominatim), debounced well under its ~1 req/sec usage
-  // policy and restricted to the loaded network's own extent so a result is
-  // actually somewhere this app can route to.
-  const searchBox = useMemo(
-    () => (network ? boundingBoxOf(network.nodes.features.map((n) => toLatLng(n.geometry.coordinates))) : null),
+  // Tokenize road names once per network, not once per keystroke per node.
+  const nodeWords = useMemo(
+    () =>
+      network
+        ? network.nodes.features.map((node) => ({ node, words: searchTokens(node.properties.name ?? "") }))
+        : [],
     [network],
   );
+  const matches = useMemo(() => {
+    const needles = searchTokens(normalizeSearchQuery(destinationQuery));
+    if (needles.length === 0 || route) return [];
+    return nodeWords.filter(({ words }) => matchesTokens(needles, words)).slice(0, 8).map(({ node }) => node);
+  }, [destinationQuery, nodeWords, route]);
+
+  // Address search, debounced well under Nominatim's ~1 req/sec usage policy.
+  // The geocoder applies the fixed Metro Manila boxes itself.
   // No search applies: render time ignores whatever addressResults/geocoding
   // are still holding from a previous query, rather than resetting them
   // synchronously from the effect body below.
-  const addressSearchActive = destinationQuery.trim().length >= 3 && !route;
+  const addressSearchActive = normalizeSearchQuery(destinationQuery).length >= 3 && !route;
   const visibleAddressResults = addressSearchActive ? addressResults : [];
   useEffect(() => {
     if (!addressSearchActive) return;
-    const needle = destinationQuery.trim();
+    const needle = normalizeSearchQuery(destinationQuery);
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setGeocoding(true);
-      // Search without bounding box restriction to get more results
       searchPlaces(
         needle,
         { proximity: positionRef.current },
@@ -2220,7 +2220,7 @@ function makeStyles(c: ThemeColors, mode: ThemeMode) {
     alignItems: "center",
     justifyContent: "center",
   },
-  dangerButtonText: { fontSize: fontSize.body, fontWeight: "700", color: c.white },
+  dangerButtonText: { fontSize: fontSize.body, fontWeight: "700", color: c.onInk },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",

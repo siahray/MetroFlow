@@ -97,7 +97,7 @@ export default function IndexScreen() {
 
           {/* Hero */}
           <View style={{ alignItems: 'center', paddingVertical: space[32] }}>
-            <View style={{ width: 80, height: 80, backgroundColor: c.slate900, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: space[16] }}>
+            <View style={{ width: 80, height: 80, backgroundColor: c.inkBg, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: space[16] }}>
               <Waves size={40} color={c.sky400} />
             </View>
             <Text style={{ fontSize: fontSize.hero, fontWeight: '900', color: c.slate900, letterSpacing: -0.5 }}>MetroFlow</Text>
@@ -117,11 +117,11 @@ export default function IndexScreen() {
           {/* CTA */}
           <View style={{ gap: space[12], marginBottom: space[16] }}>
             <TouchableOpacity
-              style={{ backgroundColor: c.slate900, paddingVertical: space[15], borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: space[8] }}
+              style={{ backgroundColor: c.inkBg, paddingVertical: space[15], borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: space[8] }}
               onPress={() => setMode('login')}
             >
-              <Text style={{ color: c.white, fontWeight: '700', fontSize: fontSize.lead }}>Sign In</Text>
-              <ArrowRight size={16} color={c.white} />
+              <Text style={{ color: c.onInk, fontWeight: '700', fontSize: fontSize.lead }}>Sign In</Text>
+              <ArrowRight size={16} color={c.onInk} />
             </TouchableOpacity>
             <TouchableOpacity
               style={{ backgroundColor: c.blue50, paddingVertical: space[15], borderRadius: 14, alignItems: 'center', borderWidth: 1, borderColor: c.blue200 }}
@@ -152,7 +152,7 @@ export default function IndexScreen() {
         </View>
 
         <View style={{ alignItems: 'center', marginBottom: space[32] }}>
-          <View style={{ width: 64, height: 64, backgroundColor: c.slate900, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: space[12] }}>
+          <View style={{ width: 64, height: 64, backgroundColor: c.inkBg, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: space[12] }}>
             <Waves size={30} color={c.sky400} />
           </View>
           <Text style={{ fontSize: fontSize.display, fontWeight: '900', color: c.slate900 }}>
@@ -208,13 +208,13 @@ export default function IndexScreen() {
           ) : null}
 
           <TouchableOpacity
-            style={{ backgroundColor: c.slate900, paddingVertical: space[15], borderRadius: 14, alignItems: 'center', marginTop: space[4] }}
+            style={{ backgroundColor: c.inkBg, paddingVertical: space[15], borderRadius: 14, alignItems: 'center', marginTop: space[4] }}
             onPress={mode === 'login' ? handleLogin : handleRegister}
             disabled={submitting}
           >
             {submitting
-              ? <ActivityIndicator size="small" color={c.white} />
-              : <Text style={{ color: c.white, fontWeight: '700', fontSize: fontSize.lead }}>
+              ? <ActivityIndicator size="small" color={c.onInk} />
+              : <Text style={{ color: c.onInk, fontWeight: '700', fontSize: fontSize.lead }}>
                   {mode === 'login' ? 'Sign In' : 'Sign Up'}
                 </Text>
             }

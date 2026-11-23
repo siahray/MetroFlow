@@ -54,22 +54,24 @@ function ShortcutHelp({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"
-      className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm animate-modal-in rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        className="w-full max-w-sm animate-modal-in rounded-xl border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-3 flex items-center gap-2">
-          <Keyboard className="h-4 w-4 text-slate-500" />
-          <h2 className="text-sm font-bold text-slate-900">Keyboard shortcuts</h2>
+          <Keyboard className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            Keyboard shortcuts
+          </h2>
         </div>
         <ul className="space-y-2">
           {SHORTCUTS.map((shortcut) => (
             <li key={shortcut.keys} className="flex items-center justify-between text-xs">
-              <span className="text-slate-600">{shortcut.label}</span>
-              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-700">
+              <span className="text-slate-600 dark:text-slate-400">{shortcut.label}</span>
+              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 {shortcut.keys}
               </kbd>
             </li>

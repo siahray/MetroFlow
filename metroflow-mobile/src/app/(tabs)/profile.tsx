@@ -277,6 +277,10 @@ export default function ProfileScreen() {
             backgroundColor: c.white,
             alignItems: 'center',
             justifyContent: 'center',
+            shadowColor: c.blue400,
+            shadowOpacity: themeMode === 'storm' ? 0.5 : 0,
+            shadowRadius: themeMode === 'storm' ? 8 : 0,
+            elevation: themeMode === 'storm' ? 4 : 0,
           }}
         >
           <Waves size={22} color={c.blue600} />
@@ -295,7 +299,20 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Identity: the one dark card on the screen, same treatment as Home's route card */}
-        <View style={{ backgroundColor: c.inkBg, borderRadius: 20, padding: space[20], gap: space[16] }}>
+        <View
+          style={{
+            backgroundColor: c.inkBg,
+            borderRadius: 20,
+            padding: space[20],
+            gap: space[16],
+            borderWidth: themeMode === 'storm' ? 1 : 0,
+            borderColor: themeMode === 'storm' ? c.blue300 : undefined,
+            shadowColor: themeMode === 'storm' ? c.blue400 : undefined,
+            shadowOpacity: themeMode === 'storm' ? 0.5 : undefined,
+            shadowRadius: themeMode === 'storm' ? 8 : undefined,
+            elevation: themeMode === 'storm' ? 4 : undefined,
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[14] }}>
             <View
               style={{
@@ -380,7 +397,17 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderColor: c.slate700, paddingTop: space[14] }}>
+          {/* A subtle divider on this permanently-dark card, same convention as
+              route.tsx's instructionDivider -- a theme token would flip
+              brightness with the mode even though this card never does. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              borderTopWidth: 1,
+              borderColor: 'rgba(255,255,255,0.14)',
+              paddingTop: space[14],
+            }}
+          >
             {stats.map((stat, i) => {
               const Icon = stat.icon;
               return (
@@ -391,7 +418,7 @@ export default function ProfileScreen() {
                     alignItems: 'center',
                     gap: space[3],
                     borderLeftWidth: i > 0 ? 1 : 0,
-                    borderColor: c.slate700,
+                    borderColor: 'rgba(255,255,255,0.14)',
                   }}
                 >
                   <Icon size={15} color={c.inkMuted} />

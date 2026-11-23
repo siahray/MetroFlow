@@ -8,15 +8,26 @@
 | ------- | ----------- | -------------- | ------------------------------------------------------------------ |
 | 1.0     | 21 Oct 2026 | Alt F4         | Initial Baseline Release                                            |
 | 1.1     | 15 Nov 2026 | Alt F4         | CR-001 — production network recalibration, driver navigation and admin incident location visualizer |
-| 1.2     | 20 Nov 2026 | Alt F4         | CR-002 — admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with responder assignment and tracking |
+| 1.2     | 20 Nov 2026 | Alt F4         | CR-002 — admin screen split: operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar with responder assignment and tracking (approved 23 Nov 2026 and included in the approved baseline) |
+
+CR-001 (15 Nov 2026), its Amendments A1 and A2, CR-002 and CR-002 A1 are
+approved (Project Lead 21 Nov 2026; QA/Documentation Lead, Academic Adviser and
+Academic Panel sign-offs recorded 23 Nov 2026) and included in the approved
+baseline (`docs/APPROVALS.md` A-20/A-21).
 
 ## Approvals
 
-| Name                    | Designation      |
-| ----------------------- | ---------------- |
-| «Project Sponsor»       | Project Sponsor  |
-| «Client Representative» | Business Owner   |
-| Sigfred Jayme           | Academic Adviser |
+| Name                    | Designation                                           |
+| ----------------------- | ----------------------------------------------------- |
+| «Project Sponsor»       | Intended evaluation scenario; no LGU sponsor exists   |
+| «Client Representative» | Scenario reviewer (advisory); no official endorsement |
+| Sigfred Jayme           | Academic Adviser — sign-off pending `[TBC]`           |
+
+This is an academic capstone project, not an LGU-commissioned, funded, endorsed
+or hosted deployment (`docs/APPROVALS.md` §1). LGU, dispatcher and rescue-unit
+references describe the intended evaluation scenario; cost figures in the
+business case are illustrative planning material, not an approved budget. All
+sign-offs are `[TBC]`, and any LGU feedback is advisory rather than an approval.
 
 ## Executive Summary
 
@@ -40,8 +51,8 @@ in [TSD.md](TSD.md).
 
 ## Business Problem Statement
 
-During a rain event, the LGU operations centre cannot verify four things that
-determine its decisions:
+In the intended LGU evaluation scenario, during a rain event the operations
+centre cannot verify four things that determine its decisions:
 
 1. **Which roads are passable now.** Flood depth is estimated by eye or from a
    caller's description, not measured against the vehicle that must cross.
@@ -71,15 +82,16 @@ business case compares options on operational fit, not purchase price alone.
 | BO-007 | Keep drivers out of verified flood hazards                 | 100% of active routes reroute or alert before entering a published hazard polygon                      |
 | BO-008 | Shorten the path from field observation to verified hazard | Median time from report submission to publish decision below the M1 baseline `[TBC]`                   |
 
-Targets are agreed with the client at M1. BO-002 is expressed as zero tolerance
-because a single dispatch into deep water can be fatal.
+Targets are placeholders to be confirmed by the academic panel at M1; no client
+baseline was supplied. BO-002 is expressed as zero tolerance because a single
+dispatch into deep water can be fatal.
 
 ## Stakeholders
 
 | Stakeholder             | Department                          | Role                                               |
 | ----------------------- | ----------------------------------- | -------------------------------------------------- |
-| «Project Sponsor»       | MDRRMC / «Client LGU»               | Funds, authorises and accepts the pilot            |
-| «Client Representative» | LGU operations and IT (CDMO)        | Business owner; provides corridor data and access  |
+| «Project Sponsor»       | MDRRMC / «Client LGU» (scenario)    | Intended evaluation sponsor; no funding or authorisation; sign-off pending |
+| «Client Representative» | LGU operations and IT (CDMO)        | Scenario reviewer (advisory); no official endorsement |
 | Dispatchers             | Operations centre                   | Primary users of the dashboard, report desk and radar |
 | Barangay responders     | Field units                         | Consume routes and dispatch instructions           |
 | Rescue commanders       | MDRRMC operations                   | Approve dispatch and oversee rescue routes         |
@@ -90,11 +102,18 @@ because a single dispatch into deep water can be fatal.
 
 Personas and engagement detail are in [Project-Management-Plan.md](Project-Management-Plan.md).
 
+The portal's three screens are `/triage` (read-only operations dashboard),
+`/moderation` (the only report-verification surface) and `/radar` (SOS-only
+assignment and tracking); this split is approved (23 Nov 2026) and part of the
+approved baseline. Driver accounts are `PUBLIC_DRIVER` (self-registered) or `RESPONDER`
+(linked to a rescue unit); admin accounts are `ADMIN`/`SUPER_ADMIN`.
+
 ## Functional Requirements
 
 These are the business-level capabilities. The FSD decomposes them into
-`FSD-FR-001` to `FSD-FR-118`; each row here names the business requirement it
-serves so the traceability chain is never broken.
+`FSD-FR-001` to `FSD-FR-154`, including the approved CR-002 Amendment A1
+requirements `FSD-FR-150`–`154`; each row here names the business requirement
+it serves so the traceability chain is never broken.
 
 | Req ID | Requirement                                                                            | Priority |
 | ------ | -------------------------------------------------------------------------------------- | -------- |
@@ -163,7 +182,7 @@ Business-level risks. The full register, scoring and responses are in
 | ------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | Model outputs judged unrealistic by practitioners | Trust collapses; the tool is not adopted   | Declare calibration constants; validate against documented events; present as decision support |
 | Route-level authorisation not delivered before acceptance | Cannot be used with real data       | Delivered 27 Oct 2026: every route requires a token and writes require a portal role. Rate limiting delivered 28 Oct 2026 for login, registration, SOS and simulation (TSD LIM-006); an edge WAF needs a paid plan (LIM-025) |
-| No baseline data from the client                  | Benefits cannot be quantified              | Use audit-trail and risk benefits; collect the baseline during the pilot                       |
+| No baseline data from a client                    | Benefits cannot be quantified              | Use audit-trail and risk benefits; M1 baselines remain `[TBC]`                                  |
 | Dispatchers find the portal slower than radio     | They bypass the system                     | Usability sessions from M4; keep the existing process running in parallel                      |
 | Pilot corridor changes late                       | Seed data and demonstration rework         | Freeze the corridor at M2; changes require scope re-evaluation                                 |
 | Personal data incident during testing             | Legal and ethical exposure                 | Synthetic data only; row-level security verified; no personal data in logs                     |
@@ -177,19 +196,27 @@ Business-level risks. The full register, scoring and responses are in
 
 ## Success Metrics
 
-| KPI                                         | Target                                         | Current (9 Nov 2026)                                                          |
+| KPI                                         | Target                                         | Current (13 Nov 2026)                                                         |
 | ------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| Network state p95 (NFR-001)                 | ≤ 500 ms                                       | **Not currently met** — 13 Nov 2026 hosted, real-network re-measurement p95 ≈5,585 ms before the serializer fix, ≈52,872 ms after (SSE-client pool contention); a clean re-measurement is still open |
+| Route response p95 (NFR-002)                | ≤ 200 ms                                       | **Not currently met** — 13 Nov 2026 hosted re-measurement p95 ≈2,934 ms (≈4,341 ms after the geometry filter); see NFR-002 |
 | Report-to-triage time                       | Below the M1 baseline `[TBC]`                  | Blocked — needs a client-supplied M1 baseline, not an engineering gap         |
 | Dispatches aborted for road conditions      | 0 per event                                    | Structurally guaranteed (routing refuses an over-clearance edge, `test_clearance_gates_route_availability`); no declared event has run yet to confirm empirically |
 | Decisions with actor, timestamp and action  | 100%                                           | Met — every triage/dispatch decision endpoint calls `audit.record` in the same transaction |
 | Route responses respecting clearance        | 100%                                           | Met — `td_a_star_search` excludes any edge at or above clearance; test-covered |
-| High/Medium security findings               | 0                                              | Met (9 Nov 2026) — see NFR-004 above                                          |
+| High/Medium security findings               | 0                                              | Met (9 Nov 2026) — see NFR-004 above; awaiting a green live CI run to confirm  |
 | `Must` requirements accepted                | 100% by M9                                     | Tracked in the FSD, not this document                                        |
 | System Usability Scale                      | ≥ 75 `[TBC]`                                   | Blocked — needs real UAT sessions                                            |
 | Hazard publish to SSE event                 | ≤ 100 ms at p95, server-side                   | **Not currently met** — re-measured 13 Nov 2026 against the real Quezon City network over the hosted deployment, p95 ≈1,374 ms; see NFR-019 above |
 | Offline route completion in cached corridor | 100% of scripted runs                          | Met — `offline-route.test.ts` (clearance vs depth, hazard detour, `ignore_hazards`, no safe route), 15/15 passing |
 | Privileged actions blocked without a role   | 100%                                           | Met — role-dependency checks return 403 on every privileged route; test-covered |
 | Driver reports reaching a triage decision   | 100% of queued reports have a recorded outcome | Structurally guaranteed (no silent delete, `BRULE-005`); not yet measured over a real event |
+
+NFR-001/002/019 remain over budget on the 13 Nov 2026 hosted, real-network
+measurements recorded in the NFR table; `docs/IMPLEMENTATION_STATUS.md` marks
+them done on the earlier local measurements and on the individual fixes, but the
+hosted tail measurement and a clean re-run (with no concurrent SSE clients) are
+still open.
 
 ## Appendix A — Business Requirements and Scope
 
@@ -216,12 +243,19 @@ does, so this document is also an honest statement of scope.
 | BR-014 | Let drivers submit structured flood reports with photo and depth evidence    | Must     | Met — depth level, camera photo, EXIF, offline queue; Moderation and Evidence is the only screen that verifies user reports (CR-002) |
 | BR-015 | Let drivers request emergency rescue with an exact location in one action    | Must     | Met in the driver app — one-tap SOS persists with coordinates and assignment status; the SOS-only Dispatch Radar assigns a specific unit and tracks it during the response (CR-002); native telephony is out of scope |
 | BR-016 | Give dispatchers a live map, fleet visibility and flood-safe dispatch        | Must     | Met — live MapLibre layers (network, hazard, closure, fleet, SOS, advisories), fleet CRUD, ranked dispatch and rescue-route preview; Dispatch Radar is SOS-only, assigns a specific unit, and tracks it from live telemetry with a derived ETA and a `dispatch_events` mission timeline (CR-002) |
-| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Met — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented on the Open-Meteo rain gate and GloFAS modelled river discharge, the system's sole rain/river telemetry sources |
+| BR-017 | Ingest river and rain gauge data and flag impacted roads automatically       | Should   | Met for the live sources — internal sensor ingestion (`FSD-FR-090`/`091`), threshold breach detection and advisory road flagging are implemented on the Open-Meteo rain gate and GloFAS modelled river discharge, the system's live rain/river sources; Project NOAH is a rain-gated advisory fallback (`backend/flood_state.py`), never a closure. Partial by requirement granularity: Manual River Reading Intake (`FSD-FR-095`) — **Not Implemented**; NOAH flood maps (`FSD-FR-098`/`099`) — **Not Implemented — layer data/import missing**; NASA GPM IMERG Ingestion (`FSD-FR-104`) — **Partially Implemented — Open-Meteo live, NASA GPM IMERG missing** |
 | BR-018 | Keep navigation, hazards and reporting usable when connectivity drops        | Must     | Met — ordered offline report queue, SQLite cache of graph/hazards/last route, offline route planning; basemap tiles out of scope |
-| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Met — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled as the system's sole flood-state sources |
+| BR-019 | Base routing on current flood state where it exists and on a clearly labelled fallback where it does not | Should | Met for the live sources — Open-Meteo rain gate and GloFAS modelled river discharge are live and labelled as the primary flood-state sources; Project NOAH is a rain-gated advisory fallback that never closes a road (`backend/flood_state.py`). Partial by requirement granularity: Manual River Reading Intake (`FSD-FR-095`) — **Not Implemented**; NOAH flood maps (`FSD-FR-098`/`099`) — **Not Implemented — layer data/import missing**; NASA GPM IMERG Ingestion (`FSD-FR-104`) — **Partially Implemented — Open-Meteo live, NASA GPM IMERG missing** |
+| BR-022 | Do not build EV charging stops, HOV-lane routing, toll/highway bypass, scheduled-departure traffic prediction or walking/cycling/transit routing in the pilot | Out of scope | Declined — the pilot graph carries no such attributes (`BACKLOG.md`; `FSD-FR-119`–`123`) |
 
 `Must` requirements define the acceptance boundary. All of them are met in the pilot.
 Deprioritised or out-of-pilot scope is marked above rather than assumed.
+
+The requirement-ID register here is incomplete relative to `BACKLOG.md`'s
+cross-document sync record: BR-020, BR-021 and NFR-028–030 were reported as
+synced, but no authoritative definitions survive in the retained change-request
+documents (only BR-022's declined advanced-routing scope is recoverable). Treat
+those IDs as unresolved until the source change requests are restored.
 
 ### A.2 In scope
 
@@ -241,7 +275,7 @@ Deprioritised or out-of-pilot scope is marked above rather than assumed.
 ### A.3 Out of scope
 
 - Native iOS or Android store builds.
-- CCTV. Evidence is the photo the reporter submits from their own phone.
+- No CCTV — report `source` label only. Evidence is the photo the reporter submits from their own phone; `CCTV` survives only as a legacy `source` enum value in the API, not a feed.
 - Production SMS, telephony or carrier integration for SOS.
 - Offline basemap tiles; offline mode renders the cached road graph.
 - Multi-LGU deployment, billing and tenancy.
@@ -250,10 +284,11 @@ Deprioritised or out-of-pilot scope is marked above rather than assumed.
 
 ### A.4 Boundary statement for acceptance
 
-The pilot is accepted on a **demonstration corridor with synthetic rainfall, a
-seeded gauge set and a real persisted report flow**. It is not accepted as a
-production dispatch system until real sensor agreements, carrier-grade SOS
-delivery and multi-LGU isolation are in place. Those items are recorded in TSD §7 and are not implied by this release.
+Within the academic evaluation, the pilot is demonstrated on a **demonstration
+corridor with synthetic rainfall, a seeded gauge set and a real persisted report
+flow**; no LGU acceptance is implied. It is not a production dispatch system
+until real sensor agreements, carrier-grade SOS delivery and multi-LGU isolation
+are in place. Those items are recorded in TSD §7 and are not implied by this release.
 
 ## Appendix B — Business Rules, Assumptions and Constraints
 
@@ -287,19 +322,19 @@ delivery and multi-LGU isolation are in place. Those items are recorded in TSD �
 | Assumption | A-002 | The pilot corridor is representative enough to demonstrate routing        |
 | Assumption | A-003 | Free or institutional service tiers suffice for the pilot                 |
 | Assumption | A-004 | Dispatchers have a modern desktop browser and reliable connectivity       |
-| Assumption | A-005 | Rainfall is supplied manually or from Open-Meteo (live rain gate); OpenWeather is an optional supplementary source; Open-Meteo and GloFAS are the system's rain/river telemetry sources |
+| Assumption | A-005 | Rainfall is entered manually or from Open-Meteo (live rain gate); GloFAS modelled river discharge (via Open-Meteo's Flood API) is the other live source, and Project NOAH is a rain-gated advisory fallback. OpenWeather was considered only — no integration exists |
 | Assumption | A-006 | The client provides corridor and barangay naming conventions              |
 | Assumption | A-007 | Drivers have a smartphone with a modern browser, camera and geolocation   |
 | Assumption | A-008 | Cellular data can drop during an event, so offline operation is required  |
 | Assumption | A-009 | Sensor readings may be simulated for the pilot but must be labelled       |
-| Assumption | A-010 | Mapbox Directions API is used for dry-state routing (ADR-025); the portal basemap is the keyless Carto Positron style (ADR-022); OSM raster remains the swap-in fallback |
+| Assumption | A-010 | Mapbox Directions API is used for dry-state routing (ADR-025); the portal basemap is the keyless Carto Positron style (ADR-022); the driver app has no OSM raster fallback — an unset Mapbox token leaves a blank basemap while the cached graph still renders (ADR-026) |
 | Constraint | C-001 | Delivery must fit the academic term                                       |
 | Constraint | C-002 | Team effort is part-time and shared with coursework                       |
-| Constraint | C-003 | No paid GitHub Code Security, so CodeQL cannot analyse the private repo   |
+| Constraint | C-003 | Resolved — the repository went public 10 Nov 2026 and CodeQL (`security-extended`) runs in CI with 0 alerts (`BACKLOG.md` S-3; `.github/workflows/codeql.yml`) |
 | Constraint | C-004 | Only synthetic or public data may be used                                 |
 | Constraint | C-005 | Credentials are never committed; public keys are restricted by origin     |
 | Constraint | C-006 | The driver client ships as a native Expo app, not a public store release |
-| Constraint | C-007 | Evidence is the reporter's own photo; no CCTV feed is available or used   |
+| Constraint | C-007 | Evidence is the reporter's own photo; no CCTV feed exists — `CCTV` is only a legacy report `source` label |
 | Constraint | C-008 | Basemap tiles are online-only; offline mode uses the cached graph         |
 | Constraint | C-009 | The pilot is single-LGU and single-region                                 |
 | Constraint | C-010 | UI follows the client-supplied HTML/CSS template; no bespoke UI design    |

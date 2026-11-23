@@ -1,19 +1,10 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ClipboardCheck,
-  Gauge,
-  Inbox,
-  RefreshCw,
-  Shield,
-  Siren,
-  Truck,
-  Waves,
-} from "lucide-react";
+import { ClipboardCheck, Gauge, RefreshCw, Shield, Siren, Truck, Waves } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ActiveSensorsModal } from "@/components/active-sensors-modal";
 import { AppShell } from "@/components/app-shell";
 import { ErrorNotice } from "@/components/error-notice";
 import { NetworkMap } from "@/components/network-map";
@@ -45,6 +36,7 @@ export default function OperationsDashboardPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [hazards, setHazards] = useState<HazardZone[]>([]);
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [sensorsOpen, setSensorsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -218,38 +210,30 @@ export default function OperationsDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="flex flex-col gap-4 xl:col-span-2">
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-amber-100 bg-amber-50 text-amber-600">
-                <Inbox className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={() => setSensorsOpen(true)}
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm hover:bg-slate-50"
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-sky-100 bg-sky-50 text-sky-600">
+                <Gauge className="h-4 w-4" />
               </span>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Waiting for attention</h2>
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  {summary.unassignedSos} SOS without a unit · {summary.pendingReports} reports
-                  awaiting moderation
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/radar"
-                className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Open Dispatch Radar
-              </Link>
-              <Link
-                href="/moderation"
-                className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Open Moderation
-              </Link>
-            </div>
-          </section>
+              <span>
+                <span className="block text-sm font-bold text-slate-900">Active sensors</span>
+                <span className="block text-[11px] text-slate-500">
+                  {sensors.length} active · {sensors.filter((sensor) => sensor.last_flagged).length}{" "}
+                  in breach
+                </span>
+              </span>
+            </span>
+            <span className="text-xs font-semibold text-slate-600">View</span>
+          </button>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <WaitingTable
               title="Reports awaiting moderation"
+              count={summary.pendingReports}
               caption="Five oldest unattended reports"
               href="/moderation"
               empty="The moderation queue is clear."
@@ -262,6 +246,7 @@ export default function OperationsDashboardPage() {
 
             <WaitingTable
               title="SOS awaiting a unit"
+              count={summary.unassignedSos}
               caption="Five oldest unattended distress signals"
               href="/radar"
               empty="Every active SOS has a unit assigned."
@@ -273,8 +258,6 @@ export default function OperationsDashboardPage() {
               }))}
             />
           </div>
-
-          <ActiveSensorsPanel sensors={sensors} />
 
           {/* Stretches to the row bottom, so the map's lower edge lines up with
               the Operational trends column on wide screens. */}
@@ -289,18 +272,23 @@ export default function OperationsDashboardPage() {
 
         <TrendsCharts sos={sosList} reports={reports} vehicles={vehicles} hazards={hazards} />
       </div>
+      {sensorsOpen ? (
+        <ActiveSensorsModal sensors={sensors} onClose={() => setSensorsOpen(false)} />
+      ) : null}
     </AppShell>
   );
 }
 
 function WaitingTable({
   title,
+  count,
   caption,
   href,
   empty,
   rows,
 }: {
   title: string;
+  count: number;
   caption: string;
   href: string;
   empty: string;
@@ -310,7 +298,12 @@ function WaitingTable({
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <header className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-bold text-slate-900">{title}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-slate-900">{title}</h2>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+              {count}
+            </span>
+          </div>
           <p className="text-[11px] text-slate-500">{caption}</p>
         </div>
         <Link
@@ -351,85 +344,6 @@ function WaitingTable({
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
-}
-
-function ActiveSensorsPanel({ sensors }: { sensors: Sensor[] }) {
-  const breaches = sensors.filter((sensor) => sensor.last_flagged).length;
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <header className="flex items-start justify-between gap-2 border-b border-slate-200 px-4 py-3">
-        <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-sky-100 bg-sky-50 text-sky-600">
-            <Gauge className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-sm font-bold text-slate-900">Active sensors</h2>
-            <p className="text-[11px] text-slate-500">
-              {sensors.length} active · {breaches} in breach
-            </p>
-          </div>
-        </div>
-        {breaches > 0 ? (
-          <span className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-            <AlertTriangle className="h-3 w-3" /> Breach detected
-          </span>
-        ) : null}
-      </header>
-      {sensors.length === 0 ? (
-        <p className="px-4 py-3 text-[11px] text-slate-500">No active sensors.</p>
-      ) : (
-        <table className="w-full text-left text-[11px]">
-          <thead>
-            <tr className="border-b border-slate-100 text-[10px] tracking-wider text-slate-500 uppercase">
-              <th scope="col" className="px-4 py-2 font-semibold">
-                Sensor
-              </th>
-              <th scope="col" className="px-2 py-2 font-semibold">
-                Threshold
-              </th>
-              <th scope="col" className="px-2 py-2 font-semibold">
-                Last reading
-              </th>
-              <th scope="col" className="px-4 py-2 text-right font-semibold">
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sensors.map((sensor) => {
-              const unit = sensor.threshold_unit === "m" ? "m" : "mm/hr";
-              const reading =
-                sensor.last_value == null ? "No readings" : `${sensor.last_value} ${unit}`;
-              return (
-                <tr key={sensor.sensor_id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-4 py-2">
-                    <div className="font-mono font-semibold text-slate-800">{sensor.sensor_id}</div>
-                    <div className="truncate text-slate-500">{sensor.name}</div>
-                  </td>
-                  <td className="px-2 py-2 whitespace-nowrap text-slate-600">
-                    {sensor.threshold_value} {unit}
-                  </td>
-                  <td className="px-2 py-2 whitespace-nowrap text-slate-600">{reading}</td>
-                  <td className="px-4 py-2 text-right">
-                    <span
-                      className={
-                        sensor.last_flagged
-                          ? "rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-800"
-                          : "rounded-full bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-800"
-                      }
-                    >
-                      {sensor.last_flagged ? "BREACH" : "NORMAL"}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
           </tbody>
         </table>
       )}
