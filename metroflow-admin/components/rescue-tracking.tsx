@@ -338,24 +338,27 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
       ) : null}
 
       {removing ? (
-        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-900/50 p-4">
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80">
           <div
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="remove-unit-title"
-            className="w-full max-w-sm animate-modal-in space-y-4 rounded-2xl bg-white p-6 shadow-xl"
+            className="w-full max-w-sm animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]"
           >
-            <h2 id="remove-unit-title" className="text-base font-bold text-slate-900">
+            <h2
+              id="remove-unit-title"
+              className="text-base font-bold text-slate-900 dark:text-slate-100"
+            >
               Remove {removing.call_sign}?
             </h2>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               The unit leaves the fleet and can no longer be dispatched. Past incidents keep their
               record. This is written to the audit log.
             </p>
             {removeError ? (
               <p
                 role="alert"
-                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400"
               >
                 {removeError}
               </p>
@@ -365,7 +368,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 type="button"
                 onClick={() => setRemoving(null)}
                 disabled={removeBusy}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>
@@ -373,7 +376,7 @@ export function RescueTracking({ onBack, onAction }: RescueTrackingProps) {
                 type="button"
                 onClick={handleConfirmRemove}
                 disabled={removeBusy}
-                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50 dark:bg-rose-600 dark:hover:bg-rose-500"
               >
                 {removeBusy ? "Removing…" : "Remove unit"}
               </button>

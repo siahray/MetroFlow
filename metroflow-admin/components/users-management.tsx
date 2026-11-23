@@ -283,14 +283,16 @@ export function UsersManagement() {
 
       {/* Create Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Create New User</h3>
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Create New User
+            </h3>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label
                   htmlFor="user-create-name"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Name
                 </label>
@@ -300,13 +302,13 @@ export function UsersManagement() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 />
               </div>
               <div>
                 <label
                   htmlFor="user-create-email"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Email
                 </label>
@@ -316,13 +318,13 @@ export function UsersManagement() {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 />
               </div>
               <div>
                 <label
                   htmlFor="user-create-password"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Password
                 </label>
@@ -333,13 +335,13 @@ export function UsersManagement() {
                   minLength={8}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 />
               </div>
               <div>
                 <label
                   htmlFor="user-create-role"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Role
                 </label>
@@ -354,7 +356,7 @@ export function UsersManagement() {
                       vehicle_id: role === "RESPONDER" ? formData.vehicle_id : null,
                     });
                   }}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 >
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
@@ -365,7 +367,7 @@ export function UsersManagement() {
                 <div>
                   <label
                     htmlFor="user-create-vehicle"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
+                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                   >
                     Rescue unit
                   </label>
@@ -378,7 +380,7 @@ export function UsersManagement() {
                         vehicle_id: e.target.value ? Number(e.target.value) : null,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                   >
                     <option value="">Not linked</option>
                     {units.map((unit) => (
@@ -396,14 +398,14 @@ export function UsersManagement() {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky-600 dark:hover:bg-sky-500"
                 >
                   {isSubmitting ? "Creating..." : "Create User"}
                 </button>
@@ -415,14 +417,14 @@ export function UsersManagement() {
 
       {/* Edit Modal */}
       {isEditModalOpen && editingUser && (
-        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Edit User</h3>
+        <div className="fixed inset-0 z-50 flex animate-backdrop-in items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md dark:bg-black/80">
+          <div className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Edit User</h3>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <label
                   htmlFor="user-edit-name"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Name
                 </label>
@@ -432,13 +434,13 @@ export function UsersManagement() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 />
               </div>
               <div>
                 <label
                   htmlFor="user-edit-email"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Email
                 </label>
@@ -448,13 +450,13 @@ export function UsersManagement() {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 />
               </div>
               <div>
                 <label
                   htmlFor="user-edit-role"
-                  className="block text-xs font-semibold text-slate-700 mb-1"
+                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                 >
                   Role
                 </label>
@@ -469,7 +471,7 @@ export function UsersManagement() {
                       vehicle_id: role === "RESPONDER" ? formData.vehicle_id : null,
                     });
                   }}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                 >
                   <option value="SUPER_ADMIN">Super Admin</option>
                   <option value="ADMIN">Admin</option>
@@ -482,7 +484,7 @@ export function UsersManagement() {
                 <div>
                   <label
                     htmlFor="user-edit-vehicle"
-                    className="block text-xs font-semibold text-slate-700 mb-1"
+                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
                   >
                     Rescue unit
                   </label>
@@ -495,7 +497,7 @@ export function UsersManagement() {
                         vehicle_id: e.target.value ? Number(e.target.value) : null,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:border-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-sky-500"
                   >
                     <option value="">Not linked</option>
                     {units.map((unit) => (
@@ -513,14 +515,14 @@ export function UsersManagement() {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-brand-primary px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-sky-600 dark:hover:bg-sky-500"
                 >
                   {isSubmitting ? "Updating..." : "Update User"}
                 </button>
