@@ -50,6 +50,24 @@ production single sign-on and a public information portal.
 | Assigned Project Manager | Khent U. Lapating                                         |
 | Duration Estimate        | ≈14.5 weeks total, pending the panel's own scheduling confirmation of the 27 Nov 2026 defence date below |
 
+### Waterfall Phases
+
+| Phase | Start | End | Deliverable / Sign-off |
+| --- | --- | --- | --- |
+| 1. Requirements | August 18, 2026 | August 20, 2026 | Project Charter and BRD drafted (M1); formal sign-off tracked in `APPROVALS.md` A-01/A-02 |
+| 2. Design | August 21, 2026 | August 26, 2026 | TSD accepted; PostGIS schema, routing/flood-state architecture and API contract frozen (M2) |
+| 3. Implementation | August 27, 2026 | November 5, 2026 | API engine — simulate, network-state and route endpoints (M3); realtime, reports and fleet API (M7); LGU map, moderation and dispatch radar (M8); dispatch portal operational (M4) |
+| 4. Verification | October 25, 2026 | November 4, 2026 | ZAP API scan and CodeQL (security-extended) clean at High/Medium; baseline documentation set accepted (M6); hardening complete (M5) |
+| 5. Deployment and Pilot | November 5, 2026 | November 27, 2026 | Driver app, sensor impact demonstration and panel defence (M9) — **projected**, pending the panel's own scheduling confirmation, not an engineering date |
+
+Phases 3 and 4 overlap by date (25 Oct – 5 Nov) rather than running strictly in
+sequence: backend, portal and mobile work continued on separate tracks while
+hardening and documentation review were already underway, so this table is a
+retrospective Waterfall-style framing of real, partly concurrent delivery
+(see `E. KEY DELIVERABLES AND MILESTONES` below for the exact milestone dates
+this table is built from), not a claim that implementation fully stopped
+before verification began.
+
 ### OPEX
 
 | No. | Cost Description               | Amount (PHP) |
