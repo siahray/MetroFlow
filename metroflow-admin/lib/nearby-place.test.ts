@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 
-import { nearbyPlace } from "./nearby-place";
+import { nearbyPlace, searchPlaces } from "./nearby-place";
 
 const originalFetch = globalThis.fetch;
 
@@ -44,4 +44,34 @@ test("nearbyPlace returns null on a failed request", async () => {
 test("nearbyPlace returns null when Nominatim has nothing for the coordinate", async () => {
   mockFetch({});
   expect(await nearbyPlace(0, 0)).toBeNull();
+});
+
+test("searchPlaces maps Nominatim search rows to labelled coordinates", async () => {
+  mockFetch([
+    {
+      display_name: "Quezon City Hall, Elliptical Road, Diliman, Quezon City, Philippines",
+      lat: "14.6464",
+      lon: "121.0500",
+    },
+  ]);
+
+  expect(await searchPlaces("Quezon City Hall")).toEqual([
+    {
+      label: "Quezon City Hall, Elliptical Road, Diliman, Quezon City, Philippines",
+      latitude: 14.6464,
+      longitude: 121.05,
+    },
+  ]);
+});
+
+test("searchPlaces returns an empty list for a blank query without fetching", async () => {
+  globalThis.fetch = (() => {
+    throw new Error("should not be called");
+  }) as typeof fetch;
+  expect(await searchPlaces("   ")).toEqual([]);
+});
+
+test("searchPlaces returns an empty list on a failed request", async () => {
+  mockFetch([], false);
+  expect(await searchPlaces("flood")).toEqual([]);
 });

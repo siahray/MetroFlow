@@ -1,10 +1,12 @@
 "use client";
 
-import { X } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import { Search, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { SOSRequest } from "@/lib/dispatch";
+import { searchPlaces, type PlaceResult } from "@/lib/nearby-place";
 import { CALL_IN_DEFAULT, createSOS, parseCallIn, type CallInForm } from "@/lib/sos-call";
+import { LocationPickerMap } from "./location-picker-map";
 import { useDialogFocus } from "./use-dialog-focus";
 
 type LogSOSModalProps = {
@@ -30,6 +32,61 @@ export function LogSOSModal({ onLogged, onClose }: LogSOSModalProps) {
 
   const set = (key: keyof CallInForm) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }));
+
+  const setCoordinates = (latitude: number, longitude: number) =>
+    setValues((current) => ({
+      ...current,
+      latitude: latitude.toFixed(5),
+      longitude: longitude.toFixed(5),
+    }));
+
+  // Address search (FSD-FR-087): a dispatcher finds the caller's location by
+  // name instead of typing raw coordinates. Debounced and cancellable so a
+  // fast typist never races an older query past a newer one.
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [results, setResults] = useState<PlaceResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!searchOpen || q.length < 3) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setSearching(true);
+      searchPlaces(q, controller.signal)
+        .then(setResults)
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, searchOpen]);
+
+  // Derived so a short query hides stale results without a synchronous
+  // setState in the effect above.
+  const showResults = searchOpen && query.trim().length >= 3;
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onClickOutside = (event: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [searchOpen]);
+
+  function pickResult(result: PlaceResult) {
+    setCoordinates(result.latitude, result.longitude);
+    setQuery(result.label);
+    setSearchOpen(false);
+    setResults([]);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -58,7 +115,7 @@ export function LogSOSModal({ onLogged, onClose }: LogSOSModalProps) {
         aria-labelledby="log-sos-title"
         onSubmit={handleSubmit}
         noValidate
-        className="w-full max-w-md animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]"
+        className="w-full max-w-lg animate-modal-in space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5 dark:border-slate-700 dark:bg-slate-900 dark:ring-white/10 dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.75)]"
       >
         <div className="flex items-center justify-between">
           <h2 id="log-sos-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
@@ -75,44 +132,75 @@ export function LogSOSModal({ onLogged, onClose }: LogSOSModalProps) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label
-              htmlFor="log-sos-latitude"
-              className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
-            >
-              Latitude
-            </label>
+        <div ref={searchBoxRef} className="relative">
+          <label
+            htmlFor="log-sos-location-search"
+            className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
+          >
+            Location
+          </label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
-              id="log-sos-latitude"
+              id="log-sos-location-search"
               ref={first}
-              inputMode="decimal"
-              value={values.latitude}
-              onChange={(e) => set("latitude")(e.target.value)}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "log-sos-error" : undefined}
-              className={`${field} ${error ? "border-rose-400 dark:border-rose-500/60" : "border-slate-200 dark:border-slate-700"}`}
+              type="text"
+              role="combobox"
+              aria-expanded={searchOpen}
+              aria-controls="log-sos-location-results"
+              aria-autocomplete="list"
+              autoComplete="off"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setSearchOpen(false);
+              }}
+              placeholder="Search an address or place…"
+              className={`${field} border-slate-200 pl-8 dark:border-slate-700`}
             />
           </div>
-          <div>
-            <label
-              htmlFor="log-sos-longitude"
-              className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300"
+          {showResults ? (
+            <ul
+              id="log-sos-location-results"
+              role="listbox"
+              className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
             >
-              Longitude
-            </label>
-            <input
-              id="log-sos-longitude"
-              inputMode="decimal"
-              value={values.longitude}
-              onChange={(e) => set("longitude")(e.target.value)}
-              className={`${field} ${error ? "border-rose-400 dark:border-rose-500/60" : "border-slate-200 dark:border-slate-700"}`}
-            />
-          </div>
+              {searching ? (
+                <li className="px-3 py-1.5 text-[11px] text-slate-400">Searching…</li>
+              ) : results.length === 0 ? (
+                <li className="px-3 py-1.5 text-[11px] text-slate-400">No matches</li>
+              ) : (
+                results.map((result) => (
+                  <li key={`${result.latitude},${result.longitude}`}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={false}
+                      onClick={() => pickResult(result)}
+                      className="block w-full truncate px-3 py-1.5 text-left text-[11px] text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      {result.label}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          ) : null}
         </div>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          Prefilled with the pilot area&apos;s centre. Replace it with the coordinates the caller
-          gives; the incident appears on the live map as soon as it is saved.
+
+        <LocationPickerMap
+          latitude={Number(values.latitude)}
+          longitude={Number(values.longitude)}
+          onChange={setCoordinates}
+        />
+        <p className="text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite">
+          Pinned at {Number(values.latitude).toFixed(4)}°, {Number(values.longitude).toFixed(4)}°.
+          Search an address or drag the pin to match the caller; the incident appears on the live
+          map as soon as it is saved.
         </p>
 
         <div>
