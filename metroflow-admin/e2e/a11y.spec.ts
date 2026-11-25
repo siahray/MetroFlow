@@ -65,7 +65,7 @@ test("the call-in dialog keeps keyboard focus inside and hands it back", async (
 
   const dialog = page.getByRole("dialog", { name: "Log a call-in distress signal" });
   await expect(dialog).toBeVisible();
-  await expect(page.getByLabel("Latitude")).toBeFocused();
+  await expect(page.getByLabel("Location")).toBeFocused();
 
   // Tab out of the last control wraps to the first, Shift+Tab wraps back.
   await page.getByRole("button", { name: "Log incident" }).focus();

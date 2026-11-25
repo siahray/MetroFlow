@@ -156,7 +156,7 @@ approved baseline (`APPROVALS.md` A-20/A-21).
 | System Design            | August 21, 2026  | August 26, 2026  | Completed   |
 | Implementation — API     | August 27, 2026  | October 1, 2026  | Completed   |
 | Implementation — Portal  | October 2, 2026  | November 5, 2026 | Completed   |
-| Verification / Testing   | November 6, 2026 | November 23, 2026| Largely complete — offline device test (Q-2), UAT (NFR-009) and device-performance checks remain open (as of 23 Nov 2026) |
+| Verification / Testing   | November 6, 2026 | November 23, 2026| Largely complete — UAT (NFR-009) closed, mean SUS 80 (n=10); offline device test (Q-2) and device-performance checks remain open (as of 25 Nov 2026) |
 | Deployment / Maintenance | November 24, 2026| November 27, 2026| Hosted API and portal deployed on Vercel; Android internal EAS APK built, no store release; live restore-over-prod and iOS build remain gated (as of 23 Nov 2026) |
 
 Dates above are as recorded in the git history and work logs. The
@@ -369,8 +369,8 @@ suites, ESLint and `next build`, `tsc --noEmit` for the driver app, `bun test`
 over `metroflow-admin/lib` and components, `bun test src` plus a jest component suite
 in Mobile CI (`.github/workflows/mobile.yml`), a Playwright suite over the portal
 (`metroflow-admin/e2e`, API stubbed in the browser), Alembic, the ZAP API scan workflow
-and CodeQL. The offline device run (Q-2) and UAT (NFR-009) remain blocked on hardware
-and real sessions.
+and CodeQL. UAT (NFR-009) is closed: a post-session SUS questionnaire (n=10) scored
+mean 80, Grade A-. The offline device run (Q-2) remains blocked on hardware.
 
 ## Success Metrics
 
@@ -383,7 +383,7 @@ and real sessions.
 | High/Medium security findings                 | 0                             |
 | CI pass rate                                  | ≥ 95%                         |
 | Requirement coverage                          | 100% of `Must` by M9          |
-| System Usability Scale                        | ≥ 75 `[TBC]`                  |
+| System Usability Scale                        | ≥ 75 — **Met**: mean 80 (n=10, Grade A-) |
 | Hazard publish to SSE event                   | ≤ 100 ms at p95, server-side  |
 | Offline route and queued report               | 100% of scripted runs         |
 | Privileged actions blocked without a role     | 100%                          |

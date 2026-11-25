@@ -9,6 +9,10 @@ little-endian TIFF, and the offsets are fixed so the fixture stays readable:
 
 from __future__ import annotations
 
+from io import BytesIO
+
+from PIL import Image
+
 
 def _entry(tag: int, kind: int, count: int, value: bytes) -> bytes:
     return (
@@ -71,4 +75,14 @@ def build_jpeg(*, make: str = "TestCam", latitude_degrees: int = 14) -> bytes:
         + data
     )
     payload = b"Exif\x00\x00" + tiff
-    return b"\xff\xd8" + b"\xff\xe1" + (len(payload) + 2).to_bytes(2, "big") + payload + b"\xff\xd9"
+    exif_segment = b"\xff\xe1" + (len(payload) + 2).to_bytes(2, "big") + payload
+
+    # A real, Pillow-decodable 2x2 JPEG with the hand-rolled EXIF segment
+    # spliced in right after SOI (where a camera puts it), so this fixture
+    # survives strip_exif's re-encode the same way a real photo does
+    # (SEC-004) while reports.read_exif's own marker scan still finds it
+    # as the very first segment.
+    buf = BytesIO()
+    Image.new("RGB", (2, 2), color=(255, 0, 0)).save(buf, format="JPEG")
+    base = buf.getvalue()
+    return base[:2] + exif_segment + base[2:]

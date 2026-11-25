@@ -2,7 +2,7 @@
 
 ## MetroFlow — Intelligent Urban Mobility and Flood Simulation System
 
-Version 1.2 — CR-002 (includes CR-001 A1/A2 and CR-002 A1; approved 23 Nov 2026, part of the approved baseline)
+Version 1.3 — CR-002 and CR-001 A1/A2 (includes CR-002 A1; CR-002 approved by the Project Lead 20 Nov 2026, CR-001 A1/A2 approved by the Project Lead 21 Nov 2026; formal QA/Adviser/Panel sign-offs recorded 23 Nov 2026, part of the approved baseline)
 
 ## Document Control
 
@@ -10,7 +10,7 @@ Version 1.2 — CR-002 (includes CR-001 A1/A2 and CR-002 A1; approved 23 Nov 202
 | ----------- | ---------------------------------------------------------------- |
 | Project     | MetroFlow                                                        |
 | Document    | Technical Specification Document                                 |
-| Version     | 1.2                                                              |
+| Version     | 1.3                                                              |
 | Prepared By | Alt F4                                                           |
 | Baseline    | `main`, 20 November 2026                                         |
 | Change      | CR-002 — admin screen split (operations dashboard, report-only Moderation and Evidence, SOS-only Dispatch Radar) with responder assignment and dual-mode tracking |
@@ -58,7 +58,7 @@ See FSD §Implementation Status for the current position.
 CR-001 A1 (`FSD-FR-146/147`, `BRULE-020`, `ADR-028`, `TC-075/076`, `LIM-031`),
 CR-001 A2 (`FSD-FR-148/149`, `TC-077/078`, `LIM-032`) and CR-002 A1
 (`FSD-FR-150`–`154`, `BRULE-021`, `TC-079`–`083`) extend the table above; all are
-implemented, documented and approved 23 Nov 2026 as part of the approved baseline (A-20/A-21).
+implemented, documented and approved by the Project Lead 20–21 Nov 2026 (formal sign-offs recorded 23 Nov 2026) as part of the approved baseline (A-20/A-21).
 
 ## 1. Solution Architecture
 
@@ -504,7 +504,7 @@ Full request and response contracts, examples and error bodies are in
 | VAL-013       | BR-014  | FSD-FR-065 | `depth_level` is one of `ANKLE`, `KNEE`, `IMPASSABLE`                                                                    |
 | VAL-014       | BR-014  | FSD-FR-066 | Photo is required for a photo report; max 4 MB; JPEG/PNG/WebP; MIME sniffed. `source` accepts only `PHOTO`, `SENSOR` or `CALL` (`backend/reports.py::SOURCES`); a `CCTV` value returns 422, enforcing that CCTV is strictly out of scope (reporters' phone photos only, FSD "Out of Scope for This Release") |
 | VAL-015       | BR-014  | FSD-FR-067 | Latitude is within $\pm 90$, longitude within $\pm 180$; EXIF location must agree with the claimed point within 200 m when present |
-| VAL-016       | BR-014  | FSD-FR-065 | Report submissions are rate-limited per device `[TBC]`                                                                   |
+| VAL-016       | BR-014  | FSD-FR-065 | Report submissions are rate-limited to 12 per minute per device (`backend/config.py::rate_limit_reports_per_min`) |
 | VAL-017       | BR-016  | FSD-FR-082 | A flood polygon has at least three vertices and is closed; a closure line has at least two points                        |
 | VAL-018       | BR-016  | FSD-FR-084 | `obstruction_level` is one of `CAUTION`, `LEVEL_2`, `LEVEL_3`, `IMPASSABLE`                                              |
 | VAL-019       | BR-016  | FSD-FR-076 | Vehicle status moves only through the allowed transition graph                                                           |

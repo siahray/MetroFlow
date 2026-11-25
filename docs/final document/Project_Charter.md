@@ -10,10 +10,10 @@
 | Project Classification  | Simple          |
 | Document Classification | Internal Use    |
 | Prepared By             | Alt F4          |
-| Version No.             | 1.1             |
+| Version No.             | 1.3             |
 | Date Prepared           | 21 October 2026 |
 | Context                 | Academic capstone — the LGU roles below are the intended evaluation scenario, not a funded, endorsed or accepted LGU project; no LGU budget is requested and all sign-offs are `[TBC]` (`docs/APPROVALS.md` §1) |
-| Approval Register Note  | A-01 lists v1.1, matching this canonical file; no version bump implied |
+| Approval Register Note  | A-01 lists v1.1; this file is now v1.3 per the CR-002/CR-001 A1-A2 revision row below (`APPROVALS.md` A-20/A-21) |
 
 ## Revision History
 
@@ -21,7 +21,8 @@
 | ------- | ------------ | ----------------- | ------------------------ | --------------- |
 | 1.0     | 21 Oct 2026  | Khent U. Lapating | Initial Baseline Release | All Sections    |
 | 1.1     | 15 Nov 2026  | Khent U. Lapating | CR-001 — production network recalibration, driver navigation and admin incident location visualizer | A, C, D |
-| —       | 20–21 Nov 2026; approved 23 Nov 2026 | Khent U. Lapating | Approved 23 Nov 2026 and part of the approved baseline: CR-002 admin screen split, CR-002 A1 and CR-001 Amendments A1/A2 are implemented, documented and approved (`APPROVALS.md` A-20/A-21); the original CR-001 approval is unchanged | A, D, E |
+| 1.2     | 20–21 Nov 2026 | Khent U. Lapating | Approved by the Project Lead 20 Nov 2026 (CR-002) and 21 Nov 2026 (CR-001 Amendments A1/A2); formal QA/Adviser/Panel sign-offs recorded 23 Nov 2026 — part of the approved baseline: CR-002 admin screen split, CR-002 A1 and CR-001 Amendments A1/A2 are implemented, documented and approved (`APPROVALS.md` A-20/A-21); the original CR-001 approval is unchanged | A, D, E |
+| 1.3     | 21 Nov 2026 | Khent U. Lapating | CR-001 Amendments A1/A2 — opt-in least-submerged fallback with submersion warning (`FSD-FR-146`/`147`, `BRULE-020`, `ADR-028`), driver current-conditions weather card, report-contract tightening and proximity tuning; approved by the Project Lead 21 Nov 2026, formal sign-offs recorded 23 Nov 2026 | A, D, E |
 
 ## A. PROJECT OVERVIEW
 
@@ -49,6 +50,24 @@ production single sign-on and a public information portal.
 | Period (Weeks)           | ≈14.5 weeks total (18 Aug – 27 Nov 2026) through deployment and panel defence — a planning projection, pending the panel's own scheduling confirmation |
 | Assigned Project Manager | Khent U. Lapating                                         |
 | Duration Estimate        | ≈14.5 weeks total, pending the panel's own scheduling confirmation of the 27 Nov 2026 defence date below |
+
+### Waterfall Phases
+
+| Phase | Start | End | Deliverable / Sign-off |
+| --- | --- | --- | --- |
+| 1. Requirements | August 18, 2026 | August 20, 2026 | Project Charter and BRD drafted (M1); formal sign-off tracked in `APPROVALS.md` A-01/A-02 |
+| 2. Design | August 21, 2026 | August 26, 2026 | TSD accepted; PostGIS schema, routing/flood-state architecture and API contract frozen (M2) |
+| 3. Implementation | August 27, 2026 | November 5, 2026 | API engine — simulate, network-state and route endpoints (M3); realtime, reports and fleet API (M7); LGU map, moderation and dispatch radar (M8); dispatch portal operational (M4) |
+| 4. Verification | October 25, 2026 | November 4, 2026 | ZAP API scan and CodeQL (security-extended) clean at High/Medium; baseline documentation set accepted (M6); hardening complete (M5) |
+| 5. Deployment and Pilot | November 5, 2026 | November 27, 2026 | Driver app, sensor impact demonstration and panel defence (M9) — **projected**, pending the panel's own scheduling confirmation, not an engineering date |
+
+Phases 3 and 4 overlap by date (25 Oct – 5 Nov) rather than running strictly in
+sequence: backend, portal and mobile work continued on separate tracks while
+hardening and documentation review were already underway, so this table is a
+retrospective Waterfall-style framing of real, partly concurrent delivery
+(see `E. KEY DELIVERABLES AND MILESTONES` below for the exact milestone dates
+this table is built from), not a claim that implementation fully stopped
+before verification began.
 
 ### OPEX
 
@@ -138,13 +157,13 @@ Project-Management-Plan.md.
 | ID   | Deliverable                    | Acceptance condition                                                                                |
 | ---- | ------------------------------ | --------------------------------------------------------------------------------------------------- |
 | D-01 | Simulation and routing API     | Contract tests pass; endpoints behave as specified in api.md                                      |
-| D-02 | LGU dispatch portal            | Three-screen split usable end-to-end: `/triage` read-only operations dashboard, `/moderation` report verification, `/radar` SOS dispatch with unit assignment (CR-002, Approved 23 Nov 2026) |
+| D-02 | LGU dispatch portal            | Three-screen split usable end-to-end: `/triage` read-only operations dashboard, `/moderation` report verification, `/radar` SOS dispatch with unit assignment (CR-002, approved by the Project Lead 20 Nov 2026; sign-offs recorded 23 Nov 2026) |
 | D-03 | Database schema and migrations | Clean `alembic upgrade head`; `alembic check` reports no drift                                      |
 | D-04 | CI/CD pipeline                 | Tests, lint, build, security scan and hosted migrations run from the repo                           |
 | D-05 | Document set                   | Charter, BRD, business case, FSD, TSD, PMP and API reference accepted                               |
 | D-06 | Demonstration                  | Live walkthrough of simulation → routing → triage → dispatch                                        |
 | D-07 | Driver app                     | EAS internal build from the supplied template; navigation, reports, offline queue, SOS and telemetry |
-| D-08 | LGU live map and moderation    | Template-derived UI; MapLibre layers, evidence desk, approve/reject, draw and publish; report verification lives on `/moderation` only and `/radar` is SOS-only (CR-002, Approved 23 Nov 2026) |
+| D-08 | LGU live map and moderation    | Template-derived UI; MapLibre layers, evidence desk, approve/reject, draw and publish; report verification lives on `/moderation` only and `/radar` is SOS-only (CR-002, approved by the Project Lead 20 Nov 2026; sign-offs recorded 23 Nov 2026) |
 | D-09 | Fleet and dispatch             | Unit status, nearest-unit ranking, flood-safe rescue route                                          |
 | D-10 | Auth, RBAC and sensors         | API-issued roles, audit writes, gauge ingestion and advisory road impact                            |
 

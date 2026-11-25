@@ -2629,6 +2629,15 @@ def delete_vehicle(
     db.commit()
 
 
+# Grid step in degrees for telemetry rounding (NFR-021, SEC-008): ~0.0005° is
+# ~50 m of latitude, matching the TSD's own ST_SnapToGrid(point, 0.0005) spec.
+TELEMETRY_GRID_DEG = 0.0005
+
+
+def _round_to_grid(value: float, step: float = TELEMETRY_GRID_DEG) -> float:
+    return round(value / step) * step
+
+
 @app.post("/api/v1/vehicles/{vehicle_id}/telemetry", status_code=204)
 def post_telemetry(
     vehicle_id: int,
@@ -2641,7 +2650,11 @@ def post_telemetry(
     Rejected with 429 if the same vehicle submitted a ping within
     ``settings.telemetry_min_seconds``.  On acceptance the vehicle row is
     updated in-place and a ``VEHICLE_UPDATED`` SSE event is emitted so the
-    portal fleet overlay refreshes live (FSD-FR-074, FSD-FR-075).
+    portal fleet overlay refreshes live (FSD-FR-074, FSD-FR-075).  The stored
+    position is rounded to a ~50 m grid (NFR-021); device-id hashing and a
+    24h purge from that same requirement don't apply here -- there is no
+    device id separate from ``vehicle_id``, and this row holds only the
+    latest fix, not a history to purge.
     """
     db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.vehicle_id == vehicle_id).first()
     if not db_vehicle:
@@ -2658,8 +2671,8 @@ def post_telemetry(
                 headers={"Retry-After": str(remaining)},
             )
 
-    db_vehicle.current_location_lat = ping.latitude
-    db_vehicle.current_location_lon = ping.longitude
+    db_vehicle.current_location_lat = _round_to_grid(ping.latitude)
+    db_vehicle.current_location_lon = _round_to_grid(ping.longitude)
     if ping.speed_kmh is not None:
         db_vehicle.speed_kmh = ping.speed_kmh
     # heading is not persisted on the Vehicle model (pilot scope); it is
@@ -3905,6 +3918,9 @@ def submit_report(
     if photo_mime is None:
         raise HTTPException(status_code=415, detail="photo must be a JPEG, PNG or WebP image")
     exif = reports.read_exif(photo_bytes) or None
+    # EXIF is captured above from the original bytes; what's stored is the
+    # re-encoded, metadata-stripped copy (SEC-004).
+    photo_bytes = reports.strip_exif(photo_bytes, photo_mime)
 
     source = source or "PHOTO"
     now = datetime.now(UTC).replace(tzinfo=None)

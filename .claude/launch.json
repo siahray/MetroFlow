@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "metroflow-admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "metroflow-admin", "run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "demo-assets",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8743", "--directory", "/private/tmp/claude-501/-Users-siahray-Codes-Systems-MetroFlow/f9d9eead-6c32-476d-b026-7f539250b54f/scratchpad/metroflow-demo"],
+      "port": 8743
+    }
+  ]
+}

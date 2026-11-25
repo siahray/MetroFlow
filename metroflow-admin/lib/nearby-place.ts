@@ -50,3 +50,42 @@ export async function nearbyPlace(
     address: parts.slice(1, 3).join(", ") || row.display_name,
   };
 }
+
+export type PlaceResult = { label: string; latitude: number; longitude: number };
+
+/** Biases results toward the pilot area without excluding a precise match elsewhere. */
+const PILOT_VIEWBOX = "120.814,14.765 121.314,14.365"; // left,top right,bottom
+
+/**
+ * Forward geocode for the call-in dialog's address search (FSD-FR-087), so a
+ * dispatcher can find a caller's location by name instead of typing raw
+ * coordinates. Same keyless Nominatim provider as `nearbyPlace`.
+ */
+export async function searchPlaces(query: string, signal?: AbortSignal): Promise<PlaceResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    q,
+    viewbox: PILOT_VIEWBOX,
+    limit: "6",
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    signal,
+    headers: { "User-Agent": "MetroFlow LGU dispatch portal" },
+  });
+  if (!response.ok) return [];
+
+  const rows = (await response.json()) as Array<{
+    display_name?: string;
+    lat?: string;
+    lon?: string;
+  }>;
+  return rows
+    .filter((row) => row.display_name && row.lat && row.lon)
+    .map((row) => ({
+      label: row.display_name!,
+      latitude: Number(row.lat),
+      longitude: Number(row.lon),
+    }));
+}
