@@ -11,7 +11,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://metroflow-api-siahrays-projects.vercel.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://metroflow-api-siahrays-projects.vercel.app",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "SET_IN_EAS_ENV"
       },
       "android": {
         "buildType": "apk"
@@ -20,7 +21,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://metroflow-api-siahrays-projects.vercel.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://metroflow-api-siahrays-projects.vercel.app",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "SET_IN_EAS_ENV"
       }
     }
   },

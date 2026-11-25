@@ -604,14 +604,25 @@ export async function submitReport(input: {
   if (input.capturedAt) form.append("captured_at", input.capturedAt);
   if (input.clientId) form.append("client_id", input.clientId);
   if (input.photo) {
-    // React Native's FormData accepts this descriptor as a file part.
-    form.append("photo", input.photo as unknown as Blob);
+    // The New Architecture's FormData only accepts a string, a Blob, or
+    // something implementing `.bytes()` -- the old `{uri, name, type}`
+    // descriptor throws "Unsupported FormDataPart implementation". expo-file-system's
+    // `File` satisfies that contract, so wrap the picker/camera uri in one.
+    // Imported lazily (not at module top) so this file stays a pure module:
+    // a static import here drags in react-native's own entrypoint, which
+    // Bun's test runner can't parse (`bun test src` relies on this file
+    // having no native-module imports at load time).
+    const { File } = await import("expo-file-system");
+    form.append("photo", new File(input.photo.uri));
   }
 
   const headers = new Headers();
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  const res = await fetch(`${API_BASE_URL}/api/v1/reports`, {
+  // expo/fetch (not the global fetch) is required to send that File-backed
+  // FormData correctly on-device; lazily imported for the same reason as File above.
+  const { fetch: expoFetch } = await import("expo/fetch");
+  const res = await expoFetch(`${API_BASE_URL}/api/v1/reports`, {
     method: "POST",
     headers,
     body: form,
