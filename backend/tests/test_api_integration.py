@@ -24,6 +24,7 @@ from evidence import build_jpeg
 from fastapi.testclient import TestClient
 
 import mapbox_directions
+import reports
 import river_discharge
 import weather
 from config import settings
@@ -602,9 +603,11 @@ def test_report_submission_enters_the_queue_with_evidence_metadata(client, creat
     assert body["urgency_score"] > 0
     assert body["location_plausible"] is True
     assert len(body["reporter_hash"]) == 64
-    assert body["photo"]["bytes"] == len(photo)
+    # The stored photo is the re-encoded, EXIF-stripped copy (SEC-004), not a
+    # byte-identical pass-through of the upload.
+    assert body["photo"]["bytes"] != len(photo)
     assert body["photo"]["mime"] == "image/jpeg"
-    assert body["photo"]["sha256"] == __import__("hashlib").sha256(photo).hexdigest()
+    assert body["photo"]["sha256"] != __import__("hashlib").sha256(photo).hexdigest()
     # The capture time comes from the camera's EXIF when the client sends none.
     assert body["captured_at"].startswith("2026-10-29T13:00:00")
     assert body["exif"]["camera_make"] == "TestCam"
@@ -624,6 +627,9 @@ def test_the_queue_is_ordered_by_live_urgency(client, created_records):
 
 
 def test_evidence_photo_round_trips(client, created_records):
+    """The served photo is the re-encoded, EXIF-stripped copy (SEC-004): it
+    decodes as the same image, but isn't byte-identical to the upload, and
+    carries no EXIF of its own."""
     photo = build_jpeg()
     report = submit_report(client, created_records)
     original = client.post(
@@ -635,7 +641,9 @@ def test_evidence_photo_round_trips(client, created_records):
 
     response = client.get(f"/api/v1/reports/{original.json()['report_id']}/photo")
     assert response.status_code == 200
-    assert response.content == photo
+    assert response.content != photo
+    assert reports.read_exif(response.content) == {}
+    assert reports.sniff_image_mime(response.content) == "image/jpeg"
     assert response.headers["content-type"] == "image/jpeg"
     assert response.headers["cache-control"] == "private, no-store"
     assert report["photo"] is not None
@@ -1383,7 +1391,8 @@ def _delete_test_vehicle(client, vehicle_id: int) -> None:
 
 
 def test_telemetry_updates_vehicle_location(client):
-    """A valid ping updates lat/lon/speed on the vehicle row (FSD-FR-072)."""
+    """A valid ping updates lat/lon/speed on the vehicle row, rounded to the
+    ~50 m privacy grid (FSD-FR-072, NFR-021)."""
     driver_headers, email = _make_driver_headers(client)
     vehicle_id = _create_test_vehicle(client)
     try:
@@ -1402,12 +1411,22 @@ def test_telemetry_updates_vehicle_location(client):
         vehicles = client.get("/api/v1/vehicles")
         assert vehicles.status_code == 200, vehicles.text
         row = next(v for v in vehicles.json() if v["vehicle_id"] == vehicle_id)
-        assert abs(row["current_location_lat"] - 14.5995) < 1e-6
-        assert abs(row["current_location_lon"] - 120.9842) < 1e-6
+        # Rounded to the nearest 0.0005° grid step, not passed through raw.
+        assert abs(row["current_location_lat"] - 14.5995) < 0.00026
+        assert abs(row["current_location_lon"] - 120.9840) < 1e-6
         assert abs(row["speed_kmh"] - 30.0) < 1e-3
     finally:
         _delete_test_vehicle(client, vehicle_id)
         _cleanup_email(email)
+
+
+def test_telemetry_rounds_position_to_grid():
+    """_round_to_grid snaps to the nearest ~50 m step, both directions (NFR-021)."""
+    from main import _round_to_grid
+
+    assert _round_to_grid(14.5995) == pytest.approx(14.5995)
+    assert _round_to_grid(120.9842) == pytest.approx(120.984)
+    assert _round_to_grid(-14.60012) == pytest.approx(-14.6)
 
 
 def test_vehicle_detail_matches_the_list_row(client):

@@ -32,6 +32,9 @@ def geometry_to_geojson(value: Any) -> dict[str, Any] | None:
 
 GEOMETRY_HAZARD_TYPES = {"Polygon", "LineString"}
 
+OBSTRUCTION_LEVELS = ("CAUTION", "LEVEL_2", "LEVEL_3", "IMPASSABLE")
+ObstructionLevel = Literal["CAUTION", "LEVEL_2", "LEVEL_3", "IMPASSABLE"]
+
 
 def geojson_to_geometry(value: dict[str, Any] | None) -> Any:
     """Convert a GeoJSON Polygon or LineString into a PostGIS geometry value.
@@ -44,12 +47,26 @@ def geojson_to_geometry(value: dict[str, Any] | None) -> Any:
     """
     if value is None:
         return None
-    if value.get("type") not in GEOMETRY_HAZARD_TYPES:
-        raise ValueError(f"geometry must be a Polygon or LineString, got {value.get('type')!r}")
+    geo_type = value.get("type")
+    if geo_type not in GEOMETRY_HAZARD_TYPES:
+        raise ValueError(f"geometry must be a Polygon or LineString, got {geo_type!r}")
     from geoalchemy2.shape import from_shape
     from shapely.geometry import shape as shapely_shape
 
-    return from_shape(shapely_shape(value), srid=4326)
+    try:
+        geom = shapely_shape(value)
+    except Exception as exc:
+        raise ValueError(f"malformed {geo_type} coordinates") from exc
+    # VAL-017 / E013: a polygon needs at least three distinct vertices (a
+    # closed ring of four positions) and a closure line needs two points. The
+    # portal enforces the same minimums while drawing; the API re-checks so a
+    # hand-rolled client cannot store a degenerate hazard.
+    if geo_type == "Polygon":
+        if geom.is_empty or not geom.is_valid or len(geom.exterior.coords) < 4:
+            raise ValueError("polygon must have at least three vertices and be valid")
+    elif geom.is_empty or not geom.is_valid or len(geom.coords) < 2:
+        raise ValueError("closure line must have at least two points and be valid")
+    return from_shape(geom, srid=4326)
 
 
 class EdgeProperties(BaseModel):
@@ -241,7 +258,7 @@ class SOSResponse(BaseModel):
 
 class HazardCreate(BaseModel):
     name: str
-    obstruction_level: str = "partial"
+    obstruction_level: ObstructionLevel = "CAUTION"
     avg_depth_cm: int | None = None
     edge_id: int | None = None
     notes: str | None = None
@@ -250,7 +267,7 @@ class HazardCreate(BaseModel):
 
 class HazardUpdate(BaseModel):
     name: str | None = None
-    obstruction_level: str | None = None
+    obstruction_level: ObstructionLevel | None = None
     avg_depth_cm: int | None = None
     edge_id: int | None = None
     active: bool | None = None

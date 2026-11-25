@@ -21,6 +21,7 @@ for ever and a new one would never outrank it.
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 from datetime import datetime
 
@@ -120,6 +121,39 @@ def sniff_image_mime(data: bytes) -> str | None:
         if data.startswith(signature):
             return mime
     return None
+
+
+_PILLOW_FORMAT = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
+
+logger = logging.getLogger("metroflow.reports")
+
+
+def strip_exif(data: bytes, mime: str) -> bytes:
+    """Re-encode an evidence photo to drop its embedded metadata (SEC-004).
+
+    EXIF is already extracted from ``data`` by ``read_exif`` before this runs;
+    this is only about what gets stored. Pillow's own ``save`` never carries
+    EXIF forward unless it's passed back in explicitly, so a plain re-save
+    is a strip.
+
+    Intake must never fail because a sniffed-as-valid image turns out to be
+    something Pillow can't decode (a truncated upload, an exotic JPEG
+    variant); that degrades to storing the original bytes, same policy as
+    ``read_exif``.
+    """
+    from io import BytesIO
+
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(BytesIO(data)) as image:
+            out = BytesIO()
+            save_kwargs = {"quality": 90} if mime == "image/jpeg" else {}
+            image.save(out, format=_PILLOW_FORMAT[mime], **save_kwargs)
+            return out.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError):
+        logger.warning("strip_exif could not re-encode a %s upload; storing it unstripped", mime)
+        return data
 
 
 def depth_label(depth_level: str) -> str:

@@ -180,3 +180,19 @@ def test_sensor_mismatch_only_when_the_nearest_gauge_in_range_contradicts_the_re
     )
     # A report without a position cannot be compared.
     assert reports.sensor_mismatch(None, None, [(*near, True, False)]) is False
+
+
+def test_strip_exif_removes_metadata_but_keeps_the_image_decodable():
+    photo = build_jpeg()
+    assert reports.read_exif(photo)  # fixture carries real EXIF before stripping
+
+    stripped = reports.strip_exif(photo, "image/jpeg")
+
+    assert reports.read_exif(stripped) == {}
+    assert reports.sniff_image_mime(stripped) == "image/jpeg"
+
+
+def test_strip_exif_fails_open_on_bytes_pillow_cannot_decode():
+    garbage = b"\xff\xd8\xff\xd9"  # sniffs as JPEG, has no actual image data
+
+    assert reports.strip_exif(garbage, "image/jpeg") == garbage
