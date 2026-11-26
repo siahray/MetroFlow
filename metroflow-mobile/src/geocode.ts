@@ -363,6 +363,7 @@ type MapboxFeature = {
   place_type?: string[];
   center?: [number, number];
   properties?: { category?: string };
+  context?: { id?: string; text?: string }[];
 };
 
 /**
@@ -459,6 +460,44 @@ export async function reverseGeocodeName(
       .filter((part) => part && part !== "Philippines")
       .join(", ");
     return full || (feature.text ?? "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort barangay name from reverse geocode; null when unavailable. */
+export async function reverseGeocodeBarangay(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+  token: string = MAPBOX_TOKEN,
+): Promise<string | null> {
+  if (!token) return null;
+  const params = new URLSearchParams({
+    access_token: token,
+    limit: "1",
+    language: "en",
+    types: "neighborhood,locality,place",
+  });
+  try {
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?${params.toString()}`,
+      { signal },
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { features?: MapboxFeature[] };
+    const feature = payload.features?.[0];
+    if (!feature) return null;
+    const type = feature.place_type?.[0];
+    if (type === "neighborhood" || type === "locality") {
+      const name = (feature.text ?? "").trim();
+      return name || null;
+    }
+    const ctx = feature.context?.find(
+      (c) => c.id?.startsWith("neighborhood.") || c.id?.startsWith("locality."),
+    );
+    const name = (ctx?.text ?? "").trim();
+    return name || null;
   } catch {
     return null;
   }
