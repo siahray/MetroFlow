@@ -769,6 +769,7 @@ class ReportResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     location_plausible: bool = True
+    barangay: str | None = None
     narrative: str | None = None
     # The stored base score decayed by age, which is what the queue orders on.
     urgency_score: float

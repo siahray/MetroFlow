@@ -177,16 +177,16 @@ export function ReportDesk({
                 ) : null}
               </div>
               {photoUrl ? (
-                <div className="flex h-64 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
+                <div className="flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-lg bg-slate-950">
                   {/* eslint-disable-next-line @next/next/no-img-element -- evidence is a blob URL, not an optimisable asset */}
                   <img
                     src={photoUrl}
                     alt={`Evidence submitted for report ${report.report_id.slice(0, 8)}`}
-                    className="max-h-full max-w-full object-contain"
+                    className="h-full w-full object-contain"
                   />
                 </div>
               ) : (
-                <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
+                <div className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-slate-400">
                   {report.photo ? (
                     <>
                       <FileWarning className="h-6 w-6" />

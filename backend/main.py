@@ -3796,6 +3796,7 @@ def _report_response(
         location_plausible=latitude is not None
         and longitude is not None
         and reports.location_plausible(latitude, longitude),
+        barangay=report.barangay,
         narrative=report.narrative,
         urgency_score=reports.live_urgency(report.urgency_score, report.submitted_at, now),
         nearby_reports=nearby,
@@ -3862,6 +3863,9 @@ def submit_report(
     longitude: Annotated[float, Form(ge=-180, le=180)],
     photo: Annotated[UploadFile, File(description="Photo evidence (required)")],
     narrative: Annotated[str | None, Form(max_length=1000)] = None,
+    barangay: Annotated[
+        str | None, Form(max_length=120, description="Barangay name; auto-detected from GPS")
+    ] = None,
     captured_at: Annotated[str | None, Form(description="Device capture time, ISO 8601")] = None,
     source: Annotated[str | None, Form(description="PHOTO, SENSOR, CCTV or CALL")] = None,
     client_id: Annotated[
@@ -3950,6 +3954,7 @@ def submit_report(
         source=source,
         geometry=point,
         narrative=narrative,
+        barangay=barangay.strip() or None if barangay else None,
         depth_level=depth_level,
         photo_data=photo_bytes,
         photo_mime=photo_mime,

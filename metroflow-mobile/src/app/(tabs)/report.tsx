@@ -37,7 +37,7 @@ import { useAuth } from '../../auth';
 import { Avatar } from '../../components/Avatar';
 import { useDialog } from '../../components/Dialog';
 import { enqueueReport, isOffline, newClientId } from '../../offline';
-import { reverseGeocodeName } from '../../geocode';
+import { reverseGeocodeBarangay, reverseGeocodeName } from '../../geocode';
 import {
   ApiError,
   submitReport,
@@ -126,6 +126,9 @@ export default function ReportScreen() {
   const [fixAt, setFixAt] = useState<string | null>(null);
   const [placeName, setPlaceName] = useState<string | null>(null);
   const placeNameGeneration = useRef(0);
+  const [barangay, setBarangay] = useState('');
+  const [barangayEdited, setBarangayEdited] = useState(false);
+  const barangayGeneration = useRef(0);
   const [locationState, setLocationState] = useState<LocationState>('locating');
   const [locationError, setLocationError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -192,12 +195,20 @@ export default function ReportScreen() {
   if (position !== prevPositionForPlaceName) {
     setPrevPositionForPlaceName(position);
     setPlaceName(null);
+    setBarangay('');
+    setBarangayEdited(false);
   }
   useEffect(() => {
     if (!position) return;
     const generation = ++placeNameGeneration.current;
+    const barangayGen = ++barangayGeneration.current;
     void reverseGeocodeName(position.latitude, position.longitude).then((name) => {
       if (placeNameGeneration.current === generation) setPlaceName(name);
+    });
+    void reverseGeocodeBarangay(position.latitude, position.longitude).then((name) => {
+      if (barangayGeneration.current === barangayGen) {
+        setBarangay((current) => (current.trim() ? current : (name ?? '')));
+      }
     });
   }, [position]);
 
@@ -311,6 +322,7 @@ export default function ReportScreen() {
       depthLevel: selected.api,
       latitude: position.latitude,
       longitude: position.longitude,
+      barangay: barangay.trim() || null,
       capturedAt: photo.capturedAt,
       photo: { uri: photo.uri, name: photo.name, type: photo.type },
     };
@@ -632,6 +644,31 @@ export default function ReportScreen() {
                   <Text style={{ fontSize: fontSize.body, fontWeight: '700', color: c.blue700 }}>Retry</Text>
                 </TouchableOpacity>
               ) : null}
+            </View>
+
+            <View style={{ gap: space[6] }}>
+              <Text style={{ fontSize: fontSize.body, fontWeight: '600', color: c.slate500 }}>
+                Barangay
+              </Text>
+              <TextInput
+                value={barangay}
+                onChangeText={(value) => {
+                  setBarangay(value);
+                  setBarangayEdited(true);
+                }}
+                placeholder={position ? 'Detecting barangay…' : 'Auto-filled from GPS'}
+                placeholderTextColor={c.slate400}
+                style={{
+                  ...card,
+                  paddingHorizontal: space[14],
+                  paddingVertical: space[12],
+                  fontSize: fontSize.body,
+                  color: c.slate900,
+                }}
+              />
+              <Text style={{ fontSize: fontSize.caption, color: c.slate400 }}>
+                Auto-detected from your GPS location. Edit if needed.
+              </Text>
             </View>
 
             <Text style={{ fontSize: fontSize.body, fontWeight: '600', color: c.slate500, marginTop: space[2] }}>
