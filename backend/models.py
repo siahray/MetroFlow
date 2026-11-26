@@ -365,6 +365,9 @@ class IncidentReport(Base):
     )
     geometry = Column(Geometry(geometry_type="POINT", srid=4326), nullable=True)
     narrative = Column(Text, nullable=True)
+    barangay = Column(
+        String(120), nullable=True, comment="Reporter barangay; auto-detected from GPS, editable"
+    )
     depth_level = Column(
         String(20), nullable=False, index=True, comment="ANKLE, KNEE or IMPASSABLE"
     )
